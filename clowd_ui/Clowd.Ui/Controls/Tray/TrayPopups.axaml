@@ -1,0 +1,239 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- The dark look for everything the tray opens OUTSIDE its own window: tooltips, the status blip,
+         and the flyout menus a chevron can raise.
+
+         This file is a Styles file rather than a ControlTheme dictionary, and it is deliberately NOT
+         merged into the application resources by ControlThemes: the graphite tooltip and the near-black
+         menu belong to a strip floating over an arbitrary desktop, and the same look inside the app
+         windows would fight every themed surface there. The tray window adds this file to its own
+         Styles collection instead (the ModeSelector / CollapsingSegmentedBar pattern), so it reaches the
+         tray, and - because a popup's styling parent chain runs back to the window that opened it - the
+         tooltips and menus too, and nothing else in the process.
+
+         The ContentControl theme is keyed rather than implicit for the same reason the file is scoped:
+         it is asked for by name, once by the tooltip theme that derives from it and once by the code
+         that builds the blip. Nothing else in a tray window is a bare ContentControl. -->
+    <Styles.Resources>
+
+        <!-- The room the menu's shadow needs around the visible border, in the presenter's template
+             below. It is a resource rather than a literal because FloatingTrayWindow.ShowMenu has to
+             subtract the left/top of it from the flyout's offsets - the spec's 8 px gap is measured from
+             the edge people see, and the margin moves that edge inside the popup. One value, two
+             readers: retune the shadow and the menu still lands 8 px off its tile. -->
+        <Thickness x:Key="TrayMenuShadowReserve">30,18,30,42</Thickness>
+
+        <!-- Spec §10. One look, two users: the hover tooltip and the 6 s status blip are the same little
+             dark chip, so they are the same theme; a blip that looked different would read as a second
+             kind of message when it is really the same voice. No arrow (an arrow needs a placement it
+             can point from, and these are re-aimed on every rotation) and no wrapping: a tip long
+             enough to wrap belongs in the window, not over the desktop. -->
+        <ControlTheme x:Key="TrayTipTheme" TargetType="ContentControl">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.TipFill}" />
+            <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <!-- spec writes CSS "4,8" (vertical 4, horizontal 8) -->
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <!-- A ToolTip IS a ContentControl, so the chip above is the whole theme; the placement and the
+             350 ms delay are per-control facts the window writes, not part of the look. -->
+        <ControlTheme x:Key="TrayToolTipTheme"
+                      TargetType="ToolTip"
+                      BasedOn="{StaticResource TrayTipTheme}" />
+
+        <!-- Spec §5. The menu is one step darker and more opaque than the tray: it sits ON the tray's
+             own window edge, so a lighter panel would look like a hole in the strip. Opaque enough that
+             it needs no blur - nothing here asks the compositor for an effect. -->
+        <ControlTheme x:Key="TrayMenuFlyoutPresenterTheme" TargetType="MenuFlyoutPresenter">
+            <Setter Property="MinWidth" Value="190" />
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.MenuFill}" />
+            <Setter Property="BorderBrush" Value="{x:Static tray:TrayTokens.MenuBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <!-- The margin is the room the shadow needs, not spacing: a popup root sizes itself to
+                         this Border's layout bounds, and a BoxShadow is painted outside them, so without
+                         the margin the shadow falls off the popup window and nothing is drawn (measured:
+                         the desktop one pixel under the menu was still the desktop colour). The four
+                         numbers are the shadow's reach - blur 30 sideways, 30-12 above, 30+12 below -
+                         and they live in the TrayMenuShadowReserve resource above because
+                         FloatingTrayWindow.ShowMenu reads the same value back: the margin is transparent
+                         and hit-test-free, but it does move the presenter's visual edge inside the popup,
+                         so the flyout's offsets subtract its left/top. The 190 px minimum has to be
+                         re-applied to the Border as well: the setter's MinWidth sizes the presenter, and
+                         the margin would otherwise eat 60 px of the menu people see. -->
+                    <Border Name="_bg"
+                            Margin="{StaticResource TrayMenuShadowReserve}"
+                            MinWidth="{TemplateBinding MinWidth}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            BoxShadow="0 12 30 0 #73000000"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <!-- Spec §5, items. A row is a rounded strip with a leading 13 px check gutter: the gutter is
+             always laid out and only its ink appears, so the label of the picked row and the labels of
+             every other row line up instead of stepping sideways as the choice moves. -->
+        <ControlTheme x:Key="TrayMenuItemTheme" TargetType="MenuItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <!-- spec writes CSS "6,9" (vertical 6, horizontal 9) -->
+            <Setter Property="Padding" Value="9,6" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <Border Name="_bg"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Padding="{TemplateBinding Padding}">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                <tray:TrayGlyphIcon Name="_check"
+                                                    Width="13"
+                                                    Height="13"
+                                                    VerticalAlignment="Center"
+                                                    Foreground="{TemplateBinding Foreground}"
+                                                    Glyph="{x:Static tray:TrayGlyphs.Check}"
+                                                    Opacity="0" />
+                                <ContentPresenter Name="PART_HeaderPresenter"
+                                                  Grid.Column="1"
+                                                  HorizontalAlignment="Left"
+                                                  VerticalAlignment="Center"
+                                                  Content="{TemplateBinding Header}"
+                                                  ContentTemplate="{TemplateBinding HeaderTemplate}" />
+                            </Grid>
+                        </Border>
+                        <!-- These menus are one flat list of choices, so no row of them ever opens this.
+                             It is templated all the same because a MenuItem with children and no
+                             PART_Popup is a row that silently does nothing when clicked, and the next
+                             person to add a nested row should not have to discover that. -->
+                        <Popup Name="PART_Popup"
+                               HorizontalOffset="-4"
+                               IsLightDismissEnabled="False"
+                               Placement="RightEdgeAlignedTop"
+                               IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}">
+                            <Border Background="{x:Static tray:TrayTokens.MenuFill}"
+                                    BorderBrush="{x:Static tray:TrayTokens.MenuBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="5">
+                                <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                            </Border>
+                        </Popup>
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+
+            <!-- Two selectors, one veil, so the menu never shows two highlighted rows. The pointer
+                 resting on a row is the only state that lights it here: Avalonia's menu interaction
+                 handler selects the FIRST row as the flyout opens, so an unqualified `:selected` veil
+                 lit a row the pointer had never touched while the pointer still sat on the chevron.
+                 Selection is therefore only visible when a keyboard put it there (`:focus-visible`) —
+                 which these WS_EX_NOACTIVATE strips essentially never see (§0.3) — and the hover veil
+                 below is what people actually get. Hovering a row also makes it the selected one, so
+                 the two states still cannot disagree. -->
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="{x:Static tray:TrayTokens.MenuItemHover}" />
+            </Style>
+            <Style Selector="^:selected:focus-visible /template/ Border#_bg">
+                <Setter Property="Background" Value="{x:Static tray:TrayTokens.MenuItemHover}" />
+            </Style>
+
+            <!-- Radio semantics: exactly one row per menu carries the tick. -->
+            <Style Selector="^[IsChecked=True] /template/ tray|TrayGlyphIcon#_check">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+
+            <!-- A row that cannot be picked is a sentence, not an offer ("nothing found"), so it dims and
+                 stops answering the pointer. Declared after the veils because Avalonia keeps showing
+                 :pointerover on a disabled control. -->
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <Style Selector="^:disabled /template/ Border#_bg">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+
+            <!-- The uppercase caption row that names what the list is choosing. Last on purpose: a
+                 caption is often added disabled, and this opacity must win over the disabled one rather
+                 than multiply with it. The text arrives already uppercase (there is no text-transform
+                 here); LetterSpacing is the spec's .06 em of 10.5 px, and it inherits from the row into
+                 the presenter's text without a second selector. -->
+            <Style Selector="^.header">
+                <Setter Property="FontSize" Value="10.5" />
+                <Setter Property="LetterSpacing" Value="0.63" />
+                <Setter Property="Opacity" Value="0.5" />
+                <!-- spec writes CSS "5,9,3" (top 5, sides 9, bottom 3) -->
+                <Setter Property="Padding" Value="9,5,9,3" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </Style>
+            <Style Selector="^.header /template/ Border#_bg">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <!-- no tick gutter on a caption: its text starts at the panel's padding, like a heading -->
+            <Style Selector="^.header /template/ tray|TrayGlyphIcon#_check">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+        </ControlTheme>
+
+    </Styles.Resources>
+
+    <!-- The app theme's `TextBlock:disabled` foreground must not leak into the tray. The tray's disabled
+         signal is OPACITY, never colour (TrayPrimaryButton.axaml's Waiting label at .65, the caption row
+         at .5 and the "nothing found" row at .45 below), and its ink is always white over graphite
+         because these strips float over an arbitrary desktop rather than over a themed app surface.
+         Without this rule the Semi theme's rule — which has Style priority and therefore beats the
+         Template-priority `Foreground="{TemplateBinding Foreground}"` inside every template here — repaints
+         "Wait…" and a menu's uppercase caption row in its own muted grey, so the .65/.5 opacities land
+         on the wrong colour (≈ .22 and .16 white), and in a light OS theme they would go dark-on-graphite.
+         This is a window-level style: it is later in the styling chain than the application's, so it wins
+         for the tray, its tooltips and its menu popups, and nowhere else in the process. -->
+    <Style Selector="TextBlock:disabled">
+        <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
+    </Style>
+
+    <!-- Implicit themes are keyed by type in the application resources, and these are not there on
+         purpose, so each type is pointed at its theme by a style instead. A tray window is the only
+         place these three selectors can match. -->
+    <Style Selector="ToolTip">
+        <Setter Property="Theme" Value="{StaticResource TrayToolTipTheme}" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="Theme" Value="{StaticResource TrayMenuFlyoutPresenterTheme}" />
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="Theme" Value="{StaticResource TrayMenuItemTheme}" />
+    </Style>
+
+</Styles>

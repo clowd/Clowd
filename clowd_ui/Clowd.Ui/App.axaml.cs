@@ -95,6 +95,12 @@ namespace Clowd
                 if (UI.VideoEditor.VideoEditorWindow.TryHandleArgs(args))
                     return;
 
+                // hidden tray harness (`--tray-spike generic|glyphs|recording|share|scroll`): the
+                // generic controls, or one of the three real strips, with no recorder, driver or
+                // capture session behind them. Same single-instance rules as the two harnesses above.
+                if (UI.TraySpike.TryHandleArgs(args))
+                    return;
+
                 await SetupMutex(args);
                 bool firstRun = await SetupSettings() || Program.IsVelopackFirstRun;
 
@@ -465,7 +471,7 @@ namespace Clowd
         /// The Share Region hotkey and tray action: ends the live share, or launches the capture
         /// overlay in share mode to pick a region to mirror. Unlike recording there is no third
         /// state to toggle through — a share is either running or it is not — so the second press
-        /// simply ends it, exactly as the strip's CANCEL tile does.
+        /// simply ends it, exactly as the share strip's "Stop sharing" tile does.
         /// <para>Deliberately independent of <see cref="ToggleRecording"/>: the two sessions are
         /// separate helper processes with separate guards, and sharing a region while recording it
         /// (or the reverse) is a reasonable thing to do, so neither entry point blocks the other.</para>

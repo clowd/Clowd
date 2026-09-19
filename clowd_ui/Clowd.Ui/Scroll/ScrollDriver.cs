@@ -106,7 +106,7 @@ namespace Clowd.UI
 
             _proc = proc;
 
-            // .NET's stdin writer does not auto-flush: without this a FINISH or CANCEL would sit
+            // .NET's stdin writer does not auto-flush: without this a Finish or Cancel command would sit
             // in the writer's buffer while the driver kept scrolling the user's window.
             proc.StandardInput.AutoFlush = true;
 

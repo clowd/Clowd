@@ -89,7 +89,7 @@ namespace Clowd.UI
         /// <summary>The user asked to leave resize mode WITHOUT committing: Esc outside a drag, per
         /// spec addendum 8.2. The page aborts the mode — border restored on the last applied region,
         /// obscure state restored, no move command written. Never raised during a drag (Esc there reverts
-        /// the drag instead) and never raised for a commit, which is always the RESIZE tile's job.</summary>
+        /// the drag instead) and never raised for a commit, which is always the Resize tile's job.</summary>
         public event EventHandler CancelRequested;
 
         /// <summary>The rect the drag has arrived at, in capture space. Always &gt;= 64 per side and
@@ -262,7 +262,7 @@ namespace Clowd.UI
         /// drag it reverts to the rectangle the drag started from, through the same path the
         /// secondary button uses. Outside a drag it asks the page to abort the whole mode
         /// (<see cref="CancelRequested"/>). Neither ever commits — committing is the toolbar's
-        /// RESIZE tile's job and nothing else's.
+        /// Resize tile's job and nothing else's.
         /// </summary>
         protected override void OnKeyDown(KeyEventArgs e)
         {
@@ -538,7 +538,7 @@ namespace Clowd.UI
                 // The secondary button cancels a drag in progress — one of two ways in since
                 // addendum 8.2 made this window focusable, the other being Esc. Outside a drag it
                 // still does nothing at all: leaving the mode without committing is Esc's job now,
-                // and committing is the toolbar's RESIZE tile's.
+                // and committing is the toolbar's Resize tile's.
                 if (props.IsRightButtonPressed)
                 {
                     TryCancelDrag();
@@ -578,7 +578,7 @@ namespace Clowd.UI
                 }
 
                 // PointToScreen returns a PixelPoint already in capture space on both platforms
-                // (the recipe FloatingToolbarWindow.DragHandleMoved uses), so this delta needs no
+                // (the recipe TrayGrip/TrayDragGesture uses), so this delta needs no
                 // scaling, and the window being repositioned under the pointer on the previous step
                 // cancels out exactly. Never accumulate deltas frame to frame.
                 var now = _owner.PointToScreen(e.GetPosition(_owner));

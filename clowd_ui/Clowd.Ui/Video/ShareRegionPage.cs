@@ -16,7 +16,7 @@ namespace Clowd.UI
     /// which mirrors a rectangle of the screen into an ordinary top-level window that a meeting app
     /// (Teams, Zoom, Meet, …) can share, and puts Clowd's own chrome around it — the click-through
     /// <see cref="BorderWindow"/> so the user can see what is being broadcast, and a four-tile
-    /// <see cref="FloatingToolbarWindow"/> (DRAG ME / HIDE / RESIZE / CANCEL) so they can obscure
+    /// <see cref="ShareRegionFloatingButtons"/> (Hide / Resize / Options / Stop) so they can obscure
     /// it, change which pixels it covers, or stop.
     /// <para>Resize mode is a small explicit state machine (<see cref="ResizeState"/>) that lives
     /// here and nowhere else. The toolbar only latches a tile and raises an event, and
@@ -39,7 +39,7 @@ namespace Clowd.UI
     /// thread only), with every public entry point an <c>async void</c> whose awaits sit inside a
     /// try/catch funnelling to <see cref="OnCriticalError"/> — an unhandled exception out of an
     /// async void kills the process. <see cref="_closing"/> is a one-way latch: every terminal path
-    /// sets it, and every path rechecks it after an await, because a CANCEL or an app exit can land
+    /// sets it, and every path rechecks it after an await, because a Cancel or an app exit can land
     /// in any of those gaps.</para>
     /// <para>A share and a recording deliberately do NOT exclude each other. They are separate
     /// helper processes with separate single-instance guards, and sharing a region while recording
@@ -100,7 +100,7 @@ namespace Clowd.UI
         /// </summary>
         private enum ResizeState
         {
-            /// <summary>Not resizing. The only state in which the HIDE tile and the settings
+            /// <summary>Not resizing. The only state in which the Hide tile and the settings
             /// listener are allowed to write obscure commands.</summary>
             Off,
 
@@ -119,7 +119,7 @@ namespace Clowd.UI
 
         private ShareRegionDriver _driver;
         private BorderWindow _border;
-        private FloatingToolbarWindow _toolbar;
+        private ShareRegionFloatingButtons _toolbar;
 
         // The region actually being mirrored. Seeded from the overlay's selection and replaced by
         // what the helper reports it applied (it forces each side to at least 64 px and to an even
@@ -151,7 +151,7 @@ namespace Clowd.UI
         // Non-null is also this page's test for "the overlay is up" — see OnRegionChanged.
         private ShareResizeWindow _resizeWindow;
 
-        // What this page last COMMANDED, and the user's own HIDE tile state as the page understands
+        // What this page last COMMANDED, and the user's own Hide tile state as the page understands
         // it. Never read back from an ack: ShareObscureState.Strength is 0 for both "none" and
         // "hide", and BuildObscureCommand clamps a strength to 1..100, so restoring Blur from a
         // remembered wire value would send "obscure blur 1" — an invisible blur the user believes
@@ -304,14 +304,18 @@ namespace Clowd.UI
             // the meeting.
             _region = ToScreenRect(_driver?.AppliedRegion) ?? _region;
 
-            _border = new BorderWindow(_region);
+            // Title is set here rather than in BorderWindow.axaml so the shared default stays
+            // 'Clowd Recording Frame' for VideoCapturePage: window-list / Alt-Tab / screen-picker
+            // enumeration must not show a recording frame while this session is only sharing.
+            // Presentational only — nothing keys on either string.
+            _border = new BorderWindow(_region) { Title = "Clowd Shared Region Frame" };
             // Deliberately NO SetOverlayText anywhere in this page. The border's frame is inflated
             // strictly outside the region, but its overlay text renders INSIDE it — i.e. straight
             // into the pixels being mirrored to everyone in the meeting. The toolbar's drag-handle
             // label, which sits outside the region, is where this session says anything at all.
             _border.Show();
 
-            _toolbar = new FloatingToolbarWindow(FloatingToolbarProfile.ShareRegion);
+            _toolbar = new ShareRegionFloatingButtons();
             _toolbar.HideToggled += (s, hidden) => OnHideToggled(hidden);
             _toolbar.ResizeToggled += (s, on) => OnResizeToggled(on);
             _toolbar.CancelClicked += (s, e) => Cancel();
@@ -325,16 +329,15 @@ namespace Clowd.UI
             // The toolbar has no clock of its own and this page deliberately does not grow one: an
             // elapsed timer would need a DispatcherTimer whose only job is to say how long a thing
             // that is plainly still happening has been happening. The helper's own status line is
-            // free and says something the user cannot otherwise see, so the label carries that; it
-            // reads "SHARING" until the first status arrives about a second in.
-            _toolbar.SetStatusText("SHARING");
+            // free and says something the user cannot otherwise see, so the grip's tooltip carries
+            // that (SetFps) once the first status arrives about a second in.
             _toolbar.ShowNear(_region);
 
             // The GPU effect can fail to build before the toolbar exists (the helper emits its
             // unsolicited obscure/none as soon as it happens, which may be before or after the
             // handshake), so the tile is retired here rather than only from the ack handler.
             if (_driver != null && !_driver.BlurAvailable)
-                _toolbar.SetObscureAvailable(false);
+                _toolbar.RetireHide();
 
             CreateResizeTimers();
 
@@ -380,19 +383,19 @@ namespace Clowd.UI
                 // timer also covers a move written from a state that never showed an overlay.
                 _border?.SetRegion(_region);
                 if (_resizeState == ResizeState.Exiting)
-                    FinishResize("NO MOVE");
+                    FinishResize("Move refused");
             };
 
             // The entry-hide arm. The overlay is gated on the helper confirming the region is
             // obscured, but an ack can be lost and the command drain can be blocked behind another
-            // command, and a user who pressed RESIZE and got nothing has no way to find out why.
+            // command, and a user who pressed Resize and got nothing has no way to find out why.
             // 400 ms is long enough that the ack normally wins and short enough not to read as a
             // hang. TryShowResizeChrome is a no-op unless the mode is still Entering.
             _resizeArm = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
             _resizeArm.Tick += (s, e) => { _resizeArm.Stop(); TryShowResizeChrome(); };
         }
 
-        /// <summary>The obscure the HIDE tile asks for, from settings. Strength is passed
+        /// <summary>The obscure the Hide tile asks for, from settings. Strength is passed
         /// unconditionally: <see cref="ShareRegionProtocol.BuildObscureCommand"/> DROPS it for Hide
         /// (producing a bare <c>obscure hide</c>), and hand-building the line instead is forbidden —
         /// <c>obscure hide 50</c> is refused with <c>command_error</c>, no ack ever arrives, and the
@@ -419,21 +422,21 @@ namespace Clowd.UI
         };
 
         /// <summary>
-        /// The HIDE tile was pressed. The tile is optimistic: <c>HideClicked</c> flips itself and
+        /// The Hide tile was pressed. The tile is optimistic: <c>HideClicked</c> flips itself and
         /// then reports the state it flipped TO, so it is already showing the new state by the time
         /// this runs. The helper's <c>obscure</c> ack is the only confirmation there is, and
         /// <see cref="OnObscureChanged"/> is what makes the tile agree with the process actually
         /// drawing the frames — including flipping it back when the helper does not do what it was
-        /// asked. That is deliberately the opposite of the RESIZE tile, which never latches itself
+        /// asked. That is deliberately the opposite of the Resize tile, which never latches itself
         /// because the page can refuse the mode outright (see <see cref="OnResizeToggled"/>); a
-        /// refused HIDE is only ever a wrong-looking tile for one round trip, while a refused
+        /// refused Hide is only ever a wrong-looking tile for one round trip, while a refused
         /// resize would strand the tile in a mode that never began.
         /// What is sent is whatever the user configured (blur, pixelate or a
         /// black card, at their chosen strength), remembered here rather than read back from the
         /// wire so a later restore can reproduce it exactly.
         /// <para>Refused outright while resize mode is anything but Off. Resize mode owns the
         /// obscure state for its duration — it has hidden the region on the user's behalf and owes a
-        /// restore — and a HIDE press landing in the middle of that would either be overwritten by
+        /// restore — and a Hide press landing in the middle of that would either be overwritten by
         /// the restore or overwrite it. The toolbar disables the tile for exactly this window, so
         /// this guard is the second line of that rule rather than the only one.</para>
         /// </summary>
@@ -482,9 +485,9 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// The RESIZE tile was pressed. The tile deliberately does not flip itself: it raises the
+        /// The Resize tile was pressed. The tile deliberately does not flip itself: it raises the
         /// state it is ASKING for and this page answers with
-        /// <see cref="FloatingToolbarWindow.SetResizeState"/>, so a request that arrives when the
+        /// <see cref="ShareRegionFloatingButtons.SetResizeState"/>, so a request that arrives when the
         /// session cannot honour it (closing, not sharing yet, driver gone) leaves the tile alone
         /// instead of latching a mode that does not exist. That is what the corrective call in the
         /// bail-out branch is for.
@@ -505,7 +508,7 @@ namespace Clowd.UI
             }
             else
             {
-                // Entering counts: the user can press RESIZE again before the overlay has appeared,
+                // Entering counts: the user can press Resize again before the overlay has appeared,
                 // and that press must still end the mode (and restore the obscure) rather than being
                 // dropped because the chrome was not up yet. Exiting does not — one move is already
                 // in flight and a second is unmatchable.
@@ -528,7 +531,7 @@ namespace Clowd.UI
             _preResizeStrength = _intendedStrength;
             _resizeHideSent = false;
 
-            // Latch the tile and lock HIDE BEFORE anything can await or ack.
+            // Latch the tile and lock Hide BEFORE anything can await or ack.
             _toolbar?.SetResizeState(true, false);
 
             // Hide, not the configured style: the helper's blur at strength 50 is a 5x downscale and
@@ -548,7 +551,7 @@ namespace Clowd.UI
                 // second case is the one the user must be told about, and a blip on the drag handle
                 // is the only channel there is: a dialog here lands over a live presentation.
                 if (!_driver.BlurAvailable)
-                    _toolbar?.ShowStatusBlip("LIVE");
+                    _toolbar?.ShowStatusBlip("Region is live");
                 TryShowResizeChrome();
             }
         }
@@ -604,7 +607,7 @@ namespace Clowd.UI
 
             // Two topmost windows now, one of them freshly activated over the other. The placement
             // cascade's last rung parks the strip INSIDE the region (reachable whenever the region
-            // covers a whole monitor), so without this the RESIZE tile that ends the mode can be
+            // covers a whole monitor), so without this the Resize tile that ends the mode can be
             // covered by the very window that press put up — with the region hidden. Esc is a
             // second way out now, but a mode whose only escape is an unadvertised key is not one.
             // This is the first assertion, not the only one: OnResizeWindowActivated repeats it for
@@ -636,7 +639,7 @@ namespace Clowd.UI
         /// <summary>
         /// Esc outside a drag: leave resize mode without committing (addendum 8.2). Esc DURING a
         /// drag never reaches here — the overlay reverts that drag itself and raises nothing — and
-        /// a commit is always the RESIZE tile's job, so there is exactly one thing this can mean,
+        /// a commit is always the Resize tile's job, so there is exactly one thing this can mean,
         /// and it is what a refused move already does minus the move.
         /// </summary>
         private void OnResizeCancelled(object sender, EventArgs e)
@@ -690,7 +693,7 @@ namespace Clowd.UI
         /// it from another app. Activation re-orders a window above its topmost peers and the
         /// toolbar is one of them, so the raise done once in <see cref="TryShowResizeChrome"/> is a
         /// guarantee with a lifetime of one click: the strip can be parked INSIDE the region (the
-        /// placement cascade's last rung), and a buried strip means the RESIZE tile — the only
+        /// placement cascade's last rung), and a buried strip means the Resize tile — the only
         /// gesture that commits — is unreachable for the rest of the mode.
         /// <para>Activation is the whole of the exposure, which is why there is no pointer hook here
         /// and no timer. A press that does NOT change activation re-orders nothing: Windows raises a
@@ -714,7 +717,7 @@ namespace Clowd.UI
         /// mirrored rectangle first, then the border goes back on the last APPLIED region — which
         /// here is simply the region, since a cancel changes nothing — and then
         /// <see cref="FinishResize"/> does the obscure restore and the tiles.
-        /// <para>Silent, with no blip: the overlay vanishing and the RESIZE tile unlatching are the
+        /// <para>Silent, with no blip: the overlay vanishing and the Resize tile unlatching are the
         /// feedback for something the user just asked for. The blips are reserved for the outcomes
         /// they did not ask for, like a move the helper refused.</para>
         /// </summary>
@@ -729,7 +732,7 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Leaves resize mode, committing whatever the drag arrived at. Pressing RESIZE again is
+        /// Leaves resize mode, committing whatever the drag arrived at. Pressing Resize again is
         /// the only gesture that commits: a single drag is undone with a right-button press or Esc
         /// inside the overlay, and Esc outside a drag leaves the mode without committing at all
         /// (<see cref="CancelResize"/>).
@@ -768,7 +771,7 @@ namespace Clowd.UI
 
             _resizeState = ResizeState.Exiting;
             _movePending = true;
-            // busy keeps HIDE locked and RESIZE un-pressable until the region has actually moved.
+            // busy keeps Hide locked and Resize un-pressable until the region has actually moved.
             _toolbar?.SetResizeState(true, true);
             _driver.MoveRegion(target);                  // EXACTLY ONE move: acks carry no request id
             _moveTimeout.Start();                        // 2000 ms
@@ -995,7 +998,7 @@ namespace Clowd.UI
 
             if (state.Unsolicited && !state.BlurAvailable)
             {
-                Debug.WriteLine("The region sharing helper retracted its obscure effect; retiring the HIDE tile.");
+                Debug.WriteLine("The region sharing helper retracted its obscure effect; retiring the Hide tile.");
 
                 // GfxState::Failed is permanent for the PROCESS and gates hide, pixelate and blur
                 // alike, so the remembered mode is now unrestorable — clear it rather than sending a
@@ -1007,10 +1010,10 @@ namespace Clowd.UI
                 _resizeWasHidden = false;
                 _resizeHideSent = false;
 
-                // also unlights the tile and blips "NO HIDE" on the drag handle. Never a dialog:
+                // also unlights the tile and blips "Hide unavailable". Never a dialog:
                 // this can land in the middle of a meeting the user is presenting to. Goes through
-                // UpdateShareLocks, so HIDE stays locked while resize is still active.
-                _toolbar?.SetObscureAvailable(false);
+                // UpdateLocks, so Hide stays locked while resize is still active.
+                _toolbar?.RetireHide();
 
                 if (_resizeState != ResizeState.Off)
                 {
@@ -1018,20 +1021,20 @@ namespace Clowd.UI
                     // made so again. The user cannot be left to discover that from the picture their
                     // meeting is seeing, and the mode must not be stranded waiting for an ack that
                     // will never come.
-                    _toolbar?.ShowStatusBlip("LIVE");
+                    _toolbar?.ShowStatusBlip("Region is live");
                     TryShowResizeChrome();              // no-op unless still Entering
                 }
             }
         }
 
         /// <summary>Once-a-second frame rate report from the helper — the only evidence the user has
-        /// that the mirror is still live, so it goes on the drag-handle label.</summary>
+        /// that the mirror is still live, so it goes in the grip's tooltip.</summary>
         private void OnStatusReceived(object sender, double fps)
         {
             if (_closing)
                 return;
 
-            _toolbar?.SetStatusText(fps.ToString("F0", CultureInfo.CurrentCulture) + " FPS");
+            _toolbar?.SetFps(fps);
         }
 
         /// <summary>
@@ -1060,7 +1063,7 @@ namespace Clowd.UI
             _moveTimeout.Stop();
             _border?.SetRegion(_region);      // refused: nothing moved, so re-assert what is mirrored
             if (_resizeState == ResizeState.Exiting)
-                FinishResize("NO MOVE");
+                FinishResize("Move refused");
         }
 
         /// <summary>
@@ -1130,7 +1133,7 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Ends the session at the user's request: the CANCEL tile, and the Share Region tray item
+        /// Ends the session at the user's request: the Stop sharing tile, and the Share Region tray item
         /// / hotkey firing a second time (<see cref="App.ToggleShareRegion"/>) — a toggle that
         /// starts a share has to be able to end one, and "end it" is the only other thing a live
         /// share can be told to do. No dialog either way: they asked for this, and the windows and
@@ -1148,7 +1151,7 @@ namespace Clowd.UI
 
                 // Awaited rather than fire-and-forget so the mirror window is really gone before
                 // this returns — a meeting app left holding a stale window is exactly the confusion
-                // CANCEL exists to end.
+                // Cancel exists to end.
                 if (_driver != null)
                     await _driver.DisposeAsync();
 

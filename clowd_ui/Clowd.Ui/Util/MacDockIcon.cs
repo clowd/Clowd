@@ -13,7 +13,7 @@ namespace Clowd.Util
     /// window is open (the 1Password model). Avalonia only reads ShowInDock once at startup,
     /// so the NSApplication activation policy is flipped at runtime instead — Regular while
     /// any visible ShowInTaskbar window exists, Accessory (tray/menu-bar only) otherwise.
-    /// The recording chrome (BorderWindow, FloatingToolbarWindow) and the dialogs opt out
+    /// The recording chrome (BorderWindow, FloatingTrayWindow) and the dialogs opt out
     /// via ShowInTaskbar="False"; a dock icon appearing mid-recording would also resize the
     /// dock and shift the content being recorded.
     /// </summary>

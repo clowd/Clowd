@@ -15,7 +15,7 @@ namespace Clowd.UI
     /// <summary>
     /// Orchestrates a screen-recording session (DESIGN §4.2): hosts the <see cref="ObsCapturer"/>
     /// process, shows the click-through <see cref="BorderWindow"/> and the
-    /// <see cref="FloatingToolbarWindow"/>, and creates the recents session when the recording
+    /// <see cref="RecordingFloatingButtons"/>, and creates the recents session when the recording
     /// finishes (§4.5). Window-less <see cref="IPage"/> like <see cref="ScreenCapturePage"/>;
     /// single-instance via <see cref="ActiveInstance"/> (UI thread only). Every async void entry
     /// point wraps its awaits in try/catch routing to the CriticalError path — an unhandled
@@ -83,7 +83,7 @@ namespace Clowd.UI
         // replacement spawns (both write into the same session directory).
         private Task _pendingShutdown;
         private BorderWindow _border;
-        private FloatingToolbarWindow _toolbar;
+        private RecordingFloatingButtons _toolbar;
         private SettingsRecording _settings;
         private ScreenRect _region;
         // corner radius of _region, in _region's own space (0 = square): what the capturer
@@ -101,7 +101,6 @@ namespace Clowd.UI
         // once MoveToOutputFolderAsync has run, and _outputFile while recording or if the move failed.
         private string _savedPath;
         private TimeSpan _lastStatusElapsed;
-        private int _statusCount;
 
         public async void Open(ScreenRect region, double cornerRadius, string sessionDir)
         {
@@ -156,7 +155,7 @@ namespace Clowd.UI
                 _border.SetOverlayText("WAIT…");
                 _border.Show();
 
-                _toolbar = new FloatingToolbarWindow(FloatingToolbarProfile.Recording);
+                _toolbar = new RecordingFloatingButtons();
                 _toolbar.StartClicked += (s, e) => StartRecording();
                 _toolbar.PauseToggleClicked += (s, e) => TogglePauseRecording();
                 _toolbar.FinishClicked += (s, e) => FinishRecording();
@@ -166,7 +165,6 @@ namespace Clowd.UI
                 _toolbar.MicToggled += (s, enabled) => _obs?.SetMicrophoneMute(!enabled);
                 _toolbar.SpeakerToggled += (s, enabled) => _obs?.SetSpeakerMute(!enabled);
                 _toolbar.WebcamToggled += (s, enabled) => OnWebcamToggled(enabled);
-                _toolbar.SetPrimaryText("WAIT…");
                 _toolbar.SetWaiting(true);
                 _toolbar.ShowNear(region);
 
@@ -194,7 +192,7 @@ namespace Clowd.UI
         {
             _initializing = true;
             _initialized = false;
-            SetPrimaryText("WAIT…", waiting: true);
+            SetPrimaryState(waiting: true, "WAIT…");
             // a respawned capturer with audio removed never emits levels again — clear the
             // stale meters rather than freezing the last values through the WAIT phase.
             _toolbar?.SetAudioLevels(null, null);
@@ -237,7 +235,7 @@ namespace Clowd.UI
                 SetOutputFile(WantedContainer());
 
                 // the first probe of a binary spawns `--help` and can take seconds, during which
-                // CANCEL stays live — so re-assert the guard above rather than spawning into a
+                // Cancel stays live — so re-assert the guard above rather than spawning into a
                 // session that has since been torn down (nothing would ever dispose that process:
                 // OnCriticalError returns early once _closing is set).
                 if (_closing)
@@ -261,8 +259,8 @@ namespace Clowd.UI
                 return;
 
             _initialized = true;
-            // the button says START; the border has room for the instruction that goes with it.
-            SetPrimaryText("START", waiting: false, borderText: "PRESS\nSTART");
+            // the button says Start; the border has room for the instruction that goes with it.
+            SetPrimaryState(waiting: false, "PRESS\nSTART");
 
             // the settings file carries the devices, never the capture toggles — those are mutes.
             ApplyCaptureMutes();
@@ -300,8 +298,8 @@ namespace Clowd.UI
 
                 IsRecording = true;
                 _toolbar.SetRecordingState(true);
-                // the drag handle keeps its "DRAG ME" label until the first status arrives (WPF
-                // parity) — OnStatusReceived then drives the FPS/timer alternation.
+                // the grip tooltip reads "Drag to move" until the first status arrives;
+                // OnStatusReceived then feeds SetElapsed/SetFps.
             }
             catch (Exception ex)
             {
@@ -720,10 +718,10 @@ namespace Clowd.UI
                     if (_closing || !ReferenceEquals(_obs, obs))
                         return;
 
-                    // START is actionable throughout the (up to 10 s) wait for the ack, and the
+                    // Start is actionable throughout the (up to 10 s) wait for the ack, and the
                     // recorder handles commands in order — so "start" is queued behind this
                     // configure and by now frames may already be flowing. Respawning here would
-                    // quit that process and truncate video.mp4 while the toolbar says FINISH: the
+                    // quit that process and truncate video.mp4 while the toolbar offers Finish: the
                     // recording wins, and the settings apply to the next one.
                     if (IsRecording || _starting)
                     {
@@ -917,29 +915,22 @@ namespace Clowd.UI
                 _pendingShutdown = null;
         }
 
-        /// <summary>Mirrors the primary-button label onto the border overlay ("WAIT…" / "START").
-        /// <paramref name="waiting"/> travels with it: the toolbar locks the button (and drops its
-        /// pulse) for as long as the recorder is being built, which is precisely the WAIT label —
-        /// <see cref="StartRecording"/> would ignore a press then anyway. <paramref name="borderText"/>
-        /// overrides the overlay wording where the border has room to say more than the button.</summary>
-        private void SetPrimaryText(string text, bool waiting, string borderText = null)
+        /// <summary>Locks or frees the toolbar's primary button and writes the border overlay text
+        /// that goes with it. <paramref name="waiting"/> holds the button (and drops its pulse) for
+        /// as long as the recorder is being built — <see cref="StartRecording"/> would ignore a
+        /// press then anyway; the button's own label ("Wait…" / "Start") follows it, so only the
+        /// border's wording travels here.</summary>
+        private void SetPrimaryState(bool waiting, string borderText)
         {
-            _border?.SetOverlayText(borderText ?? text);
-            _toolbar?.SetPrimaryText(text);
+            _border?.SetOverlayText(borderText);
             _toolbar?.SetWaiting(waiting);
         }
 
         private void OnStatusReceived(object sender, ObsStatus status)
         {
             _lastStatusElapsed = status.Elapsed;
-
-            // statuses arrive at 1 Hz — alternate elapsed time / FPS every 4 s (§4.2). Statuses
-            // stop while paused, but one may already be in flight when the pause lands — the
-            // toolbar (which owns the PAUSED label) drops it rather than letting it overwrite.
-            var text = (_statusCount++ / 4) % 2 == 1
-                ? $"{status.Fps:F0} FPS"
-                : $"{(int)status.Elapsed.TotalMinutes:D2}:{status.Elapsed.Seconds:D2}";
-            _toolbar?.SetStatusText(text);
+            _toolbar?.SetElapsed(status.Elapsed);
+            _toolbar?.SetFps(status.Fps);
         }
 
         private void OnLevelsReceived(object sender, ObsLevels levels)

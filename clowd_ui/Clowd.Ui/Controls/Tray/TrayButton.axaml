@@ -1,0 +1,138 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:clowd="using:Clowd"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- The accent is a user setting, so it cannot be a static token: the tray window writes the
+         effective capture accent into its own resources under this key and every tray theme reads it
+         with a DynamicResource. This default exists so a TrayButton hosted anywhere else (a spike
+         harness, a designer surface) still renders its active state instead of nothing. -->
+    <SolidColorBrush x:Key="TrayAccentBrush" Color="{x:Static clowd:AccentColors.Default}" />
+
+    <!-- Spec §2. Four layers, bottom to top: the fill, a per-look resting veil, the glyph, the hover
+         veil. Every state below is a layer's opacity or a layer's brush — nothing here is ever written
+         from code, which is what keeps one button's hover identical to the next one's.
+
+         The glyph is 16x16 with the button's Padding as its margin, so an icon-only button measures
+         8 + 16 + 8 = 32 and is then clamped up to MinWidth 34 (the spec's sz + 2). -->
+    <ControlTheme x:Key="{x:Type tray:TrayButton}" TargetType="tray:TrayButton">
+        <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
+        <Setter Property="MinWidth" Value="{x:Static tray:TrayTokens.ButtonMinWidth}" />
+        <!-- spec writes CSS "0,8" (left/right 8); Avalonia's pair is horizontal,vertical -->
+        <Setter Property="Padding" Value="8,0" />
+        <!-- 7 = the spec's button radius (§2); CornerRadius has no double conversion, so it is a literal -->
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="Background" Value="{x:Static tray:TrayTokens.SegBrush}" />
+        <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform"
+                                               Duration="{x:Static tray:TrayTokens.PressTransition}" />
+            </Transitions>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                    <!-- resting look veil (DangerFilled only): an alpha overlay, never a pre-blended
+                         literal, so it stays correct if the segment colour ever moves. It fades on the
+                         same 180 ms curve as the hover veil because hover hides it (see below), and a
+                         cut there would read as a flicker under a crossfading hover. -->
+                    <Border Name="_veil"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity"
+                                                  Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                    <tray:TrayGlyphIcon Name="_icon"
+                                        Width="{x:Static tray:TrayTokens.IconSize}"
+                                        Height="{x:Static tray:TrayTokens.IconSize}"
+                                        Margin="{TemplateBinding Padding}"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Foreground="{TemplateBinding Foreground}"
+                                        Glyph="{TemplateBinding Glyph}" />
+                    <Border Name="_hover"
+                            Background="{x:Static tray:TrayTokens.HoverVeil}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Opacity="0">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity"
+                                                  Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style Selector="^:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.96)" />
+        </Style>
+
+        <!-- the spec's "end" class: Quiet is the recessive trailing look, and it rests a step behind the
+             buttons that do the work. Danger and DangerFilled are the ".end.finish" exception and rest at
+             full opacity (spec §6): the red ink is the point of those two looks, and dimming them to .85
+             would wash the glyph off `Rec` and the filled look off its 22 % red. -->
+        <Style Selector="^[Look=Quiet]">
+            <Setter Property="Opacity" Value="0.85" />
+        </Style>
+        <Style Selector="^[Look=Quiet]:pointerover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style Selector="^[Look=Danger] /template/ tray|TrayGlyphIcon#_icon, ^[Look=DangerFilled] /template/ tray|TrayGlyphIcon#_icon">
+            <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.RecBrush}" />
+        </Style>
+        <Style Selector="^[Look=Danger] /template/ Border#_hover, ^[Look=DangerFilled] /template/ Border#_hover">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.RecVeil28}" />
+        </Style>
+        <!-- DangerFilled already wears 22 % of the red at rest; hover is the same 28 % as Danger, so
+             the two looks converge under the pointer and differ only when the pointer is elsewhere. -->
+        <Style Selector="^[Look=DangerFilled] /template/ Border#_veil">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.RecVeil22}" />
+        </Style>
+        <!-- The hover veil REPLACES the resting one, exactly as the primary button does for Active and
+             Paused: the spec's hover fill is Seg + 28 % Rec (#613A3C), and leaving both layers painted
+             gives Seg + 22 % + 28 % ≈ 44 % (#7E3F40). Hiding the resting veil here is what makes the two
+             states exclusive, and it is why `_veil` carries the same 180 ms opacity transition. -->
+        <Style Selector="^[Look=DangerFilled]:pointerover /template/ Border#_veil">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+
+        <!-- "mode on": the accent is the one app-configurable colour on the strip, and it is only ever
+             used as a fill under white ink (spec §11), so the white glyph needs no extra rule. -->
+        <Style Selector="^[IsActive=True] /template/ Border#_bg">
+            <Setter Property="Background" Value="{DynamicResource TrayAccentBrush}" />
+        </Style>
+        <Style Selector="^[IsActive=True] /template/ Border#_hover">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WhiteVeil10}" />
+        </Style>
+
+        <!-- Declared LAST deliberately: Avalonia keeps showing :pointerover on a disabled control, so a
+             later rule is the only way .4 survives the pointer resting on a disabled Quiet button — and
+             the hover veil has to be pinned back to 0 for the same reason. -->
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <Style Selector="^:disabled /template/ Border#_hover">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

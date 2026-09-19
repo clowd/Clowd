@@ -1,0 +1,125 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- The rotate button (spec §3): 14x14, no fill of its own, a dimmed glyph that comes up to full
+         strength on hover over a 14 % white veil. Its own ControlTheme rather than styles inside the
+         grip's template, because the app's default Button look (fill, border, pressed transform) has
+         to be replaced wholesale, not patched. The glyph is drawn at 11 px with the 2.4-unit stroke the
+         glyph data already carries, which is what keeps it legible at this size. -->
+    <ControlTheme x:Key="TrayGripRotateTheme" TargetType="Button">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Opacity" Value="0.5" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+            </Transitions>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <!-- transparent, but present: without a Background the 14 px box is not hit-testable
+                         and only the glyph's own ink would take the click -->
+                    <Border Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Border Name="_hover"
+                            Background="{x:Static tray:TrayTokens.WhiteVeil14}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Opacity="0">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                    <tray:TrayGlyphIcon Width="11"
+                                        Height="11"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Foreground="{x:Static tray:TrayTokens.FgBrush}"
+                                        Glyph="{x:Static tray:TrayGlyphs.Rotate}" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </ControlTheme>
+
+    <!-- The grip (spec §3). Horizontal: a 25.5 px wide column (6 + 15.5 dots + 4) at the row height of
+         32. Vertical: a 25.5 px tall row spanning the tray's inner width. The dot grid turns with the
+         strip (4x3 -> 3x4) and the rotate button follows it from below to the right; nothing is rebuilt
+         on a rotation, only restyled. -->
+    <ControlTheme x:Key="{x:Type tray:TrayGrip}" TargetType="tray:TrayGrip">
+        <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
+        <!-- spec's CSS 0,4,0,6 -> left 6, right 4 in Avalonia's order -->
+        <Setter Property="Padding" Value="6,0,4,0" />
+        <!-- the move affordance. SizeAll is the closest standard cursor to CSS `grab`; it is a
+             Windows-only nicety, since a no-activate window never gets cursor rects honoured on macOS. -->
+        <Setter Property="Cursor" Value="SizeAll" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <!-- Background=Transparent is load-bearing: the padding is most of the target the user
+                     actually aims at, and an unpainted Border does not hit-test. -->
+                <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                    <StackPanel Name="_stack"
+                                Orientation="Vertical"
+                                Spacing="2"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <tray:TrayGripDots Name="_dots"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Orientation="{TemplateBinding Orientation}" />
+                        <Button Name="PART_Rotate"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="Rotate toolbar"
+                                Theme="{StaticResource TrayGripRotateTheme}"
+                                ToolTip.Tip="Rotate toolbar" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <!-- The dots are quiet until the user is either hovering them or already moving the strip. The
+             dragging case is not the same as hovering: the pointer is routinely dragged clean off the
+             grip, and the dots going dim mid-move would read as the drag having been dropped. -->
+        <Style Selector="^ /template/ tray|TrayGripDots#_dots">
+            <Setter Property="Opacity" Value="0.45" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="^:pointerover /template/ tray|TrayGripDots#_dots">
+            <Setter Property="Opacity" Value="0.85" />
+        </Style>
+        <Style Selector="^[IsDragging=True] /template/ tray|TrayGripDots#_dots">
+            <Setter Property="Opacity" Value="0.85" />
+        </Style>
+
+        <!-- Vertical strip: the grip lies down. 25.5 high, full width, dots 3x4, rotate to the right of
+             them, and the CSS 6,0,4,0 (top 6, bottom 4) becomes Avalonia's 0,6,0,4. -->
+        <Style Selector="^[Orientation=Vertical]">
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.GripLength}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="0,6,0,4" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ StackPanel#_stack">
+            <Setter Property="Orientation" Value="Horizontal" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

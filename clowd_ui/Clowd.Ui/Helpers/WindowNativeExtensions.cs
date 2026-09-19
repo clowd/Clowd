@@ -7,7 +7,7 @@ namespace Clowd.UI.Helpers
 {
     /// <summary>
     /// Native window-style helpers for the recording UI windows (BorderWindow and
-    /// FloatingToolbarWindow, design §4.2). Every member is safe to call on any OS —
+    /// FloatingTrayWindow, design §4.2). Every member is safe to call on any OS —
     /// each one is a no-op off its own platform, so callers need no cfg guards.
     /// </summary>
     internal static class WindowNativeExtensions

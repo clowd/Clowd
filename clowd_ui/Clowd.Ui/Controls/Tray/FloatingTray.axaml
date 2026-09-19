@@ -1,0 +1,62 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- Spec §1 / §9. The tray's 4 px padding is spent as a 1 px highlight ring plus 3 px of inner
+         padding, so the outer box is exactly 40 px tall in a row and 42 px wide in a column while the
+         ring still reads as an inner edge on a dark desktop.
+
+         Fill and ring are two stacked Borders rather than one Border with Background + BorderThickness:
+         Avalonia deflates a Border's background by half its border thickness, which leaves the
+         outermost pixel row of a 1 px ring roughly half transparent, so on a dark desktop it reads as
+         a blend with whatever is behind the window instead of the spec's 6 % white over graphite (and
+         picks up a tint over a coloured taskbar). Drawing the fill at full size underneath and the
+         ring on top of it means the edge pixel is fill + 6 % white, exactly as specified.
+
+         The shadow is a property of the control rather than a literal here because the owning window
+         reserves transparent room for it and turns it off when the platform cannot composite a
+         transparent window at all.
+
+         The items panel is the one-dimensional layout the spec asks for: every child is a
+         StackPanel child with the spec's 4 px gap, and the axis follows the tray's Orientation
+         through a template binding — the ItemsPresenter hands its own templated parent to the panel
+         it builds, so the binding resolves to the tray. -->
+    <ControlTheme x:Key="{x:Type tray:FloatingTray}" TargetType="tray:FloatingTray">
+        <Setter Property="Background" Value="{x:Static tray:TrayTokens.TrayBrush}" />
+        <Setter Property="BorderBrush" Value="{x:Static tray:TrayTokens.Ring}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <!-- The owning window places (and rotates) the strip from Tray.Bounds synchronously right after
+             Show(), before size-to-content has shrunk the Win32 default client area, so the tray must
+             never inherit a stale client size: left/top alignment inside the window's root Panel makes
+             its Bounds equal its desired size on the very first layout pass. -->
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="{TemplateBinding Orientation}"
+                            Spacing="{x:Static tray:TrayTokens.Gap}" />
+            </ItemsPanelTemplate>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Name="_fill"
+                            Background="{TemplateBinding Background}"
+                            BoxShadow="{TemplateBinding Shadow}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Border Name="_ring"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False" />
+                    <!-- TrayPad 4 = 1 px ring + 3 px inner padding, spec §1 -->
+                    <ItemsPresenter Name="PART_ItemsPresenter"
+                                    Margin="{x:Static tray:TrayTokens.TrayPadding}"
+                                    ItemsPanel="{TemplateBinding ItemsPanel}" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+</ResourceDictionary>

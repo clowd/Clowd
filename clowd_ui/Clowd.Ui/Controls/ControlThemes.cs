@@ -26,10 +26,19 @@ namespace Clowd.UI.Controls
 
             Add(app, "ToolButton");
             Add(app, "RowIconButton");
-            Add(app, "CaptureToolButton");
             Add(app, "SpinnerTextBox");
             Add(app, "DropDownButton");
             Add(app, "CaptionedCheckBox");
+
+            // The floating tray's controls. A sub-folder is just part of the name, since Add() builds the
+            // avares URI from it. TrayPopups.axaml is deliberately absent: it is a window-scoped Styles
+            // file (the dark tooltip/menu look must not leak into the rest of the app), not a dictionary.
+            Add(app, "Tray/FloatingTray");
+            Add(app, "Tray/TrayButton");
+            Add(app, "Tray/TrayPrimaryButton");
+            Add(app, "Tray/TraySplitToggle");
+            Add(app, "Tray/TrayGrip");
+            Add(app, "Tray/TrayStatusBlock");
         }
 
         private static void Add(Application app, string name)

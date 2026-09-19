@@ -27,7 +27,7 @@ namespace Clowd.UI
         internal static ScrollCapturePage ActiveInstance { get; private set; }
 
         private BorderWindow _border;
-        private ScrollStatusWindow _status;
+        private ScrollStatusStrip _status;
         private ScrollDriver _driver;
         private string _sessionDir;
 
@@ -92,7 +92,7 @@ namespace Clowd.UI
                 _border = new BorderWindow(region);
                 _border.Show();
 
-                _status = new ScrollStatusWindow();
+                _status = new ScrollStatusStrip();
                 _status.FinishClicked += (s, e) => Finish();
                 _status.CancelClicked += (s, e) => Cancel();
                 if (!_status.TryShowNear(region))
@@ -187,7 +187,7 @@ namespace Clowd.UI
             return false;
         }
 
-        /// <summary>Stops the run and keeps everything captured so far (the HUD's FINISH button —
+        /// <summary>Stops the run and keeps everything captured so far (the HUD's Finish button —
         /// Esc reaches the driver directly, which polls it while the target holds focus).</summary>
         private void Finish()
         {
@@ -213,7 +213,7 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Honors a cancel that arrived while the run was already finishing. Reaching CANCEL
+        /// Honors a cancel that arrived while the run was already finishing. Reaching Cancel
         /// means moving the cursor onto the HUD, which pauses the driver rather than ending it —
         /// but a cancel can still land in the window between the driver deciding it is done and
         /// this page hearing about it. It wins whenever it does: nothing the run produced is shown
@@ -399,7 +399,7 @@ namespace Clowd.UI
             "scrolling" => "Scrolling…",
             "settling" => "Waiting for the page…",
             "stitching" => "Stitching…",
-            _ => "Esc or FINISH to stop",
+            _ => "Esc or Finish to stop",
         };
 
         /// <summary>Explains an outcome that is not simply "here is your image". Only the two

@@ -1,0 +1,302 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="using:System"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- The transport button (design spec §4). Everything the four states look like is expressed here as
+         `^[State=…]` styles over token veils, so the C# side owns exactly one fact (Waiting is not
+         pressable) and the fills stay arithmetically correct if the tray colour ever changes.
+
+         Layout notes worth knowing before editing:
+         * The width is FIXED at 60 (horizontal). The label changes every second while a transport runs;
+           a button that could grow would make the whole strip twitch. In vertical mode the width becomes
+           NaN and the button stretches to the tray's 34 px column instead.
+         * `_content` declares two rows AND two columns and the children move between cells on rotation.
+           `Grid.ColumnDefinitions` is not a styled property (it cannot be set from a Style), and the
+           unused Auto row/column collapses to zero, so this is the cheap way to have both layouts. The
+           spacing is swapped with the axis so the collapsed track contributes no gap either.
+         * The glyph slot is 10x10 and holds both layers: the 9 px status glyph and the 14 px verb glyph
+           pulled in by a -2 margin so it also measures 10. That is what keeps the label from shifting
+           when the two swap on hover. -->
+    <ControlTheme x:Key="{x:Type tray:TrayPrimaryButton}" TargetType="tray:TrayPrimaryButton">
+        <Setter Property="Cursor" Value="Hand" />
+        <!-- The spec's 8,0 content padding is carried by the control (and applied as `_content`'s margin)
+             instead of by `_bg`, on purpose: a Border padding would inset `_veil` and `_hover` too,
+             leaving 8 px of un-tinted fill at each end of every hover. -->
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform"
+                                               Duration="{x:Static tray:TrayTokens.PressTransition}" />
+            </Transitions>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="_bg"
+                        Width="{x:Static tray:TrayTokens.PrimaryWidth}"
+                        Height="{x:Static tray:TrayTokens.ButtonHeight}"
+                        CornerRadius="7"
+                        ClipToBounds="True">
+                    <Border.Transitions>
+                        <Transitions>
+                            <BrushTransition Property="Background" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                        </Transitions>
+                    </Border.Transitions>
+                    <Panel>
+                        <!-- the state tint, layered over `_bg`'s fill rather than pre-blended into it.
+                             The Opacity transition is what lets the hover veil REPLACE this one instead
+                             of stacking on it: the two states that have both fade in opposite directions
+                             over the same duration, so the fill walks straight from the resting tint to
+                             the hover tint without a dip through the bare fill. -->
+                        <Border Name="_veil" CornerRadius="7" IsHitTestVisible="False">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <BrushTransition Property="Background" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                                    <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                                </Transitions>
+                            </Border.Transitions>
+                        </Border>
+                        <Grid Name="_content"
+                              Margin="{TemplateBinding Padding}"
+                              ColumnDefinitions="Auto,Auto"
+                              RowDefinitions="Auto,Auto"
+                              ColumnSpacing="5"
+                              RowSpacing="0"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center">
+                            <Panel Name="_glyph"
+                                   Grid.Row="0"
+                                   Grid.Column="0"
+                                   Width="10"
+                                   Height="10"
+                                   VerticalAlignment="Center">
+                                <!-- rest layer: the status. Default is the record dot, which Idle, Active and
+                                     Waiting all use; Paused restyles it to the pause bars. -->
+                                <tray:TrayGlyphIcon Name="_state"
+                                                    Width="9"
+                                                    Height="9"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    RenderTransformOrigin="50%,50%"
+                                                    Glyph="{x:Static tray:TrayGlyphs.Rec}"
+                                                    Foreground="{x:Static tray:TrayTokens.FgBrush}">
+                                    <!-- The pulse animates this transform's ScaleX/ScaleY, so the object has
+                                         to exist up front: Avalonia's keyframe animator animates the
+                                         RenderTransform it finds, it does not create one. -->
+                                    <tray:TrayGlyphIcon.RenderTransform>
+                                        <ScaleTransform />
+                                    </tray:TrayGlyphIcon.RenderTransform>
+                                </tray:TrayGlyphIcon>
+                                <!-- hover layer: the verb. Only Active (pause) and Paused (play) have one,
+                                     so Idle and Waiting never swap. -->
+                                <tray:TrayGlyphIcon Name="_act"
+                                                    Width="14"
+                                                    Height="14"
+                                                    Margin="-2"
+                                                    IsVisible="False"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Foreground="{x:Static tray:TrayTokens.FgBrush}" />
+                            </Panel>
+                            <TextBlock Name="_label"
+                                       Grid.Row="0"
+                                       Grid.Column="1"
+                                       Text="{TemplateBinding Label}"
+                                       FontSize="11.5"
+                                       FontWeight="SemiBold"
+                                       FontFeatures="tnum"
+                                       Foreground="{x:Static tray:TrayTokens.FgBrush}"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Transitions>
+                                    <Transitions>
+                                        <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                                    </Transitions>
+                                </TextBlock.Transitions>
+                            </TextBlock>
+                        </Grid>
+                        <Border Name="_hover" CornerRadius="7" Opacity="0" IsHitTestVisible="False">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                                </Transitions>
+                            </Border.Transitions>
+                        </Border>
+                    </Panel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <!-- ============ Idle: nothing running. Fill Rec, white dot, no verb glyph. ============ -->
+        <Style Selector="^[State=Idle] /template/ Border#_bg">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.RecBrush}" />
+        </Style>
+        <Style Selector="^[State=Idle] /template/ Border#_hover">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WhiteVeil12}" />
+        </Style>
+        <Style Selector="^[State=Idle]:pointerover /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <!-- ============ Active: running. Tray fill + 10 % white, the dot pulses in Rec. ============ -->
+        <Style Selector="^[State=Active] /template/ Border#_bg">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.TrayBrush}" />
+        </Style>
+        <Style Selector="^[State=Active] /template/ Border#_veil">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WhiteVeil10}" />
+        </Style>
+        <Style Selector="^[State=Active] /template/ Border#_hover">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WhiteVeil16}" />
+        </Style>
+        <Style Selector="^[State=Active]:pointerover /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <!-- The spec defines the hover fill as tray + 16 % white, i.e. the hover veil REPLACES the
+             resting one; leaving both painted gives tray + 10 % + 16 % (measured #595B5E against the
+             spec's #484A4D). Hiding the resting veil here is what makes the two states exclusive. -->
+        <Style Selector="^[State=Active]:pointerover /template/ Border#_veil">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^[State=Active] /template/ tray|TrayGlyphIcon#_state">
+            <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.RecBrush}" />
+            <!-- The pulse lives under the state selector so it simply stops existing the moment the state
+                 changes; a style animation leaves no value behind (FillMode None), so there is no residual
+                 scale to undo. Origin is the glyph's centre, set on the element above.
+
+                 The keyframes target `ScaleTransform.ScaleX/Y`, not `RenderTransform`: Avalonia 12.1 has no
+                 keyframe animator for an ITransform value (TransformOperationsAnimator only serves the
+                 TransformOperationsTransition), so `Value="scale(0.72)"` threw "No animator registered for
+                 the property RenderTransform" on the first measure. Animating the transform's own doubles
+                 uses TransformAnimator, which is why `_state` declares an explicit <ScaleTransform/>. -->
+            <Style.Animations>
+                <Animation Duration="{x:Static tray:TrayTokens.Pulse}" IterationCount="Infinite" Easing="CubicEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                        <Setter Property="Opacity" Value="1" />
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="0.72" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="0.72" />
+                        <Setter Property="Opacity" Value="0.55" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                        <Setter Property="Opacity" Value="1" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="^[State=Active] /template/ tray|TrayGlyphIcon#_act">
+            <Setter Property="Glyph" Value="{x:Static tray:TrayGlyphs.Pause}" />
+        </Style>
+        <Style Selector="^[State=Active]:pointerover /template/ tray|TrayGlyphIcon#_state">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^[State=Active]:pointerover /template/ tray|TrayGlyphIcon#_act">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+
+        <!-- ============ Paused: held. Tray fill + 22 % Warn, static amber bars, dimmed label. ============ -->
+        <Style Selector="^[State=Paused] /template/ Border#_bg">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.TrayBrush}" />
+        </Style>
+        <Style Selector="^[State=Paused] /template/ Border#_veil">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WarnVeil22}" />
+        </Style>
+        <Style Selector="^[State=Paused] /template/ Border#_hover">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WarnVeil34}" />
+        </Style>
+        <Style Selector="^[State=Paused]:pointerover /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <!-- same exclusivity as Active: tray + 34 % Warn, not tray + 22 % + 34 % (measured #7B5A24
+             against the spec's #624B26). -->
+        <Style Selector="^[State=Paused]:pointerover /template/ Border#_veil">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^[State=Paused] /template/ tray|TrayGlyphIcon#_state">
+            <Setter Property="Glyph" Value="{x:Static tray:TrayGlyphs.Pause}" />
+            <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.WarnBrush}" />
+        </Style>
+        <Style Selector="^[State=Paused] /template/ tray|TrayGlyphIcon#_act">
+            <Setter Property="Glyph" Value="{x:Static tray:TrayGlyphs.Play}" />
+        </Style>
+        <Style Selector="^[State=Paused] /template/ TextBlock#_label">
+            <Setter Property="Opacity" Value="0.65" />
+        </Style>
+        <Style Selector="^[State=Paused]:pointerover /template/ TextBlock#_label">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^[State=Paused]:pointerover /template/ tray|TrayGlyphIcon#_state">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^[State=Paused]:pointerover /template/ tray|TrayGlyphIcon#_act">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+
+        <!-- ============ Waiting: asked to start, no answer yet. Seg fill, faint dot, no hover. ============ -->
+        <Style Selector="^[State=Waiting] /template/ Border#_bg">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.SegBrush}" />
+        </Style>
+        <Style Selector="^[State=Waiting] /template/ tray|TrayGlyphIcon#_state">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="^[State=Waiting] /template/ TextBlock#_label">
+            <Setter Property="Opacity" Value="0.65" />
+        </Style>
+
+        <!-- ============ Pressed / disabled ============ -->
+        <Style Selector="^:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.96)" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <Style Selector="^:disabled /template/ Border#_hover">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <!-- Declared AFTER :disabled so it wins: Waiting is the one disabled state that must not be dimmed
+             (it is the button's own doing, and a dimmed strip reads as a broken one). Avalonia still sends
+             :pointerover to a disabled control, which is why no Waiting hover style exists at all. -->
+        <Style Selector="^[State=Waiting]">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <!-- ============ Vertical: stacked glyph over label, stretched to the tray column (spec §9) ============ -->
+        <Style Selector="^[Orientation=Vertical]">
+            <Setter Property="Padding" Value="2,0" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Border#_bg">
+            <Setter Property="Width" Value="{x:Static sys:Double.NaN}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Grid#_content">
+            <Setter Property="ColumnSpacing" Value="0" />
+            <Setter Property="RowSpacing" Value="3" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Panel#_glyph">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ tray|TrayGlyphIcon#_state">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ tray|TrayGlyphIcon#_act">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="Height" Value="12" />
+        </Style>
+        <!-- the label moves out of column 1 and into row 1; the digits stay upright -->
+        <Style Selector="^[Orientation=Vertical] /template/ TextBlock#_label">
+            <Setter Property="Grid.Row" Value="1" />
+            <Setter Property="Grid.Column" Value="0" />
+            <Setter Property="FontSize" Value="8.5" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

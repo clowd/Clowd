@@ -1,0 +1,269 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- The toggle half (spec §5). A Button with its own ControlTheme rather than the app's default
+         look: it must be a transparent window onto the slot's fill, so the whole default template
+         (fill, border, pressed transform) is replaced, not patched.
+
+         Its CornerRadius, Padding and the dimensions come from the outer theme's styles — the half's
+         shape depends on facts only the slot knows (is there a chevron, which way does the strip
+         run) — so nothing here sets them. -->
+    <ControlTheme x:Key="TraySplitToggleHalfTheme" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="MinWidth" Value="{x:Static tray:TrayTokens.ButtonMinWidth}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <!-- transparent, but painted: an unpainted Border does not hit-test, and the
+                         padding around the glyph is most of the target the user aims at -->
+                    <Border Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Padding="{TemplateBinding Padding}"
+                                      Content="{TemplateBinding Content}" />
+                    <Border Name="_hover"
+                            Background="{x:Static tray:TrayTokens.HoverVeil}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False"
+                            Opacity="0">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity"
+                                                  Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <!-- :not(:disabled) is load-bearing: Avalonia keeps reporting :pointerover on a disabled
+             control, and the dimming that says "inert" lives on the slot (or, for a chevron-only
+             disable, on the outer theme) — a rule in another theme cannot be ordered against this
+             one, so this rule has to exclude itself. -->
+        <Style Selector="^:pointerover:not(:disabled) /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </ControlTheme>
+
+    <!-- The chevron half (spec §5): 16x32 (vertical: full width x 14) with a hairline divider on the
+         edge it meets the toggle on, and the down chevron at 12 px. It rests a step behind the
+         toggle at .7 opacity — it opens a menu, it does not change anything by itself — and comes up
+         to full strength over a 10 % white veil under the pointer. -->
+    <ControlTheme x:Key="TraySplitToggleChevronTheme" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{x:Static tray:TrayTokens.Divider}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Opacity" Value="0.7" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+            </Transitions>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <!-- the divider is drawn on this Border, and the glyph is its SIBLING rather than
+                         its child, so the 1 px line does not push the chevron off centre -->
+                    <Border Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Border Name="_hover"
+                            Background="{x:Static tray:TrayTokens.WhiteVeil10}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False"
+                            Opacity="0">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity"
+                                                  Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                    <tray:TrayGlyphIcon Width="12"
+                                        Height="12"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Foreground="{x:Static tray:TrayTokens.FgBrush}"
+                                        Glyph="{x:Static tray:TrayGlyphs.Chev}" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <!-- see the toggle half: a disabled control still reports :pointerover -->
+        <Style Selector="^:pointerover:not(:disabled)">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:pointerover:not(:disabled) /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </ControlTheme>
+
+    <!-- The slot (spec §5, §9). One Seg-filled rounded box holding two transparent halves and, over
+         the toggle half, the underline bar.
+
+         The bar is a sibling of the toggle button rather than part of its content: the spec insets it
+         7 px from the BUTTON's edges (34 - 2*7 = the 20 px track), while the button's own padding is
+         8/7 and would shift the bar half a pixel. Centring a 20 px bar in the 34 px half gives the
+         spec's insets exactly, in both orientations, with no arithmetic. It is hit-test invisible, so
+         the click still lands on the toggle underneath.
+
+         The two halves sit in a StackPanel, not a Grid: a rotation is then one TemplateBinding rather
+         than a pair of row/column definitions and four attached-property setters that have to be
+         swapped in the right order. -->
+    <ControlTheme x:Key="{x:Type tray:TraySplitToggle}" TargetType="tray:TraySplitToggle">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="_slot"
+                        Background="{x:Static tray:TrayTokens.SegBrush}"
+                        CornerRadius="7">
+                    <StackPanel Name="_parts" Orientation="{TemplateBinding Orientation}">
+                        <Panel Name="_toggleHost">
+                            <!-- the owner names the control; the template forwards that name to the half a screen reader actually lands on.
+                                 TrayToggleHalfButton is a Button that also answers the toggle pattern, so the
+                                 state the bar below shows is readable without eyes (spec §2, §10); it keeps
+                                 Button as its style key, which is why the rules below still find it. -->
+                            <tray:TrayToggleHalfButton Name="PART_Toggle"
+                                    Theme="{StaticResource TraySplitToggleHalfTheme}"
+                                    AutomationProperties.Name="{TemplateBinding (AutomationProperties.Name)}"
+                                    ToolTip.Tip="{TemplateBinding ToggleToolTip}">
+                                <Panel>
+                                    <!-- two glyphs swapped by visibility, the way the app's other
+                                         state-carrying buttons do it: the alternative would be a
+                                         code-side Glyph write on every state change, and a style
+                                         setter cannot carry another property's value. -->
+                                    <tray:TrayGlyphIcon Name="_iconOn"
+                                                        Width="{x:Static tray:TrayTokens.IconSize}"
+                                                        Height="{x:Static tray:TrayTokens.IconSize}"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{x:Static tray:TrayTokens.FgBrush}"
+                                                        Glyph="{TemplateBinding OnGlyph}"
+                                                        IsVisible="{TemplateBinding IsOn}" />
+                                    <!-- off is dimmed as well as crossed out: the two glyphs of a pair
+                                         differ by a slash alone, which is not enough from across a
+                                         desktop -->
+                                    <tray:TrayGlyphIcon Name="_iconOff"
+                                                        Width="{x:Static tray:TrayTokens.IconSize}"
+                                                        Height="{x:Static tray:TrayTokens.IconSize}"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Opacity="0.45"
+                                                        Foreground="{x:Static tray:TrayTokens.FgBrush}"
+                                                        Glyph="{TemplateBinding OffGlyph}"
+                                                        IsVisible="{TemplateBinding IsOn, Converter={x:Static BoolConverters.Not}}" />
+                                </Panel>
+                            </tray:TrayToggleHalfButton>
+                            <Border Name="_track"
+                                    Width="{x:Static tray:TrayTokens.TrackWidth}"
+                                    Height="{x:Static tray:TrayTokens.TrackHeight}"
+                                    Margin="0,0,0,3"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Bottom"
+                                    Background="{x:Static tray:TrayTokens.Track}"
+                                    CornerRadius="3"
+                                    ClipToBounds="True"
+                                    IsHitTestVisible="False">
+                                <Border Name="_pill"
+                                        Width="{x:Static tray:TrayTokens.TrackWidth}"
+                                        HorizontalAlignment="Left"
+                                        CornerRadius="3">
+                                    <Border.Transitions>
+                                        <Transitions>
+                                            <!-- the level arrives ~10 times a second; without this the
+                                                 bar reads as a row of steps instead of a movement -->
+                                            <DoubleTransition Property="Width"
+                                                              Duration="{x:Static tray:TrayTokens.LevelTransition}" />
+                                        </Transitions>
+                                    </Border.Transitions>
+                                </Border>
+                            </Border>
+                        </Panel>
+                        <!-- name and tooltip are two strings, not one: an owner may grow the tooltip a
+                             reason (" · locked while …") as the state changes, while the accessible name
+                             stays the fixed label spec §10 lists -->
+                        <Button Name="PART_Chevron"
+                                Theme="{StaticResource TraySplitToggleChevronTheme}"
+                                AutomationProperties.Name="{TemplateBinding ChevronName}"
+                                ToolTip.Tip="{TemplateBinding ChevronToolTip}"
+                                IsVisible="{TemplateBinding HasChevron}"
+                                IsEnabled="{TemplateBinding IsChevronEnabled}" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <!-- The toggle half is 32 high on both axes; everything else about it depends on the axis, so
+             both orientations are written out rather than one relying on the other's setters being
+             reverted. -->
+        <Style Selector="^ /template/ Button#PART_Toggle">
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
+            <!-- alone in the slot, the toggle carries all four of its corners -->
+            <Setter Property="CornerRadius" Value="7" />
+        </Style>
+        <Style Selector="^[Orientation=Horizontal] /template/ Button#PART_Toggle">
+            <!-- spec's CSS 0,7,0,8 -> left 8, right 7 in Avalonia's order: 8 + 16 + 7 = 31, clamped up
+                 to the 34 px MinWidth, which is where the split's 34 + 16 = 50 comes from -->
+            <Setter Property="Padding" Value="8,0,7,0" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Button#PART_Toggle">
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <!-- with a chevron the inner edge goes square, so the two halves read as one slot -->
+        <Style Selector="^[Orientation=Horizontal][HasChevron=True] /template/ Button#PART_Toggle">
+            <Setter Property="CornerRadius" Value="7,0,0,7" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical][HasChevron=True] /template/ Button#PART_Toggle">
+            <Setter Property="CornerRadius" Value="7,7,0,0" />
+        </Style>
+
+        <!-- Horizontal: 16 wide beside the toggle, divider on its left, stretched to the row height.
+             Vertical: under the toggle, full width, 14 high, divider on top. Neither dimension is set
+             in the template, so switching axis simply swaps which of these two rules matches. -->
+        <Style Selector="^[Orientation=Horizontal] /template/ Button#PART_Chevron">
+            <Setter Property="Width" Value="{x:Static tray:TrayTokens.ChevronWidth}" />
+            <Setter Property="CornerRadius" Value="0,7,7,0" />
+            <Setter Property="BorderThickness" Value="1,0,0,0" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Button#PART_Chevron">
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.ChevronHeight}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="0,0,7,7" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+        </Style>
+
+        <!-- Red off, green on — the same two colours in every mode, so the bar can be read without
+             reading the glyph. -->
+        <Style Selector="^ /template/ Border#_pill">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.RecBrush}" />
+        </Style>
+        <Style Selector="^[IsOn=True] /template/ Border#_pill">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.OkBrush}" />
+        </Style>
+
+        <!-- The chevron alone is inert (a chevron whose choice is temporarily fixed): it dims, the
+             toggle beside it does not. -->
+        <Style Selector="^[IsChevronEnabled=False] /template/ Button#PART_Chevron">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+
+        <!-- The whole slot is inert. Dimming is applied ONCE, on the slot, so both halves and the bar
+             fade together by the same factor; the rule below it puts the chevron's own dim back to its
+             resting .7 so a disabled slot with a disabled chevron does not multiply out to .16.
+             Declared last because Avalonia still reports :pointerover on disabled controls. -->
+        <Style Selector="^:disabled /template/ Border#_slot">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <Style Selector="^:disabled /template/ Button#PART_Chevron">
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

@@ -1,0 +1,54 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- Spec §8. Two stacked lines in a 32 px row: a bold tabular fact over a dimmed explanation.
+
+         The Padding lives on a Border rather than on the StackPanel because an Avalonia Panel has no
+         Padding; the control's own Padding property is the single place it is written, so the CSS-order
+         trap (spec "0,10,0,8" = left 8, right 10) is converted exactly once, here.
+
+         Both lines trim rather than wrap: the block's width is fixed by its owner, and a second visual
+         row would change the height of the whole strip mid-run. -->
+    <ControlTheme x:Key="{x:Type tray:TrayStatusBlock}" TargetType="tray:TrayStatusBlock">
+        <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
+        <!-- spec writes CSS "0,10,0,8" (left 8, right 10): the right side carries the extra pixel so the
+             ellipsis never touches the button next to it -->
+        <Setter Property="Padding" Value="8,0,10,0" />
+        <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
+        <!-- the text is a running readout, so a narrator should re-read it as it changes; the name it
+             reads is built in code from the two lines -->
+        <Setter Property="AutomationProperties.LiveSetting" Value="Polite" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        Padding="{TemplateBinding Padding}">
+                    <StackPanel Orientation="Vertical"
+                                VerticalAlignment="Center"
+                                Spacing="2">
+                        <!-- LineHeight is the spec's 1.1x, rounded to whole pixels so the pair (13 + 2 + 11)
+                             is stable at every scaling instead of drifting a subpixel per line -->
+                        <TextBlock Name="_primary"
+                                   FontSize="11.5"
+                                   FontWeight="SemiBold"
+                                   FontFeatures="tnum"
+                                   LineHeight="13"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   Text="{TemplateBinding PrimaryText}"
+                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap" />
+                        <TextBlock Name="_secondary"
+                                   FontSize="10"
+                                   LineHeight="11"
+                                   Opacity="0.6"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   Text="{TemplateBinding SecondaryText}"
+                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+</ResourceDictionary>
