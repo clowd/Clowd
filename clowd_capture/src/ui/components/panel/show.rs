@@ -216,7 +216,7 @@ impl StripMetrics {
             Axis::Row => self.readout_along,
             Axis::Column => self.thick,
         };
-        let along = tokens::EMBLEM_SLOT + tokens::GAP + readout_along + groups_along;
+        let along = tokens::EMBLEM_SLOT + tokens::EMBLEM_GAP + readout_along + groups_along;
         match axis {
             Axis::Row => vec2(along, self.thick),
             Axis::Column => vec2(col_inner, along),
@@ -343,7 +343,13 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
                     Axis::Row => vec2(tokens::EMBLEM_SLOT, across),
                     Axis::Column => vec2(across, tokens::EMBLEM_SLOT),
                 };
+                // The emblem's slot is padded around a smaller mark, so it
+                // needs less of a gap than the flush button boxes. egui
+                // spends `item_spacing` AFTER a widget, so this is set
+                // before the emblem and restored before the readout.
+                ui.spacing_mut().item_spacing = Vec2::splat(tokens::EMBLEM_GAP);
                 widgets::emblem(ui, emblem_slot);
+                ui.spacing_mut().item_spacing = Vec2::splat(tokens::GAP);
                 let readout_slot = match axis {
                     Axis::Row => vec2(m.readout_along, across),
                     Axis::Column => vec2(across, m.thick),

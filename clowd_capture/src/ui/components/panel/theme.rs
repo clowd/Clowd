@@ -57,6 +57,11 @@ pub mod tokens {
     pub const EMBLEM_SLOT: f32 = 40.0;
     /// The emblem mark, centred in its slot.
     pub const EMBLEM_MARK: f32 = 32.0;
+    /// Between the emblem and the readout. The mark is smaller than its
+    /// slot, so the slot already carries whitespace the button boxes do
+    /// not: a full `GAP` on top of that reads as a wider hole than the
+    /// gaps further along the strip.
+    pub const EMBLEM_GAP: f32 = GAP - 4.0;
     /// Button icon cell.
     pub const ICON: f32 = 20.0;
     pub const ICON_SIZE: Vec2 = vec2(ICON, ICON);
@@ -175,7 +180,10 @@ pub fn apply_style(ctx: &egui::Context) {
     s.animation_time = HOVER_FADE_SECS;
     // The tray's 0.8 pt steps at 125 % are off egui's 1/32 grid, so the
     // orange "unaligned" markers would be permanent noise.
-    s.debug.show_unaligned = false;
+    #[cfg(debug_assertions)]
+    {
+        s.debug.show_unaligned = false;
+    }
     // Struct update rather than a full literal: a full `Visuals { .. }`
     // would have to name the deprecated `clip_rect_margin`.
     s.visuals = egui::Visuals {
