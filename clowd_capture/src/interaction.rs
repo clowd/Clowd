@@ -13,6 +13,9 @@ pub const ZOOM_MIN: f32 = 1.0;
 pub const ZOOM_MAX: f32 = 256.0;
 
 const VELOCITY_WINDOW: Duration = Duration::from_secs(5);
+/// Speed thresholds for the scroll hint, in physical px per second at
+/// 100 % — `evaluate` scales the measured speed down by the DPI so the
+/// same hand movement reads the same on every display.
 const SLOW_SPEED_THRESHOLD: f32 = 15.0;
 const FAST_SPEED_THRESHOLD: f32 = 40.0;
 const HINT_MIN_DISPLAY: Duration = Duration::from_secs(3);
@@ -225,8 +228,10 @@ impl MouseVelocityTracker {
         total_distance / elapsed.as_secs_f32()
     }
 
-    pub fn evaluate(&mut self, now: Instant, currently_shown: bool) -> bool {
-        let speed = self.average_speed(now);
+    /// `dpi` is the scale of the monitor under the cursor: the samples
+    /// are physical pixels, the thresholds are 100 % pixels.
+    pub fn evaluate(&mut self, now: Instant, currently_shown: bool, dpi: f32) -> bool {
+        let speed = self.average_speed(now) / dpi.max(1.0);
         if currently_shown {
             if let Some(shown_at) = self.hint_shown_at {
                 if now.duration_since(shown_at) < HINT_MIN_DISPLAY {
@@ -682,6 +687,23 @@ mod tests {
         assert!(!n.kind.message().is_empty());
     }
 
+    /// The thresholds are 100 % pixels: the same slow hand at 200 % moves
+    /// twice the physical pixels and must still count as slow.
+    #[test]
+    fn slow_threshold_scales_with_dpi() {
+        let mut tracker = MouseVelocityTracker::new();
+        let start = Instant::now();
+        // 20 px/s over four seconds (past MIN_HISTORY): fast at 100 %
+        // (>= 15), slow at 200 % (10).
+        for i in 0..80 {
+            let t = start + Duration::from_millis(i * 50);
+            tracker.record(t, ScreenPointF::new(100.0 + i as f32, 100.0));
+        }
+        let now = start + Duration::from_millis(4000);
+        assert!(!tracker.evaluate(now, false, 1.0));
+        assert!(tracker.evaluate(now, false, 2.0));
+    }
+
     #[test]
     fn velocity_tracker_slow_mouse_shows_hint() {
         let mut tracker = MouseVelocityTracker::new();
@@ -691,7 +713,7 @@ mod tests {
             tracker.record(t, ScreenPointF::new(100.0 + i as f32 * 0.5, 100.0));
         }
         let now = start + Duration::from_millis(24 * 200);
-        assert!(tracker.evaluate(now, false));
+        assert!(tracker.evaluate(now, false, 1.0));
     }
 
     #[test]
@@ -703,7 +725,7 @@ mod tests {
             tracker.record(t, ScreenPointF::new(100.0 + i as f32 * 100.0, 100.0));
         }
         let now = start + Duration::from_millis(24 * 200);
-        assert!(!tracker.evaluate(now, false));
+        assert!(!tracker.evaluate(now, false, 1.0));
     }
 
     #[test]
@@ -715,11 +737,11 @@ mod tests {
             tracker.record(t, ScreenPointF::new(100.0, 100.0));
         }
         let show_time = start + Duration::from_millis(19 * 200);
-        assert!(tracker.evaluate(show_time, false));
+        assert!(tracker.evaluate(show_time, false, 1.0));
 
         let fast_time = show_time + Duration::from_secs(1);
         tracker.record(fast_time, ScreenPointF::new(500.0, 500.0));
-        assert!(tracker.evaluate(fast_time, true));
+        assert!(tracker.evaluate(fast_time, true, 1.0));
     }
 
     #[test]
@@ -731,14 +753,14 @@ mod tests {
             tracker.record(t, ScreenPointF::new(100.0, 100.0));
         }
         let show_time = start + Duration::from_millis(19 * 200);
-        assert!(tracker.evaluate(show_time, false));
+        assert!(tracker.evaluate(show_time, false, 1.0));
 
         let later = show_time + Duration::from_secs(4);
         for i in 0..30 {
             let t = show_time + Duration::from_secs(3) + Duration::from_millis(i * 30);
             tracker.record(t, ScreenPointF::new(100.0 + i as f32 * 80.0, 100.0));
         }
-        assert!(!tracker.evaluate(later, true));
+        assert!(!tracker.evaluate(later, true, 1.0));
     }
 
     #[test]
@@ -748,6 +770,6 @@ mod tests {
         tracker.record(start, ScreenPointF::new(100.0, 100.0));
         let now = start + Duration::from_millis(500);
         tracker.record(now, ScreenPointF::new(100.0, 100.0));
-        assert!(!tracker.evaluate(now, false));
+        assert!(!tracker.evaluate(now, false, 1.0));
     }
 }

@@ -70,11 +70,36 @@ struct VsOut {
     @location(1) @interpolate(flat) handle_center: vec2<f32>,
 };
 
-// The border's half-thickness in physical pixels, stepped on whole-pixel
-// DPI boundaries — 2 px stroke at 100–199 %, 4 px at 200–299 %, … — so
-// the stroke stays pixel-sharp on every display.
-fn border_half() -> f32 {
-    return floor(max(u.viewport.z, 1.0));
+// The border stroke in whole physical pixels: floor(2 × DPI), so 2 px at
+// 100–149 %, 3 px at 150–199 %, 4 px at 200 % … — always an integer, so
+// the stroke stays pixel-sharp on every display. It straddles the
+// selection edge with `border_out` px outside and `border_in` px inside;
+// an odd stroke puts its extra pixel on the outside.
+fn border_px() -> f32 {
+    return floor(2.0 * max(u.viewport.z, 1.0));
+}
+fn border_out() -> f32 {
+    return ceil(border_px() * 0.5);
+}
+fn border_in() -> f32 {
+    return floor(border_px() * 0.5);
+}
+
+// Handle geometry. The circle is 6 px radius at 100 % and scales with
+// the DPI exactly (it is anti-aliased, so it needs no pixel snapping);
+// the two bands inside it — a 1 px accent rim, then a 2 px white ring —
+// round to whole pixels each, so the ring stays crisp while the
+// proportions (1 : 2 : 3, rim : ring : core) hold at every scale. That
+// keeps the handle tracking the hit-test radius (`selection::hit_test`)
+// on fractional scales instead of jumping at 200 %.
+fn handle_radius() -> f32 {
+    return 6.0 * max(u.viewport.z, 1.0);
+}
+fn handle_rim() -> f32 {
+    return max(round(max(u.viewport.z, 1.0)), 1.0);
+}
+fn handle_ring() -> f32 {
+    return max(round(2.0 * max(u.viewport.z, 1.0)), 1.0);
 }
 
 // The rounded selection's radius, clamped the way the window server
@@ -98,7 +123,8 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
     let c = corners[vi % 6u];
 
     let sr = u.selection_rect;
-    let half = border_half();
+    let bo = border_out();
+    let bi = border_in();
     let radius = u.sel_params.z;
 
     var rect = vec4<f32>(0.0, 0.0, 0.0, 0.0);
@@ -112,20 +138,21 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
             // the strip strictly between them. Corner patches (4-7)
             // stay degenerate.
             switch quad {
-                case 0u { rect = vec4(sr.x - half, sr.y - half, sr.z + half, sr.y + half); }
-                case 1u { rect = vec4(sr.z - half, sr.y + half, sr.z + half, sr.w - half); }
-                case 2u { rect = vec4(sr.x - half, sr.w - half, sr.z + half, sr.w + half); }
-                case 3u { rect = vec4(sr.x - half, sr.y + half, sr.x + half, sr.w - half); }
+                case 0u { rect = vec4(sr.x - bo, sr.y - bo, sr.z + bo, sr.y + bi); }
+                case 1u { rect = vec4(sr.z - bi, sr.y + bi, sr.z + bo, sr.w - bi); }
+                case 2u { rect = vec4(sr.x - bo, sr.w - bi, sr.z + bo, sr.w + bo); }
+                case 3u { rect = vec4(sr.x - bo, sr.y + bi, sr.x + bi, sr.w - bi); }
                 default {}
             }
         } else {
             // Rounded: the slabs cover only the straight border
-            // sections (± half + 1 px for the AA fringe); the corner
-            // patches cover each corner's quadrant out to where the
-            // curve meets the straight edges, which also spans the
-            // outside-the-curve corner region they repaint.
+            // sections (± the wider side of the stroke + 1 px for the AA
+            // fringe); the corner patches cover each corner's quadrant
+            // out to where the curve meets the straight edges, which
+            // also spans the outside-the-curve corner region they
+            // repaint.
             let r = clamped_radius();
-            let pad = half + 1.0;
+            let pad = bo + 1.0;
             switch quad {
                 case 0u { rect = vec4(sr.x + r, sr.y - pad, sr.z - r, sr.y + pad); }
                 case 1u { rect = vec4(sr.z - pad, sr.y + r, sr.z + pad, sr.w - r); }
@@ -140,8 +167,7 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
     } else if u.sel_params.w > 0.5 {
         // Resize handles: 8 quads sized to the handle circle + AA
         // fringe, centered on the corners and edge midpoints.
-        let step_f = half;
-        let ext = 6.0 * step_f + 1.5;
+        let ext = handle_radius() + 1.5;
         let mid_x = (sr.x + sr.z) * 0.5;
         let mid_y = (sr.y + sr.w) * 0.5;
         switch quad - 8u {
@@ -267,18 +293,19 @@ fn dash_color(arc: f32) -> vec4<f32> {
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let fade = clamp(u.viewport.w, 0.0, 1.0);
     let sr = u.selection_rect;
-    let half = border_half();
+    let bo = border_out();
+    let bi = border_in();
     let radius = u.sel_params.z;
 
     if in.qid >= 8u {
         // Resize handle: an anti-aliased circle — from the edge inward:
-        // `half` px accent, `half` px white ring, rest accent. One
-        // distance per pixel (the quad knows its own center), where the
-        // old fullscreen pass evaluated all eight.
-        let step_f = half;
-        let handle_r    = 6.0 * step_f;
-        let white_outer = handle_r - step_f;
-        let white_inner = handle_r - 3.0 * step_f;
+        // the accent rim, the white ring, then the accent core (see
+        // `handle_radius` for the sizing). One distance per pixel (the
+        // quad knows its own center), where the old fullscreen pass
+        // evaluated all eight.
+        let handle_r    = handle_radius();
+        let white_outer = handle_r - handle_rim();
+        let white_inner = white_outer - handle_ring();
         let aa = 0.5;
         let hd = distance(in.pos.xy, in.handle_center);
         if (hd >= handle_r + aa) {
@@ -304,15 +331,16 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // corner squares). Left/right slabs span only the inner-y strip
         // strictly between them.
         let px = vec2<i32>(floor(in.pos.xy));
-        let ihalf = i32(half);
+        let ibo = i32(bo);
+        let ibi = i32(bi);
         let sx = i32(sr.x);
         let sy = i32(sr.y);
         let sz = i32(sr.z);
         let sw = i32(sr.w);
-        let inner_top    = sy + ihalf;
-        let inner_bottom = sw - ihalf - 1;
-        let outer_left   = sx - ihalf;
-        let outer_right  = sz + ihalf - 1;
+        let inner_top    = sy + ibi;
+        let inner_bottom = sw - ibi - 1;
+        let outer_left   = sx - ibo;
+        let outer_right  = sz + ibo - 1;
         let top_len  = (outer_right - outer_left) + 1;
         let side_len = (inner_bottom - inner_top) + 1;
 
@@ -327,9 +355,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return vec4(dash.rgb * fade, fade);
     }
 
-    // Rounded border. The same 2*half stroke straddling the rect's edge,
-    // run around a rounded rect and anti-aliased over one pixel, with
-    // the dash phase measured along the curved perimeter.
+    // Rounded border. The same stroke straddling the rect's edge
+    // (`bo` outside, `bi` inside), run around a rounded rect and
+    // anti-aliased over one pixel, with the dash phase measured along
+    // the curved perimeter.
     let fpos = in.pos.xy;
     let rmin = sr.xy;
     let rmax = sr.zw;
@@ -338,9 +367,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Straight edges at integer coordinates land pixel centres at
     // half-integer distances, so these two coverages are exactly 0 or 1
     // there and reproduce the integer path's classification; only the
-    // curves see fractional values.
-    let border_a = clamp(half + 0.5 - abs(d), 0.0, 1.0);
-    let inside_a = clamp(-(d + half) + 0.5, 0.0, 1.0);
+    // curves see fractional values. The stroke is `d` in [-bi, bo].
+    let border_a = clamp(min(d + bi, bo - d) + 0.5, 0.0, 1.0);
+    let inside_a = clamp(-(d + bi) + 0.5, 0.0, 1.0);
     let dash = dash_color(rounded_rect_arc(fpos, rmin, rmax, r));
     let dash_w = border_a * fade;
 

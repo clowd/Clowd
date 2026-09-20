@@ -2342,10 +2342,11 @@ impl ApplicationHandler for App {
                         .input
                         .velocity_tracker
                         .record(now, cycle.input.virtual_cursor);
+                    let dpi = dpi_at_point(cycle.input.virtual_cursor, &self.monitors);
                     cycle.input.show_scroll_hint = cycle
                         .input
                         .velocity_tracker
-                        .evaluate(now, cycle.input.show_scroll_hint);
+                        .evaluate(now, cycle.input.show_scroll_hint, dpi);
                 }
 
                 let panel = broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);

@@ -178,18 +178,17 @@ impl SnapshotState {
                 // The radius is a length in the same space as the rect, so
                 // it scales with the magnifier like the rect's edges do.
                 let radius_local = selection_radius.max(0.0) * zoom.max(1.0);
-                // Dash period: snapped to the border's perimeter (same DPI
-                // step rule the shader uses for the stroke) so the pattern
-                // wraps without a cut dash — but only when that seam is on
-                // screen to see, and never mid-drag (see
-                // [`dash_period_for_frame`] and [`seam_visible`]).
-                let dpi_step = self.dpi_scale.max(1.0).floor();
-                let nominal = NOMINAL_DASH_PERIOD * dpi_step;
+                // Dash period: snapped to the border's perimeter so the
+                // pattern wraps without a cut dash — but only when that
+                // seam is on screen to see, and never mid-drag (see
+                // [`dash_period_for_frame`] and [`seam_visible`]). The
+                // nominal period rounds with the DPI to whole pixels.
+                let nominal = (NOMINAL_DASH_PERIOD * self.dpi_scale.max(1.0)).round();
                 let period = dash_period_for_frame(
                     &mut self.held_dash_period,
                     !selection_dragging && seam_visible(handles, radius_local),
                     nominal,
-                    border_perimeter(r - l, b - t, radius_local),
+                    border_perimeter(r - l, b - t, radius_local, border_px(self.dpi_scale)),
                 );
                 ([l, t, r, b], radius_local, period)
             })
@@ -275,16 +274,30 @@ impl SnapshotState {
 /// (DxScreenCapture.cpp:638-645) and the shader's own constant.
 pub(crate) const NOMINAL_DASH_PERIOD: f32 = 32.0;
 
+/// The selection border stroke in whole physical pixels at `dpi`:
+/// `floor(2 × dpi)`, the rule `selection.wgsl`'s `border_px` applies.
+pub(crate) fn border_px(dpi: f32) -> f32 {
+    (2.0 * dpi.max(1.0)).floor()
+}
+
 /// Length of the path the dashes walk: the selection border's perimeter
-/// in px for a `w`×`h` rect with corner radius `r` (0 = square). For the
-/// square border this is the integer path's `2 * top_len + 2 * side_len`
-/// (the stroke's extra `half` on the top/bottom runs cancels the `half`
-/// the sides give up); the rounded path swaps four corners for one
-/// circle's worth of arc. `r` is clamped like the shader clamps it.
-pub(crate) fn border_perimeter(w: f32, h: f32, r: f32) -> f32 {
+/// in px for a `w`×`h` rect with corner radius `r` (0 = square) and a
+/// `stroke` px border. For the square border this is the integer path's
+/// `2 * top_len + 2 * side_len`: the top/bottom runs span the stroke's
+/// outer extent and the sides give up its inner extent, which cancel for
+/// an even stroke and leave four extra pixels for an odd one (the
+/// shader puts the odd pixel outside). The rounded path swaps four
+/// corners for one circle's worth of arc. `r` is clamped like the shader
+/// clamps it.
+pub(crate) fn border_perimeter(w: f32, h: f32, r: f32, stroke: f32) -> f32 {
     let w = w.max(0.0);
     let h = h.max(0.0);
     let r = r.clamp(0.0, w.min(h) * 0.5);
+    if r <= 0.0 {
+        let out = (stroke * 0.5).ceil();
+        let inn = (stroke * 0.5).floor();
+        return 2.0 * (w + h) + 4.0 * (out - inn);
+    }
     2.0 * (w + h) - 8.0 * r + 2.0 * std::f32::consts::PI * r
 }
 
@@ -566,11 +579,26 @@ mod tests {
     /// full circle of arc, and a radius past half the short side clamps.
     #[test]
     fn border_perimeter_square_and_rounded() {
-        assert_eq!(border_perimeter(100.0, 50.0, 0.0), 300.0);
-        let rounded = border_perimeter(100.0, 50.0, 10.0);
+        assert_eq!(border_perimeter(100.0, 50.0, 0.0, 2.0), 300.0);
+        // An odd stroke puts its extra pixel outside: the top and bottom
+        // runs each grow by two, the sides shrink by none.
+        assert_eq!(border_perimeter(100.0, 50.0, 0.0, 3.0), 304.0);
+        assert_eq!(border_perimeter(100.0, 50.0, 0.0, 4.0), 300.0);
+        let rounded = border_perimeter(100.0, 50.0, 10.0, 2.0);
         assert!((rounded - (300.0 - 80.0 + 2.0 * std::f32::consts::PI * 10.0)).abs() < 1e-3);
         // Radius clamps to 25 (half of 50): a stadium.
-        assert_eq!(border_perimeter(100.0, 50.0, 1000.0), border_perimeter(100.0, 50.0, 25.0));
+        assert_eq!(border_perimeter(100.0, 50.0, 1000.0, 2.0), border_perimeter(100.0, 50.0, 25.0, 2.0));
+    }
+
+    /// The stroke rule the shader and the perimeter share.
+    #[test]
+    fn border_px_floors_twice_the_dpi() {
+        assert_eq!(border_px(1.0), 2.0);
+        assert_eq!(border_px(1.25), 2.0);
+        assert_eq!(border_px(1.5), 3.0);
+        assert_eq!(border_px(1.75), 3.0);
+        assert_eq!(border_px(2.0), 4.0);
+        assert_eq!(border_px(2.25), 4.0);
     }
 
     /// The shared curve's endpoints: byte-exact passthrough at t=0 (the

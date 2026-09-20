@@ -97,7 +97,7 @@ struct VsOut {
 // old fragment logic:
 //   chunk     = one thin arm's length     (round(50 * scale))
 //   chunk2    = thick arms end            (2 * chunk)
-//   wide_half = thick arm half-width      (clamp(round(2.5 * scale), 1, 4))
+//   wide_half = thick arm half-width      (max(round(2.5 * scale), 1))
 @vertex
 fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
     var corners = array<vec2<f32>, 6>(
@@ -113,7 +113,7 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
     let scale = max(u.viewport.z, 1.0);
     let chunk = round(50.0 * scale);
     let chunk2 = chunk * 2.0;
-    let wide_half = clamp(round(2.5 * scale), 1.0, 4.0);
+    let wide_half = max(round(2.5 * scale), 1.0);
     let w = u.viewport.x;
     let h = u.viewport.y;
 
@@ -161,13 +161,13 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         case 0u, 1u {
             // Dash runs ALONG the line: along Y for the vertical line,
             // along X for the horizontal one. 6 black + 6 white pixels
-            // per period at 100 %, scaled by the whole-pixel DPI step so
-            // the dashes are the same physical size on every display.
-            // Anchored to absolute window coordinates so the dashes feel
+            // per period at 100 %, the period rounded with the DPI so
+            // the dashes are the same physical size on every display
+            // (the line itself stays 1 px: see vs_main). Anchored to
+            // absolute window coordinates so the dashes feel
             // screen-fixed rather than swimming with the cursor.
-            let dpi_step = i32(floor(max(u.viewport.z, 1.0)));
             let dash_coord = select(px.x, px.y, in.kind == KIND_DASH_V);
-            let period = 12 * dpi_step;
+            let period = max(i32(round(12.0 * u.viewport.z)), 2);
             let half_period = period / 2;
             // WGSL signed `%` preserves sign of the dividend; add
             // `period` before the second `%` so negative window
