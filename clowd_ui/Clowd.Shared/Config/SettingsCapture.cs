@@ -103,6 +103,23 @@ namespace Clowd.Config
         }
 
         /// <summary>
+        /// Whether the capture overlay offers SEARCH — a reverse image search of the selection.
+        /// The shell hands the cropped image to the default browser, which posts it to Google Lens
+        /// and lands on the results; nothing else reaches that action, so switching this off
+        /// removes the feature rather than just trimming a button (clowd_capture PanelFeatures,
+        /// over <c>--no-image-search</c>).
+        /// </summary>
+        [Category("Optional features")]
+        [DisplayName("Reverse image search")]
+        [Description("Show the SEARCH button in the capture window, which looks the selected image " +
+                     "up with a reverse image search and opens the results in your browser")]
+        public bool ImageSearchEnabled
+        {
+            get => _imageSearchEnabled;
+            set => Set(ref _imageSearchEnabled, value);
+        }
+
+        /// <summary>
         /// Whether the shell keeps a capturer process waiting in the background
         /// (standby mode, CAPTURE_PROTOCOL.md) so the overlay opens without paying
         /// process/GPU startup on every capture. When off — or after the standby
@@ -223,6 +240,7 @@ namespace Clowd.Config
         private bool _scrollingCaptureEnabled = true;
         private bool _scrollCaptureRewindToTop = true;
         private bool _ocrEnabled = true;
+        private bool _imageSearchEnabled = true;
         private double _obscuredWindowDetectionThreshold = 0.80;
         private bool _openSavedInExplorer = true;
     }

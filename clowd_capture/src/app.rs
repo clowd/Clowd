@@ -22,7 +22,8 @@ use crate::render::window::{set_hardware_cursor_visible, WindowHandle, WindowSet
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
 use crate::session_output::{
-    write_color_action, write_ocr_upload_action, write_scroll_action, write_session, write_share_action, write_video_action, SessionAction,
+    write_color_action, write_image_search_action, write_ocr_upload_action, write_scroll_action, write_session, write_share_action,
+    write_video_action, SessionAction,
 };
 use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
@@ -185,6 +186,9 @@ pub enum CycleAction {
     /// into a window a meeting app can share.
     Share,
     Scroll,
+    /// The capture strip's SEARCH: the cropped image was handed to the
+    /// shell to look up with a reverse image search.
+    SearchImage,
     Copy,
     Save,
     /// OCR mode's COPY: the recognized text went to the clipboard.
@@ -1456,6 +1460,41 @@ impl App {
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Session Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                            self.show_all_windows();
+                        } else {
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
+                        }
+                    }
+                }
+            }
+            Command::SearchImage => {
+                // The image has to leave the machine for a reverse image
+                // search, and the shell is the half that speaks HTTP — so
+                // this writes the cropped image plus a `search-image`
+                // marker and lets `CaptureSessionDispatcher` do the
+                // lookup. Without a --session-dir there is no shell
+                // listening: the Command::Video precedent, ignore.
+                let Some(session_dir) = cycle.settings.session_dir.clone() else {
+                    log::info!("command SearchImage ignored: no --session-dir provided");
+                    return;
+                };
+                hide_overlay_for_action(&self.windows);
+                let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
+                    (Some(sel), Some(buf)) => write_image_search_action(
+                        &session_dir,
+                        sel,
+                        cycle.input.selection_radius,
+                        buf,
+                        active_peek_image,
+                        cursor_visible,
+                    ),
+                    _ => ActionResult::Failed("No selection or buffer".into()),
+                };
+                match result {
+                    ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SearchImage),
+                    ActionResult::Canceled => self.show_all_windows(),
+                    ActionResult::Failed(msg) => {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Image Search Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);

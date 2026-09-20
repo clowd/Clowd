@@ -140,8 +140,10 @@ namespace Clowd.UI
     /// capture (session.json present) loads the session, names it "Screenshot" and opens the
     /// editor or the upload flow depending on the action.txt marker; a SELECT-COLOR capture
     /// (action.txt only) opens the color viewer; a SHARE capture (a "share x,y,w,h" marker, no
-    /// files) starts a region share; an OCR-UPLOAD capture (an "ocr-upload" marker
-    /// plus an ocr.txt sidecar, no image) uploads the recognized text as a paste; a canceled
+    /// files) starts a region share; a SEARCH-IMAGE capture (a "search-image" marker plus
+    /// cropped.png, no session) is looked up with a reverse image search; an OCR-UPLOAD capture
+    /// (an "ocr-upload" marker plus an ocr.txt sidecar, no image) uploads the recognized text as
+    /// a paste; a canceled
     /// capture (neither file) deletes the pre-created session directory. COPY/SAVE are handled
     /// inside the capturer itself and never produce a session.
     /// </summary>
@@ -354,6 +356,13 @@ namespace Clowd.UI
                     PageManager.Current.GetScrollCapturePage()
                         .Open(result.Region, result.ScrollPoint, result.TargetHwnd, result.SessionDir);
                     break;
+                case CaptureAction.SearchImage:
+                    // the PNG travels in the result, not in a session — the capturer's session dir
+                    // is already gone by now, and ReverseImageSearch deletes the file when it is
+                    // done with it (the OcrUpload arm below is the precedent for an action whose
+                    // directory is gone by the time it is dispatched).
+                    await ReverseImageSearch.SearchAsync(result.ImagePath);
+                    break;
                 case CaptureAction.OcrUpload:
                     // the recognized text travels in the result, not in a session — the
                     // capturer's session dir is already gone by now. UploadText creates its
@@ -557,6 +566,11 @@ namespace Clowd.UI
             if (!settings.OcrEnabled || !ocrAvailable)
                 args.Add("--no-ocr");
 
+            // SEARCH hands the cropped image to the browser to look up; unlike SHARE and VIDEO
+            // there is no mode and no tray item behind it, so this switch is the whole feature.
+            if (!settings.ImageSearchEnabled)
+                args.Add("--no-image-search");
+
             // The SAVE button writes the file inside the capturer, so the naming the editor's
             // save dialog does — the user's filename pattern, rendered and uniquified against
             // the folder they last saved into — has to travel with it. Both are omitted when
@@ -632,6 +646,7 @@ namespace Clowd.UI
         Share,
         Scroll,
         OcrUpload,
+        SearchImage,
     }
 
     /// <summary>A finished, non-canceled capture. <see cref="Session"/> is set for
@@ -639,11 +654,17 @@ namespace Clowd.UI
     /// <see cref="SessionDir"/> for Video and Scroll, which additionally carry
     /// <see cref="ScrollPoint"/> and <see cref="TargetHwnd"/>; <see cref="Region"/> alone for
     /// Share, whose directory is already deleted; <see cref="Text"/> for OcrUpload, which carries
-    /// no session at all.</summary>
+    /// no session at all; <see cref="ImagePath"/> for SearchImage, whose one PNG outlives its
+    /// session directory.</summary>
     public sealed class CaptureResult
     {
         public CaptureAction Action { get; init; }
         public SessionInfo Session { get; init; }
+
+        /// <summary>The image a SearchImage capture is looking up, moved out of the session
+        /// directory before that directory was deleted — so it is the caller's to delete once the
+        /// search has been posted.</summary>
+        public string ImagePath { get; init; }
         public Color? Color { get; init; }
         public ScreenRect Region { get; init; }
         public string SessionDir { get; init; }
@@ -679,7 +700,9 @@ namespace Clowd.UI
         /// action from the action.txt marker (missing marker = Edit). An action.txt of
         /// "select-color #RRGGBB" without a session carries just the picked color; the
         /// directory is deleted. A "share x,y,w,h" marker carries just the region to mirror, and
-        /// its directory is deleted too — a share writes no files. An "ocr-upload" marker carries
+        /// its directory is deleted too — a share writes no files. A "search-image" marker carries
+        /// its image in cropped.png, which is moved to a temp file before the directory is deleted.
+        /// An "ocr-upload" marker carries
         /// its text in an ocr.txt sidecar, which is read out before the directory is deleted.
         /// Otherwise the capture was canceled: the pre-created directory is deleted and null is
         /// returned.
@@ -800,6 +823,41 @@ namespace Clowd.UI
 
                 Debug.WriteLine("Unparseable scroll action: " + action);
                 DeleteSessionDir(sessionDir);
+                return null;
+            }
+
+            // a "search-image" marker means the overlay wants the selection looked up with a
+            // reverse image search. cropped.png beside it is the whole payload, and no session is
+            // registered for it: the capture is transient, so the file is moved out to a temp path
+            // the caller owns and the directory goes the way OcrUpload's does. This branch must
+            // stay above the fall-through DeleteSessionDir below — the PNG has to be rescued
+            // before the directory goes away.
+            const string searchImagePrefix = "search-image";
+            if (action != null && action.StartsWith(searchImagePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string imagePath = null;
+                try
+                {
+                    var source = Path.Combine(sessionDir, "cropped.png");
+                    if (File.Exists(source))
+                    {
+                        imagePath = Path.Combine(Path.GetTempPath(), "clowd-search-" + Guid.NewGuid().ToString("N") + ".png");
+                        File.Move(source, imagePath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Failed to move the image search capture: " + ex);
+                    SentryConfig.CaptureHandled(ex, "capture.move-search-image");
+                    imagePath = null;
+                }
+
+                DeleteSessionDir(sessionDir);
+
+                if (!String.IsNullOrEmpty(imagePath))
+                    return new CaptureResult { Action = CaptureAction.SearchImage, ImagePath = imagePath };
+
+                Debug.WriteLine("search-image marker with no readable image");
                 return null;
             }
 

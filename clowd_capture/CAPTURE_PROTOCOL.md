@@ -51,6 +51,7 @@ flags that differ (`CaptureArguments.Build`).
 | `--no-scroll-capture` | flag | SCROLL shown | Hide the SCROLL button and drop its `L` accelerator. Windows-only button; the flag parses everywhere. |
 | `--no-video` | flag | VIDEO shown | Hide the VIDEO button and drop its `V` accelerator. Sent when the shell has recording switched off entirely (there is no per-button switch for VIDEO). Like `--no-share`, it hides the button only: `--video` is a mode that never shows the strip and is unaffected. |
 | `--no-ocr` | flag | OCR shown | Hide the OCR button and drop its `O` accelerator. The button is the only way into OCR mode, so this also removes the OCR strip. |
+| `--no-image-search` | flag | SEARCH shown | Hide the SEARCH (reverse image search) button and drop its `A` accelerator. Unlike `--no-share` and `--no-video` this removes the action as well as the button: nothing else reaches it. |
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
 | `--share` | flag | off | Share-region picker: first confirmed selection dispatches the SHARE action immediately, skipping the panel. Requires `--session-dir`. The same auto-dispatch shape as `--video`, and mutually exclusive with it: passing both is rejected by clap as a malformed command line, like any other bad flag, because the first confirmed selection cannot be both a recording region and a mirror region. Without the flag the SHARE action is still reachable — from its button on the capture strip. |
@@ -151,6 +152,7 @@ configuration has exactly one path.
 | VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H [R]` |
 | SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
 | SHARE | `action.txt` only | `share X,Y,W,H` |
+| SEARCH-IMAGE | `cropped.png`, `action.txt` | `search-image` |
 | OCR-UPLOAD | `ocr.txt`, `action.txt` | `ocr-upload` |
 | COPY / SAVE | none — handled inside the capturer (clipboard / save dialog, named per `--filename-pattern`) | — |
 | OCR-COPY / OCR-SEARCH | none — handled inside the capturer (clipboard / browser launch) | — |
@@ -161,7 +163,7 @@ File contents:
 | File | Contents |
 |---|---|
 | `desktop.png` | Full virtual-desktop bitmap, locked peek window composited, never the cursor (the editor toggles cursor visibility itself). |
-| `cropped.png` | Preview of the selection, peek composited; cursor composited only if visible to the user; corners transparent when the selection is a picked window and rounded corners are on (`--no-rounded-corners`). For VIDEO: no peek compositing (the recording shows real obstructions) and never rounded. |
+| `cropped.png` | Preview of the selection, peek composited; cursor composited only if visible to the user; corners transparent when the selection is a picked window and rounded corners are on (`--no-rounded-corners`). For VIDEO: no peek compositing (the recording shows real obstructions) and never rounded. For SEARCH-IMAGE: exactly as for EDIT/UPLOAD — it is the image the user is looking up, so it must be the image they were shown. |
 | `cursor.png` | Desktop crop at the cursor rect with the cursor composited. Absent when no cursor was captured or the OS reported it hidden. |
 | `session.json` | Session metadata (§1.3). |
 | `ocr.txt` | The text recognized in the selection, UTF-8 without BOM, lines separated by `\n`. Present only with the `ocr-upload` marker; the shell reads it, uploads it as a text paste, and deletes the directory. |
@@ -179,11 +181,15 @@ these files:
 2. VIDEO: `cropped.png` first, then **`action.txt` last**. Its appearance is
    the completion signal; no `desktop.png`, no `session.json` (the session is
    created by Clowd.Ui when recording finishes).
-3. OCR-UPLOAD: `ocr.txt` first, then **`action.txt` last**. Its appearance is
+3. SEARCH-IMAGE: `cropped.png` first, then **`action.txt` last**. Its
+   appearance is the completion signal; no `desktop.png` and no
+   `session.json` — the shell hands that one file to the browser to search
+   with and deletes the directory.
+4. OCR-UPLOAD: `ocr.txt` first, then **`action.txt` last**. Its appearance is
    the completion signal; no PNGs and no `session.json` — the recognized text
    is the entire payload, and the shell uploads it as a text paste.
-4. SELECT-COLOR / SCROLL / SHARE: `action.txt` only.
-5. Neither `session.json` nor `action.txt` present = the capture was
+5. SELECT-COLOR / SCROLL / SHARE: `action.txt` only.
+6. Neither `session.json` nor `action.txt` present = the capture was
    canceled; the shell deletes the pre-created directory.
 
 The VIDEO rect is emitted in the platform capture coordinate space: physical
@@ -221,6 +227,17 @@ rect here is a request. It is emitted two ways: by the SHARE button on the
 capture strip (accelerator `H`), and by `--share`, which auto-dispatches the
 same action the moment a selection is confirmed — the twin of the VIDEO
 button and `--video`.
+
+The SEARCH-IMAGE marker carries nothing at all — the payload is
+`cropped.png` beside it. The shell writes the image into a one-shot local
+HTML page and opens that in the default browser, which posts it to Google
+Lens and is redirected to the results. The upload is the *browser's*
+because Lens binds an upload to the session that made it: a POST from the
+shell yields a link that reads "Expired upload" in the browser that opens
+it. The capture is transient and no session is registered for it, which is
+why the directory is deleted as soon as the file has been read. The action
+is reachable only from the SEARCH button on the capture strip (accelerator
+`A`), and `--no-image-search` removes both.
 
 The OCR markers come from a second action panel the overlay shows once it has
 recognized text inside the selection (Windows only — like SCROLL, the button

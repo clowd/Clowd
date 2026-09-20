@@ -442,6 +442,86 @@ fn share_action_line(selection: ScreenRect, monitors: &[MonitorInfo]) -> anyhow:
     Ok(format!("share {x},{y},{w},{h}\n"))
 }
 
+/// Write a SEARCH-IMAGE (reverse image search) action payload:
+/// `cropped.png` — the very image UPLOAD would have sent — plus an
+/// `action.txt` = `search-image` marker written LAST, so its appearance is
+/// the completion signal (the rule [`write_video_action`] documents).
+///
+/// No `desktop.png` and no `session.json`: the shell posts this one file to
+/// the search engine, opens the results page and deletes the directory, so
+/// nothing downstream ever opens a session for it. That is the VIDEO
+/// writer's shape, not the UPLOAD writer's — the difference being which of
+/// the two ways of making `cropped.png` is right here.
+///
+/// It is made the *screenshot* way: peek composited, the cursor included
+/// only when the user has it visible, and a picked window's corners
+/// rounded away. What the user is searching for is what the overlay showed
+/// them, down to the transparent corners — the VIDEO poster's raw,
+/// square, un-peeked crop would hand the engine pixels of the obscuring
+/// window instead.
+pub fn write_image_search_action(
+    session_dir: &Path,
+    selection: ScreenRect,
+    corner_radius: f32,
+    buffer: &CapturedDesktop,
+    peek: Option<&WindowPeekImage>,
+    cursor_visible: bool,
+) -> ActionResult {
+    match write_image_search_action_inner(session_dir, selection, corner_radius, buffer, peek, cursor_visible) {
+        Ok(action_path) => {
+            log::info!("search-image action written to {:?}", action_path);
+            ActionResult::Success
+        }
+        Err(e) => {
+            log::error!("search-image action write failed: {e:#}");
+            ActionResult::Failed(format!("Failed to write image search action: {e}"))
+        }
+    }
+}
+
+fn write_image_search_action_inner(
+    session_dir: &Path,
+    selection: ScreenRect,
+    corner_radius: f32,
+    buffer: &CapturedDesktop,
+    peek: Option<&WindowPeekImage>,
+    cursor_visible: bool,
+) -> anyhow::Result<PathBuf> {
+    std::fs::create_dir_all(session_dir)?;
+    let session_dir = absolute_path(session_dir);
+
+    let requested = selection;
+    let selection = selection
+        .intersection(&buffer.bounds)
+        .ok_or_else(|| anyhow!("selection {:?} does not intersect desktop bounds {:?}", selection, buffer.bounds))?;
+    // A corner the clamp cut off is not a corner — the same rule
+    // `write_session_inner` applies to the preview it shares this crop
+    // with.
+    let preview_corners = if corner_radius > 0.0 {
+        corners_to_round(requested, selection)
+    } else {
+        [false; 4]
+    };
+
+    let preview_path = session_dir.join("cropped.png");
+    {
+        let (mut rgba, w, h) = extract_region(selection, buffer, peek).ok_or_else(|| anyhow!("failed to extract selection preview"))?;
+        if cursor_visible {
+            if let Some(cur) = buffer.cursor.as_ref() {
+                composite_cursor_rgba(&mut rgba, w, h, selection, cur);
+            }
+        }
+        apply_rounded_corners(&mut rgba, w, h, corner_radius, preview_corners);
+        save_png(&preview_path, rgba, w, h)?;
+    }
+
+    // action.txt last: until it appears the shell sees a directory it
+    // simply ignores, so a failure above loses nothing but the capture.
+    let action_path = session_dir.join(ACTION_FILE);
+    std::fs::write(&action_path, "search-image\n")?;
+    Ok(action_path)
+}
+
 /// Write an OCR-UPLOAD action payload: `ocr.txt` holding the recognized
 /// text and an `action.txt` = `ocr-upload` marker written LAST, so its
 /// appearance is the completion signal (the same rule

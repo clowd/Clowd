@@ -19,10 +19,10 @@ use crate::ui::command::Command;
 /// Which of the optional panel buttons the shell has left switched on.
 ///
 /// The capture strip grew past what fits comfortably under a small
-/// selection, so UPLOAD, SHARE, SCROLL and OCR became opt-out
+/// selection, so UPLOAD, SHARE, SCROLL, OCR and SEARCH became opt-out
 /// (SettingsCapture's "Optional features" section, carried in over
-/// `--no-upload` / `--no-share` / `--no-scroll-capture` / `--no-ocr` and
-/// the matching `show` fields).
+/// `--no-upload` / `--no-share` / `--no-scroll-capture` / `--no-ocr` /
+/// `--no-image-search` and the matching `show` fields).
 /// EDIT / VIDEO / COPY / SAVE / RESET / EXIT are deliberately NOT
 /// configurable — they are the capturer's reason to exist, and a strip
 /// that can be emptied is a strip that can strand a captured selection.
@@ -53,6 +53,10 @@ pub struct PanelFeatures {
     /// OCR in the capture strip. Switching it off makes the OCR strip
     /// unreachable, since OCR mode is the only thing that raises it.
     pub ocr: bool,
+    /// SEARCH (reverse image search) in the capture strip. Nothing else
+    /// reaches the action — unlike SHARE and VIDEO there is no mode and no
+    /// tray item behind it — so switching it off removes it outright.
+    pub image_search: bool,
 }
 
 impl Default for PanelFeatures {
@@ -69,6 +73,7 @@ impl PanelFeatures {
         scroll_capture: true,
         video: true,
         ocr: true,
+        image_search: true,
     };
 
     /// Whether a button emitting `command` may appear at all. Commands
@@ -80,6 +85,7 @@ impl PanelFeatures {
             Command::ScrollCapture => self.scroll_capture,
             Command::Video => self.video,
             Command::Ocr => self.ocr,
+            Command::SearchImage => self.image_search,
             _ => true,
         }
     }
@@ -89,7 +95,7 @@ impl PanelFeatures {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelButtonSet {
     /// The capture strip: [UPLOAD / EDIT / VIDEO / COPY / SAVE]
-    /// [SHARE / SCROLL / OCR] [RESET / EXIT] (SCROLL and OCR are
+    /// [SHARE / SCROLL / OCR / SEARCH] [RESET / EXIT] (SCROLL and OCR are
     /// Windows-only).
     Normal,
     /// The strip shown while the OCR overlay owns the selection.
@@ -268,7 +274,8 @@ pub struct ButtonDef {
 /// The primary group (accent) is the five actions that finish the
 /// capture with the image as it is. The second group is the hand-offs:
 /// SHARE and SCROLL give the region to a live helper, OCR swaps the strip
-/// for a second round of decisions. The last group is the two ways out.
+/// for a second round of decisions, SEARCH hands the image to the shell's
+/// reverse image search. The last group is the two ways out.
 ///
 /// Accelerator keys (not stored — derived from `underline_idx`):
 ///   0: Upload — U   (0x55)
@@ -284,8 +291,13 @@ pub struct ButtonDef {
 ///   6: Scroll — L   (0x4C), underlined on the fifth char because
 ///      S, C and R already belong to Save, Copy and Reset
 ///   7: OCR    — O   (0x4F)
-///   8: Reset  — R   (0x52)
-///   9: Exit   — X   (0x58), underlined on the second char
+///   8: Search — A   (0x41), underlined on the third char: S, E, R and C
+///      all belong to Save, Edit, Reset and Copy, which leaves A and H,
+///      and H is Share's. The OCR strip's own SEARCH keeps its S — the
+///      two strips are never on screen together, and the lookup is scoped
+///      to one set.
+///   9: Reset  — R   (0x52)
+///  10: Exit   — X   (0x58), underlined on the second char
 const NORMAL_DEFS: &[ButtonDef] = &[
     ButtonDef {
         command: Command::Upload,
@@ -344,6 +356,13 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         tip: "Recognize text (OCR)",
     },
     ButtonDef {
+        command: Command::SearchImage,
+        label: "Search",
+        underline_idx: 2,
+        icon: &crate::ui::components::panel::assets::IMAGE_SEARCH,
+        tip: "Reverse image search on the web",
+    },
+    ButtonDef {
         command: Command::Reset,
         label: "Reset",
         underline_idx: 0,
@@ -359,7 +378,7 @@ const NORMAL_DEFS: &[ButtonDef] = &[
     },
 ];
 
-/// [Upload Edit Video Copy Save] [Share Scroll OCR] [Reset Exit].
+/// [Upload Edit Video Copy Save] [Share Scroll OCR Search] [Reset Exit].
 const NORMAL_GROUPS: &[ButtonGroup] = &[
     ButtonGroup {
         tone: GroupTone::Primary,
@@ -367,7 +386,7 @@ const NORMAL_GROUPS: &[ButtonGroup] = &[
     },
     ButtonGroup {
         tone: GroupTone::Secondary,
-        len: 3,
+        len: 4,
     },
     ButtonGroup {
         tone: GroupTone::Secondary,
@@ -501,20 +520,21 @@ pub fn lookup_command_by_key(set: PanelButtonSet, features: PanelFeatures, c: ch
         .map(|(_, def)| def.command)
 }
 
-/// All 32 on/off combinations of the five switches, so invariants are
+/// All 64 on/off combinations of the six switches, so invariants are
 /// checked against every strip the shell can ask for rather than just
 /// the extremes. Module level so `show`'s tests can reach it too.
 #[cfg(test)]
-pub const FEATURE_COMBINATIONS: [PanelFeatures; 32] = {
-    let mut out = [PanelFeatures::ALL; 32];
+pub const FEATURE_COMBINATIONS: [PanelFeatures; 64] = {
+    let mut out = [PanelFeatures::ALL; 64];
     let mut i = 0;
-    while i < 32 {
+    while i < 64 {
         out[i] = PanelFeatures {
             upload: i & 1 != 0,
             scroll_capture: i & 2 != 0,
             ocr: i & 4 != 0,
             share: i & 8 != 0,
             video: i & 16 != 0,
+            image_search: i & 32 != 0,
         };
         i += 1;
     }
@@ -644,12 +664,14 @@ mod tests {
             scroll_capture: false,
             video: false,
             ocr: false,
+            image_search: false,
         };
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'u'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'h'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'l'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'v'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'o'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'a'), None);
         // UPLOAD is one switch across both strips — text is still an upload.
         assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, off, 'u'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, off, 's'), Some(Command::OcrSearch));
@@ -756,7 +778,7 @@ mod tests {
             .collect();
         assert_eq!(
             normal,
-            ["Upload", "Edit", "Video", "Copy", "Save", "Share", "Scroll", "OCR", "Reset", "Exit"]
+            ["Upload", "Edit", "Video", "Copy", "Save", "Share", "Scroll", "OCR", "Search", "Reset", "Exit"]
         );
         let ocr: Vec<&str> = PanelButtonSet::Ocr
             .defs()
@@ -800,7 +822,7 @@ mod tests {
             labels(PanelButtonSet::Normal),
             vec![
                 (GroupTone::Primary, vec!["Upload", "Edit", "Video", "Copy", "Save"]),
-                (GroupTone::Secondary, vec!["Share", "Scroll", "OCR"]),
+                (GroupTone::Secondary, vec!["Share", "Scroll", "OCR", "Search"]),
                 (GroupTone::Secondary, vec!["Reset", "Exit"]),
             ]
         );
@@ -837,6 +859,7 @@ mod tests {
             share: false,
             scroll_capture: false,
             ocr: false,
+            image_search: false,
             ..PanelFeatures::ALL
         };
         assert_eq!(

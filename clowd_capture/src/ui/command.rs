@@ -30,6 +30,10 @@ pub enum Command {
     /// Run OCR over the current selection and lift the recognized lines
     /// off the desktop.
     Ocr,
+    /// Hand the selection to the shell for a reverse image search: the
+    /// shell posts the cropped image to the search engine and opens the
+    /// results page in the browser.
+    SearchImage,
     /// Copy the recognized text to the clipboard.
     OcrCopy,
     /// Open a web search for the recognized text.

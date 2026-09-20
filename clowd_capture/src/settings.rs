@@ -303,6 +303,12 @@ pub struct CliArgs {
     #[arg(long)]
     pub no_ocr: bool,
 
+    /// Hide the SEARCH (reverse image search) button. Unlike `--no-share`
+    /// and `--no-video` this removes the action outright: nothing but the
+    /// button reaches it.
+    #[arg(long)]
+    pub no_image_search: bool,
+
     /// How the panel draws its buttons: `key` is a square holding the icon
     /// and the accelerator letter, `below` the icon over a full label with
     /// the accelerator underlined.
@@ -363,6 +369,7 @@ impl CliArgs {
                 scroll_capture: !self.no_scroll_capture,
                 video: !self.no_video,
                 ocr: !self.no_ocr,
+                image_search: !self.no_image_search,
             },
             panel_buttons: self.panel_buttons,
             bench_startup: self.bench_startup,
@@ -457,6 +464,7 @@ mod tests {
             "--no-scroll-capture",
             "--no-video",
             "--no-ocr",
+            "--no-image-search",
         ])
         .into_settings();
         assert_eq!(
@@ -467,12 +475,17 @@ mod tests {
                 scroll_capture: false,
                 video: false,
                 ocr: false,
+                image_search: false,
             }
         );
 
         let no_ocr = CliArgs::parse_from(["clowd_capture", "--no-ocr"]).into_settings();
         assert!(!no_ocr.panel_features.ocr);
         assert!(no_ocr.panel_features.upload && no_ocr.panel_features.scroll_capture && no_ocr.panel_features.share);
+
+        let no_image_search = CliArgs::parse_from(["clowd_capture", "--no-image-search"]).into_settings();
+        assert!(!no_image_search.panel_features.image_search);
+        assert!(no_image_search.panel_features.upload && no_image_search.panel_features.ocr && no_image_search.panel_features.share);
 
         let no_share = CliArgs::parse_from(["clowd_capture", "--no-share"]).into_settings();
         assert!(!no_share.panel_features.share);

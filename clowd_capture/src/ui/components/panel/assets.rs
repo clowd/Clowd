@@ -64,6 +64,10 @@ pub const SAVE: Svg = svg!("save.svg");
 pub const RESET: Svg = svg!("refresh.svg");
 pub const EXIT: Svg = svg!("delete.svg");
 pub const SEARCH: Svg = svg!("search.svg");
+/// The SEARCH mark with a picture inside the lens: the capture strip's
+/// reverse image search, told apart from the OCR strip's text SEARCH by
+/// what is being looked up rather than by a second magnifier.
+pub const IMAGE_SEARCH: Svg = svg!("image_search.svg");
 pub const BACK: Svg = svg!("back.svg");
 
 /// The Clowd logo drawn as the tray emblem at the head of the strip
@@ -84,6 +88,7 @@ pub const ALL: &[&Svg] = &[
     &RESET,
     &EXIT,
     &SEARCH,
+    &IMAGE_SEARCH,
     &BACK,
     &CLOWD_LOGO,
 ];
