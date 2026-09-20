@@ -155,13 +155,14 @@ impl SnapshotState {
         }
 
         // Handle visibility is a CPU decision: shown only after capture,
-        // and never while a scroll point is being picked (the picker owns
-        // the next click, so nothing that looks draggable may be on
-        // screen) or while OCR lines are lifted (they must not draw over
-        // the raised text). Decided here rather than at the uniform write
-        // below because the dash period depends on it — a handle over the
+        // and never while OCR lines are lifted (they must not draw over
+        // the raised text). The scroll picker keeps them: trimming the
+        // region down to the scrolling area is part of aiming, and the
+        // press handler routes a handle press to a resize rather than to
+        // the pick. Decided here rather than at the uniform write below
+        // because the dash period depends on it — a handle over the
         // corner hides the pattern's seam.
-        let handles = captured && !scroll_pick_mode && !ocr_active;
+        let handles = captured && !ocr_active;
 
         // Selection rect in window-local physical pixels — through the
         // zoom mapping, so it stays congruent with the UV path above.

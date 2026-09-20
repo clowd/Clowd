@@ -114,7 +114,8 @@ pub struct PanelInputs {
     /// The user's capture accent: the primary group's fill.
     pub accent: Color32,
     /// What the readout slot shows: the selection's size on the capture
-    /// strip, the lifted word count on the OCR strip.
+    /// strip, the lifted word count on the OCR strip. Unused by the
+    /// scroll-pick strip, whose body is the instruction.
     pub readout: Readout,
     /// The selection as the user made it: the size readout prints this,
     /// so a rect straddling two monitors keeps showing its true size.

@@ -29,10 +29,6 @@ pub const CURSOR_SQUARE_PAD: f32 = 4.0;
 pub const OVERLAP_GAP: f32 = 4.0;
 /// Gap between the selection's top edge and the notice pill below it.
 pub const NOTICE_GAP_Y: f32 = 8.0;
-/// Diagonal offset of the scroll-pick instruction from the cursor.
-/// Derived from the reticle's own extent so the chip's near corner always
-/// clears the outer ticks — the two move together if it is ever resized.
-pub const SCOPE_HINT_OFFSET: f32 = crate::ui::components::scope::layout::SCOPE_EXTENT * 0.8;
 
 /// The chip that holds `text`, with or without a keycap. The keycap and
 /// its gap collapse to nothing for a chip that describes an action with no
@@ -83,14 +79,7 @@ pub fn color_hint(cursor: Pos2, size: Vec2, screen: Rect, placed: &[Rect]) -> Re
     offset_from_cursor(cursor, size, screen, CROSSHAIR_OFFSET, placed)
 }
 
-/// The scroll-point picker's instruction. Same flip-and-clamp rule as the
-/// colour chip, further out to clear the reticle, and deliberately NOT
-/// avoiding the other chips: it is the only one on screen while picking.
-pub fn scroll_pick_hint(cursor: Pos2, size: Vec2, screen: Rect) -> Rect {
-    offset_from_cursor(cursor, size, screen, SCOPE_HINT_OFFSET, &[])
-}
-
-/// Shared body of the two cursor-following chips.
+/// Shared body of the cursor-following chip.
 fn offset_from_cursor(cursor: Pos2, size: Vec2, screen: Rect, offset: f32, placed: &[Rect]) -> Rect {
     let mut x = cursor.x + offset;
     let mut y = cursor.y + offset;
@@ -148,7 +137,6 @@ pub fn notice_rect(selection: Rect, size: Vec2, screen: Rect) -> Rect {
 pub fn place(anchor: Anchor, size: Vec2, screen: Rect, placed: &[Rect]) -> Rect {
     match anchor {
         Anchor::Cursor(c) => color_hint(c, size, screen, placed),
-        Anchor::ScopeCursor(c) => scroll_pick_hint(c, size, screen),
         Anchor::MonitorBottom => monitor_hint_bottom(size, screen, placed),
         Anchor::MonitorTop => monitor_hint_top(size, screen, placed),
         Anchor::CursorImage {
@@ -191,21 +179,6 @@ mod tests {
         let corner = color_hint(pos2(2.0, 2.0), c, s, &[]);
         assert!(corner.min.x >= 0.0 && corner.min.y >= 0.0);
         assert!(s.contains_rect(corner));
-    }
-
-    /// Same rule, further out, and it ignores whatever else was placed.
-    #[test]
-    fn scroll_pick_hint_flips_and_clamps() {
-        let s = screen();
-        let c = chip();
-
-        let normal = scroll_pick_hint(pos2(500.0, 500.0), c, s);
-        assert_eq!(normal.min, pos2(500.0 + SCOPE_HINT_OFFSET, 500.0 + SCOPE_HINT_OFFSET));
-
-        let flipped = scroll_pick_hint(pos2(1910.0, 1075.0), c, s);
-        assert_eq!(flipped.min.x, 1910.0 - SCOPE_HINT_OFFSET - c.x);
-        assert_eq!(flipped.min.y, 1075.0 - SCOPE_HINT_OFFSET - c.y);
-        assert!(s.contains_rect(flipped));
     }
 
     #[test]

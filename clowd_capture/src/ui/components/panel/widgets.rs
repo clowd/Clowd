@@ -192,6 +192,37 @@ pub fn readout_job(readout: Readout) -> LayoutJob {
     job
 }
 
+/// The instruction's layout job at one wrap width. Regular weight at
+/// 85 %, like the readout's numbers: it is the strip's one piece of
+/// prose, and it sits straight on the chassis with no fill of its own.
+pub fn hint_job(text: &str, wrap_width: f32) -> LayoutJob {
+    let mut job = LayoutJob::single_section(
+        text.to_owned(),
+        TextFormat {
+            font_id: egui::FontId::new(tokens::HINT_FONT, egui::FontFamily::Monospace),
+            color: tokens::FG_85,
+            line_height: Some(tokens::HINT_LINE),
+            ..Default::default()
+        },
+    );
+    job.wrap.max_width = wrap_width;
+    job
+}
+
+/// The instruction in a dead slot, its block centred in the slot. Box
+/// centring, not ink centring: a wrapped paragraph must sit on its line
+/// boxes, or a line without descenders would ride differently from one
+/// with them.
+pub fn hint(ui: &mut Ui, text: &str, wrap_width: f32, slot: Vec2) -> egui::Rect {
+    let galley = ui
+        .painter()
+        .layout_job(hint_job(text, wrap_width));
+    let (rect, _) = ui.allocate_exact_size(slot, Sense::hover());
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, tokens::FG_85);
+    rect
+}
+
 /// The readout in a dead slot, centred on its ink: the galley's box
 /// carries Cascadia's tall ascent above the digits, so centring the box
 /// leaves the glyphs riding high, more so at every DPI step.

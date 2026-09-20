@@ -75,14 +75,20 @@ impl Near {
 /// Choose the side for `anchor` (already clipped to `bounds`), ask
 /// `size_for` ONCE for that axis's `(width, height)` in px, put the box at
 /// its origin and clamp both axes onto `bounds`.
+///
+/// `lock` pins the strip to one axis: the sides running the other way are
+/// struck out of the cascade before the fit tests, so a set whose contents
+/// only make sense along one axis (the scroll-picker's wrapped
+/// instruction) can never be stood on its end.
 pub fn place(
     anchor: ScreenRect,
     bounds: ScreenRect,
     fit: Fit,
     near: Near,
+    lock: Option<Axis>,
     size_for: impl FnOnce(Axis) -> (i32, i32),
 ) -> (Side, ScreenRect) {
-    let side = choose_side(anchor, bounds, fit, near);
+    let side = choose_side(anchor, bounds, fit, near, lock);
     let (w, h) = size_for(side.axis());
     let (x, y) = origin(side, anchor, bounds, (w, h), near);
     // Keep the WHOLE box on the bounds, both axes (a shadow may clip).
@@ -104,7 +110,7 @@ const CASCADE: [Side; 4] = [Side::Below, Side::Right, Side::Left, Side::Inside];
 /// strip. Neither test depends on what the strip currently holds, so a
 /// content change can never flip the orientation. When no candidate passes
 /// both tests the thickness alone decides.
-fn choose_side(anchor: ScreenRect, bounds: ScreenRect, fit: Fit, near: Near) -> Side {
+fn choose_side(anchor: ScreenRect, bounds: ScreenRect, fit: Fit, near: Near, lock: Option<Axis>) -> Side {
     // `min_distance` is subtracted so the box never hugs the bounds edge;
     // negative means "no space".
     let bottom = (bounds.bottom() - anchor.bottom()).max(0) - near.min_distance;
@@ -122,10 +128,19 @@ fn choose_side(anchor: ScreenRect, bounds: ScreenRect, fit: Fit, near: Near) -> 
         Axis::Row => row_fits,
         Axis::Column => col_fits,
     };
+    let allowed = |s: Side| lock.is_none_or(|axis| s.axis() == axis);
     CASCADE
         .into_iter()
+        .filter(|&s| allowed(s))
         .find(|&s| across(s) && along(s))
-        .or_else(|| CASCADE.into_iter().find(|&s| across(s)))
+        .or_else(|| {
+            CASCADE
+                .into_iter()
+                .filter(|&s| allowed(s))
+                .find(|&s| across(s))
+        })
+        // `Inside` is a row, so a row lock always has this fallback; a
+        // column lock falls back to its own last candidate.
         .unwrap_or(Side::Inside)
 }
 
@@ -195,7 +210,7 @@ mod tests {
     }
 
     fn placed(anchor: ScreenRect, bounds: ScreenRect) -> (ScreenRect, Side) {
-        let (side, rect) = place(anchor, bounds, FIT, near(), full);
+        let (side, rect) = place(anchor, bounds, FIT, near(), None, full);
         (rect, side)
     }
 
@@ -258,8 +273,8 @@ mod tests {
             min_distance: 0,
             ..near()
         };
-        assert_eq!(place(anchor, HD, FIT, loose, full).0, Side::Below);
-        assert_eq!(place(anchor, HD, FIT, near(), full).0, Side::Right);
+        assert_eq!(place(anchor, HD, FIT, loose, None, full).0, Side::Below);
+        assert_eq!(place(anchor, HD, FIT, near(), None, full).0, Side::Right);
     }
 
     #[test]
@@ -312,7 +327,7 @@ mod tests {
                 },
                 ..FIT
             };
-            let (side, r) = place(anchor, HD, fit, near(), |_| (w, 56));
+            let (side, r) = place(anchor, HD, fit, near(), None, |_| (w, 56));
             assert_eq!(side, Side::Below);
             let mid = r.left() + w / 2;
             assert!((mid - (500 + aw / 2)).abs() <= 1, "anchor {aw} box {w}: mid {mid}");
@@ -323,7 +338,7 @@ mod tests {
     fn size_for_is_called_once_with_the_chosen_axis() {
         let calls = Cell::new(0);
         let axis = Cell::new(None);
-        let (side, _) = place(rect(500, 1000, 100, 60), HD, FIT, near(), |a| {
+        let (side, _) = place(rect(500, 1000, 100, 60), HD, FIT, near(), None, |a| {
             calls.set(calls.get() + 1);
             axis.set(Some(a));
             full(a)
@@ -339,7 +354,7 @@ mod tests {
     fn each_strip_is_centred_with_its_own_width() {
         let anchor = rect(500, 300, 100, 100);
         let mids = [400, 520].map(|w| {
-            let (_, r) = place(anchor, HD, FIT, near(), |_| (w, 56));
+            let (_, r) = place(anchor, HD, FIT, near(), None, |_| (w, 56));
             r.left() + w / 2
         });
         assert!((mids[0] - mids[1]).abs() <= 1, "{mids:?}");

@@ -1,36 +1,37 @@
 //! Geometry of the scroll-pick scope reticle.
 //!
 //! The reticle replaces the OS pointer while [`crate::ui::shared::UiSharedState::scroll_pick_mode`]
-//! is set: a ring around the cursor, four thin hairs inside it, four thick
-//! ticks outside it, and a center dot marking the exact point the wheel
-//! will be aimed at. Every dimension is in DIPs and scaled by the
-//! monitor's DPI at compute time, so the reticle is the same physical size
-//! on every display.
+//! is set: a ring around the cursor, cut open at the four axes, with a
+//! hair running out through each gap and a center dot marking the exact
+//! point the wheel will be aimed at. Every dimension is in DIPs and scaled
+//! by the monitor's DPI at compute time, so the reticle is the same
+//! physical size on every display.
 
 /// Outer radius of the ring.
-const RING_RADIUS: f32 = 15.0;
+const RING_RADIUS: f32 = 13.0;
 /// Ring stroke, drawn inward from `RING_RADIUS`.
 const RING_STROKE: f32 = 2.0;
+/// Half-width of the gap the ring leaves at each axis, in radians. The
+/// hairs pass through these, so the gap is wide enough to clear a hair
+/// plus its halo with air either side at every DPI.
+const RING_GAP: f32 = 0.23;
 /// Dark outline drawn one step outside every bright element so the reticle
 /// reads against both light and dark backgrounds.
 const HALO: f32 = 1.0;
 /// Radius kept clear at the center so the pixel under the cursor stays
 /// visible around the dot.
 const CENTER_GAP: f32 = 4.0;
-/// Thickness of the hairs inside the ring.
+/// Thickness of the hairs.
 const HAIR_THICKNESS: f32 = 1.0;
-/// Gap between the ring and the outer ticks.
-const TICK_GAP: f32 = 3.0;
-/// Length of each outer tick.
-const TICK_LEN: f32 = 9.0;
-/// Thickness of the outer ticks.
-const TICK_THICKNESS: f32 = 3.0;
+/// How far each hair runs from the center — out through the ring's gap
+/// and a little past it.
+const HAIR_LENGTH: f32 = 20.0;
 /// Radius of the center dot.
 const DOT_RADIUS: f32 = 1.5;
 
 /// Distance from the cursor to the furthest pixel the reticle touches, in
 /// DIPs. The picker's hint uses this to keep clear of the reticle.
-pub const SCOPE_EXTENT: f32 = RING_RADIUS + TICK_GAP + TICK_LEN + HALO;
+pub const SCOPE_EXTENT: f32 = HAIR_LENGTH + HALO;
 
 /// The reticle in window-local physical pixels, ready to emit.
 #[derive(Debug, Clone, Copy)]
@@ -39,16 +40,15 @@ pub struct ScopeLayout {
     pub center_y: f32,
     pub ring_radius: f32,
     pub ring_stroke: f32,
+    /// Half-width of the gap left at each axis, in radians. Unscaled — an
+    /// angle is the same at every DPI.
+    pub ring_gap: f32,
     pub halo: f32,
     /// Hairs run from `hair_inner` to `hair_outer` out from the center
-    /// along each axis.
+    /// along each axis, crossing the ring's gaps on the way.
     pub hair_inner: f32,
     pub hair_outer: f32,
     pub hair_thickness: f32,
-    /// Ticks run from `tick_inner` to `tick_outer`, outside the ring.
-    pub tick_inner: f32,
-    pub tick_outer: f32,
-    pub tick_thickness: f32,
     pub dot_radius: f32,
 }
 
@@ -61,27 +61,32 @@ impl ScopeLayout {
         // and a fractional thickness would smear them across two.
         let px = |dips: f32| (dips * dpi).round().max(1.0);
 
-        let ring_radius = px(RING_RADIUS);
-        let ring_stroke = px(RING_STROKE);
-        let halo = px(HALO);
-        let tick_inner = ring_radius + px(TICK_GAP);
-
         Self {
             center_x: center_x.round(),
             center_y: center_y.round(),
-            ring_radius,
-            ring_stroke,
-            halo,
+            ring_radius: px(RING_RADIUS),
+            ring_stroke: px(RING_STROKE),
+            ring_gap: RING_GAP,
+            halo: px(HALO),
             hair_inner: px(CENTER_GAP),
-            // Stop at the ring's inner edge — overlapping it would thicken
-            // the stroke at four points.
-            hair_outer: (ring_radius - ring_stroke).max(px(CENTER_GAP)),
+            hair_outer: px(HAIR_LENGTH),
             hair_thickness: px(HAIR_THICKNESS),
-            tick_inner,
-            tick_outer: tick_inner + px(TICK_LEN),
-            tick_thickness: px(TICK_THICKNESS),
             dot_radius: px(DOT_RADIUS),
         }
+    }
+
+    /// The four arcs of the ring, as `(start, end)` angle pairs in
+    /// radians, each one spanning the quadrant between two gaps.
+    /// `pad` widens both ends of every arc, which the halo pass uses to
+    /// keep its outline past the bright arc's tips.
+    pub fn ring_arcs(&self, pad: f32) -> [(f32, f32); 4] {
+        let quarter = std::f32::consts::FRAC_PI_2;
+        let mut out = [(0.0, 0.0); 4];
+        for (i, slot) in out.iter_mut().enumerate() {
+            let start = i as f32 * quarter + self.ring_gap;
+            *slot = (start - pad, start + quarter - 2.0 * self.ring_gap + pad);
+        }
+        out
     }
 }
 
@@ -116,21 +121,55 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hairs_stop_at_the_ring_and_ticks_start_outside_it() {
+    fn hairs_run_through_the_rings_gaps_and_out_past_it() {
         for dpi in [1.0, 1.5, 2.0, 3.0] {
             let s = ScopeLayout::compute(100.0, 100.0, dpi);
             assert!(s.hair_inner < s.hair_outer, "dpi {dpi}: hairs must have length");
             assert!(
-                s.hair_outer <= s.ring_radius - s.ring_stroke,
-                "dpi {dpi}: hairs must stop at the ring's inner edge"
+                s.hair_inner < s.ring_radius - s.ring_stroke,
+                "dpi {dpi}: hairs must start inside the ring"
             );
-            assert!(s.tick_inner > s.ring_radius, "dpi {dpi}: ticks must clear the ring");
-            assert!(s.tick_outer > s.tick_inner, "dpi {dpi}: ticks must have length");
+            assert!(s.hair_outer > s.ring_radius, "dpi {dpi}: hairs must carry on past the ring");
             assert!(
-                s.tick_outer <= SCOPE_EXTENT * dpi + s.halo,
+                s.hair_outer + s.halo <= SCOPE_EXTENT * dpi + s.halo,
                 "dpi {dpi}: reticle must fit inside the extent the hint keeps clear"
             );
         }
+    }
+
+    /// A hair and its halo pass through the gap without touching either
+    /// arc tip, at every DPI: the gap is an angle, so the clearance it
+    /// buys shrinks in DIPs as the ring grows in pixels.
+    #[test]
+    fn the_gaps_clear_the_hairs_at_every_dpi() {
+        for dpi in [1.0, 1.5, 2.0, 3.0] {
+            let s = ScopeLayout::compute(100.0, 100.0, dpi);
+            // Distance from the axis to an arc tip, at the ring's radius.
+            let clearance = s.ring_radius * s.ring_gap.sin();
+            let hair_half = s.hair_thickness / 2.0 + s.halo;
+            assert!(
+                clearance > hair_half,
+                "dpi {dpi}: gap {clearance} must clear the haloed hair {hair_half}"
+            );
+        }
+    }
+
+    /// The arcs tile the ring: four equal spans with a gap of `2 *
+    /// ring_gap` between each pair, and `pad` grows both ends of each.
+    #[test]
+    fn ring_arcs_leave_a_gap_at_every_axis() {
+        let s = ScopeLayout::compute(100.0, 100.0, 1.0);
+        let arcs = s.ring_arcs(0.0);
+        for (i, (start, end)) in arcs.iter().enumerate() {
+            let quarter = std::f32::consts::FRAC_PI_2;
+            assert!((start - (i as f32 * quarter + s.ring_gap)).abs() < 1e-5);
+            assert!((end - start - (quarter - 2.0 * s.ring_gap)).abs() < 1e-5);
+            // The axis itself — the multiple of a quarter turn — lies in
+            // the gap, not under an arc.
+            assert!(*start > i as f32 * quarter, "arc {i} must start after its axis");
+        }
+        let padded = s.ring_arcs(0.05);
+        assert!(padded[0].0 < arcs[0].0 && padded[0].1 > arcs[0].1, "pad grows both ends");
     }
 
     #[test]
@@ -142,7 +181,6 @@ mod tests {
         // invert it.
         let s = ScopeLayout::compute(-40.0, 12.0, 1.5);
         assert!(s.hair_inner < s.hair_outer);
-        assert!(s.tick_inner < s.tick_outer);
         let (lo, hi) = line_span(s.center_x, s.hair_thickness);
         assert!(lo < hi, "a hair at a negative origin must keep min < max");
     }

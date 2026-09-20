@@ -110,6 +110,20 @@ pub mod tokens {
     pub const READOUT_LINE: f32 = 11.0;
     pub const READOUT_PAD_H: f32 = 4.0;
 
+    /// The scroll-picker's instruction, in the readout's place: 11 pt on
+    /// 15 pt line boxes (prose, not a two-digit stack, so it is set
+    /// looser than the readout), padded like the readout is.
+    pub const HINT_FONT: f32 = 11.0;
+    pub const HINT_LINE: f32 = 15.0;
+    pub const HINT_PAD_H: f32 = 8.0;
+    /// How many lines the instruction is allowed to take. The wrap search
+    /// returns the narrowest width that fits it in this many, which is
+    /// also the best-balanced one.
+    pub const HINT_LINES: usize = 2;
+    /// The wrap search's step, in points: the narrowest multiple of this
+    /// that holds the text in `HINT_LINES` lines wins.
+    pub const HINT_WRAP_STEP: f32 = 4.0;
+
     /// The hover tooltip on a `key`-style button (the C# strips' tip chip,
     /// spec §10): `#F2141619`, white 11 pt text, padding 8 × 4, radius 6,
     /// shown after 350 ms, 7 pt below a row / 8 pt beside a column.

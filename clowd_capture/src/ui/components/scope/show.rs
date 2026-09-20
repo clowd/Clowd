@@ -11,8 +11,9 @@
 //! match in physical pixels and line up across the seam, which is why the
 //! inputs carry a DPI of their own instead of using the host's.
 
-use egui::{pos2, Color32, Painter, Rect, Stroke};
+use egui::{pos2, Color32, Painter, Pos2, Rect, Shape, Stroke};
 
+use crate::selection::Hittest;
 use crate::ui::components::scope::layout;
 use crate::ui::components::InputCtx;
 use crate::ui::shared::{aabb_intersects, UiMonitor};
@@ -21,8 +22,8 @@ use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRectF};
 /// Dark outline behind every bright element, so the reticle reads against
 /// both light and dark desktops.
 pub const HALO: Color32 = Color32::from_black_alpha(140);
-/// The hairs inside the ring — white, so they stay legible over the accent
-/// ring whatever colour it is.
+/// The hairs — white, so they stay legible both inside the accent ring
+/// and out over the desktop, whatever colour the accent is.
 pub const HAIR: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 242);
 
 /// One host's copy of the reticle. The center stays in virtual-desktop
@@ -42,16 +43,22 @@ pub struct ScopeInputs {
 /// owns the overlay, every host whose bounds intersect the square
 /// `cursor ± SCOPE_EXTENT * cursor_monitor.dpi` draws the whole reticle.
 ///
-/// The `overlays_visible` gate must keep agreeing with
+/// The reticle is the pointer's stand-in over the selection's INTERIOR
+/// only — the one place a pick can land. On the resize handles, outside
+/// the selection and over the strip the ordinary pointer stays, because
+/// those are still ordinary interactions: the region can be trimmed to
+/// the scrolling area while the picker waits.
+///
+/// The `overlays_visible` and `hittest` gates must keep agreeing with
 /// `app::update_cursor_visibility`, which hides the OS pointer under
-/// exactly the same condition: if this said `None` while the pointer stayed
-/// hidden there would be no pointer at all.
+/// exactly the same conditions: if this said `None` while the pointer
+/// stayed hidden there would be no pointer at all.
 ///
 /// The host's index is unused — the reach test is geometric — but the
 /// signature matches every other overlay's builder.
 pub fn inputs(_index: usize, monitor: &UiMonitor, c: &InputCtx<'_>) -> Option<ScopeInputs> {
     let i = c.input;
-    if !(i.scroll_pick_mode && i.overlays_visible) {
+    if !(i.scroll_pick_mode && i.overlays_visible && i.hittest == Hittest::Inside) {
         return None;
     }
     let target = c.monitors[c.cursor_index?];
@@ -76,40 +83,55 @@ pub fn show(p: &Painter, s: &ScopeInputs, monitor: &UiMonitor) {
     let k = 1.0 / monitor.dpi_scale.max(0.1);
     let c = pos2(l.center_x * k, l.center_y * k);
 
-    // Ring: the dark ring is one halo wider on both edges, so the accent
-    // ring sits inside it with an outline either side. egui centres a
-    // stroke on its radius, where the old SDF drew it inward, hence the
-    // half-width each radius steps back by.
+    // Ring, cut open at the four axes so the hairs run out through the
+    // gaps rather than crossing the stroke. Each arc is drawn twice: the
+    // dark outline — one halo wider on both edges, and padded at both tips
+    // so the arc ends are outlined too — then the accent arc over it. egui
+    // centres a stroke on its radius, where the old SDF drew it inward,
+    // hence the half-width each radius steps back by.
     let halo_w = l.ring_stroke + 2.0 * l.halo;
-    p.circle_stroke(c, (l.ring_radius + l.halo - halo_w / 2.0) * k, Stroke::new(halo_w * k, HALO));
-    p.circle_stroke(
-        c,
-        (l.ring_radius - l.ring_stroke / 2.0) * k,
-        Stroke::new(l.ring_stroke * k, s.accent),
-    );
-
-    // Hairs inside the ring, then ticks outside it. Each band is drawn
-    // twice — the dark arms, inflated by one halo all round, then the
-    // bright ones over them.
-    for (inner, outer, thick, col) in [
-        (l.hair_inner, l.hair_outer, l.hair_thickness, HAIR),
-        (l.tick_inner, l.tick_outer, l.tick_thickness, s.accent),
+    let halo_r = l.ring_radius + l.halo - halo_w / 2.0;
+    let ring_r = l.ring_radius - l.ring_stroke / 2.0;
+    for (radius, width, col, pad) in [
+        (halo_r, halo_w, HALO, l.halo / halo_r.max(1.0)),
+        (ring_r, l.ring_stroke, s.accent, 0.0),
     ] {
-        for halo in [true, false] {
-            let (t, col, grow) = if halo {
-                (thick + 2.0 * l.halo, HALO, l.halo)
-            } else {
-                (thick, col, 0.0)
-            };
-            for [x0, y0, x1, y1] in layout::arm_rects(&l, inner - grow, outer + grow, t) {
-                p.rect_filled(Rect::from_min_max(pos2(x0 * k, y0 * k), pos2(x1 * k, y1 * k)), 0u8, col);
-            }
+        for arc in l.ring_arcs(pad) {
+            p.add(arc_shape(c, radius * k, arc, Stroke::new(width * k, col)));
+        }
+    }
+
+    // Hairs, from the center gap out through the ring and a little past
+    // it. Drawn twice — the dark arms, inflated by one halo all round,
+    // then the bright ones over them.
+    for halo in [true, false] {
+        let (t, col, grow) = if halo {
+            (l.hair_thickness + 2.0 * l.halo, HALO, l.halo)
+        } else {
+            (l.hair_thickness, HAIR, 0.0)
+        };
+        for [x0, y0, x1, y1] in layout::arm_rects(&l, l.hair_inner - grow, l.hair_outer + grow, t) {
+            p.rect_filled(Rect::from_min_max(pos2(x0 * k, y0 * k), pos2(x1 * k, y1 * k)), 0u8, col);
         }
     }
 
     // Center dot — the exact point the wheel will be aimed at.
     p.circle_filled(c, (l.dot_radius + l.halo) * k, HALO);
     p.circle_filled(c, l.dot_radius * k, s.accent);
+}
+
+/// One arc of the ring as a polyline, in the painter's points. egui has no
+/// arc primitive, so the curve is sampled — finely enough that its own
+/// antialiasing hides the segments at every radius the DPIs produce.
+fn arc_shape(c: Pos2, radius: f32, (start, end): (f32, f32), stroke: Stroke) -> Shape {
+    let steps = (radius.round() as usize).clamp(6, 32);
+    let points = (0..=steps)
+        .map(|i| {
+            let a = start + (end - start) * i as f32 / steps as f32;
+            pos2(c.x + radius * a.cos(), c.y + radius * a.sin())
+        })
+        .collect();
+    Shape::line(points, stroke)
 }
 
 #[cfg(test)]
@@ -150,10 +172,13 @@ mod tests {
         }
     }
 
+    /// Picking, with the cursor in the selection's interior — the one
+    /// place the reticle is drawn.
     fn picking(cursor_x: f32) -> InteractionState {
         let mut input = InteractionState::new();
         input.captured = true;
         input.scroll_pick_mode = true;
+        input.hittest = Hittest::Inside;
         input.virtual_cursor = ScreenPointF::new(cursor_x, 400.0);
         input
     }
@@ -164,7 +189,7 @@ mod tests {
     #[test]
     fn a_cursor_ten_px_from_the_seam_reaches_both_hosts_and_forty_px_reaches_one() {
         let m = monitors();
-        // SCOPE_EXTENT is 28 DIPs, so 10 px short of the seam reaches over
+        // SCOPE_EXTENT is 21 DIPs, so 10 px short of the seam reaches over
         // it and 40 px does not.
         let near = picking(1910.0);
         assert!(inputs(0, &m[0], &ctx(&near, &m)).is_some(), "the cursor's own host");
@@ -204,5 +229,21 @@ mod tests {
 
         input.overlays_visible = false;
         assert!(inputs(0, &m[0], &ctx(&input, &m)).is_none(), "Q hides it");
+    }
+
+    /// The reticle stands in for the pointer over the selection's
+    /// interior only: on a resize handle and outside the selection the OS
+    /// pointer is back, so drawing a reticle there would double it.
+    #[test]
+    fn the_reticle_is_the_interiors_alone() {
+        let m = monitors();
+        let mut input = picking(300.0);
+
+        for ht in [Hittest::Outside, Hittest::TopLeft, Hittest::Right, Hittest::Bottom] {
+            input.hittest = ht;
+            assert!(inputs(0, &m[0], &ctx(&input, &m)).is_none(), "{ht:?} keeps the OS pointer");
+        }
+        input.hittest = Hittest::Inside;
+        assert!(inputs(0, &m[0], &ctx(&input, &m)).is_some());
     }
 }

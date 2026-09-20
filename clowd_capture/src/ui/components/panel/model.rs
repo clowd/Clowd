@@ -94,13 +94,43 @@ pub enum PanelButtonSet {
     Normal,
     /// The strip shown while the OCR overlay owns the selection.
     Ocr,
+    /// The strip shown while a scroll point is being picked: no readout,
+    /// the aiming instruction in its place, and the two ways back out.
+    ScrollPick,
 }
 
 impl PanelButtonSet {
-    /// Every set: `show`'s union fit walks it so the tray's
-    /// orientation and column thickness never depend on which set is up,
-    /// and tests hold their invariants across all of them.
-    pub const ALL: &'static [PanelButtonSet] = &[Self::Normal, Self::Ocr];
+    /// Every set, for the invariants the tests hold across all of them.
+    /// The strip's own union fit walks [`Self::UNION`] instead.
+    #[cfg(test)]
+    pub const ALL: &'static [PanelButtonSet] = &[Self::Normal, Self::Ocr, Self::ScrollPick];
+
+    /// The sets the union fit is taken over: every set EXCEPT the
+    /// scroll-pick strip, whose instruction makes it several times wider
+    /// than any other. Folding it into the union would widen every column
+    /// and push every strip's row length past the fit test, so it is
+    /// measured on its own instead (`show::union_fit` adds its own row
+    /// footprint when it is the set on screen) and pinned to a row
+    /// ([`Self::axis_lock`]).
+    pub const UNION: &'static [PanelButtonSet] = &[Self::Normal, Self::Ocr];
+
+    /// The axis this set must run along, or `None` when placement is free
+    /// to choose. The scroll-pick strip is a row wherever it lands: its
+    /// instruction wraps to two lines at a width no column could hold.
+    pub const fn axis_lock(self) -> Option<super::place::Axis> {
+        match self {
+            Self::ScrollPick => Some(super::place::Axis::Row),
+            _ => None,
+        }
+    }
+
+    /// What sits between the emblem and the buttons.
+    pub const fn body(self) -> Body {
+        match self {
+            Self::Normal | Self::Ocr => Body::Readout,
+            Self::ScrollPick => Body::Hint(SCROLL_PICK_HINT),
+        }
+    }
 
     /// Every button this set *can* show, in left-to-right (or
     /// top-to-bottom) order — including any the user has switched off.
@@ -109,6 +139,7 @@ impl PanelButtonSet {
         match self {
             Self::Normal => NORMAL_DEFS,
             Self::Ocr => OCR_DEFS,
+            Self::ScrollPick => SCROLL_PICK_DEFS,
         }
     }
 
@@ -118,6 +149,7 @@ impl PanelButtonSet {
         match self {
             Self::Normal => NORMAL_GROUPS,
             Self::Ocr => OCR_GROUPS,
+            Self::ScrollPick => SCROLL_PICK_GROUPS,
         }
     }
 
@@ -398,6 +430,48 @@ const OCR_GROUPS: &[ButtonGroup] = &[
         len: 2,
     },
 ];
+
+/// The scroll-picker's instruction, in the readout's place. One
+/// sentence, kept short because the strip is as wide as it is: the wrap
+/// search cuts it into two balanced lines (`show::hint_wrap`) and the
+/// panel is sized from that, so every word costs tray width.
+pub const SCROLL_PICK_HINT: &str = "Resize the selection to the scrolling area, then click where mouse should scroll.";
+
+/// What a set puts between the emblem and its buttons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Body {
+    /// The two-line readout: the selection's size, or the word count.
+    Readout,
+    /// A wrapped instruction, sitting straight on the chassis — no fill
+    /// of its own, the way the readout has none.
+    Hint(&'static str),
+}
+
+/// The buttons shown while a scroll point is being picked: the two ways
+/// out, in one grey group. Nothing primary — the accepting gesture is the
+/// click on the desktop, not a button.
+const SCROLL_PICK_DEFS: &[ButtonDef] = &[
+    ButtonDef {
+        command: Command::ScrollBack,
+        label: "Back",
+        underline_idx: 0,
+        icon: &super::assets::BACK,
+        tip: "Back to previous options",
+    },
+    ButtonDef {
+        command: Command::Exit,
+        label: "Exit",
+        underline_idx: 1,
+        icon: &super::assets::EXIT,
+        tip: "Cancel and exit",
+    },
+];
+
+/// [Back Exit].
+const SCROLL_PICK_GROUPS: &[ButtonGroup] = &[ButtonGroup {
+    tone: GroupTone::Secondary,
+    len: 2,
+}];
 
 impl ButtonDef {
     /// The keyboard accelerator character for this button, derived from

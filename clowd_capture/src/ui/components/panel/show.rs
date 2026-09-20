@@ -20,7 +20,7 @@
 use egui::{pos2, vec2, Rect, Vec2};
 
 use super::assets;
-use super::model::{ButtonDef, ButtonStyle, GroupTone, PanelButtonSet, PanelFeatures, Readout};
+use super::model::{Body, ButtonDef, ButtonStyle, GroupTone, PanelButtonSet, PanelFeatures, Readout};
 use super::place::{self, Axis, Fit, Footprint, Near};
 use super::theme::{self, tokens};
 use super::widgets;
@@ -134,14 +134,60 @@ fn show_tip(ctx: &egui::Context, axis: Axis, tray: Rect, hovered: Option<(egui::
 /// along a row.
 pub type MeasuredButton = (usize, &'static ButtonDef, f32);
 
+/// The strip's body as measured: which one it is, and — for the
+/// instruction — the wrap width it was laid out at, so the pass that
+/// paints it uses the width the pass that sized the tray measured.
+#[derive(Clone, Copy, PartialEq)]
+pub enum MeasuredBody {
+    Readout(Readout),
+    Hint { text: &'static str, wrap: f32 },
+}
+
+/// The narrowest wrap width, in points, that fits `text` in
+/// `tokens::HINT_LINES` lines, and the line count it achieved.
+///
+/// Narrowest is also best-balanced: at the width where the last line is
+/// about to spill into a third, the two lines are as near equal as the
+/// break points allow. The search starts from the width a perfectly even
+/// split would need (half the unwrapped run) and steps up, so it costs a
+/// handful of layouts of one short paragraph, once per measured pass.
+///
+/// A text that will not fit in `HINT_LINES` lines at any width up to its
+/// full run returns that full width: one line, never a clipped box.
+fn hint_wrap(ctx: &egui::Context, text: &'static str) -> (f32, usize) {
+    let full = ctx
+        .fonts_mut(|f| f.layout_job(widgets::hint_job(text, f32::INFINITY)))
+        .size()
+        .x;
+    let lines = |wrap: f32| {
+        ctx.fonts_mut(|f| f.layout_job(widgets::hint_job(text, wrap)))
+            .rows
+            .len()
+    };
+    let start = (full / tokens::HINT_LINES as f32).floor();
+    let mut wrap = start;
+    while wrap < full {
+        let rows = lines(wrap);
+        if rows <= tokens::HINT_LINES {
+            return (wrap, rows);
+        }
+        wrap += tokens::HINT_WRAP_STEP;
+    }
+    (full, lines(full))
+}
+
 /// Every number the strip is laid out with, in points, measured before the
 /// Area is positioned.
 pub struct StripMetrics {
     /// Item thickness across the strip: the button's, and the readout's
     /// square side.
     pub thick: f32,
-    /// The readout slot's length along a row.
-    pub readout_along: f32,
+    /// What sits between the emblem and the buttons, measured: the
+    /// readout, or the instruction with the wrap width it was measured
+    /// at.
+    pub body: MeasuredBody,
+    /// The body slot's length along a row.
+    pub body_along: f32,
     /// The visible groups in strip order, each with its buttons: table
     /// index, def, and the button's length along a row.
     pub groups: Vec<(GroupTone, Vec<MeasuredButton>)>,
@@ -151,6 +197,16 @@ impl StripMetrics {
     /// Measure one set under one feature switch set. Only valid inside a
     /// run: `Context::fonts_mut` panics before the first pass.
     pub fn measure(ctx: &egui::Context, set: PanelButtonSet, features: PanelFeatures, style: ButtonStyle, readout: Readout) -> Self {
+        let body = match set.body() {
+            Body::Readout => MeasuredBody::Readout(readout),
+            Body::Hint(text) => {
+                let (wrap, _) = hint_wrap(ctx, text);
+                MeasuredBody::Hint {
+                    text,
+                    wrap,
+                }
+            }
+        };
         let thick = match style {
             ButtonStyle::KeyHint => tokens::KEY_TILE,
             ButtonStyle::Below => tokens::BELOW_HEIGHT,
@@ -175,10 +231,23 @@ impl StripMetrics {
                 (tone, buttons)
             })
             .collect();
-        let readout = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(readout)));
+        let body_along = match body {
+            MeasuredBody::Readout(readout) => {
+                let galley = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(readout)));
+                thick.max(galley.size().x + 2.0 * tokens::READOUT_PAD_H)
+            }
+            MeasuredBody::Hint {
+                text,
+                wrap,
+            } => {
+                let galley = ctx.fonts_mut(|f| f.layout_job(widgets::hint_job(text, wrap)));
+                thick.max(galley.size().x + 2.0 * tokens::HINT_PAD_H)
+            }
+        };
         Self {
             thick,
-            readout_along: thick.max(readout.size().x + 2.0 * tokens::READOUT_PAD_H),
+            body,
+            body_along,
             groups,
         }
     }
@@ -212,11 +281,11 @@ impl StripMetrics {
             .iter()
             .map(|(_, buttons)| tokens::GAP + self.group_along(axis, buttons))
             .sum();
-        let readout_along = match axis {
-            Axis::Row => self.readout_along,
+        let body_along = match axis {
+            Axis::Row => self.body_along,
             Axis::Column => self.thick,
         };
-        let along = tokens::EMBLEM_SLOT + tokens::EMBLEM_GAP + readout_along + groups_along;
+        let along = tokens::EMBLEM_SLOT + tokens::EMBLEM_GAP + body_along + groups_along;
         match axis {
             Axis::Row => vec2(along, self.thick),
             Axis::Column => vec2(col_inner, along),
@@ -238,6 +307,9 @@ fn outer_px(content: Vec2, ppp: f32) -> (i32, i32) {
 /// number.
 fn readout_for(set: PanelButtonSet, p: &PanelInputs) -> Readout {
     match (set, p.readout) {
+        // The scroll-pick strip shows an instruction, not a readout; the
+        // value is carried along unused so `measure` stays one signature.
+        (PanelButtonSet::ScrollPick, r) => r,
         (PanelButtonSet::Normal, _) => Readout::Size {
             width: p.selection.width(),
             height: p.selection.height(),
@@ -257,13 +329,13 @@ fn readout_for(set: PanelButtonSet, p: &PanelInputs) -> Readout {
 /// nor the column thickness depends on which set is up or which switches
 /// are on.
 fn union_fit(ctx: &egui::Context, p: &PanelInputs, ppp: f32) -> (Fit, f32) {
-    let metrics: Vec<StripMetrics> = PanelButtonSet::ALL
+    let metrics: Vec<StripMetrics> = PanelButtonSet::UNION
         .iter()
         .map(|&set| StripMetrics::measure(ctx, set, PanelFeatures::ALL, p.style, readout_for(set, p)))
         .collect();
     let mut col_inner = tokens::EMBLEM_SLOT;
     for m in &metrics {
-        col_inner = col_inner.max(m.readout_along);
+        col_inner = col_inner.max(m.body_along);
         for (_, _, along) in m.buttons() {
             col_inner = col_inner.max(*along);
         }
@@ -289,6 +361,32 @@ fn union_fit(ctx: &egui::Context, p: &PanelInputs, ppp: f32) -> (Fit, f32) {
     (fit, col_inner)
 }
 
+/// Measure the strip that is up and place its box, in physical pixels —
+/// everything `show` needs before the Area exists, and the whole of what
+/// the placement tests check.
+fn measure_and_place(
+    ctx: &egui::Context,
+    p: &PanelInputs,
+    monitor: UiMonitor,
+) -> (StripMetrics, place::Side, clowd_rust_core::geometry::ScreenRect) {
+    let ppp = monitor.dpi_scale.max(0.1);
+    let (mut fit, col_inner) = union_fit(ctx, p, ppp);
+    let m = StripMetrics::measure(ctx, p.set, p.features, p.style, p.readout);
+    // A set outside the union (the scroll-picker) is not in `fit`, and the
+    // side cascade's "does the strip fit along the monitor" test has to be
+    // asked about the strip that is actually up — otherwise a two-line
+    // instruction wider than the monitor would still pass as `Below`.
+    if !PanelButtonSet::UNION.contains(&p.set) {
+        let (w, h) = outer_px(m.content_size(Axis::Row, col_inner), ppp);
+        fit.row.len = fit.row.len.max(w);
+        fit.row.thick = fit.row.thick.max(h);
+    }
+    let (side, rect_px) = place::place(p.anchor, monitor.bounds, fit, Near::at_dpi(ppp), p.set.axis_lock(), |axis| {
+        outer_px(m.content_size(axis, col_inner), ppp)
+    });
+    (m, side, rect_px)
+}
+
 /// Build the tray for one monitor and report what the pointer found.
 /// Called inside a host's run closure, so text measurement is legal here.
 ///
@@ -305,11 +403,8 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
     // The size readout prints the UNCLIPPED selection, so a rect straddling
     // two monitors keeps showing its true size; only placement uses the
     // clipped anchor.
-    let (fit, col_inner) = union_fit(ctx, p, ppp);
-    let m = StripMetrics::measure(ctx, p.set, p.features, p.style, p.readout);
-    let (side, rect_px) = place::place(p.anchor, monitor.bounds, fit, Near::at_dpi(ppp), |axis| {
-        outer_px(m.content_size(axis, col_inner), ppp)
-    });
+    let (m, side, rect_px) = measure_and_place(ctx, p, monitor);
+    let col_inner = union_fit(ctx, p, ppp).1;
     let axis = side.axis();
     let local = egui::pos2(
         (rect_px.left() - monitor.bounds.left()) as f32 / ppp,
@@ -350,11 +445,21 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
                 ui.spacing_mut().item_spacing = Vec2::splat(tokens::EMBLEM_GAP);
                 widgets::emblem(ui, emblem_slot);
                 ui.spacing_mut().item_spacing = Vec2::splat(tokens::GAP);
-                let readout_slot = match axis {
-                    Axis::Row => vec2(m.readout_along, across),
+                let body_slot = match axis {
+                    Axis::Row => vec2(m.body_along, across),
                     Axis::Column => vec2(across, m.thick),
                 };
-                widgets::readout(ui, p.readout, readout_slot);
+                match m.body {
+                    MeasuredBody::Readout(readout) => {
+                        widgets::readout(ui, readout, body_slot);
+                    }
+                    MeasuredBody::Hint {
+                        text,
+                        wrap,
+                    } => {
+                        widgets::hint(ui, text, wrap, body_slot);
+                    }
+                }
                 for (tone, buttons) in &m.groups {
                     let base = theme::group_fill(*tone, p.accent);
                     let veil = theme::hover_veil(*tone);
@@ -438,7 +543,9 @@ mod tests {
 
     fn inputs(set: PanelButtonSet, features: PanelFeatures, style: ButtonStyle, selection: ScreenRect, monitor: UiMonitor) -> PanelInputs {
         let readout = match set {
-            PanelButtonSet::Normal => Readout::Size {
+            // The scroll-pick strip has no readout; the value is carried
+            // through unused, as the shell carries it.
+            PanelButtonSet::Normal | PanelButtonSet::ScrollPick => Readout::Size {
                 width: selection.width(),
                 height: selection.height(),
             },
@@ -571,13 +678,8 @@ mod tests {
             let mut got = None;
             let raw = self.raw_input(None, &[]);
             let full = self.ctx.run_ui(raw, |ui| {
-                let ctx = ui.ctx();
-                let ppp = monitor.dpi_scale.max(0.1);
-                let (fit, col_inner) = union_fit(ctx, p, ppp);
-                let m = StripMetrics::measure(ctx, p.set, p.features, p.style, p.readout);
-                got = Some(place::place(p.anchor, monitor.bounds, fit, Near::at_dpi(ppp), |axis| {
-                    outer_px(m.content_size(axis, col_inner), ppp)
-                }));
+                let (_, side, rect) = measure_and_place(ui.ctx(), p, monitor);
+                got = Some((side, rect));
             });
             full.drop_without_applying_deltas();
             got.expect("the closure ran")
@@ -900,12 +1002,71 @@ mod tests {
         }
     }
 
+    /// Pinned over the union sets only: the scroll-picker is not one of
+    /// them — it is locked to a row, so it has no column width to agree
+    /// about, and its instruction would widen every other set's column if
+    /// it were folded in.
+    /// The instruction is wrapped by the strip, not by hand: two lines,
+    /// near enough the same length that the block reads as a paragraph
+    /// rather than a long line with a word hanging off it.
+    #[test]
+    fn the_scroll_pick_instruction_wraps_into_two_balanced_lines() {
+        let mon = hd(1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(
+            PanelButtonSet::ScrollPick,
+            PanelFeatures::ALL,
+            ButtonStyle::KeyHint,
+            row_selection(),
+            mon,
+        );
+        h.run(&p, None);
+
+        let raw = h.raw_input(None, &[]);
+        let mut rows: Vec<f32> = Vec::new();
+        let full = h.ctx.run_ui(raw, |ui| {
+            let ctx = ui.ctx();
+            let (wrap, lines) = hint_wrap(ctx, crate::ui::components::panel::model::SCROLL_PICK_HINT);
+            assert_eq!(lines, 2, "wrapped at {wrap}");
+            let galley = ctx.fonts_mut(|f| f.layout_job(widgets::hint_job(crate::ui::components::panel::model::SCROLL_PICK_HINT, wrap)));
+            rows = galley
+                .rows
+                .iter()
+                .map(|r| r.rect().width())
+                .collect();
+        });
+        full.drop_without_applying_deltas();
+
+        assert_eq!(rows.len(), 2);
+        let (short, long) = (rows[0].min(rows[1]), rows[0].max(rows[1]));
+        assert!(short / long >= 0.75, "lines are lopsided: {rows:?}");
+    }
+
+    /// The scroll-pick strip is a row wherever it lands: the anchor here
+    /// is the one every other set answers with a column.
+    #[test]
+    fn the_scroll_pick_strip_is_always_a_row() {
+        let mon = monitor(rect(0, 0, 1920, 1300), 1.0);
+        let sel = rect(100, 300, 400, 998);
+        for &set in PanelButtonSet::ALL {
+            let mut h = Harness::new(mon);
+            let p = inputs(set, PanelFeatures::ALL, ButtonStyle::Below, sel, mon);
+            h.run(&p, None);
+            let want = if set == PanelButtonSet::ScrollPick {
+                Axis::Row
+            } else {
+                Axis::Column
+            };
+            assert_eq!(h.analytic(&p).0.axis(), want, "{set:?}");
+        }
+    }
+
     #[test]
     fn column_width_is_the_union_thickness() {
         let mon = monitor(rect(0, 0, 1920, 1300), 1.0);
         let sel = rect(100, 300, 400, 998);
         let mut widths = Vec::new();
-        for &set in PanelButtonSet::ALL {
+        for &set in PanelButtonSet::UNION {
             for features in [
                 PanelFeatures::ALL,
                 PanelFeatures {

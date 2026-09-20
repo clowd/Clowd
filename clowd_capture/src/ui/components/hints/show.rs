@@ -27,9 +27,6 @@ use clowd_rust_core::geometry::{RectExt, ScreenPointF};
 pub enum Anchor {
     /// Trails the crosshair: `[H]`.
     Cursor(Pos2),
-    /// Trails the crosshair further out, clear of the scroll-pick
-    /// reticle, and avoids nothing (it is alone on screen).
-    ScopeCursor(Pos2),
     /// Bottom-centre of the monitor: `[Q]` and scroll-to-zoom.
     MonitorBottom,
     /// Top-centre of the monitor: `[F]`.
@@ -74,8 +71,6 @@ pub struct NoticeInputs {
     pub selection: Rect,
 }
 
-pub const SCROLL_PICK_TEXT: &str = "Click within the scrollable area";
-
 /// Which chips belong on this monitor.
 ///
 /// The rule this replaces is the old `shared::hints_visibility` plus the
@@ -97,15 +92,11 @@ pub fn inputs(index: usize, monitor: &UiMonitor, c: &InputCtx<'_>) -> HintsInput
         swatch: None,
     };
 
-    // The scroll-point picker takes the whole overlay: the only input it
-    // wants is one click inside the selection, so it shows a single
-    // instruction and suppresses everything else — including `[M]`, which
-    // is otherwise the one chip that survives a capture.
+    // The scroll-point picker takes the whole overlay: its instruction
+    // lives on the panel strip now, and no chip may compete with it —
+    // including `[M]`, which is otherwise the one chip that survives a
+    // capture.
     if i.scroll_pick_mode {
-        if i.overlays_visible && here {
-            out.hints
-                .push(hint(None, SCROLL_PICK_TEXT.into(), Anchor::ScopeCursor(cur), true));
-        }
         return out;
     }
 
@@ -238,11 +229,7 @@ pub fn show(ctx: &Context, p: &Painter, h: &HintsInputs, notice: Option<&NoticeI
         let extra = if hint.swatch.is_some() { pill::SWATCH_GAP + swatch } else { 0.0 };
         let size = place::chip_size(galley.size() + vec2(extra, 0.0), hint.key.is_some());
         let rect = place::place(hint.anchor, size, screen, &placed);
-        // The picker's instruction is alone on screen and must not shove
-        // anything else around.
-        if !matches!(hint.anchor, Anchor::ScopeCursor(_)) {
-            placed.push(rect);
-        }
+        placed.push(rect);
         let a = hint.alpha;
         p.add(pill::shadow(rect, a));
         p.add(pill::body(rect, pill::RADIUS, a, !hint.trail));
@@ -373,10 +360,11 @@ mod tests {
         h.hints.iter().map(|x| x.key).collect()
     }
 
-    /// While the picker owns the overlay there is exactly one chip, on the
-    /// cursor's host, and nothing else — not even `[M]`.
+    /// While the picker owns the overlay there are no chips at all: its
+    /// instruction is on the panel strip, and nothing else may compete
+    /// with it — not even `[M]`, which otherwise survives a capture.
     #[test]
-    fn scroll_pick_suppresses_every_other_hint() {
+    fn scroll_pick_suppresses_every_hint() {
         let m = monitors();
         let mut input = hinting();
         input.captured = true;
@@ -386,18 +374,16 @@ mod tests {
         c.cursor_image_rect = Some(ScreenRectF::from_xy_size(300.0, 300.0, 32.0, 32.0));
 
         let here = inputs(0, &m[0], &c);
-        assert_eq!(keys(&here), vec![None]);
-        assert_eq!(here.hints[0].text, SCROLL_PICK_TEXT);
-        assert!(here.hints[0].trail, "the instruction wears the comet");
+        assert!(here.hints.is_empty());
         assert!(here.dashed_square.is_none());
-        assert!(inputs(1, &m[1], &c).hints.is_empty(), "only the cursor's host");
+        assert!(inputs(1, &m[1], &c).hints.is_empty());
 
         input.overlays_visible = false;
         assert!(
             inputs(0, &m[0], &ctx(&input, &m))
                 .hints
                 .is_empty(),
-            "Q hides it"
+            "Q hides them too"
         );
     }
 

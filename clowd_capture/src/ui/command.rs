@@ -39,6 +39,9 @@ pub enum Command {
     /// Leave OCR mode and return to the capture panel, keeping the
     /// selection.
     OcrBack,
+    /// Leave scroll-point pick mode and return to the capture panel,
+    /// keeping the selection. The keyboard twin of Escape in that mode.
+    ScrollBack,
     /// Copy the selection to the clipboard.
     Copy,
     /// Save the selection to a file.

@@ -162,11 +162,12 @@ pub fn active_panel_set(captured: bool, scroll_pick_mode: bool, ocr: &OcrState) 
     if !captured {
         return None;
     }
-    // Scroll-point picking runs over the same selection the panel sits on
-    // top of: the panel must be gone so the pick click can land anywhere
-    // inside the region, including under where the buttons were.
+    // Scroll-point picking gets a strip of its own: the aiming
+    // instruction where the readout goes, and BACK / EXIT. It outranks
+    // OCR mode for the same reason picking outranks every other input —
+    // the click the user is about to make belongs to the picker.
     if scroll_pick_mode {
-        return None;
+        return Some(PanelButtonSet::ScrollPick);
     }
     // While the OCR sweep is looping there is nothing to act on yet, so no
     // panel AT ALL — not the Normal set (its buttons would act on a frozen
@@ -236,9 +237,10 @@ mod tests {
     }
 
     #[test]
-    fn panel_hidden_while_picking_scroll_point() {
-        assert_eq!(active_panel_set(true, true, &OcrState::Idle), None);
+    fn scroll_pick_shows_its_own_strip() {
+        assert_eq!(active_panel_set(true, true, &OcrState::Idle), Some(PanelButtonSet::ScrollPick));
         assert_eq!(active_panel_set(true, false, &OcrState::Idle), Some(PanelButtonSet::Normal));
+        assert_eq!(active_panel_set(false, true, &OcrState::Idle), None, "no selection, no strip");
     }
 
     /// The panel's OCR lifecycle: HIDDEN while the sweep loops (nothing to
@@ -275,11 +277,11 @@ mod tests {
         assert_eq!(active_panel_set(true, false, &retracting), Some(PanelButtonSet::Normal));
     }
 
-    /// Scroll picking outranks OCR mode: the panel is gone entirely, so
-    /// there is no set to argue about. (Unreachable today — the two modes
-    /// cannot both be engaged — but the ordering is what makes that true.)
+    /// Scroll picking outranks OCR mode: its strip wins whatever the OCR
+    /// state says. (Unreachable today — the two modes cannot both be
+    /// engaged — but the ordering is what makes that true.)
     #[test]
-    fn scroll_pick_hides_the_panel_even_in_ocr_mode() {
+    fn scroll_pick_outranks_ocr_mode() {
         assert_eq!(active_panel_set(false, false, &OcrState::Idle), None);
         assert_eq!(active_panel_set(true, false, &OcrState::Idle), Some(PanelButtonSet::Normal));
         let lifted = OcrState::Lifted {
@@ -289,7 +291,7 @@ mod tests {
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
         };
-        assert_eq!(active_panel_set(true, true, &lifted), None);
+        assert_eq!(active_panel_set(true, true, &lifted), Some(PanelButtonSet::ScrollPick));
         assert_eq!(active_panel_set(false, false, &lifted), None);
     }
 

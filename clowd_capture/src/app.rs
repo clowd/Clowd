@@ -280,12 +280,19 @@ fn update_cursor_visibility(windows: &WindowSet, input: &InteractionState) {
     // standing in for. Checked ahead of `captured`, which is always set
     // while picking.
     //
-    // Gated on `overlays_visible` for the same reason the reticle is
-    // (`ui::components::scope::show::inputs`): the two must agree, or a state
-    // that suppresses the reticle while the pointer stays hidden would leave
-    // the user with no pointer at all. Unreachable today — Q is swallowed in
-    // pick mode — and this keeps it that way if a path is ever added.
-    if input.scroll_pick_mode && input.overlays_visible {
+    // Only where the reticle actually is, though: it is drawn over the
+    // selection's interior alone (`ui::components::scope::show::inputs`),
+    // because that is the only place a pick can land. Everywhere else the
+    // mode keeps the ordinary pointer — the resize handles are still live
+    // and their arrows have to be visible, and so does the arrow over the
+    // strip.
+    //
+    // Gated on `overlays_visible` for the same reason the reticle is: the
+    // two must agree, or a state that suppresses the reticle while the
+    // pointer stays hidden would leave the user with no pointer at all.
+    // Unreachable today — Q is swallowed in pick mode — and this keeps it
+    // that way if a path is ever added.
+    if input.scroll_pick_mode && input.overlays_visible && input.hittest == Hittest::Inside {
         windows.hide_cursors();
     } else if input.captured || input.debug_visible {
         windows.show_cursors();
@@ -1022,6 +1029,24 @@ impl App {
     /// NOT touch `InteractionController::reset` (which would destroy the
     /// selection BACK exists to preserve) and must NOT hide the overlay —
     /// the user lands back on the captured panel, not on the desktop.
+    /// Leave scroll-point pick mode with the selection intact: what
+    /// Escape and the strip's BACK button both do. The reticle, the
+    /// hidden pointer and the pick strip all hang off the one flag, so
+    /// dropping it and re-settling the cursor is the whole of it.
+    fn exit_scroll_pick_mode(&mut self, window_id: WindowId) {
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        if !cycle.input.scroll_pick_mode {
+            return;
+        }
+        cycle.input.scroll_pick_mode = false;
+        let cursor = cycle.input.hittest.cursor();
+        set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, cursor);
+        update_cursor_visibility(&self.windows, &cycle.input);
+        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+    }
+
     fn exit_ocr_mode(&mut self, window_id: WindowId) {
         let Some(cycle) = self.cycle.as_mut() else {
             return;
@@ -1706,6 +1731,7 @@ impl App {
                 broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
             }
             Command::OcrBack => self.exit_ocr_mode(window_id),
+            Command::ScrollBack => self.exit_scroll_pick_mode(window_id),
             Command::OcrCopy => {
                 // Lifted only: during Scanning there is no text yet (and
                 // no strip on screen — this arm is belt-and-braces against
@@ -2091,11 +2117,7 @@ impl ApplicationHandler for App {
                     return;
                 }
                 if cycle.input.scroll_pick_mode {
-                    cycle.input.scroll_pick_mode = false;
-                    let cursor = cycle.input.hittest.cursor();
-                    set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, cursor);
-                    update_cursor_visibility(&self.windows, &cycle.input);
-                    broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                    self.exit_scroll_pick_mode(id);
                     return;
                 }
                 self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -2134,10 +2156,11 @@ impl ApplicationHandler for App {
                         update_cursor_visibility(&self.windows, &cycle.input);
                         broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     } else if cycle.input.scroll_pick_mode {
-                        // Panel accelerators are the panel's, and the panel
-                        // is hidden while picking — swallow them rather
-                        // than let an invisible button fire. Escape (above)
-                        // is the only way out.
+                        // Accelerators are scoped to the strip on screen,
+                        // and while picking that is the scroll-pick strip:
+                        // BACK and EXIT answer, every other letter — the
+                        // Normal strip's included — is swallowed, so a
+                        // button that is not up can never fire.
                         //
                         // M is swallowed here too, ahead of its handler
                         // below. Picking suppresses both of that toggle's
@@ -2147,6 +2170,10 @@ impl ApplicationHandler for App {
                         // in the saved image, with nothing on screen to say
                         // so. D stays live: it is a developer affordance and
                         // the debug panel is its own feedback.
+                        let features = cycle.settings.panel_features;
+                        if let Some(cmd) = panel::lookup_command_by_key(panel::model::PanelButtonSet::ScrollPick, features, c) {
+                            self.dispatch_command(cmd, event_loop, id);
+                        }
                     } else if cycle.input.ocr.active() {
                         // Accelerators are scoped to the strip on screen:
                         // only while the OCR strip is up (Lifted) do its
@@ -2333,6 +2360,15 @@ impl ApplicationHandler for App {
                         let dpi = dpi_at_point(cycle.input.virtual_cursor, &self.monitors);
                         cycle.input.hittest = hit_test(cycle.input.virtual_cursor, sel, dpi);
                         settle_cursor = true;
+                        // In pick mode the OS pointer is hidden over the
+                        // selection's interior and shown everywhere else,
+                        // so this move may have crossed that line. Both
+                        // hide paths are idempotent (a global atomic
+                        // guards the one syscall), so calling it per move
+                        // costs nothing when nothing changed.
+                        if cycle.input.scroll_pick_mode {
+                            update_cursor_visibility(&self.windows, &cycle.input);
+                        }
                     }
                 }
 
@@ -2357,11 +2393,11 @@ impl ApplicationHandler for App {
                     // follows.
                     let over_button = panel.over_button;
                     let over_tray = panel.over_tray;
-                    // Pick mode owns the cursor for the whole move: the
-                    // panel is gone and every pixel of the selection is
-                    // a valid target, so neither the button pointer nor
-                    // the move/resize handles apply.
-                    let cursor = if cycle.input.scroll_pick_mode {
+                    // Pick mode claims the selection's interior — the
+                    // reticle stands in for the pointer there — but only
+                    // the interior: the strip and the resize handles are
+                    // live, and they keep their own cursors.
+                    let cursor = if cycle.input.scroll_pick_mode && !over_button && !over_tray && cycle.input.hittest == Hittest::Inside {
                         CursorIcon::Crosshair
                     } else if over_button {
                         CursorIcon::Pointer
@@ -2393,25 +2429,6 @@ impl ApplicationHandler for App {
                 }
                 match state {
                     ElementState::Pressed => {
-                        // Ahead of the panel hit-test: while picking a
-                        // scroll point the click is the pick, and nothing
-                        // else in the overlay may claim it.
-                        if cycle.input.scroll_pick_mode {
-                            // Pick mode is armed by a panel press (SCROLL)
-                            // that also hides the panel — a set change the
-                            // swap guard records. Without this check the
-                            // second press of a double-click on SCROLL
-                            // would be taken as the pick and write the
-                            // scroll action aimed at the button's own
-                            // location. Same property as the panel guard
-                            // below: one physical double-click, one command.
-                            if cycle.panel_swap.blocks_click(Instant::now()) {
-                                log::info!("scroll pick ignored: within the double-click window of the panel swap");
-                                return;
-                            }
-                            self.dispatch_scroll_pick(event_loop);
-                            return;
-                        }
                         if cycle.input.captured {
                             // One egui tick that both lays the strip out
                             // and answers the press: egui reports the
@@ -2453,6 +2470,44 @@ impl ApplicationHandler for App {
                                 // move/resize drag of the selection
                                 // underneath. Deliberately not gated by
                                 // PanelSwapGuard: nothing is dispatched.
+                                return;
+                            }
+                            // While a scroll point is being picked, a
+                            // press in the selection's interior IS the
+                            // pick; the handles stay live around it so the
+                            // region can still be trimmed to the scrolling
+                            // area, and a press outside does nothing (the
+                            // driver may only aim inside the region it is
+                            // going to stitch). Moving the selection is the
+                            // one gesture the mode takes away: its whole
+                            // interior belongs to the aim.
+                            if cycle.input.scroll_pick_mode {
+                                match cycle.input.hittest {
+                                    Hittest::Inside => {
+                                        // Pick mode is armed by a panel press
+                                        // (SCROLL) that also swaps the strip —
+                                        // a set change the swap guard records.
+                                        // Without this check the second press
+                                        // of a double-click on SCROLL would be
+                                        // taken as the pick and write the
+                                        // scroll action aimed at the button's
+                                        // own location. Same property as the
+                                        // panel guard above: one physical
+                                        // double-click, one command.
+                                        if cycle.panel_swap.blocks_click(Instant::now()) {
+                                            log::info!("scroll pick ignored: within the double-click window of the panel swap");
+                                            return;
+                                        }
+                                        self.dispatch_scroll_pick(event_loop);
+                                    }
+                                    Hittest::Outside => {}
+                                    handle => {
+                                        cycle.input.mouse_down = true;
+                                        cycle.input.mouse_down_pt = Some(cycle.input.virtual_cursor);
+                                        cycle.input.drag_mode = Some(DragMode::Resize(handle));
+                                        cycle.input.drag_anchor_selection = cycle.input.selection;
+                                    }
+                                }
                                 return;
                             }
                             // The selection is frozen under the lifted
