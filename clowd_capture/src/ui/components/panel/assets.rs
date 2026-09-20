@@ -1,11 +1,10 @@
 //! Embedded SVG assets for the panel.
 //!
-//! Each `include_bytes!` points at a file in `assets/icons/`. The button
-//! icons are parsed with `usvg` and rasterised into the
-//! `ui::gpu::icon::IconAtlas` by `ui::gpu::panel` on the render thread;
-//! `PANEL_ICONS` in `model.rs` is the deduped table that decides atlas
-//! slot order. Fonts live in `ui::gpu::text` because they're consumed by
-//! the text stack directly.
+//! Each `include_bytes!` points at a file in `assets/icons/`. Every mark
+//! is parsed with `usvg` and rasterised per DPI into egui textures by
+//! `icons.rs`, on the app thread, the first time a tray runs on a
+//! monitor. Fonts live in `ui::gpu::text` because they're consumed by the
+//! text stack directly.
 
 /// Paper-plane "send" mark for the UPLOAD button (24-unit canvas, white).
 pub const SVG_UPLOAD: &[u8] = include_bytes!("../../../../assets/icons/upload.svg");
@@ -22,8 +21,7 @@ pub const SVG_SEARCH: &[u8] = include_bytes!("../../../../assets/icons/search.sv
 pub const SVG_BACK: &[u8] = include_bytes!("../../../../assets/icons/back.svg");
 
 /// The Clowd logo drawn as the tray emblem at the head of the strip
-/// (16-unit canvas, brand blue baked in). NOT a button icon: it is
-/// deliberately absent from `PANEL_ICONS` because it has no button, no
-/// hover and no click, and is rasterised at its own (larger) size into
-/// the last slot of the panel's icon atlas.
+/// (16-unit canvas, brand blue baked in). NOT a button icon: it has no
+/// button, no hover and no click, and is rasterised at its own (larger)
+/// size into its own texture.
 pub const SVG_CLOWD_LOGO: &[u8] = include_bytes!("../../../../assets/icons/clowd-logo.svg");

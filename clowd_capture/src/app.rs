@@ -30,9 +30,8 @@ use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage
 use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::panel;
-use crate::ui::components::panel::compose::{compose, PanelScene};
-use crate::ui::components::panel::model::{PanelButtonSet, PanelFeatures};
-use crate::ui::shared::{active_panel_set, pick_monitor_containing_center, UiMonitor};
+use crate::ui::egui_host::{EguiHosts, PanelOutcome, SyncArgs};
+use crate::ui::shared::{active_panel_set, UiMonitor};
 use crate::ui_state::{build_ui_shared_state, sample_bgra, UiStateBuildInput};
 use clowd_rust_core::geometry::{
     to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectExt, ScreenRectRounded, WindowPoint,
@@ -141,8 +140,10 @@ pub struct CaptureCycle {
     /// physical double-click into two different commands — see
     /// [`PanelSwapGuard`].
     panel_swap: PanelSwapGuard,
-    /// The arranged panel for the current input — see [`panel_scene`].
-    panel: PanelMemo,
+    /// The per-monitor egui contexts. On the cycle rather than on `App` so
+    /// the free `broadcast_ui_state` can drive them through disjoint field
+    /// borrows.
+    egui: EguiHosts,
 }
 
 /// An in-flight OCR recognition: (request id, one-shot result latch,
@@ -304,57 +305,6 @@ fn set_cursor_if_changed(windows: &WindowSet, last_cursor: &mut HashMap<WindowId
     }
 }
 
-/// Everything the panel's geometry depends on. The cursor is deliberately
-/// absent: hover is animated render-side from the broadcast cursor.
-#[derive(Clone, Copy, PartialEq)]
-struct PanelKey {
-    selection: ScreenRect,
-    set: PanelButtonSet,
-    features: PanelFeatures,
-    monitor: ScreenRect,
-    dpi_bits: u32,
-}
-
-#[derive(Default)]
-struct PanelMemo {
-    key: Option<PanelKey>,
-    scene: Option<Arc<PanelScene>>,
-}
-
-/// The panel as placed for the current input, rebuilt only when an input
-/// changes. Called on demand (`CursorMoved` hit-tests BEFORE it broadcasts
-/// and may have moved the selection in the same event) and by
-/// `broadcast_ui_state`, so both see one `Arc`: the renderers paint exactly
-/// the scene the app thread routes clicks through. A `None` result is
-/// cached under its key like any other.
-///
-/// Not gated on `overlays_visible`: the cursor icon keeps routing while Q
-/// hides the overlays (pre-existing behaviour); the draw gate lives in
-/// `panel_visibility`.
-fn panel_scene(cycle: &mut CaptureCycle, ui_monitors: &[UiMonitor]) -> Option<Arc<PanelScene>> {
-    let input = active_panel_set(cycle.input.captured, cycle.input.scroll_pick_mode, &cycle.input.ocr)
-        .zip(cycle.input.selection)
-        .and_then(|(set, selection)| {
-            let monitor = pick_monitor_containing_center(ui_monitors, selection)?;
-            let key = PanelKey {
-                selection,
-                set,
-                features: cycle.settings.panel_features,
-                monitor: monitor.bounds,
-                dpi_bits: monitor.dpi_scale.to_bits(),
-            };
-            Some((key, monitor))
-        });
-    let key = input.map(|(k, _)| k);
-    if key != cycle.panel.key {
-        cycle.panel.scene = input
-            .and_then(|(k, monitor)| compose(monitor, k.selection, k.set, k.features))
-            .map(Arc::new);
-        cycle.panel.key = key;
-    }
-    cycle.panel.scene.clone()
-}
-
 /// The command Return fires — the panel's invisible default button — or
 /// `None` when Return must stay inert.
 ///
@@ -411,7 +361,7 @@ fn panel_swap_guard_window() -> Duration {
 /// changed, to enforce one property: **a single physical double-click on a
 /// panel button must never dispatch two different commands.**
 ///
-/// The set swap is synchronous on the first press, and `panel::compose`
+/// The set swap is synchronous on the first press, and `panel::show`
 /// centres each strip with its own width, so the second press of a
 /// double-click lands at an arbitrary position in the new strip: possibly
 /// a different button, possibly nothing. Which one depends on strip widths
@@ -469,7 +419,12 @@ impl PanelSwapGuard {
     }
 }
 
-fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors: &Arc<[UiMonitor]>, cycle: &mut CaptureCycle) {
+fn broadcast_ui_state(
+    windows: &WindowSet,
+    monitors: &[MonitorInfo],
+    ui_monitors: &Arc<[UiMonitor]>,
+    cycle: &mut CaptureCycle,
+) -> PanelOutcome {
     // Feed the double-click swap guard from the same decision function the
     // click routing and the renderers use (`active_panel_set`) — deriving
     // it any other way could let the guard and the panel disagree about
@@ -480,10 +435,6 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
         active_panel_set(cycle.input.captured, cycle.input.scroll_pick_mode, &cycle.input.ocr),
         Instant::now(),
     );
-    // Before the build input below: that literal borrows the desktop
-    // buffer, and the memo needs the cycle mutably.
-    let panel = panel_scene(cycle, ui_monitors);
-
     let cursor_pt = to_screen_point(cycle.input.virtual_cursor);
 
     let hovered_monitor_name = monitors
@@ -529,6 +480,25 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
             })
     };
 
+    // After the hovered-window block above, so the debug rows the hosts
+    // will eventually read see this broadcast's values, and before the
+    // build input below, which needs the frames. This is the one call that
+    // runs the hosts with everything this broadcast knows, so its outcome
+    // is also the answer to what the pointer is over — the cursor ladder
+    // in `CursorMoved` reads it rather than running the tray a second time.
+    let panel = cycle.egui.sync(SyncArgs {
+        input: &cycle.input,
+        settings: &cycle.settings,
+        monitors,
+        ui_monitors,
+        desktop_buffer: cycle.desktop_buffer.as_deref(),
+        hovered_title: cycle.cached_hovered_title.as_deref(),
+        hovered_bounds: hovered_window_bounds,
+        hovered_index: hovered_window_index,
+        hovered_obstructed: hovered_window_obstructed,
+    });
+    let egui_frames = cycle.egui.frames();
+
     let state = Arc::new(build_ui_shared_state(UiStateBuildInput {
         monitors: ui_monitors.clone(),
         selection: cycle.input.selection,
@@ -544,9 +514,6 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
         overlays_visible: cycle.input.overlays_visible,
         hovered_monitor_name,
         hovered_window_title: cycle.cached_hovered_title.clone(),
-        hovered_window_bounds,
-        hovered_window_index,
-        hovered_window_obstructed,
         peek_window_bounds: new_peek.as_ref().map(|p| p.window_rect),
         cursor_overlay_visible: cycle.input.cursor_overlay_visible,
         desktop_buffer: cycle.desktop_buffer.as_deref(),
@@ -560,7 +527,7 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
         // path. Everything else in the enum is Copy.
         ocr: cycle.input.ocr.clone(),
         ocr_notice: cycle.input.ocr_notice,
-        panel,
+        egui: egui_frames,
     }));
 
     for h in windows.values() {
@@ -573,6 +540,8 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
         }
         cycle.cached_peek_command = new_peek;
     }
+
+    panel
 }
 
 impl App {
@@ -664,7 +633,7 @@ impl App {
             ocr_job: None,
             ocr_ready: None,
             panel_swap: PanelSwapGuard::new(),
-            panel: PanelMemo::default(),
+            egui: EguiHosts::new(&ui_monitors, startup.clone()),
             input: InteractionState {
                 virtual_cursor: initial_mouse,
                 zoom: 1.0,
@@ -1973,6 +1942,21 @@ impl ApplicationHandler for App {
         self.try_pick_up_screenshot(event_loop);
         self.try_advance_ocr();
 
+        // A host that scheduled a repaint (a hover fade, an Area sizing
+        // pass) must be run even though nothing it depends on changed, and
+        // so must one whose worker has published fresher frame timings for
+        // the debug panel.
+        if let Some(cycle) = self.cycle.as_mut() {
+            let now = Instant::now();
+            let repaint = cycle.egui.repaint_due(now);
+            let fresh_perf = cycle
+                .egui
+                .debug_poll(&self.windows, &self.ui_monitors, cycle.input.debug_visible, now);
+            if repaint || fresh_perf {
+                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+            }
+        }
+
         let mut bench_done = false;
         if let Some(cycle) = self.cycle.as_mut() {
             // The gate is only evaluated once the screenshot has landed:
@@ -2288,6 +2272,11 @@ impl ApplicationHandler for App {
                     }
                 }
 
+                // Set below once this move has a selection to hit-test
+                // against, and acted on after the broadcast: the broadcast
+                // is what runs the tray, and it is the only run that sees
+                // this move's debug rows.
+                let mut settle_cursor = false;
                 if cycle.input.captured {
                     if let (Some(mode), Some(anchor), Some(start)) =
                         (cycle.input.drag_mode, cycle.input.drag_anchor_selection, cycle.input.mouse_down_pt)
@@ -2312,38 +2301,7 @@ impl ApplicationHandler for App {
                     } else if let Some(sel) = cycle.input.selection {
                         let dpi = dpi_at_point(cycle.input.virtual_cursor, &self.monitors);
                         cycle.input.hittest = hit_test(cycle.input.virtual_cursor, sel, dpi);
-
-                        let pos = cycle.input.virtual_cursor;
-                        let panel = panel_scene(cycle, &self.ui_monitors);
-                        let over_button = panel
-                            .as_ref()
-                            .is_some_and(|p| p.hit_test(pos.x, pos.y).is_some());
-                        let over_tray = panel
-                            .as_ref()
-                            .is_some_and(|p| p.contains(pos.x, pos.y));
-                        // Pick mode owns the cursor for the whole move: the
-                        // panel is gone and every pixel of the selection is
-                        // a valid target, so neither the button pointer nor
-                        // the move/resize handles apply.
-                        let cursor = if cycle.input.scroll_pick_mode {
-                            CursorIcon::Crosshair
-                        } else if over_button {
-                            CursorIcon::Pointer
-                        } else if over_tray {
-                            // Dead tray (chassis, emblem, readout, padding):
-                            // its clicks are swallowed on press, so the
-                            // arrow, never a resize handle that would
-                            // promise a drag the press cannot start.
-                            CursorIcon::Default
-                        } else if cycle.input.ocr.active() {
-                            // The selection is frozen for the whole of OCR
-                            // mode: resize arrows would promise an
-                            // interaction it no longer offers.
-                            CursorIcon::Default
-                        } else {
-                            cycle.input.hittest.cursor()
-                        };
-                        set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, cursor);
+                        settle_cursor = true;
                     }
                 }
 
@@ -2359,7 +2317,38 @@ impl ApplicationHandler for App {
                         .evaluate(now, cycle.input.show_scroll_hint);
                 }
 
-                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                let panel = broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                if settle_cursor {
+                    // The tray is egui's now, and the broadcast above just
+                    // laid the strip out with this move's pointer, so what
+                    // it found under that pointer is what the cursor
+                    // follows.
+                    let over_button = panel.over_button;
+                    let over_tray = panel.over_tray;
+                    // Pick mode owns the cursor for the whole move: the
+                    // panel is gone and every pixel of the selection is
+                    // a valid target, so neither the button pointer nor
+                    // the move/resize handles apply.
+                    let cursor = if cycle.input.scroll_pick_mode {
+                        CursorIcon::Crosshair
+                    } else if over_button {
+                        CursorIcon::Pointer
+                    } else if over_tray {
+                        // Dead tray (chassis, emblem, readout, padding):
+                        // its clicks are swallowed on press, so the
+                        // arrow, never a resize handle that would
+                        // promise a drag the press cannot start.
+                        CursorIcon::Default
+                    } else if cycle.input.ocr.active() {
+                        // The selection is frozen for the whole of OCR
+                        // mode: resize arrows would promise an
+                        // interaction it no longer offers.
+                        CursorIcon::Default
+                    } else {
+                        cycle.input.hittest.cursor()
+                    };
+                    set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, cursor);
+                }
                 broadcast_mouse_state(&self.windows, &cycle.input);
             }
             WindowEvent::MouseInput {
@@ -2392,43 +2381,47 @@ impl ApplicationHandler for App {
                             return;
                         }
                         if cycle.input.captured {
-                            let pos = cycle.input.virtual_cursor;
-                            if let Some(panel) = panel_scene(cycle, &self.ui_monitors) {
-                                if let Some(cmd) = panel.hit_test(pos.x, pos.y) {
-                                    // PROPERTY: a single physical double-
-                                    // click on a panel button must never
-                                    // dispatch two different commands. The
-                                    // set swap is synchronous on the first
-                                    // press and the new strip is re-centred
-                                    // under the cursor, so the second press
-                                    // can land on any button of the OTHER
-                                    // set (OCR's first press swaps the
-                                    // strip; its second could hit the OCR
-                                    // strip's EXIT and destroy the
-                                    // capture). Swallow (not fall through:
-                                    // the click was aimed at a button) any
-                                    // press within one double-click
-                                    // interval of a swap; see
-                                    // PanelSwapGuard.
-                                    if cycle.panel_swap.blocks_click(Instant::now()) {
-                                        log::info!("panel click ignored: the button set changed within the double-click window");
-                                        return;
-                                    }
-                                    // The hit id encodes its set, so the
-                                    // command can only be read against the
-                                    // strip it was hit-tested in.
-                                    self.dispatch_command(cmd, event_loop, id);
+                            // One egui tick that both lays the strip out
+                            // and answers the press: egui reports the
+                            // click synchronously, so routing stays on the
+                            // app thread.
+                            let out = cycle
+                                .egui
+                                .panel_press(&cycle.input, &cycle.settings, &self.ui_monitors);
+                            if let Some(cmd) = out.clicked {
+                                // PROPERTY: a single physical double-
+                                // click on a panel button must never
+                                // dispatch two different commands. The
+                                // set swap is synchronous on the first
+                                // press and the new strip is re-centred
+                                // under the cursor, so the second press
+                                // can land on any button of the OTHER
+                                // set (OCR's first press swaps the
+                                // strip; its second could hit the OCR
+                                // strip's EXIT and destroy the
+                                // capture). Swallow (not fall through:
+                                // the click was aimed at a button) any
+                                // press within one double-click
+                                // interval of a swap; see
+                                // PanelSwapGuard.
+                                if cycle.panel_swap.blocks_click(Instant::now()) {
+                                    log::info!("panel click ignored: the button set changed within the double-click window");
                                     return;
                                 }
-                                if panel.contains(pos.x, pos.y) {
-                                    // Dead tray: chassis, emblem, readout,
-                                    // padding. The tray owns the click, as
-                                    // the C# strips do, so it cannot arm a
-                                    // move/resize drag of the selection
-                                    // underneath. Deliberately not gated by
-                                    // PanelSwapGuard: nothing is dispatched.
-                                    return;
-                                }
+                                // The button ids encode their set, so the
+                                // command can only come from the strip
+                                // this tick actually laid out.
+                                self.dispatch_command(cmd, event_loop, id);
+                                return;
+                            }
+                            if out.over_tray {
+                                // Dead tray: chassis, emblem, readout,
+                                // padding. The tray owns the click, as
+                                // the C# strips do, so it cannot arm a
+                                // move/resize drag of the selection
+                                // underneath. Deliberately not gated by
+                                // PanelSwapGuard: nothing is dispatched.
+                                return;
                             }
                             // The selection is frozen under the lifted
                             // lines — their geometry was computed against

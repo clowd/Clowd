@@ -4,7 +4,7 @@ use crate::gpu::overlay::{CROSSHAIR_VERTICES, SELECTION_VERTICES};
 use crate::gpu::WindowGpu;
 use crate::gxi::{self, AcquireResult};
 use crate::render::desktop::{OverlayVisibility, SnapshotState};
-use crate::telemetry::perf::{PerfSample, PerfTracker};
+use crate::telemetry::perf::PerfSample;
 use crate::ui::gpu::UiRenderer;
 
 /// What [`draw_once`] wants the render loop to do next.
@@ -38,7 +38,6 @@ pub(crate) fn draw_once(
     // `None` while the deferred UI build is still in flight (see
     // `WindowGpu::peek`): the frame is then the desktop pass alone.
     mut ui_renderer: Option<&mut UiRenderer>,
-    perf: &PerfTracker,
     gpu_timing: Option<&gxi::GpuTimings>,
     out_sample: &mut Option<PerfSample>,
 ) -> DrawStatus {
@@ -70,7 +69,7 @@ pub(crate) fn draw_once(
     let wait = frame.acquire_wait();
 
     if let Some(ui) = ui_renderer.as_mut() {
-        ui.prepare(&gpu.device, &gpu.queue, surface_size, perf);
+        ui.prepare(&gpu.device, &gpu.queue, surface_size);
     }
 
     // Pass order is the painter's stack, background to front: desktop

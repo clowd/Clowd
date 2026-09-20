@@ -17,6 +17,7 @@ use std::ops::Range;
 use std::time::{Duration, Instant};
 
 use windows::Win32::Graphics::Direct3D11::ID3D11Buffer;
+use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_R32_UINT;
 use windows::Win32::Graphics::Dxgi::{IDXGISwapChain1, DXGI_PRESENT};
 
 use super::device::{BindGroup, Buffer, Device, Queue};
@@ -120,6 +121,27 @@ impl Frame {
         unsafe {
             ctx.0
                 .IASetVertexBuffers(slot, 1, Some(buffers.as_ptr()), Some(strides.as_ptr()), Some(offsets.as_ptr()));
+        }
+    }
+
+    pub fn set_index_buffer(&mut self, buffer: &Buffer) {
+        let ctx = self.queue.lock();
+        unsafe {
+            ctx.0
+                .IASetIndexBuffer(Some(&buffer.raw), DXGI_FORMAT_R32_UINT, 0);
+        }
+    }
+
+    /// `indices` is a range into the bound index buffer; `base_vertex` is
+    /// added to every index. One instance, always — the indexed path is
+    /// the egui painter's, and it has no per-instance attributes (so it
+    /// never wants the `stride == 0` heuristic [`Frame::draw`] applies).
+    pub fn draw_indexed(&mut self, indices: Range<u32>, base_vertex: i32) {
+        let count = indices.end - indices.start;
+        let ctx = self.queue.lock();
+        unsafe {
+            ctx.0
+                .DrawIndexed(count, indices.start, base_vertex);
         }
     }
 

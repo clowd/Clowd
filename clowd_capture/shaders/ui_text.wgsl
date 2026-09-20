@@ -11,7 +11,7 @@
 // retained instance buffers stay valid across atlas growth (the atlas
 // grows in place — allocations keep their texel coordinates).
 //
-// Output is STRAIGHT (non-premultiplied) alpha, unlike ui_icon.wgsl; pair
+// Output is STRAIGHT (non-premultiplied) alpha, unlike ui_rect.wgsl; pair
 // with src=SrcAlpha/dst=OneMinusSrcAlpha color blend and
 // One/OneMinusSrcAlpha alpha blend.
 
@@ -58,7 +58,7 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Instance) -> VsOut {
     let height = (inst.dim & 0xffff0000u) >> 16u;
     var uv = vec2<u32>(inst.uv & 0xffffu, (inst.uv & 0xffff0000u) >> 16u);
 
-    // Two-triangle quad from the vertex index, like ui_icon.wgsl.
+    // Two-triangle quad from the vertex index, like ui_rect.wgsl.
     var corners = array<vec2<u32>, 6>(
         vec2<u32>(0u, 0u),
         vec2<u32>(1u, 0u),

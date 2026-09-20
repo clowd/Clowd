@@ -6,16 +6,16 @@
 //! draw; no coordination between threads is needed.
 //!
 //! The button panel is the one overlay that is hit-tested as well as
-//! drawn, so it is arranged once on the app thread and shipped inside the
-//! state as a placed scene: renderers paint it and the app thread
-//! hit-tests it, and the two cannot disagree.
+//! drawn, so it is run by egui on the app thread — the run that answers
+//! the click is the run that produced the picture — and shipped here as
+//! tessellated primitives, one set per monitor, for the workers to paint.
 
 use std::sync::Arc;
 
 use crate::interaction::{OcrNotice, OcrState};
 use crate::settings::TipsMode;
-use crate::ui::components::panel::compose::PanelScene;
 use crate::ui::components::panel::model::PanelButtonSet;
+use crate::ui::egui_frame::EguiFrame;
 use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 /// Minimal per-monitor info the UI layout rules need.
@@ -59,9 +59,6 @@ pub struct UiSharedState {
     pub overlays_visible: bool,
     pub hovered_monitor_name: Option<String>,
     pub hovered_window_title: Option<String>,
-    pub hovered_window_bounds: Option<ScreenRect>,
-    pub hovered_window_index: Option<usize>,
-    pub hovered_window_obstructed: bool,
     pub cursor_overlay_visible: bool,
     pub hovered_pixel_bgra: Option<[u8; 4]>,
     /// Bounding rect of the captured cursor image in virtual-desktop
@@ -84,10 +81,10 @@ pub struct UiSharedState {
     /// Mirror of `InteractionState::ocr_notice`: the transient "OCR gave
     /// you nothing" pill.
     pub ocr_notice: Option<OcrNotice>,
-    /// The arranged panel for this broadcast, or `None` when no panel is
-    /// up. Already placed, already clipped, already knows its monitor.
-    /// Built once per input change on the app thread.
-    pub panel: Option<Arc<PanelScene>>,
+    /// What egui produced for each monitor this broadcast, indexed the same
+    /// as `monitors`. `None` in a slot means that monitor has nothing to
+    /// draw (no host has run yet, or it drew nothing).
+    pub egui: Arc<[Option<Arc<EguiFrame>>]>,
 }
 
 /// The monitor whose bounds hold the point, or `None` in a gap between
@@ -119,8 +116,8 @@ pub(crate) fn pick_monitor_containing_center(monitors: &[UiMonitor], rect: Scree
 /// Which set of buttons the panel is showing, or `None` when there is no
 /// panel at all.
 ///
-/// This is the SINGLE decision point: `app::panel_scene` composes the
-/// strip from it, and `PanelSwapGuard` watches it for swaps. Keeping the
+/// This is the SINGLE decision point: `egui_host` builds the strip's
+/// inputs from it, and `PanelSwapGuard` watches it for swaps. Keeping the
 /// decision in one pure function means the guard and the strip on screen
 /// can never disagree about which set is up.
 ///
@@ -151,19 +148,15 @@ pub fn active_panel_set(captured: bool, scroll_pick_mode: bool, ocr: &OcrState) 
     Some(PanelButtonSet::Normal)
 }
 
-/// The panel this broadcast carries, or `None` while overlays are hidden.
-/// The scene knows its own monitor; the renderer compares
-/// `scene.monitor.bounds` to its own.
-pub fn panel_visibility(state: &UiSharedState) -> Option<&PanelScene> {
-    // Deliberately not part of `active_panel_set`: the Q toggle is about
-    // *drawing*, not about which buttons are live. The app thread keeps
-    // routing clicks while overlays are hidden (that is pre-existing
-    // behavior), so folding this gate into the shared function would
-    // silently change it.
-    if !state.overlays_visible {
-        return None;
-    }
-    state.panel.as_deref()
+/// Whether a worker draws its egui frame this broadcast.
+///
+/// Deliberately not part of `active_panel_set`: the Q toggle is about
+/// *drawing*, not about which buttons are live. The app thread keeps
+/// routing clicks while overlays are hidden (that is pre-existing
+/// behaviour), so folding this gate into the shared function would
+/// silently change it.
+pub fn egui_draw_visible(state: &UiSharedState) -> bool {
+    state.overlays_visible
 }
 
 /// Decide whether the tips panel is visible and on which monitor.
@@ -256,27 +249,28 @@ pub fn scroll_pick_visibility(state: &UiSharedState) -> Option<UiMonitor> {
     monitor_under_cursor(state)
 }
 
-/// Whether the per-monitor debug panel is visible on `this` monitor. Shown
-/// on **every** monitor when the `D`-key toggle is on, mirroring
-/// `DxScreenCapture.cpp:915-933`.
-pub fn debug_monitor_visibility(state: &UiSharedState, _this: &UiMonitor) -> bool {
-    state.overlays_visible && state.debug_visible
+/// Whether the per-monitor debug panel is visible. Shown on **every**
+/// monitor when the `D`-key toggle is on, so it needs no monitor at all.
+///
+/// Both debug rules take loose arguments rather than a `UiSharedState`
+/// because the panels are now built on the app thread, from the
+/// `InteractionState` that the broadcast is about to be made out of — the
+/// state itself does not exist yet at that point.
+pub fn debug_monitor_visibility(overlays_visible: bool, debug_visible: bool) -> bool {
+    overlays_visible && debug_visible
 }
 
-/// Whether the primary (cursor-follow) debug panel is visible on `this`
-/// monitor. Shown on exactly one monitor — the one containing the virtual
-/// cursor. Mirrors `DxScreenCapture.cpp:935-977`.
-pub fn debug_primary_visibility(state: &UiSharedState, this: &UiMonitor) -> bool {
-    if !state.overlays_visible {
+/// Whether the primary (cursor-follow) debug panel is visible on the
+/// monitor spanning `bounds`. Shown on exactly one monitor — the one
+/// containing the virtual cursor — or on none when the cursor sits in a gap
+/// between monitors.
+pub fn debug_primary_visibility(overlays_visible: bool, debug_visible: bool, cursor: ScreenPointF, bounds: ScreenRect) -> bool {
+    if !overlays_visible || !debug_visible {
         return false;
     }
-    if !state.debug_visible {
-        return false;
-    }
-    let cx = state.virtual_cursor.x.round() as i32;
-    let cy = state.virtual_cursor.y.round() as i32;
-    let b = this.bounds;
-    cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+    let cx = cursor.x.round() as i32;
+    let cy = cursor.y.round() as i32;
+    cx >= bounds.left() && cx < bounds.right() && cy >= bounds.top() && cy < bounds.bottom()
 }
 
 #[cfg(test)]
@@ -308,9 +302,6 @@ mod tests {
             overlays_visible: true,
             hovered_monitor_name: None,
             hovered_window_title: None,
-            hovered_window_bounds: None,
-            hovered_window_index: None,
-            hovered_window_obstructed: false,
             cursor_overlay_visible: true,
             hovered_pixel_bgra: None,
             cursor_image_rect: None,
@@ -319,7 +310,7 @@ mod tests {
             scroll_pick_mode: false,
             ocr: OcrState::Idle,
             ocr_notice: None,
-            panel: None,
+            egui: Arc::from([]),
         }
     }
 
@@ -379,19 +370,14 @@ mod tests {
         assert_eq!(active_panel_set(true, false, &retracting), Some(PanelButtonSet::Normal));
     }
 
-    /// The broadcast carries the scene; the Q toggle only gates drawing.
+    /// The broadcast carries the egui frames unconditionally; the Q
+    /// toggle only gates whether a worker paints them.
     #[test]
-    fn panel_visibility_follows_the_overlay_toggle() {
-        use crate::ui::components::panel::compose::compose;
-        use crate::ui::components::panel::model::PanelFeatures;
-
+    fn egui_draw_gate_follows_the_overlay_toggle() {
         let mut s = state();
-        assert!(panel_visibility(&s).is_none(), "no scene in the broadcast, nothing to draw");
-        let scene = compose(monitor(), s.selection.unwrap(), PanelButtonSet::Normal, PanelFeatures::ALL).unwrap();
-        s.panel = Some(Arc::new(scene));
-        assert!(panel_visibility(&s).is_some());
+        assert!(egui_draw_visible(&s));
         s.overlays_visible = false;
-        assert!(panel_visibility(&s).is_none());
+        assert!(!egui_draw_visible(&s));
     }
 
     /// Scroll picking outranks OCR mode: the panel is gone entirely, so
@@ -484,15 +470,16 @@ mod tests {
 
     #[test]
     fn debug_visibility_respects_overlays_and_cursor_monitor() {
-        let m = monitor();
-        let mut s = state();
-        s.debug_visible = true;
+        let b = monitor().bounds;
+        let inside = ScreenPointF::new(30.0, 30.0);
+        let elsewhere = ScreenPointF::new(300.0, 30.0);
 
-        assert!(debug_monitor_visibility(&s, &m));
-        assert!(debug_primary_visibility(&s, &m));
-        s.virtual_cursor = ScreenPointF::new(300.0, 30.0);
-        assert!(!debug_primary_visibility(&s, &m));
-        s.overlays_visible = false;
-        assert!(!debug_monitor_visibility(&s, &m));
+        assert!(debug_monitor_visibility(true, true));
+        assert!(debug_primary_visibility(true, true, inside, b));
+        assert!(!debug_primary_visibility(true, true, elsewhere, b));
+        assert!(!debug_monitor_visibility(false, true));
+        assert!(!debug_primary_visibility(false, true, inside, b));
+        assert!(!debug_monitor_visibility(true, false));
+        assert!(!debug_primary_visibility(true, false, inside, b));
     }
 }

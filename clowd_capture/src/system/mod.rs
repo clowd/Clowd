@@ -149,8 +149,8 @@ pub struct MonitorInfo {
     pub refresh_hz: f32,
     /// Human-readable display name (e.g. `\\.\DISPLAY1` on Windows, or
     /// `"Display 1"` on macOS). Used by the Tips & Hotkeys panel to show
-    /// "Select monitor '[name]'" entries.
-    #[allow(dead_code)]
+    /// "Select monitor '[name]'" entries, and by the debug panel's
+    /// identity row.
     pub name: String,
     /// PCI vendor + device IDs of the DXGI adapter driving this monitor.
     /// Used by the render workers (`gxi::Device::create`'s adapter hint)

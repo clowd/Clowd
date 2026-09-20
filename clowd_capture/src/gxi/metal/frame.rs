@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_metal::{
-    MTLCommandBuffer as MTLCommandBufferProto, MTLCommandEncoder as _, MTLDrawable as MTLDrawableProto, MTLPrimitiveType,
-    MTLRenderCommandEncoder as MTLRenderCommandEncoderProto,
+    MTLBuffer as MTLBufferProto, MTLCommandBuffer as MTLCommandBufferProto, MTLCommandEncoder as _, MTLDrawable as MTLDrawableProto,
+    MTLIndexType, MTLPrimitiveType, MTLRenderCommandEncoder as MTLRenderCommandEncoderProto,
 };
 use objc2_quartz_core::CAMetalDrawable as CAMetalDrawableProto;
 
@@ -32,6 +32,10 @@ pub struct Frame {
     cmd: Retained<ProtocolObject<dyn MTLCommandBufferProto>>,
     encoder: Retained<ProtocolObject<dyn MTLRenderCommandEncoderProto>>,
     drawable: Retained<ProtocolObject<dyn CAMetalDrawableProto>>,
+    /// The index buffer [`Frame::set_index_buffer`] bound, if any — Metal
+    /// takes it at draw time rather than as encoder state, so it is held
+    /// here until [`Frame::draw_indexed`] needs it.
+    index_buffer: Option<Retained<ProtocolObject<dyn MTLBufferProto>>>,
     /// Time `Surface::acquire` spent blocked in `nextDrawable`, exposed
     /// via [`Frame::acquire_wait`].
     acquire_wait: Duration,
@@ -67,6 +71,7 @@ impl Frame {
             cmd,
             encoder,
             drawable,
+            index_buffer: None,
             acquire_wait,
             presented: false,
         }
@@ -132,6 +137,36 @@ impl Frame {
         unsafe {
             self.encoder
                 .setVertexBuffer_offset_atIndex(Some(&buffer.raw), 0, VERTEX_BUFFER_INDEX);
+        }
+    }
+
+    pub fn set_index_buffer(&mut self, buffer: &Buffer) {
+        self.index_buffer = Some(buffer.raw.clone());
+    }
+
+    /// `indices` is a range into the bound index buffer; `base_vertex` is
+    /// added to every index. One instance, always — the indexed path is
+    /// the egui painter's, and it has no per-instance attributes.
+    pub fn draw_indexed(&mut self, indices: Range<u32>, base_vertex: i32) {
+        let buf = self
+            .index_buffer
+            .as_ref()
+            .expect("set_index_buffer before draw_indexed");
+        // SAFETY: the range comes from the painter's own index bookkeeping
+        // against the buffer it just bound, and the buffer is retained by
+        // the caller for the frame. Metal's offset is in BYTES.
+        unsafe {
+            self.encoder
+                .drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount_baseVertex_baseInstance(
+                    MTLPrimitiveType::Triangle,
+                    (indices.end - indices.start) as usize,
+                    MTLIndexType::UInt32,
+                    buf,
+                    indices.start as usize * 4,
+                    1,
+                    base_vertex as isize,
+                    0,
+                );
         }
     }
 

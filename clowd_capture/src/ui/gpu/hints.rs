@@ -37,7 +37,8 @@ const KEYCAP_BORDER: [f32; 4] = [0.06, 0.06, 0.06, 0.95];
 const DASH_LEN: f32 = 6.0;
 
 /// AA fringe the rounded-rect instances are inflated by. Shared with the
-/// OCR bubbles for the same reason as the palette above.
+/// OCR bubbles (`super::ocr_bubbles`), the only other reader, for the
+/// same reason as the palette above.
 pub(crate) const AA: f32 = 1.5;
 
 struct CachedBuffer {

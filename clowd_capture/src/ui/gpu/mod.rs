@@ -2,23 +2,20 @@
 //!
 //! Submodules:
 //!   * [`rect`]   — instanced colored/bordered rect pipeline
-//!   * [`icon`]   — CPU-rasterized icon atlas + textured-quad pipeline
+//!   * [`egui_painter`] — the egui triangle-list painter
 //!   * [`lift`]   — OCR scanning-sweep band
 //!   * [`ocr_bubbles`] — OCR re-rendered text bubbles
 //!   * [`glyph`]  — glyph atlas + instanced glyph-quad pipeline
 //!   * [`text`]   — text stack (fonts, shaping, glyph renderers)
-//!   * [`panel`]  — per-frame button-panel draw
 //!   * [`tips`]   — per-frame tips-panel draw
 //!   * [`renderer`] — the top-level `UiRenderer`
 
 pub mod area;
-pub mod debug;
+pub mod egui_painter;
 pub mod glyph;
 pub mod hints;
-pub mod icon;
 pub mod lift;
 pub mod ocr_bubbles;
-pub mod panel;
 pub mod rect;
 pub mod renderer;
 pub mod scope;

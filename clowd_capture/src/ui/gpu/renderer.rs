@@ -2,7 +2,7 @@
 //!
 //! One instance per render thread. Every frame the caller first invokes
 //! [`UiRenderer::prepare`] to decide what belongs on this monitor and
-//! upload all per-frame GPU data (rect/icon instance buffers, glyph
+//! upload all per-frame GPU data (rect instance buffers, glyph
 //! shape+atlas), then hands the renderer an open `RenderPass` via
 //! [`UiRenderer::draw`]. The two-phase split lets the caller fold the UI
 //! draw into the same render pass as the desktop triangle, avoiding an
@@ -13,25 +13,20 @@
 //!   1. `lift` pipeline: the OCR scanning sweep.
 //!   2. `rect` pipeline, LEADING range: OCR bubble pills + shadows.
 //!   3. bubble glyph renderer: the bubbles' recognized-text glyphs.
-//!   4. `rect` pipeline, TRAILING range: backgrounds, borders, the tray
-//!      shadow / fill / ring, button fills, color swatch, label underlines.
-//!   5. `icon` pipeline: the tray emblem and button icons, textured quads
-//!      out of the CPU-rasterised atlas.
-//!   6. main glyph text: labels, tips body, the "W × H" readout.
+//!   4. `rect` pipeline, TRAILING range: backgrounds, borders, hint
+//!      pills, color swatch.
+//!   5. main glyph text: labels, tips body, the "W × H" readout.
+//!   6. `egui` painter: the egui-drawn panels, above everything else.
 
 use std::sync::Arc;
 use std::time::Instant;
 
 use crate::gxi;
-use crate::telemetry::perf::PerfTracker;
-use crate::telemetry::startup::StartupTimings;
 use crate::ui::gpu::area::AreaRenderer;
-use crate::ui::gpu::debug::DebugRenderer;
+use crate::ui::gpu::egui_painter::EguiPainter;
 use crate::ui::gpu::hints::HintsRenderer;
-use crate::ui::gpu::icon::{IconInstance, IconPipeline};
 use crate::ui::gpu::lift::LiftPipeline;
 use crate::ui::gpu::ocr_bubbles::OcrBubblesRenderer;
-use crate::ui::gpu::panel::PanelRenderer;
 use crate::ui::gpu::rect::{RectInstance, RectPipeline};
 use crate::ui::gpu::text::{TextArea, TextStack};
 use crate::ui::gpu::tips::TipsRenderer;
@@ -39,24 +34,18 @@ use crate::ui::shared::{UiMonitor, UiSharedState};
 
 pub struct UiRenderer {
     rect: RectPipeline,
-    icon: IconPipeline,
+    egui: EguiPainter,
     lift: LiftPipeline,
     ocr_bubbles: OcrBubblesRenderer,
     text: TextStack,
     area: AreaRenderer,
     hints: HintsRenderer,
     tips: TipsRenderer,
-    panel: PanelRenderer,
-    debug: DebugRenderer,
-    last_frame_time: Option<Instant>,
     state: Option<Arc<UiSharedState>>,
     this_monitor: UiMonitor,
-    /// Stable per-render-thread context for the debug panel — values that
-    /// never change after startup (monitor name, adapter, startup
-    /// timings). `perf` is the only live source; see `render()`.
-    monitor_name: String,
-    adapter_name: String,
-    startup: Arc<StartupTimings>,
+    /// Index of this monitor in `UiSharedState.monitors` — the slot this
+    /// renderer reads out of the broadcast's per-monitor egui frames.
+    monitor_index: usize,
     /// Set by `prepare()`, consumed by `draw()`. `false` when there's
     /// nothing to render (no state yet), so `draw()` becomes a no-op.
     has_prepared: bool,
@@ -92,7 +81,7 @@ pub struct UiRenderer {
 /// (`render::spawn_deferred_stack`) rather than by Stage A.
 pub struct UiPipelines {
     rect: RectPipeline,
-    icon: IconPipeline,
+    egui: EguiPainter,
     lift: LiftPipeline,
 }
 
@@ -115,33 +104,31 @@ impl UiPipelines {
                 crate::system::lower_thread_priority();
                 RectPipeline::new(device)
             });
-            let icon = s.spawn(|| {
+            let egui = s.spawn(|| {
                 crate::system::lower_thread_priority();
-                IconPipeline::new(device)
+                EguiPainter::new(device)
             });
-            // The third compile rides the calling thread: spawning for it
+            // The last compile rides the calling thread: spawning for it
             // would only add a join.
             let lift = LiftPipeline::new(device);
             Self {
                 rect: rect.join().expect("ui rect pipeline thread"),
-                icon: icon.join().expect("ui icon pipeline thread"),
+                egui: egui.join().expect("ui egui pipeline thread"),
                 lift,
             }
         })
     }
 }
 
-/// The text stack plus every component whose construction needs it (they
-/// allocate their `CachedBuffer`s out of the font system), and the panel,
-/// which parses its icon SVGs plus the emblem and shapes on demand. Kept
-/// together because the `&mut TextStack` borrow makes them inherently
-/// sequential, so they are one job for the deferred builder to schedule.
+/// The text stack plus every component whose construction needs it: they
+/// allocate their `CachedBuffer`s out of the font system. Kept together
+/// because the `&mut TextStack` borrow makes them inherently sequential,
+/// so they are one job for the deferred builder to schedule.
 pub struct UiText {
     text: TextStack,
     area: AreaRenderer,
     hints: HintsRenderer,
     tips: TipsRenderer,
-    panel: PanelRenderer,
 }
 
 impl UiText {
@@ -149,13 +136,11 @@ impl UiText {
         let area = AreaRenderer::new(&mut text);
         let hints = HintsRenderer::new(&mut text);
         let tips = TipsRenderer::new(&mut text);
-        let panel = PanelRenderer::new();
         Self {
             text,
             area,
             hints,
             tips,
-            panel,
         }
     }
 }
@@ -167,35 +152,19 @@ impl UiRenderer {
     /// `UiRenderer` is the proof that every pipeline it can draw with has
     /// been compiled, which is what keeps frame 0 — drawn before this type
     /// exists at all — from being able to reference one.
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_parts(
-        pipelines: UiPipelines,
-        text: UiText,
-        this_monitor: UiMonitor,
-        monitor_index: usize,
-        monitor_name: String,
-        adapter_name: String,
-        adapter_id: Option<(u32, u32)>,
-        startup: Arc<StartupTimings>,
-    ) -> Self {
-        let debug = DebugRenderer::new(monitor_index, adapter_id);
+    pub fn from_parts(pipelines: UiPipelines, text: UiText, this_monitor: UiMonitor, monitor_index: usize) -> Self {
         Self {
             rect: pipelines.rect,
-            icon: pipelines.icon,
+            egui: pipelines.egui,
             lift: pipelines.lift,
             ocr_bubbles: OcrBubblesRenderer::new(),
             text: text.text,
             area: text.area,
             hints: text.hints,
             tips: text.tips,
-            panel: text.panel,
-            debug,
-            last_frame_time: None,
             state: None,
             this_monitor,
-            monitor_name,
-            adapter_name,
-            startup,
+            monitor_index,
             has_prepared: false,
             any_text: false,
             any_bubble_text: false,
@@ -215,7 +184,6 @@ impl UiRenderer {
     /// overlay. Also re-anchors the animation clock.
     pub fn begin_cycle(&mut self) {
         self.state = None;
-        self.last_frame_time = None;
         // The shaped bubble glyph buffers belong to a dead outcome.
         self.ocr_bubbles.clear();
         self.bubble_static_prepared = false;
@@ -223,24 +191,17 @@ impl UiRenderer {
     }
 
     /// Stage all per-frame work: component visibility decisions,
-    /// rect/icon instance uploads, glyph shape + atlas prep. After
+    /// rect instance uploads, glyph shape + atlas prep. After
     /// `prepare` returns the caller may open a render pass and invoke
     /// [`UiRenderer::draw`] to issue the UI draw calls into it. Split
     /// from `draw` so the UI can share the same render pass as the
     /// desktop triangle — on M1 TBDR this avoids an MSAA tile
     /// store+load between passes.
-    pub fn prepare(&mut self, device: &gxi::Device, queue: &gxi::Queue, viewport_px: (u32, u32), perf: &PerfTracker) {
+    pub fn prepare(&mut self, device: &gxi::Device, queue: &gxi::Queue, viewport_px: (u32, u32)) {
         self.has_prepared = false;
         self.any_text = false;
         self.any_bubble_text = false;
         self.bubble_rect_count = 0;
-
-        let now = Instant::now();
-        let dt = self
-            .last_frame_time
-            .map(|t| now.duration_since(t).as_secs_f32())
-            .unwrap_or(0.0);
-        self.last_frame_time = Some(now);
 
         let Some(state) = self.state.clone() else {
             return;
@@ -249,21 +210,16 @@ impl UiRenderer {
         self.text
             .update_viewport(queue, viewport_px.0, viewport_px.1);
 
-        // Pre-size the rect buffer. The debug sparkline alone emits a
-        // few hundred rects (bars × segments + legend + reference
-        // lines). Starting at zero means the vector grows-and-copies
-        // 8-9 times per frame just to reach that size — one extra
-        // memcpy per growth of the pushed bytes, which compounds into
-        // a measurable CPU cost on a hot path. A fixed upper starting
-        // capacity means zero growth allocations for the typical
-        // frame.
-        let mut rect_instances: Vec<RectInstance> = Vec::with_capacity(512);
-        let mut icon_draws: Vec<IconInstance> = Vec::with_capacity(16);
+        // Pre-size the rect buffer so a typical frame never grows it. What
+        // is left on this pipeline after the panel and the debug sparkline
+        // moved to egui is the info overlay, the hint pills and the colour
+        // swatch — a few dozen rects.
+        let mut rect_instances: Vec<RectInstance> = Vec::with_capacity(64);
 
         // OCR bubbles stage into their OWN rect list: it becomes the
         // LEADING range of the single rect upload below, which is what
         // lets `draw` slip the bubble glyphs between the pills and every
-        // other rect (the panel must cover bubbles, bubbles must cover
+        // other rect (the overlays must cover bubbles, bubbles must cover
         // the dimmed desktop).
         let mut bubble_rects: Vec<RectInstance> = Vec::with_capacity(32);
         let bubbles_at_rest = self
@@ -278,25 +234,23 @@ impl UiRenderer {
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.tips
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
-        self.panel.prepare(
+        // The egui frame for THIS monitor, uploaded here so the vertex,
+        // index and texture writes happen while the render pass is still
+        // closed. Textures are resynced even when nothing draws, so a
+        // panel hidden by the overlay toggle never returns against a stale
+        // atlas.
+        let egui_frame = state
+            .egui
+            .get(self.monitor_index)
+            .and_then(|f| f.as_deref());
+        let b = self.this_monitor.bounds;
+        self.egui.prepare(
             device,
             queue,
-            &mut self.text,
-            &state,
-            &self.this_monitor,
-            &mut rect_instances,
-            &mut icon_draws,
-            dt,
-        );
-        self.debug.prepare(
-            &mut self.text,
-            &state,
-            &self.this_monitor,
-            &self.monitor_name,
-            &self.adapter_name,
-            perf,
-            &self.startup,
-            &mut rect_instances,
+            viewport_px,
+            (b.width() as u32, b.height() as u32),
+            egui_frame,
+            crate::ui::shared::egui_draw_visible(&state),
         );
 
         let elapsed_secs = self.start_time.elapsed().as_secs_f32();
@@ -308,14 +262,10 @@ impl UiRenderer {
         bubble_rects.append(&mut rect_instances);
         self.rect
             .prepare(device, queue, viewport_px, elapsed_secs, &bubble_rects);
-        if let Some(atlas) = self.panel.atlas() {
-            self.icon
-                .prepare(device, queue, viewport_px, atlas, &icon_draws);
-        }
 
         // Bubble glyphs ride the dedicated renderer so their draw can be
         // ordered between the two rect ranges — the main renderer below
-        // draws last, above the panel.
+        // draws last, above the bubbles.
         //
         // Static-Lifted fast path: once the reveal has settled every
         // frame's staging is byte-identical (the animation is a pure
@@ -351,10 +301,6 @@ impl UiRenderer {
             .text_areas(viewport_px, &mut text_areas);
         self.tips
             .text_areas(viewport_px, &mut text_areas);
-        self.panel
-            .text_areas(viewport_px, &mut text_areas);
-        self.debug
-            .text_areas(viewport_px, &mut text_areas);
         self.any_text = self.text.prepare(device, queue, &text_areas);
 
         // An atlas cap-hit inside either prepare above cleared the atlas:
@@ -382,12 +328,11 @@ impl UiRenderer {
         //      dimmed desktop.
         //   3. bubble glyphs — the recognized text, on its own glyph
         //      renderer precisely so it can be issued here: above its
-        //      pill backgrounds, below the panel's rects.
-        //   4. rect TRAILING range — hint pills, the button panel: covers
-        //      any bubble it overlaps.
-        //   5. icons, then 6. main glyph text (panel/hint labels) —
-        //      the panel and its labels end up above EVERYTHING, bubbles
-        //      included.
+        //      pill backgrounds, below the other overlays' rects.
+        //   4. rect TRAILING range — hint pills, the info overlay:
+        //      covers any bubble it overlaps.
+        //   5. main glyph text — hint and tips labels, the readout.
+        //   6. egui — the egui-drawn panels, above all of it.
         self.lift.draw(frame);
         self.rect
             .draw_range(frame, 0..self.bubble_rect_count);
@@ -396,9 +341,10 @@ impl UiRenderer {
         }
         self.rect
             .draw_range(frame, self.bubble_rect_count..u32::MAX);
-        self.icon.draw(frame);
         if self.any_text {
             self.text.draw(frame);
         }
+        // Last: the egui panels sit above everything, bubbles included.
+        self.egui.draw(frame);
     }
 }

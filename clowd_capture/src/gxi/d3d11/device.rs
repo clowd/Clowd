@@ -21,11 +21,12 @@ use windows::Win32::Graphics::Direct3D::{
 };
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Buffer, ID3D11Device, ID3D11DeviceContext, ID3D11Query, ID3D11SamplerState, ID3D11ShaderResourceView,
-    ID3D11Texture2D, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_SHADER_RESOURCE, D3D11_BIND_VERTEX_BUFFER, D3D11_BOX, D3D11_BUFFER_DESC,
-    D3D11_COMPARISON_NEVER, D3D11_CPU_ACCESS_WRITE, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_DEBUG, D3D11_CREATE_DEVICE_FLAG,
-    D3D11_FILTER_MIN_MAG_MIP_POINT, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_WRITE_DISCARD, D3D11_QUERY_DESC, D3D11_QUERY_EVENT,
-    D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION, D3D11_SAMPLER_DESC, D3D11_SDK_VERSION, D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE2D_DESC,
-    D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, D3D11_USAGE_DYNAMIC, D3D11_USAGE_IMMUTABLE,
+    ID3D11Texture2D, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_SHADER_RESOURCE, D3D11_BIND_VERTEX_BUFFER, D3D11_BOX,
+    D3D11_BUFFER_DESC, D3D11_COMPARISON_NEVER, D3D11_CPU_ACCESS_WRITE, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_DEBUG,
+    D3D11_CREATE_DEVICE_FLAG, D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, D3D11_FILTER_MIN_MAG_MIP_POINT, D3D11_MAPPED_SUBRESOURCE,
+    D3D11_MAP_WRITE_DISCARD, D3D11_QUERY_DESC, D3D11_QUERY_EVENT, D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION, D3D11_SAMPLER_DESC,
+    D3D11_SDK_VERSION, D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE2D_DESC, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, D3D11_USAGE_DYNAMIC,
+    D3D11_USAGE_IMMUTABLE,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8_UNORM,
@@ -35,7 +36,7 @@ use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, IDXGIAdapter, IDXGIAdapter1, IDXGIDevice, IDXGIFactory2, DXGI_ADAPTER_FLAG_SOFTWARE,
 };
 
-use crate::gxi::types::{BindingRes, CreateMark, ShaderId, TexFormat, TextureDesc};
+use crate::gxi::types::{BindingRes, CreateMark, SamplerFilter, ShaderId, TexFormat, TextureDesc};
 use crate::shader_bindings::{BindingEntry, ResourceKind};
 
 use super::pipeline::SharedStates;
@@ -291,6 +292,12 @@ impl Device {
         self.create_dynamic_buffer(label, size.max(1) as u32, D3D11_BIND_VERTEX_BUFFER.0 as u32)
     }
 
+    /// A 32-bit index buffer; growth by recreation is caller policy, like
+    /// the instance buffers.
+    pub fn create_index_buffer(&self, label: &str, size: u64) -> Buffer {
+        self.create_dynamic_buffer(label, size.max(1) as u32, D3D11_BIND_INDEX_BUFFER.0 as u32)
+    }
+
     fn create_dynamic_buffer(&self, label: &str, byte_width: u32, bind_flags: u32) -> Buffer {
         let desc = D3D11_BUFFER_DESC {
             ByteWidth: byte_width,
@@ -400,12 +407,14 @@ impl Device {
         })
     }
 
-    /// Every sampler in the crate is nearest-filtered, clamp-to-edge; a
-    /// filter parameter joins the signature the day a pipeline wants
-    /// something else.
-    pub fn create_sampler(&self, label: &str) -> Sampler {
+    /// Every sampler in the crate is clamp-to-edge with nearest mip
+    /// selection; `filter` picks the min/mag filter.
+    pub fn create_sampler(&self, label: &str, filter: SamplerFilter) -> Sampler {
         let desc = D3D11_SAMPLER_DESC {
-            Filter: D3D11_FILTER_MIN_MAG_MIP_POINT,
+            Filter: match filter {
+                SamplerFilter::Nearest => D3D11_FILTER_MIN_MAG_MIP_POINT,
+                SamplerFilter::Linear => D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT,
+            },
             AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,
             AddressV: D3D11_TEXTURE_ADDRESS_CLAMP,
             AddressW: D3D11_TEXTURE_ADDRESS_CLAMP,

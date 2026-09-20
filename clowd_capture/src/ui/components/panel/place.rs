@@ -1,10 +1,21 @@
-//! Anchor an arranged strip beside a region: choose the side, arrange for
-//! that side's axis, move the scene to its origin, and keep the whole box on
-//! the bounds (tail wins when it cannot fit).
+//! Where the tray goes: choose the side beside the selection, ask for the
+//! strip's size in that orientation, and keep the whole box on the
+//! monitor (tail wins when it cannot fit).
+//!
+//! Pure and in integer physical pixels, the same units the selection and
+//! the monitor bounds are in. `show` turns the result into the
+//! monitor-local point position egui's `Area` wants.
 
-use super::scene::Scene;
-use super::tree::Axis;
 use clowd_rust_core::geometry::{RectExt, ScreenRect};
+
+use super::theme::tokens;
+
+/// Which way the strip runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Axis {
+    Row,
+    Column,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
@@ -27,8 +38,8 @@ impl Side {
     }
 }
 
-/// The LONGEST box the strip can become in one orientation: `len` along it,
-/// `thick` across.
+/// The LONGEST box the strip can become in one orientation: `len` along
+/// it, `thick` across.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Footprint {
     pub len: i32,
@@ -41,15 +52,6 @@ pub struct Fit {
     pub col: Footprint,
 }
 
-impl Fit {
-    pub fn thick(self, axis: Axis) -> i32 {
-        match axis {
-            Axis::Row => self.row.thick,
-            Axis::Column => self.col.thick,
-        }
-    }
-}
-
 /// `min_distance` is clearance kept from the bounds edge in the fit test;
 /// `max_distance` the gap between the anchor and the box.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,23 +60,41 @@ pub struct Near {
     pub max_distance: i32,
 }
 
-/// Choose the side, arrange for its axis, move the scene to its origin, and
-/// make `bounds` its live rect. `arrange` receives the axis and returns the
-/// scene at (0, 0); it runs once. `anchor` is not intersected with `bounds`
-/// here: the owner clips it first, so this stays a total function.
-pub fn place(anchor: ScreenRect, bounds: ScreenRect, fit: Fit, near: Near, arrange: impl FnOnce(Axis) -> Scene) -> (Scene, Side) {
+impl Near {
+    /// The two logical distances at one monitor's scale. Both are
+    /// distances, so both round up, exactly as the retired kit's
+    /// `Scale::space` did.
+    pub fn at_dpi(dpi: f32) -> Self {
+        Self {
+            min_distance: (tokens::NEAR_MIN * dpi).ceil() as i32,
+            max_distance: (tokens::NEAR_MAX * dpi).ceil() as i32,
+        }
+    }
+}
+
+/// Choose the side for `anchor` (already clipped to `bounds`), ask
+/// `size_for` ONCE for that axis's `(width, height)` in px, put the box at
+/// its origin and clamp both axes onto `bounds`.
+pub fn place(
+    anchor: ScreenRect,
+    bounds: ScreenRect,
+    fit: Fit,
+    near: Near,
+    size_for: impl FnOnce(Axis) -> (i32, i32),
+) -> (Side, ScreenRect) {
     let side = choose_side(anchor, bounds, fit, near);
-    let mut scene = arrange(side.axis());
-    let size = scene.bounds().size;
-    let (x, y) = origin(side, anchor, bounds, (size.width, size.height), near);
-    // Keep the WHOLE box on the bounds, both axes (a shadow may clip). Only
-    // when nothing fits can the box still be longer than the bounds; then
-    // the tail stays on the bounds and the head overflows.
-    let x = clamp_span(x, size.width, bounds.left(), bounds.right());
-    let y = clamp_span(y, size.height, bounds.top(), bounds.bottom());
-    scene.translate(x, y);
-    scene.live = bounds;
-    (scene, side)
+    let (w, h) = size_for(side.axis());
+    let (x, y) = origin(side, anchor, bounds, (w, h), near);
+    // Keep the WHOLE box on the bounds, both axes (a shadow may clip).
+    // Only when nothing fits can the box still be longer than the bounds;
+    // then the tail stays on the bounds and the head overflows.
+    let rect = ScreenRect::from_xy_size(
+        clamp_span(x, w, bounds.left(), bounds.right()),
+        clamp_span(y, h, bounds.top(), bounds.bottom()),
+        w,
+        h,
+    );
+    (side, rect)
 }
 
 const CASCADE: [Side; 4] = [Side::Below, Side::Right, Side::Left, Side::Inside];
@@ -145,9 +165,6 @@ fn clamp_span(pos: i32, len: i32, lo: i32, hi: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::kit::scene::{Kind, Placed};
-    use crate::ui::kit::tokens::{self, Scale};
-    use crate::ui::kit::tree::Look;
     use std::cell::Cell;
 
     const FIT: Fit = Fit {
@@ -162,37 +179,24 @@ mod tests {
     };
 
     fn near() -> Near {
-        let s = Scale::new(1.0);
-        Near {
-            min_distance: s.space(tokens::NEAR_MIN_DISTANCE),
-            max_distance: s.space(tokens::NEAR_MAX_DISTANCE),
-        }
+        Near::at_dpi(1.0)
     }
 
     fn rect(x: i32, y: i32, w: i32, h: i32) -> ScreenRect {
         ScreenRect::from_xy_size(x, y, w, h)
     }
 
-    /// A one-node scene the size of `FIT`'s box for `axis`.
-    fn full(axis: Axis) -> Scene {
-        let (w, h) = match axis {
+    /// The `FIT` box for `axis`, as `size_for` returns it.
+    fn full(axis: Axis) -> (i32, i32) {
+        match axis {
             Axis::Row => (FIT.row.len, FIT.row.thick),
             Axis::Column => (FIT.col.thick, FIT.col.len),
-        };
-        let r = rect(0, 0, w, h);
-        Scene {
-            nodes: vec![Placed {
-                id: None,
-                rect: r,
-                kind: Kind::Box(Look::default()),
-            }],
-            live: r,
         }
     }
 
     fn placed(anchor: ScreenRect, bounds: ScreenRect) -> (ScreenRect, Side) {
-        let (scene, side) = place(anchor, bounds, FIT, near(), full);
-        (scene.bounds(), side)
+        let (side, rect) = place(anchor, bounds, FIT, near(), full);
+        (rect, side)
     }
 
     const HD: ScreenRect = ScreenRect {
@@ -254,8 +258,8 @@ mod tests {
             min_distance: 0,
             ..near()
         };
-        assert_eq!(place(anchor, HD, FIT, loose, full).1, Side::Below);
-        assert_eq!(place(anchor, HD, FIT, near(), full).1, Side::Right);
+        assert_eq!(place(anchor, HD, FIT, loose, full).0, Side::Below);
+        assert_eq!(place(anchor, HD, FIT, near(), full).0, Side::Right);
     }
 
     #[test]
@@ -308,28 +312,18 @@ mod tests {
                 },
                 ..FIT
             };
-            let (scene, side) = place(anchor, HD, fit, near(), |_| {
-                let r = rect(0, 0, w, 56);
-                Scene {
-                    nodes: vec![Placed {
-                        id: None,
-                        rect: r,
-                        kind: Kind::Box(Look::default()),
-                    }],
-                    live: r,
-                }
-            });
+            let (side, r) = place(anchor, HD, fit, near(), |_| (w, 56));
             assert_eq!(side, Side::Below);
-            let mid = scene.bounds().left() + w / 2;
+            let mid = r.left() + w / 2;
             assert!((mid - (500 + aw / 2)).abs() <= 1, "anchor {aw} box {w}: mid {mid}");
         }
     }
 
     #[test]
-    fn place_arranges_once_for_the_chosen_axis_and_sets_live() {
+    fn size_for_is_called_once_with_the_chosen_axis() {
         let calls = Cell::new(0);
         let axis = Cell::new(None);
-        let (scene, side) = place(rect(500, 1000, 100, 60), HD, FIT, near(), |a| {
+        let (side, _) = place(rect(500, 1000, 100, 60), HD, FIT, near(), |a| {
             calls.set(calls.get() + 1);
             axis.set(Some(a));
             full(a)
@@ -337,9 +331,25 @@ mod tests {
         assert_eq!(calls.get(), 1);
         assert_eq!(axis.get(), Some(side.axis()));
         assert_eq!(side.axis(), Axis::Column);
-        assert_eq!(FIT.thick(side.axis()), 92);
-        assert_eq!(scene.live, HD, "live widens to the bounds, not the box");
-        assert!(scene.contains(620.0, 700.0));
-        assert!(!scene.contains(-1.0, 700.0));
+    }
+
+    /// Each strip is centred with its OWN width, which is what lets a set
+    /// swap re-centre under the cursor (`PanelSwapGuard`'s premise).
+    #[test]
+    fn each_strip_is_centred_with_its_own_width() {
+        let anchor = rect(500, 300, 100, 100);
+        let mids = [400, 520].map(|w| {
+            let (_, r) = place(anchor, HD, FIT, near(), |_| (w, 56));
+            r.left() + w / 2
+        });
+        assert!((mids[0] - mids[1]).abs() <= 1, "{mids:?}");
+    }
+
+    #[test]
+    fn near_scales_by_ceil_at_each_dpi() {
+        for (dpi, min, max) in [(1.0, 2, 15), (1.25, 3, 19), (1.5, 3, 23), (2.0, 4, 30)] {
+            let near = Near::at_dpi(dpi);
+            assert_eq!((near.min_distance, near.max_distance), (min, max), "at {dpi}");
+        }
     }
 }

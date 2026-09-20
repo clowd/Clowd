@@ -181,7 +181,9 @@ pub const RECT_BINDINGS: &[BindingEntry] = &[BindingEntry {
     fragment: true,
 }];
 
-pub const ICON_BINDINGS: &[BindingEntry] = &[
+// ui_egui.wgsl: the egui painter's per-frame Locals (screen size in
+// points, vertex stage only), the primitive's texture and its sampler.
+pub const EGUI_BINDINGS: &[BindingEntry] = &[
     BindingEntry {
         binding: 0,
         kind: ResourceKind::UniformBuffer,
@@ -268,9 +270,9 @@ pub const ALL_SHADERS: &[ShaderDef] = &[
         bindings: RECT_BINDINGS,
     },
     ShaderDef {
-        name: "ui_icon",
-        wgsl_path: "shaders/ui_icon.wgsl",
-        bindings: ICON_BINDINGS,
+        name: "ui_egui",
+        wgsl_path: "shaders/ui_egui.wgsl",
+        bindings: EGUI_BINDINGS,
     },
     ShaderDef {
         name: "ui_lift",

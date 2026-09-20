@@ -11,7 +11,7 @@ use crate::gpu::{self};
 use crate::gxi::{self, AcquireResult, BindingRes, GpuTimings, ShaderId, SurfaceConfig, TexFormat, TextureDesc};
 use crate::interaction::OcrState;
 use crate::sync::ReadyGuard;
-use crate::telemetry::perf::{PerfSample, PerfTracker};
+use crate::telemetry::perf::{PerfSample, PerfSlot, PerfTracker, Series};
 use crate::telemetry::startup::{AtomicDuration, StartupTimings, WorkerTimings};
 use crate::ui::gpu::renderer::{UiPipelines, UiText};
 use crate::ui::gpu::text::TextStack;
@@ -68,14 +68,10 @@ struct DeferredStack {
 ///
 /// `Device` is a refcounted handle, so the builder gets its own clone and
 /// the worker thread keeps using the original meanwhile.
-#[allow(clippy::too_many_arguments)]
 fn spawn_deferred_stack(
     device: gxi::Device,
     this_monitor: UiMonitor,
     monitor_index: usize,
-    monitor_name: String,
-    adapter_name: String,
-    adapter_id: Option<(u32, u32)>,
     startup: Arc<StartupTimings>,
 ) -> thread::JoinHandle<DeferredStack> {
     thread::Builder::new()
@@ -130,16 +126,7 @@ fn spawn_deferred_stack(
             DeferredStack {
                 peek,
                 selection,
-                ui: UiRenderer::from_parts(
-                    pipelines,
-                    text,
-                    this_monitor,
-                    monitor_index,
-                    monitor_name,
-                    adapter_name,
-                    adapter_id,
-                    startup,
-                ),
+                ui: UiRenderer::from_parts(pipelines, text, this_monitor, monitor_index),
             }
         })
         .expect("spawn ui builder")
@@ -228,7 +215,12 @@ enum FirstFrame {
 // ── Worker spawn + lifecycle ────────────────────────────────────────
 
 /// Per-worker parameters built in main() before the event loop starts.
-fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<WorkerInput>, msg_rx: mpsc::Receiver<RenderMsg>) {
+fn render_worker_main(
+    params: RenderWorkerParams,
+    input_rx: mpsc::Receiver<WorkerInput>,
+    msg_rx: mpsc::Receiver<RenderMsg>,
+    perf_slot: PerfSlot,
+) {
     let RenderWorkerParams {
         monitor,
         monitor_index,
@@ -255,7 +247,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         dpi_scale: monitor.scale_factor,
         is_primary: monitor.is_primary,
     };
-    let monitor_name = monitor.name.clone();
 
     // ── Stage A: eager GPU prep (no window/surface/screenshot) ──────
 
@@ -267,22 +258,17 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             return;
         }
     };
-    let adapter_name = bundle.adapter_name.clone();
+    // Kept for the debug panel's snapshots, which are the only reader now
+    // that the panel itself runs on the app thread; `Arc<str>` so every
+    // snapshot clones it by refcount.
+    let adapter_name: Arc<str> = bundle.adapter_name.as_str().into();
 
     // Started here, before the handoff wait, and collected by the render
     // loop whenever it finishes: that is the whole overlap this buys — the
     // UI stack and the peek pipeline compile *beside* the screenshot wait,
     // window creation, frame 0 and the first visible frames instead of in
     // front of any of them.
-    let deferred = spawn_deferred_stack(
-        bundle.device.clone(),
-        this_monitor,
-        monitor_index,
-        monitor_name,
-        adapter_name,
-        adapter_hint,
-        startup.clone(),
-    );
+    let deferred = spawn_deferred_stack(bundle.device.clone(), this_monitor, monitor_index, startup.clone());
 
     worker_timings
         .render_prep
@@ -583,11 +569,19 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     let mut overlays_visible: bool = true;
     let mut cursor_overlay_visible: bool = true;
     let mut scroll_pick_mode: bool = false;
+    // Drives the snapshot producer below. The `overlays_visible` half is
+    // folded in here because the Q toggle hides the debug panels too, and a
+    // hidden panel must not pay for percentile sorts.
+    let mut debug_visible: bool = false;
     // Mirrored whole (not decomposed into flags) so the dim, the handle
     // suppression and the lift geometry all derive from the same
     // broadcast — the same reason UiSharedState carries the enum.
     let mut ocr: OcrState = OcrState::Idle;
     let mut last_iter = Instant::now();
+    // Snapshot publishing state: a monotonic sequence the app thread
+    // compares against, and the wall clock that paces publication.
+    let mut perf_seq: u64 = 0;
+    let mut last_snapshot: Option<Instant> = None;
 
     loop {
         // Fold the deferred build in the iteration it finishes. `is_finished`
@@ -646,6 +640,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                 }
                 Ok(RenderMsg::UiState(state)) => {
                     overlays_visible = state.overlays_visible;
+                    debug_visible = state.debug_visible && state.overlays_visible;
                     cursor_overlay_visible = state.cursor_overlay_visible;
                     scroll_pick_mode = state.scroll_pick_mode;
                     ocr = state.ocr.clone();
@@ -918,7 +913,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             peek_bind_group.as_ref(),
             crosshair_peek_bg.as_ref(),
             ui_renderer.as_mut(),
-            &perf,
             gpu_timing.as_ref(),
             &mut sample,
         );
@@ -933,6 +927,21 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         if let Some(mut s) = sample {
             s.overall = overall;
             perf.record(s);
+        }
+
+        if debug_visible {
+            // The stats cache refreshes one series per frame on a six-slot
+            // rotation, so the three series the panel shows have to be asked
+            // for every frame; asking only when a snapshot is built would
+            // leave each of them six snapshots stale.
+            perf.stats(Series::Cpu);
+            perf.stats(Series::Gpu);
+            perf.stats(Series::Overall);
+            if last_snapshot.is_none_or(|t| t.elapsed() >= Duration::from_millis(100)) {
+                perf_seq += 1;
+                *perf_slot.lock().unwrap() = Some(Arc::new(perf.snapshot(perf_seq, &adapter_name)));
+                last_snapshot = Some(Instant::now());
+            }
         }
     }
 }

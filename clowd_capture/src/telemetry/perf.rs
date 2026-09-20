@@ -22,6 +22,7 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Target sample window duration in seconds. The actual buffer size
@@ -34,7 +35,7 @@ const DEFAULT_PERF_WINDOW: usize = 600;
 
 /// Short tail used for the headline `fps` readout so it reacts within
 /// a second.
-pub const RECENT_WINDOW: usize = 60;
+const RECENT_WINDOW: usize = 60;
 
 /// Which timing series a stats query is about. Matches the order of
 /// `SessionStats::min_ms` / `max_ms`.
@@ -150,6 +151,37 @@ pub struct FrameStats {
     pub gpu: PerfStats,
     pub overall: PerfStats,
 }
+
+/// A plain, `Send + Sync` copy of everything the debug panel reads, built
+/// on the render worker while the panel is visible and handed to the app
+/// thread through a [`PerfSlot`]. The tracker itself can never leave the
+/// render thread — it holds `RefCell`s — so this is the whole of the
+/// worker-to-app telemetry path.
+#[derive(Debug, Clone)]
+pub struct PerfSnapshot {
+    /// Monotonic per-worker counter. The app thread re-reads a monitor's
+    /// panel only when this advances.
+    pub seq: u64,
+    pub adapter_name: Arc<str>,
+    pub target_period: Option<Duration>,
+    pub recent_overall_avg: Duration,
+    pub cpu: PerfStats,
+    pub gpu: PerfStats,
+    pub overall: PerfStats,
+    pub session: SessionStats,
+    pub sample_count: usize,
+    pub sample_time_secs: f64,
+    pub window_size: usize,
+    /// One entry per retained sample, newest first:
+    /// `[overall_ms, cpu_ms (draw + present), gpu_ms (0 when unknown)]`.
+    /// The sparkline draws these directly.
+    pub bars: Vec<[f32; 3]>,
+}
+
+/// Where a render worker publishes its latest [`PerfSnapshot`] for the app
+/// thread to poll. The app thread runs `ControlFlow::Poll`, so a slot needs
+/// no wake-up channel.
+pub type PerfSlot = Arc<Mutex<Option<Arc<PerfSnapshot>>>>;
 
 /// Number of series the stats cache rotates through. One series is
 /// recomputed per frame, so each series gets a refresh every
@@ -414,13 +446,6 @@ impl PerfTracker {
         Duration::from_nanos((sum / n as u128) as u64)
     }
 
-    /// Latest sample in the window (most recent frame). `None` before any
-    /// `record()` call.
-    #[allow(dead_code)]
-    pub fn latest(&self) -> Option<PerfSample> {
-        self.samples.back().copied()
-    }
-
     /// Read-only access to session aggregates for the panel footer.
     pub fn session(&self) -> &SessionStats {
         &self.session
@@ -455,10 +480,90 @@ impl PerfTracker {
             None => 0.0,
         }
     }
+
+    /// Copy everything the debug panel shows into a snapshot the app thread
+    /// can keep. `seq` is the caller's own counter and `adapter_name` is
+    /// cloned by refcount, so the whole call is one pass over the sample
+    /// ring plus three warm stats-cache reads.
+    pub fn snapshot(&self, seq: u64, adapter_name: &Arc<str>) -> PerfSnapshot {
+        let ms = |d: Duration| (d.as_secs_f64() * 1000.0) as f32;
+        let bars = self
+            .samples_newest_first()
+            .map(|s| [ms(s.overall), ms(s.draw) + ms(s.present), s.gpu.map_or(0.0, ms)])
+            .collect();
+        PerfSnapshot {
+            seq,
+            adapter_name: adapter_name.clone(),
+            target_period: self.target_period(),
+            recent_overall_avg: self.recent_overall_avg(),
+            cpu: self.stats(Series::Cpu),
+            gpu: self.stats(Series::Gpu),
+            overall: self.stats(Series::Overall),
+            session: *self.session(),
+            sample_count: self.sample_count(),
+            sample_time_secs: self.sample_time_secs(),
+            window_size: self.window_size(),
+            bars,
+        }
+    }
 }
 
 impl Default for PerfTracker {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample(overall_ms: u64, draw_ms: u64, present_ms: u64, gpu_ms: Option<u64>) -> PerfSample {
+        PerfSample {
+            wait: Duration::ZERO,
+            draw: Duration::from_millis(draw_ms),
+            present: Duration::from_millis(present_ms),
+            overall: Duration::from_millis(overall_ms),
+            gpu: gpu_ms.map(Duration::from_millis),
+        }
+    }
+
+    /// The snapshot is the only thing the debug panel ever sees, so it has
+    /// to carry the tracker's numbers unchanged and its bars newest-first.
+    #[test]
+    fn snapshot_mirrors_the_tracker() {
+        let mut tracker = PerfTracker::new_with_refresh(60.0);
+        for i in 1..=5u64 {
+            tracker.record(sample(i, 1, 1, Some(2)));
+        }
+        let name: Arc<str> = Arc::from("Test Adapter");
+        let snap = tracker.snapshot(7, &name);
+
+        assert_eq!(snap.seq, 7);
+        assert_eq!(&*snap.adapter_name, "Test Adapter");
+        assert_eq!(snap.sample_count, 5);
+        assert_eq!(snap.bars.len(), 5);
+        assert_eq!(snap.window_size, tracker.window_size());
+        assert_eq!(snap.target_period, tracker.target_period());
+        assert_eq!(snap.session.total_frames, 5);
+        // Newest first: the last sample recorded had overall = 5 ms.
+        assert!((snap.bars[0][0] - 5.0).abs() < 0.01, "{:?}", snap.bars);
+        assert!((snap.bars[4][0] - 1.0).abs() < 0.01, "{:?}", snap.bars);
+        // cpu = draw + present, gpu carried through.
+        assert!((snap.bars[0][1] - 2.0).abs() < 0.01, "{:?}", snap.bars);
+        assert!((snap.bars[0][2] - 2.0).abs() < 0.01, "{:?}", snap.bars);
+        assert_eq!(snap.overall.count, 5);
+    }
+
+    /// A sample whose GPU time never landed reports zero rather than
+    /// dropping the bar.
+    #[test]
+    fn snapshot_reports_a_missing_gpu_time_as_zero() {
+        let mut tracker = PerfTracker::new();
+        tracker.record(sample(10, 3, 1, None));
+        let snap = tracker.snapshot(1, &Arc::from(""));
+        assert_eq!(snap.bars[0][2], 0.0);
+        assert_eq!(snap.target_period, None);
+        assert_eq!(snap.sample_time_secs, 0.0);
     }
 }

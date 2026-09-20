@@ -17,7 +17,7 @@
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::gxi::{self, BindingRes, BlendMode, PipelineDesc, ShaderId, VertexAttr, VertexFormat, VertexLayout};
+use crate::gxi::{self, BindingRes, BlendMode, PipelineDesc, ShaderId, VertexAttr, VertexFormat, VertexLayout, VertexStep};
 use crate::interaction::OcrState;
 use crate::ocr::anim;
 use crate::ui::shared::{UiMonitor, UiSharedState};
@@ -69,6 +69,7 @@ pub struct LiftPipeline {
 
 const LIFT_INSTANCE_LAYOUT: VertexLayout = VertexLayout {
     stride: std::mem::size_of::<LiftInstance>() as u64,
+    step: VertexStep::Instance,
     attrs: &[
         VertexAttr {
             format: VertexFormat::Float32x4,

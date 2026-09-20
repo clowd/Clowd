@@ -16,7 +16,7 @@ use objc2_metal::{
     MTLVertexDescriptor, MTLVertexFormat, MTLVertexStepFunction,
 };
 
-use crate::gxi::types::{BlendMode, PipelineDesc, VertexFormat, VertexLayout};
+use crate::gxi::types::{BlendMode, PipelineDesc, VertexFormat, VertexLayout, VertexStep};
 
 use super::device::Device;
 use super::{shaders, SURFACE_FORMAT, VERTEX_BUFFER_INDEX};
@@ -126,7 +126,7 @@ impl Device {
 /// (a drifted layout fails loudly at pipeline creation, not as garbage
 /// geometry). naga maps `@location(n)` to attribute index `n`, so
 /// locations index the attribute array directly; the buffer layout lives
-/// at [`VERTEX_BUFFER_INDEX`], per-instance step, matching where
+/// at [`VERTEX_BUFFER_INDEX`], stepping as the layout asks, matching where
 /// `Frame::set_vertex_buffer` binds the buffer.
 fn vertex_descriptor(v: &VertexLayout) -> Retained<MTLVertexDescriptor> {
     let vd = MTLVertexDescriptor::vertexDescriptor();
@@ -150,7 +150,10 @@ fn vertex_descriptor(v: &VertexLayout) -> Retained<MTLVertexDescriptor> {
             .layouts()
             .objectAtIndexedSubscript(VERTEX_BUFFER_INDEX);
         layout.setStride(v.stride as usize);
-        layout.setStepFunction(MTLVertexStepFunction::PerInstance);
+        layout.setStepFunction(match v.step {
+            VertexStep::Instance => MTLVertexStepFunction::PerInstance,
+            VertexStep::Vertex => MTLVertexStepFunction::PerVertex,
+        });
         layout.setStepRate(1);
     }
     vd
@@ -158,7 +161,7 @@ fn vertex_descriptor(v: &VertexLayout) -> Retained<MTLVertexDescriptor> {
 
 fn vertex_format(f: VertexFormat) -> MTLVertexFormat {
     match f {
-        VertexFormat::Float32 => MTLVertexFormat::Float,
+        VertexFormat::Float32x2 => MTLVertexFormat::Float2,
         VertexFormat::Float32x4 => MTLVertexFormat::Float4,
         VertexFormat::Sint32x2 => MTLVertexFormat::Int2,
         VertexFormat::Uint32 => MTLVertexFormat::UInt,

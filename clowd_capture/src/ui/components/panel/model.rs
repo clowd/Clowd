@@ -1,65 +1,18 @@
 //! Button metadata: the static tables of what the panel can show.
 //!
-//! Two sets ([`PanelButtonSet`]) of [`ButtonDef`]s in strip order, an icon
-//! table ([`PANEL_ICONS`]) they index into, the shell's opt-out switches
+//! Two sets ([`PanelButtonSet`]) of [`ButtonDef`]s in strip order, each
+//! carrying its own icon bytes, the shell's opt-out switches
 //! ([`PanelFeatures`]) and the accelerator lookup. The tables are the full
 //! static truth; the strip on screen is `set.visible_defs(features)`, and
-//! both the composer and the accelerator lookup read that one filtered
-//! view, so a switched-off button is unreachable by mouse AND by key.
+//! both the tray and the accelerator lookup read that one filtered view,
+//! so a switched-off button is unreachable by mouse AND by key.
 //!
 //! Every button is drawn the same way (segment, icon over label, the
 //! accelerator glyph underlined): there is no primary/secondary
-//! distinction. The composer sizes each button from the label's glyph
-//! count, so the label text is geometry as much as it is copy.
+//! distinction. The `below` style sizes each button from its laid-out
+//! label, so the label text is geometry as much as it is copy.
 
 use crate::ui::command::Command;
-
-/// The deduped union of every icon any button set can show, in the order
-/// `PanelRenderer` parses and rasterizes them into the icon atlas.
-/// `ButtonDef::icon_id` indexes *this* table, not the button's position
-/// in its set, because the two sets share icons (UPLOAD/COPY/EXIT appear
-/// in both) and the atlas is built once for all of them.
-///
-/// The order is load-bearing: an index is baked into every `ButtonDef`
-/// at compile time, so inserting an entry anywhere but the end
-/// renumbers every icon after it.
-pub const PANEL_ICONS: &[&[u8]] = &[
-    super::assets::SVG_UPLOAD,
-    super::assets::SVG_EDIT,
-    super::assets::SVG_VIDEO,
-    super::assets::SVG_COPY,
-    super::assets::SVG_SAVE,
-    super::assets::SVG_RESET,
-    super::assets::SVG_EXIT,
-    super::assets::SVG_SEARCH,
-    super::assets::SVG_BACK,
-    super::assets::SVG_OCR,
-    super::assets::SVG_SCROLL,
-    super::assets::SVG_SHARE,
-];
-
-// Named indices into `PANEL_ICONS`. Hand-writing the numbers at each
-// `ButtonDef` would make the table order load-bearing in nine places;
-// `icon_ids_point_at_their_own_bytes` in the tests below proves these
-// still line up with the bytes each def carries.
-pub const ICON_UPLOAD: usize = 0;
-pub const ICON_EDIT: usize = 1;
-pub const ICON_VIDEO: usize = 2;
-pub const ICON_COPY: usize = 3;
-pub const ICON_SAVE: usize = 4;
-pub const ICON_RESET: usize = 5;
-pub const ICON_EXIT: usize = 6;
-pub const ICON_SEARCH: usize = 7;
-pub const ICON_BACK: usize = 8;
-pub const ICON_OCR: usize = 9;
-pub const ICON_SCROLL: usize = 10;
-pub const ICON_SHARE: usize = 11;
-
-/// Atlas entry of the Clowd emblem: appended after every `PANEL_ICONS`
-/// entry so `icon_id`s keep indexing the atlas directly. Lives here, not
-/// in the renderer, because the composer that places the mark and the
-/// atlas that rasterizes it must agree on it.
-pub const EMBLEM_SLOT: usize = PANEL_ICONS.len();
 
 /// Which of the optional panel buttons the shell has left switched on.
 ///
@@ -141,7 +94,7 @@ pub enum PanelButtonSet {
 }
 
 impl PanelButtonSet {
-    /// Every set: the composer's union fit walks it so the tray's
+    /// Every set: `show`'s union fit walks it so the tray's
     /// orientation and column thickness never depend on which set is up,
     /// and tests hold their invariants across all of them.
     pub const ALL: &'static [PanelButtonSet] = &[Self::Normal, Self::Ocr];
@@ -158,9 +111,9 @@ impl PanelButtonSet {
 
     /// The buttons this set actually shows under `features`, in the same
     /// order, each with its index into [`Self::defs`] — the single
-    /// definition of "the strip on screen", shared by the composer and the
+    /// definition of "the strip on screen", shared by `show` and the
     /// accelerator lookup. The index is the table position, not the
-    /// visible position: the composer keys ids on it so a switched-off
+    /// visible position: `show` keys widget ids on it so a switched-off
     /// button does not renumber its neighbours.
     pub fn visible_defs(self, features: PanelFeatures) -> impl Iterator<Item = (usize, &'static ButtonDef)> {
         self.defs()
@@ -170,40 +123,39 @@ impl PanelButtonSet {
     }
 }
 
+/// How a button presents its def. Chosen once per run by `--panel-buttons`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ButtonStyle {
+    /// A 40 px square: the icon with the accelerator letter, dim, beside
+    /// it. No label, no underline.
+    #[default]
+    #[value(name = "key")]
+    KeyHint,
+    /// A 48 px tall segment: the icon over the Title-case label with the
+    /// accelerator glyph underlined.
+    Below,
+}
+
 /// Static metadata for one button.
 #[derive(Debug, Clone, Copy)]
 pub struct ButtonDef {
     /// Command this button emits on click.
     pub command: Command,
     /// Display label: Title case, ASCII, no whitespace. ASCII is a hard
-    /// requirement: the composer's mono measure counts `chars()`, the
-    /// renderer underlines by byte index and `accel_key` reads that index
-    /// as a char index, so bytes, glyphs and advance columns must all
-    /// agree. `labels_are_title_case_ascii_and_underline_index_is_in_range`
+    /// requirement: `show` measures labels in a mono font by `chars()`,
+    /// `widgets::underlined_label` splits them by byte index and
+    /// `accel_key` reads that index as a char index, so bytes, glyphs and
+    /// advance columns must all agree. `labels_are_title_case_ascii_and_underline_index_is_in_range`
     /// pins it.
     pub label: &'static str,
-    /// BYTE index into `label` of the accelerator glyph: the renderer
-    /// underlines it via `glyph_bounds_at_byte`, and `accel_key` reads it
-    /// as a `chars()` index (equal only because labels are ASCII).
+    /// BYTE index into `label` of the accelerator glyph:
+    /// [`super::widgets::underlined_label`] splits the label there to
+    /// underline it, and `accel_key` reads the same index as a `chars()`
+    /// index (equal only because labels are ASCII).
     pub underline_idx: usize,
-    /// Index into [`PANEL_ICONS`] of this button's icon, which is also
-    /// its slot in the rasterized icon atlas. Explicit rather than
-    /// derived from the button's position because the two sets share
-    /// icons and have different lengths — a positional mapping would
-    /// index the atlas out of bounds on the render thread.
-    pub icon_id: usize,
     /// Raw SVG bytes for the icon, embedded at compile time via
-    /// `include_bytes!` in `assets.rs`.
-    ///
-    /// Nothing *renders* from this any more — the atlas is built from
-    /// `PANEL_ICONS` — but it is what makes `icon_id` checkable: it must
-    /// be the same bytes `PANEL_ICONS[icon_id]` holds, and
-    /// `icon_ids_point_at_their_own_bytes` below proves it. Keeping both
-    /// means a mis-numbered `icon_id` fails a unit test instead of
-    /// drawing the wrong glyph — or indexing the atlas out of bounds — on
-    /// a render thread. The `allow` is scoped to non-test builds because
-    /// the test module is its only reader.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// `include_bytes!` in `assets.rs`; [`super::icons::IconTextures`]
+    /// rasterises them per DPI and keys its cache on this pointer.
     pub svg_bytes: &'static [u8],
 }
 
@@ -237,70 +189,60 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         command: Command::Upload,
         label: "Upload",
         underline_idx: 0,
-        icon_id: ICON_UPLOAD,
         svg_bytes: super::assets::SVG_UPLOAD,
     },
     ButtonDef {
         command: Command::Edit,
         label: "Edit",
         underline_idx: 0,
-        icon_id: ICON_EDIT,
         svg_bytes: super::assets::SVG_EDIT,
     },
     ButtonDef {
         command: Command::Video,
         label: "Video",
         underline_idx: 0,
-        icon_id: ICON_VIDEO,
         svg_bytes: super::assets::SVG_VIDEO,
     },
     ButtonDef {
         command: Command::Share,
         label: "Share",
         underline_idx: 1,
-        icon_id: ICON_SHARE,
         svg_bytes: super::assets::SVG_SHARE,
     },
     ButtonDef {
         command: Command::ScrollCapture,
         label: "Scroll",
         underline_idx: 4,
-        icon_id: ICON_SCROLL,
         svg_bytes: super::assets::SVG_SCROLL,
     },
     ButtonDef {
         command: Command::Copy,
         label: "Copy",
         underline_idx: 0,
-        icon_id: ICON_COPY,
         svg_bytes: super::assets::SVG_COPY,
     },
     ButtonDef {
         command: Command::Save,
         label: "Save",
         underline_idx: 0,
-        icon_id: ICON_SAVE,
         svg_bytes: super::assets::SVG_SAVE,
     },
     ButtonDef {
         command: Command::Ocr,
         label: "OCR",
         underline_idx: 0,
-        icon_id: ICON_OCR,
         svg_bytes: super::assets::SVG_OCR,
     },
     ButtonDef {
         command: Command::Reset,
         label: "Reset",
         underline_idx: 0,
-        icon_id: ICON_RESET,
         svg_bytes: super::assets::SVG_RESET,
     },
     ButtonDef {
         command: Command::Exit,
         label: "Exit",
         underline_idx: 1,
-        icon_id: ICON_EXIT,
         svg_bytes: super::assets::SVG_EXIT,
     },
 ];
@@ -316,35 +258,30 @@ const OCR_DEFS: &[ButtonDef] = &[
         command: Command::OcrUpload,
         label: "Upload",
         underline_idx: 0,
-        icon_id: ICON_UPLOAD,
         svg_bytes: super::assets::SVG_UPLOAD,
     },
     ButtonDef {
         command: Command::OcrSearch,
         label: "Search",
         underline_idx: 0,
-        icon_id: ICON_SEARCH,
         svg_bytes: super::assets::SVG_SEARCH,
     },
     ButtonDef {
         command: Command::OcrCopy,
         label: "Copy",
         underline_idx: 0,
-        icon_id: ICON_COPY,
         svg_bytes: super::assets::SVG_COPY,
     },
     ButtonDef {
         command: Command::OcrBack,
         label: "Back",
         underline_idx: 0,
-        icon_id: ICON_BACK,
         svg_bytes: super::assets::SVG_BACK,
     },
     ButtonDef {
         command: Command::Exit,
         label: "Exit",
         underline_idx: 1,
-        icon_id: ICON_EXIT,
         svg_bytes: super::assets::SVG_EXIT,
     },
 ];
@@ -379,7 +316,7 @@ pub fn lookup_command_by_key(set: PanelButtonSet, features: PanelFeatures, c: ch
 
 /// All 32 on/off combinations of the five switches, so invariants are
 /// checked against every strip the shell can ask for rather than just
-/// the extremes. Module level so the composer's tests can reach it too.
+/// the extremes. Module level so `show`'s tests can reach it too.
 #[cfg(test)]
 pub const FEATURE_COMBINATIONS: [PanelFeatures; 32] = {
     let mut out = [PanelFeatures::ALL; 32];
@@ -401,18 +338,24 @@ pub const FEATURE_COMBINATIONS: [PanelFeatures; 32] = {
 mod tests {
     use super::*;
 
-    /// Every icon must survive `usvg` parsing: `PanelRenderer::new`
-    /// swallows a parse failure into an empty tree and an `error!` line,
-    /// so a malformed icon ships as a blank button rather than a crash.
-    ///
-    /// Iterates `PANEL_ICONS` rather than the sets so an icon that is in
-    /// the atlas but not (yet) on any button is still validated.
+    /// Every mark the tray can show must survive `usvg` parsing:
+    /// `icons::rasterise` swallows a parse failure into an empty tree and
+    /// an `error!` line, so a malformed icon ships as a blank button
+    /// rather than a crash. The emblem rides the same path, so it is
+    /// checked here too.
     #[test]
     fn every_panel_icon_parses() {
         let opts = usvg::Options::default();
-        for (i, bytes) in PANEL_ICONS.iter().enumerate() {
-            assert!(usvg::Tree::from_data(bytes, &opts).is_ok(), "PANEL_ICONS[{i}] failed to parse");
+        for set in PanelButtonSet::ALL {
+            for def in set.defs() {
+                assert!(
+                    usvg::Tree::from_data(def.svg_bytes, &opts).is_ok(),
+                    "{} in {set:?} failed to parse",
+                    def.label
+                );
+            }
         }
+        assert!(usvg::Tree::from_data(super::super::assets::SVG_CLOWD_LOGO, &opts).is_ok());
     }
 
     /// `lookup_command_by_key` returns the *first* match, so a duplicate
@@ -525,7 +468,7 @@ mod tests {
     }
 
     /// The index `visible_defs` yields is the def's position in the full
-    /// table, so it survives a neighbour being switched off; the composer
+    /// table, so it survives a neighbour being switched off; `show`
     /// derives widget ids from it on that promise.
     #[test]
     fn visible_defs_yields_table_indices() {
@@ -541,52 +484,9 @@ mod tests {
         }
     }
 
-    /// A wrong `icon_id` is invisible until the render thread draws the
-    /// wrong glyph — or, past the end of the table, indexes the atlas out
-    /// of bounds and panics on a machine nobody is watching.
-    ///
-    /// Compared by *content*, not `std::ptr::eq`: the `assets::SVG_*`
-    /// entries are `const` items, so each use site gets its own inlined
-    /// copy of the `include_bytes!` data and the addresses legitimately
-    /// differ (pointer equality was tried and fails on the very first
-    /// button). Content equality is exactly as strong here, because
-    /// `panel_icons_are_deduped` below proves no two table entries share
-    /// bytes.
-    #[test]
-    fn icon_ids_point_at_their_own_bytes() {
-        for set in PanelButtonSet::ALL {
-            for def in set.defs() {
-                assert!(
-                    def.icon_id < PANEL_ICONS.len(),
-                    "{} in {set:?} has icon_id past PANEL_ICONS",
-                    def.label
-                );
-                assert_eq!(
-                    def.svg_bytes, PANEL_ICONS[def.icon_id],
-                    "{} in {set:?} points at the wrong PANEL_ICONS entry",
-                    def.label
-                );
-            }
-        }
-    }
-
-    /// `PANEL_ICONS` is the *deduped* union — one atlas slot per distinct
-    /// icon, shared by every set that uses it (UPLOAD, COPY and EXIT are
-    /// in both strips). A duplicate entry would waste an atlas slot and,
-    /// more importantly, would leave the content comparison above unable
-    /// to tell two icon ids apart.
-    #[test]
-    fn panel_icons_are_deduped() {
-        for (i, a) in PANEL_ICONS.iter().enumerate() {
-            for (j, b) in PANEL_ICONS.iter().enumerate().skip(i + 1) {
-                assert_ne!(a, b, "PANEL_ICONS[{i}] and PANEL_ICONS[{j}] are the same icon");
-            }
-        }
-    }
-
-    /// The label text is geometry: the composer's mono measure sizes every
-    /// button from the label's glyph count, the bundled mono face makes each
-    /// glyph the same advance, and the renderer underlines by BYTE index
+    /// The label text is geometry: the `below` style sizes every button
+    /// from its laid-out label, the bundled mono face makes each glyph the
+    /// same advance, and `underlined_label` splits the job by BYTE index
     /// while `accel_key` reads a `chars()` index. All of that holds only
     /// for ASCII, whitespace-free labels whose `underline_idx` is inside
     /// the string and names the accelerator glyph.
@@ -620,7 +520,7 @@ mod tests {
 
     /// The exact spellings from the design workbench's capture profile.
     /// Pinned as literals because a respelling silently changes the button
-    /// widths the composer measures (and the parity table with them).
+    /// widths the `below` style measures.
     #[test]
     fn labels_match_the_workbench_capture_table() {
         let normal: Vec<&str> = PanelButtonSet::Normal
@@ -656,20 +556,31 @@ mod tests {
     }
 
     /// UPLOAD is a real button with the paper-plane mark; the Clowd logo
-    /// is the tray emblem and must never be in the button icon table (the
-    /// dedupe and icon-id tests above mean "buttons only").
+    /// is the tray emblem and must never be a button icon — `icons.rs`
+    /// keys its texture cache on the button bytes and looks the emblem up
+    /// separately.
     #[test]
     fn upload_icon_is_the_paper_plane() {
-        assert_eq!(PANEL_ICONS[ICON_UPLOAD], super::super::assets::SVG_UPLOAD);
+        let upload = PanelButtonSet::Normal
+            .defs()
+            .iter()
+            .find(|d| d.command == Command::Upload)
+            .expect("the capture strip has an UPLOAD button");
+        assert_eq!(upload.svg_bytes, super::super::assets::SVG_UPLOAD);
         assert_ne!(super::super::assets::SVG_UPLOAD, super::super::assets::SVG_CLOWD_LOGO);
-        assert!(
-            !PANEL_ICONS.contains(&super::super::assets::SVG_CLOWD_LOGO),
-            "the emblem must not be a button icon"
-        );
+        for set in PanelButtonSet::ALL {
+            for def in set.defs() {
+                assert_ne!(
+                    def.svg_bytes,
+                    super::super::assets::SVG_CLOWD_LOGO,
+                    "the emblem must not be a button icon"
+                );
+            }
+        }
     }
 
-    /// The emblem is rasterised through the same atlas path as the button
-    /// icons, so it must parse, and the composer centres a square mark, so
+    /// The emblem is rasterised through the same path as the button icons,
+    /// so it must parse, and `widgets::emblem` centres a square mark, so
     /// the canvas must be square (16 x 16 as authored).
     #[test]
     fn clowd_logo_parses() {

@@ -12,6 +12,7 @@ use crate::render::protocol::{PeekCommand, RenderMsg, WindowHandoff, WorkerInput
 use crate::render::worker::WorkerSetup;
 use crate::settings::CapturerSettings;
 use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
+use crate::telemetry::perf::{PerfSlot, PerfSnapshot};
 use crate::ui::shared::UiSharedState;
 use clowd_rust_core::geometry::{ScreenPointF, ScreenRect};
 
@@ -27,6 +28,9 @@ pub struct WindowHandle {
     /// by a screenshot/blur job's sender clones.
     input_tx: mpsc::Sender<WorkerInput>,
     thread: Option<JoinHandle<()>>,
+    /// The worker's published frame-timing snapshots, polled by the app
+    /// thread's debug panel at ~10 Hz while `D` is on.
+    perf_slot: PerfSlot,
     shown: Cell<bool>,
     #[cfg(target_os = "macos")]
     render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
@@ -85,6 +89,7 @@ impl WindowHandle {
             tx: setup.render_msg_tx,
             input_tx: setup.input_tx,
             thread: Some(setup.thread),
+            perf_slot: setup.perf_slot,
             shown: Cell::new(false),
             #[cfg(target_os = "macos")]
             render_subview: views.render_view,
@@ -128,6 +133,13 @@ impl WindowHandle {
 
     pub fn monitor_bounds(&self) -> ScreenRect {
         self.monitor_bounds
+    }
+
+    /// The worker's latest frame-timing snapshot, or `None` before it has
+    /// published one. Only the `Arc` is cloned under the lock: the debug
+    /// panel's formatting runs well after it is released.
+    pub fn perf_snapshot(&self) -> Option<Arc<PerfSnapshot>> {
+        self.perf_slot.lock().unwrap().clone()
     }
 
     pub fn show(&self) {

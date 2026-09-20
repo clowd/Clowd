@@ -12,13 +12,14 @@ use windows::core::s;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11BlendState, ID3D11Device, ID3D11InputLayout, ID3D11PixelShader, ID3D11RasterizerState, ID3D11VertexShader, D3D11_BLEND_DESC,
     D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD, D3D11_BLEND_SRC_ALPHA, D3D11_COLOR_WRITE_ENABLE_ALL, D3D11_CULL_NONE,
-    D3D11_FILL_SOLID, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_INSTANCE_DATA, D3D11_RASTERIZER_DESC, D3D11_RENDER_TARGET_BLEND_DESC,
+    D3D11_FILL_SOLID, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_INSTANCE_DATA, D3D11_INPUT_PER_VERTEX_DATA, D3D11_RASTERIZER_DESC,
+    D3D11_RENDER_TARGET_BLEND_DESC,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT, DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32_SINT, DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_UINT,
+    DXGI_FORMAT, DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32_SINT, DXGI_FORMAT_R32_UINT,
 };
 
-use crate::gxi::types::{BlendMode, PipelineDesc, VertexFormat};
+use crate::gxi::types::{BlendMode, PipelineDesc, VertexFormat, VertexStep};
 
 use super::device::Device;
 use super::shaders;
@@ -90,8 +91,14 @@ impl Device {
                     Format: vertex_format(a.format),
                     InputSlot: 0,
                     AlignedByteOffset: a.offset as u32,
-                    InputSlotClass: D3D11_INPUT_PER_INSTANCE_DATA,
-                    InstanceDataStepRate: 1,
+                    InputSlotClass: match v.step {
+                        VertexStep::Instance => D3D11_INPUT_PER_INSTANCE_DATA,
+                        VertexStep::Vertex => D3D11_INPUT_PER_VERTEX_DATA,
+                    },
+                    InstanceDataStepRate: match v.step {
+                        VertexStep::Instance => 1,
+                        VertexStep::Vertex => 0,
+                    },
                 })
                 .collect();
             let mut layout: Option<ID3D11InputLayout> = None;
@@ -213,7 +220,7 @@ fn create_blend(
 
 fn vertex_format(f: VertexFormat) -> DXGI_FORMAT {
     match f {
-        VertexFormat::Float32 => DXGI_FORMAT_R32_FLOAT,
+        VertexFormat::Float32x2 => DXGI_FORMAT_R32G32_FLOAT,
         VertexFormat::Float32x4 => DXGI_FORMAT_R32G32B32A32_FLOAT,
         VertexFormat::Sint32x2 => DXGI_FORMAT_R32G32_SINT,
         VertexFormat::Uint32 => DXGI_FORMAT_R32_UINT,

@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use crate::filename_pattern::DEFAULT_FILENAME_PATTERN;
-use crate::ui::components::panel::model::PanelFeatures;
+use crate::ui::components::panel::model::{ButtonStyle, PanelFeatures};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum TipsMode {
@@ -125,6 +125,11 @@ pub struct CapturerSettings {
     /// the user has left switched on — see [`PanelFeatures`]. Everything on
     /// by default, so a standalone run shows the full strip.
     pub panel_features: PanelFeatures,
+    /// How the panel draws its buttons: the square icon-plus-letter tile
+    /// (`key`, the default) or the icon over a full underlined label
+    /// (`below`). A design knob for iterating on the strip; the shell does
+    /// not pass it, so the default is what the shell shows.
+    pub panel_buttons: ButtonStyle,
     /// Benchmark mode: tear the cycle down as soon as the overlay's first
     /// frame is on screen, having logged the startup breakdown. No payload
     /// is written and no window is left up — the run exists only to produce
@@ -161,6 +166,7 @@ impl Default for CapturerSettings {
             video_mode: false,
             share_mode: false,
             panel_features: PanelFeatures::ALL,
+            panel_buttons: ButtonStyle::KeyHint,
             bench_startup: false,
             filename_pattern: DEFAULT_FILENAME_PATTERN.to_string(),
             save_directory: None,
@@ -297,6 +303,12 @@ pub struct CliArgs {
     #[arg(long)]
     pub no_ocr: bool,
 
+    /// How the panel draws its buttons: `key` is a square holding the icon
+    /// and the accelerator letter, `below` the icon over a full label with
+    /// the accelerator underlined.
+    #[arg(long, value_enum, default_value_t = ButtonStyle::KeyHint)]
+    pub panel_buttons: ButtonStyle,
+
     /// The shell's process id, so the overlay can hand its foreground
     /// rights back with `AllowSetForegroundWindow` as the cycle ends —
     /// the shell needs them to raise whatever it opens next, and cannot
@@ -352,6 +364,7 @@ impl CliArgs {
                 video: !self.no_video,
                 ocr: !self.no_ocr,
             },
+            panel_buttons: self.panel_buttons,
             bench_startup: self.bench_startup,
             filename_pattern: self.filename_pattern,
             save_directory: self.save_dir,
@@ -403,6 +416,7 @@ mod tests {
         assert_eq!(from_cli.video_mode, default.video_mode);
         assert_eq!(from_cli.share_mode, default.share_mode);
         assert_eq!(from_cli.panel_features, default.panel_features);
+        assert_eq!(from_cli.panel_buttons, default.panel_buttons);
         assert_eq!(from_cli.bench_startup, default.bench_startup);
         assert_eq!(from_cli.filename_pattern, default.filename_pattern);
         assert_eq!(from_cli.save_directory, default.save_directory);
@@ -528,6 +542,19 @@ mod tests {
         .into_settings();
         assert_eq!(set.filename_pattern, "'clowd' yyyy-MM-dd");
         assert_eq!(set.save_directory, Some(PathBuf::from("/tmp/shots")));
+    }
+
+    /// The shell launches the capturer without this flag, so the default
+    /// is the style the user sees.
+    #[test]
+    fn panel_buttons_default_to_key_and_parse_below() {
+        let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
+        assert_eq!(bare.panel_buttons, ButtonStyle::KeyHint);
+        let key = CliArgs::parse_from(["clowd_capture", "--panel-buttons", "key"]).into_settings();
+        assert_eq!(key.panel_buttons, ButtonStyle::KeyHint);
+        let below = CliArgs::parse_from(["clowd_capture", "--panel-buttons=below"]).into_settings();
+        assert_eq!(below.panel_buttons, ButtonStyle::Below);
+        assert!(CliArgs::try_parse_from(["clowd_capture", "--panel-buttons", "key-hint"]).is_err());
     }
 
     #[test]

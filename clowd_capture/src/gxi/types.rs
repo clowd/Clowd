@@ -24,7 +24,7 @@ pub enum ShaderId {
     Selection,
     Crosshair,
     UiRect,
-    UiIcon,
+    Egui,
     UiLift,
     UiText,
 }
@@ -37,7 +37,7 @@ impl ShaderId {
             ShaderId::Selection => "selection",
             ShaderId::Crosshair => "crosshair",
             ShaderId::UiRect => "ui_rect",
-            ShaderId::UiIcon => "ui_icon",
+            ShaderId::Egui => "ui_egui",
             ShaderId::UiLift => "ui_lift",
             ShaderId::UiText => "ui_text",
         }
@@ -55,7 +55,7 @@ impl ShaderId {
             ShaderId::Selection => shader_bindings::OVERLAY_BINDINGS,
             ShaderId::Crosshair => shader_bindings::CROSSHAIR_BINDINGS,
             ShaderId::UiRect => shader_bindings::RECT_BINDINGS,
-            ShaderId::UiIcon => shader_bindings::ICON_BINDINGS,
+            ShaderId::Egui => shader_bindings::EGUI_BINDINGS,
             ShaderId::UiLift => shader_bindings::LIFT_BINDINGS,
             ShaderId::UiText => shader_bindings::TEXT_BINDINGS,
         }
@@ -115,10 +115,10 @@ pub struct TextureDesc<'a> {
     pub format: TexFormat,
 }
 
-/// Vertex attribute formats in use by the instance layouts.
+/// Vertex attribute formats in use by the vertex layouts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VertexFormat {
-    Float32,
+    Float32x2,
     Float32x4,
     Sint32x2,
     Uint32,
@@ -133,13 +133,33 @@ pub struct VertexAttr {
     pub location: u32,
 }
 
-/// One per-instance vertex buffer layout (every vertex buffer in the crate
-/// is per-instance step mode; pipelines without one are fullscreen-triangle
-/// passes driven by `@builtin(vertex_index)`).
+/// Whether the vertex buffer advances once per instance (every quad
+/// pipeline, driven by `@builtin(vertex_index)`) or once per vertex (the
+/// egui triangle list).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VertexStep {
+    Instance,
+    Vertex,
+}
+
+/// One vertex buffer layout. `step` says how it advances. (Pipelines
+/// without a layout at all are fullscreen-triangle passes driven by
+/// `@builtin(vertex_index)`.)
 #[derive(Clone, Copy, Debug)]
 pub struct VertexLayout {
     pub stride: u64,
+    pub step: VertexStep,
     pub attrs: &'static [VertexAttr],
+}
+
+/// Texture sampling filter. Every sampler in the crate is clamp-to-edge
+/// with nearest mip selection; only the min/mag filter varies. The egui
+/// font atlas is the one thing that is not sampled 1:1, so it asks for
+/// linear; everything else asks for nearest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SamplerFilter {
+    Nearest,
+    Linear,
 }
 
 /// Everything needed to build one render pipeline. Topology is always a

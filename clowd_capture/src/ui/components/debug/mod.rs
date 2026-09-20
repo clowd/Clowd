@@ -1,13 +1,18 @@
 //! Debug / instrumentation component.
 //!
-//! Toggled by the `D` key (see `DxScreenCapture.cpp:1209-1213`). Exposes
-//! two overlay panels that mirror the C++ version:
-//!   * `monitor` — per-display stats panel anchored top-left of every
-//!     monitor. Shows adapter, DPI, bounds, FPS, frame-time rolling stats.
-//!   * `primary` — scene/state panel anchored top-right of the monitor
-//!     containing the virtual cursor. Shows startup timings, cursor,
-//!     selection, hovered-window info.
+//! Toggled by the `D` key. Two overlay panels, both run by egui on the app
+//! thread and shipped to the workers as tessellated primitives:
+//!   * the **monitor** panel, anchored top-left of every monitor, showing
+//!     adapter, DPI, bounds, FPS and frame-time stats plus a sparkline of
+//!     recent frames. Its live numbers come from the render worker's
+//!     `PerfSnapshot`s.
+//!   * the **primary** panel, anchored top-right of the monitor holding the
+//!     virtual cursor, showing startup timings, cursor, selection and
+//!     hovered-window info — all app-thread values already.
+//!
+//! [`model`] formats the rows, [`resources`] polls RAM/VRAM and [`show`]
+//! lays both panels out.
 
-pub mod layout;
 pub mod model;
 pub mod resources;
+pub mod show;

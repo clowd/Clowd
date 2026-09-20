@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::gxi::{self, BlendMode, CreateMark, PipelineDesc, ShaderId};
+use crate::gxi::{self, BlendMode, CreateMark, PipelineDesc, SamplerFilter, ShaderId};
 use crate::telemetry::startup::WorkerTimings;
 
 pub mod desktop;
@@ -103,7 +103,7 @@ pub fn stage_a_create_device(
     // is visible — the mouse is being tracked from the first frames.
     // Every other pipeline in the process (peek, selection, the UI
     // stack) is compiled off this path.
-    let desktop_sampler = device.create_sampler("desktop snapshot sampler");
+    let desktop_sampler = device.create_sampler("desktop snapshot sampler", SamplerFilter::Nearest);
     let desktop_pipeline = device.create_pipeline(&PipelineDesc {
         label: "desktop pipeline",
         shader: ShaderId::Desktop,
@@ -173,14 +173,14 @@ mod tests {
         let _selection = overlay::create_selection_pipeline(&device);
         let _crosshair = overlay::create_crosshair_pipeline(&device);
         let _rect = crate::ui::gpu::rect::RectPipeline::new(&device);
-        let _icon = crate::ui::gpu::icon::IconPipeline::new(&device);
+        let _egui = crate::ui::gpu::egui_painter::EguiPainter::new(&device);
         let _lift = crate::ui::gpu::lift::LiftPipeline::new(&device);
         let _atlas = crate::ui::gpu::glyph::GlyphAtlas::new(&device);
         let _glyphs = crate::ui::gpu::glyph::GlyphRenderer::new(&device);
 
         // The bind-group tables the constructors above do NOT build —
         // Desktop (the largest register walk, mixed VS/PS visibility, and
-        // the frame-0 critical path), Peek and UiIcon — plus both queue
+        // the frame-0 critical path), Peek and Egui — plus both queue
         // upload paths (write_buffer: d3d11 Map/WRITE_DISCARD incl. its
         // size assert; write_texture: UpdateSubresource with a
         // sub-rectangle D3D11_BOX, the atlas path). On d3d11 this
@@ -199,7 +199,10 @@ mod tests {
         queue.write_texture(&atlas, (1, 1), (1, 1), &[0u8; 4]);
         let ubo = device.create_uniform_buffer("smoke ubo", 80);
         queue.write_buffer(&ubo, 0, &[0u8; 80]);
-        let sampler = device.create_sampler("smoke sampler");
+        let ib = device.create_index_buffer("smoke ib", 12);
+        queue.write_buffer(&ib, 0, &[0u8; 12]);
+        let sampler = device.create_sampler("smoke sampler", SamplerFilter::Nearest);
+        let _linear = device.create_sampler("smoke linear sampler", SamplerFilter::Linear);
         let _desktop_bg = device.create_bind_group(
             "smoke desktop bind group",
             ShaderId::Desktop,
@@ -221,9 +224,9 @@ mod tests {
                 BindingRes::Sampler(&sampler),
             ],
         );
-        let _icon_bg = device.create_bind_group(
-            "smoke icon bind group",
-            ShaderId::UiIcon,
+        let _egui_bg = device.create_bind_group(
+            "smoke egui bind group",
+            ShaderId::Egui,
             &[
                 BindingRes::Uniform(&ubo),
                 BindingRes::Texture(&atlas),

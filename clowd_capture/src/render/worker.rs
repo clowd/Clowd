@@ -5,6 +5,7 @@ use std::thread::{self, JoinHandle};
 use crate::gxi;
 use crate::render::protocol::{RenderMsg, WorkerInput};
 use crate::system::MonitorInfo;
+use crate::telemetry::perf::PerfSlot;
 use crate::telemetry::startup::StartupTimings;
 use clowd_rust_core::geometry::ScreenRect;
 
@@ -24,6 +25,9 @@ pub struct WorkerSetup {
     pub render_msg_tx: mpsc::Sender<RenderMsg>,
     pub thread: JoinHandle<()>,
     pub monitor_bounds: ScreenRect,
+    /// Where this worker publishes its frame-timing snapshots for the app
+    /// thread's debug panel. Empty until the panel is first shown.
+    pub perf_slot: PerfSlot,
 }
 
 pub fn spawn_render_worker(params: RenderWorkerParams) -> WorkerSetup {
@@ -31,10 +35,12 @@ pub fn spawn_render_worker(params: RenderWorkerParams) -> WorkerSetup {
     let (render_msg_tx, render_msg_rx) = mpsc::channel();
     let monitor_bounds = params.monitor.bounds;
     let thread_name = format!("render-worker-{}", params.monitor_index);
+    let perf_slot: PerfSlot = PerfSlot::default();
+    let worker_perf_slot = perf_slot.clone();
     let thread = thread::Builder::new()
         .name(thread_name)
         .spawn(move || {
-            super::render_worker_main(params, input_rx, render_msg_rx);
+            super::render_worker_main(params, input_rx, render_msg_rx, worker_perf_slot);
         })
         .expect("spawn render worker");
     WorkerSetup {
@@ -42,5 +48,6 @@ pub fn spawn_render_worker(params: RenderWorkerParams) -> WorkerSetup {
         render_msg_tx,
         thread,
         monitor_bounds,
+        perf_slot,
     }
 }

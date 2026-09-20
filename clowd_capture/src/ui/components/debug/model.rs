@@ -6,22 +6,22 @@
 use std::fmt::{Arguments, Write};
 use std::time::Duration;
 
-use crate::telemetry::perf::PerfTracker;
-use crate::telemetry::perf::{PerfStats, Series};
+use egui::Color32;
+
+use crate::telemetry::perf::{PerfSnapshot, PerfStats, Series};
 use crate::telemetry::startup::StartupTimings;
 use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
-pub const COLOR_WHITE: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
+pub const COLOR_WHITE: Color32 = Color32::WHITE;
 
 /// Reusable line buffer with per-line color. Holds `Vec<String>` across
 /// frames so the debug panel's per-line `format!` calls can write into
 /// existing allocations via `String::clear()` + `write!`. After the first
 /// few frames no allocation happens unless the rendered text grows (which
 /// it doesn't in steady state).
-#[derive(Default)]
 pub struct LineBuf {
     lines: Vec<String>,
-    colors: Vec<[u8; 4]>,
+    colors: Vec<Color32>,
     len: usize,
 }
 
@@ -42,7 +42,7 @@ impl LineBuf {
         self.push_colored(args, COLOR_WHITE);
     }
 
-    pub fn push_colored(&mut self, args: Arguments<'_>, color: [u8; 4]) {
+    pub fn push_colored(&mut self, args: Arguments<'_>, color: Color32) {
         if self.lines.len() <= self.len {
             self.lines.push(String::new());
             self.colors.push(COLOR_WHITE);
@@ -64,12 +64,12 @@ impl LineBuf {
         self.len += 1;
     }
 
-    pub fn as_slice(&self) -> &[String] {
-        &self.lines[..self.len]
-    }
-
-    pub fn colors(&self) -> &[[u8; 4]] {
-        &self.colors[..self.len]
+    /// The lines written since the last `reset`, each with its colour.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, Color32)> {
+        self.lines[..self.len]
+            .iter()
+            .map(String::as_str)
+            .zip(self.colors[..self.len].iter().copied())
     }
 }
 
@@ -77,7 +77,7 @@ fn write_stats_row(out: &mut LineBuf, label: &str, s: PerfStats) {
     write_stats_row_colored(out, label, s, COLOR_WHITE);
 }
 
-fn write_stats_row_colored(out: &mut LineBuf, label: &str, s: PerfStats, color: [u8; 4]) {
+fn write_stats_row_colored(out: &mut LineBuf, label: &str, s: PerfStats, color: Color32) {
     const LABEL_WIDTH: usize = 7;
     if s.count == 0 {
         out.push(format_args!("{:<width$} n/a", label, width = LABEL_WIDTH));
@@ -98,11 +98,11 @@ fn write_stats_row_colored(out: &mut LineBuf, label: &str, s: PerfStats, color: 
 }
 
 /// Green→yellow→red gradient based on `t` in [0, 1].
-fn budget_color(t: f32) -> [u8; 4] {
+fn budget_color(t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);
     let r = (2.0 * t).min(1.0);
     let g = (2.0 * (1.0 - t)).min(1.0);
-    [(r * 255.0) as u8, (g * 255.0) as u8, 0x00, 0xFF]
+    Color32::from_rgb((r * 255.0) as u8, (g * 255.0) as u8, 0x00)
 }
 
 /// Format helper: wall-clock duration as "x.xx ms" (two decimals).
@@ -162,7 +162,7 @@ pub struct MonitorPanelData<'a> {
     pub dpi: u32,
     pub bounds: ScreenRect,
     pub time_to_first_render: Option<Duration>,
-    pub perf: &'a PerfTracker,
+    pub perf: &'a PerfSnapshot,
     pub target_period: Option<Duration>,
 }
 
@@ -194,11 +194,11 @@ impl<'a> MonitorPanelData<'a> {
         }
         out.push_empty();
 
-        let overall = self.perf.stats(Series::Overall);
-        let recent_ms = self.perf.recent_overall_avg().as_secs_f64() * 1000.0;
+        let overall = self.perf.overall;
+        let recent_ms = self.perf.recent_overall_avg.as_secs_f64() * 1000.0;
         let fps = if recent_ms > 0.0 { 1000.0 / recent_ms } else { 0.0 };
         let low1_fps = if overall.low1_ms > 0.0 { 1000.0 / overall.low1_ms } else { 0.0 };
-        let session = self.perf.session();
+        let session = &self.perf.session;
         out.push(format_args!(
             "fps: {:04.0}  1%low: {:04.0}  dropped: {}  session: {}",
             fps,
@@ -207,8 +207,8 @@ impl<'a> MonitorPanelData<'a> {
             DisplaySessionElapsed(session.started.elapsed()),
         ));
 
-        let count = self.perf.sample_count();
-        let secs = self.perf.sample_time_secs();
+        let count = self.perf.sample_count;
+        let secs = self.perf.sample_time_secs;
         if secs > 0.0 {
             out.push(format_args!("samples: {} ({:.0}s)", count, secs));
         } else {
@@ -216,9 +216,9 @@ impl<'a> MonitorPanelData<'a> {
         }
         out.push_empty();
 
-        let cpu_stats = self.perf.stats(Series::Cpu);
+        let cpu_stats = self.perf.cpu;
         write_stats_row(out, "cpu", cpu_stats);
-        let gpu_stats = self.perf.stats(Series::Gpu);
+        let gpu_stats = self.perf.gpu;
         if gpu_stats.count > 0 {
             write_stats_row(out, "gpu", gpu_stats);
         } else {
@@ -426,5 +426,58 @@ impl<'a> std::fmt::Display for TruncatedTitle<'a> {
             }
             f.write_char('…')
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::telemetry::perf::{PerfSnapshot, PerfTracker};
+    use clowd_rust_core::geometry::ScreenRect;
+    use std::sync::Arc;
+
+    fn snapshot() -> PerfSnapshot {
+        PerfTracker::new_with_refresh(60.0).snapshot(1, &Arc::from("Test Adapter"))
+    }
+
+    /// The monitor panel's row count is fixed: six identity rows, the two
+    /// live summary rows, the three stats rows, the session footer and the
+    /// three blank separators. The sparkline is drawn, not written.
+    #[test]
+    fn monitor_panel_writes_fifteen_rows() {
+        let perf = snapshot();
+        let data = MonitorPanelData {
+            index: 0,
+            name: r"\\.\DISPLAY1",
+            is_primary: true,
+            adapter: &perf.adapter_name,
+            vram: Some((512 * 1024 * 1024, 4096 * 1024 * 1024)),
+            dpi: 96,
+            bounds: ScreenRect::from_xy_size(0, 0, 1920, 1080),
+            time_to_first_render: Some(Duration::from_millis(42)),
+            perf: &perf,
+            target_period: perf.target_period,
+        };
+        let mut out = LineBuf::new();
+        data.write_lines(&mut out);
+        let lines: Vec<(&str, Color32)> = out.iter().collect();
+        assert_eq!(lines.len(), 15, "{lines:?}");
+        assert_eq!(lines[0].0, r"0: \\.\DISPLAY1 (PRIMARY)");
+        assert_eq!(lines[1].0, "Test Adapter");
+        assert_eq!(lines[6].0, "");
+        // No samples yet, so every stats row reads n/a and the overall row
+        // keeps the default colour.
+        assert_eq!(lines[10].0, "cpu     n/a");
+        assert_eq!(lines[11].0, "gpu     n/a");
+        assert_eq!(lines[12].0, "overall n/a");
+    }
+
+    /// The `overall` row is the one coloured row: green well inside the
+    /// frame budget, red past it.
+    #[test]
+    fn the_overall_row_is_coloured_against_the_frame_budget() {
+        assert_eq!(budget_color(0.0), Color32::from_rgb(0, 255, 0));
+        assert_eq!(budget_color(1.0), Color32::from_rgb(255, 0, 0));
+        assert_eq!(budget_color(0.5), Color32::from_rgb(255, 255, 0));
     }
 }

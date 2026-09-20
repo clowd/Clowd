@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::interaction::{OcrNotice, OcrState};
 use crate::settings::TipsMode;
 use crate::system::{CapturedDesktop, CursorImage};
-use crate::ui::components::panel::compose::PanelScene;
+use crate::ui::egui_frame::EguiFrame;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 use clowd_rust_core::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect};
 
@@ -23,9 +23,6 @@ pub struct UiStateBuildInput<'a> {
     pub overlays_visible: bool,
     pub hovered_monitor_name: Option<String>,
     pub hovered_window_title: Option<String>,
-    pub hovered_window_bounds: Option<ScreenRect>,
-    pub hovered_window_index: Option<usize>,
-    pub hovered_window_obstructed: bool,
     pub peek_window_bounds: Option<ScreenRect>,
     pub cursor_overlay_visible: bool,
     pub desktop_buffer: Option<&'a CapturedDesktop>,
@@ -34,7 +31,7 @@ pub struct UiStateBuildInput<'a> {
     pub scroll_pick_mode: bool,
     pub ocr: OcrState,
     pub ocr_notice: Option<OcrNotice>,
-    pub panel: Option<Arc<PanelScene>>,
+    pub egui: Arc<[Option<Arc<EguiFrame>>]>,
 }
 
 pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
@@ -86,9 +83,6 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         overlays_visible: input.overlays_visible,
         hovered_monitor_name: input.hovered_monitor_name,
         hovered_window_title: input.hovered_window_title,
-        hovered_window_bounds: input.hovered_window_bounds,
-        hovered_window_index: input.hovered_window_index,
-        hovered_window_obstructed: input.hovered_window_obstructed,
         cursor_overlay_visible: input.cursor_overlay_visible && !peek_covers_cursor,
         hovered_pixel_bgra,
         cursor_image_rect: if peek_covers_cursor { None } else { cursor_image_rect },
@@ -101,7 +95,7 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         // still owns the cycle's copy.)
         ocr: input.ocr,
         ocr_notice: input.ocr_notice,
-        panel: input.panel,
+        egui: input.egui,
     }
 }
 
