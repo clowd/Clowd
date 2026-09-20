@@ -190,6 +190,22 @@ namespace Clowd.UI
             _ => _settings.WebcamDeviceId,
         };
 
+        /// <summary>The target frame rate, straight from the settings: what the FPS tile shows as a
+        /// button and what the recorder's settings file carries.</summary>
+        public int Fps => _settings.Fps;
+
+        /// <summary>Writes the target frame rate and queues the save. The settings bus does the rest:
+        /// the page hears the change and pushes a <c>configure</c> to the waiting recorder, and this
+        /// model's own <see cref="Changed"/> brings the new value back to the tile.</summary>
+        public void SetFps(int fps)
+        {
+            if (_settings.Fps == fps)
+                return;
+
+            _settings.Fps = fps;
+            QueueSettingsSave();
+        }
+
         /// <summary>Writes a capture toggle and queues the save. The strip raises its own event
         /// afterwards — the settings write has to happen first, so a handler that reads the settings
         /// back (the page's live mute path does) sees the new value.</summary>
@@ -300,7 +316,9 @@ namespace Clowd.UI
                 or "" or nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker)
                 or nameof(SettingsRecording.CaptureWebcam) or nameof(SettingsRecording.WebcamDeviceId)
                 // gates the webcam entirely: leaving Studio mode unlights the camera slot.
-                or nameof(SettingsRecording.Mode)))
+                or nameof(SettingsRecording.Mode)
+                // the FPS tile's number, whether the tile or the settings page changed it.
+                or nameof(SettingsRecording.Fps)))
                 return;
 
             Changed?.Invoke(this, e.PropertyName);

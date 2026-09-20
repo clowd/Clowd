@@ -1,0 +1,138 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- The FPS tile: a 40 px square with NO segment fill — the caption and number sit on the tray
+         itself, the way the emblem does — over which the ordinary hover veil and press still play
+         while the tile is a button. Three layers, bottom to top: a transparent `_bg` (kept so the
+         corner radius and the hit area are the button's box, not the text's), the stacked text, the
+         hover veil.
+
+         Typography: the caption is small, regular weight and dimmed; the number is bigger, semibold
+         at 85 % (full white read as louder than the glyphs beside it). Neither line uses letter
+         spacing or tabular figures, both of which pad the INK inside the advance and so pull a
+         centred run off centre: letter spacing trails the last glyph (the caption sat left), and a
+         tabular "1" carries its blank width on the left (the "100" sat right). Each line is centred
+         on its own proportional width instead, in the fixed tile width below, so the strip never
+         resizes even though the run does. Line heights are pinned to whole pixels
+         (10 + 1 + 16 = 27 in the 40 px row) for the same reason TrayStatusBlock pins its own: a
+         subpixel line box drifts per scaling, and the number changes every second as a readout.
+
+         The tile's width is the MinWidth: the widest number it ever shows is three digits ("120",
+         "144", "240"), which at 14 px bold is well inside 40 − 2·4, so the strip never resizes as
+         the value changes. -->
+    <ControlTheme x:Key="{x:Type tray:TrayFpsButton}" TargetType="tray:TrayFpsButton">
+        <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
+        <Setter Property="MinWidth" Value="{x:Static tray:TrayTokens.ButtonMinWidth}" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.Corner}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <!-- the number is a running readout once frames flow, so a narrator should re-read it; the
+             owner writes the name -->
+        <Setter Property="AutomationProperties.LiveSetting" Value="Polite" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform"
+                                               Duration="{x:Static tray:TrayTokens.PressTransition}" />
+            </Transitions>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                    <!-- Stretched across the tile, not centred as a block: a centred StackPanel is as wide
+                         as its widest line, so "60" → "100" widened it by an odd pixel and shifted the
+                         caption above by half of that. With the panel pinned to the tile each line is
+                         centred in the same fixed width, and the caption's position no longer depends on
+                         the number beneath it.
+
+                         The centring itself is TextAlignment inside a stretched TextBlock, NOT
+                         HorizontalAlignment=Center on the block: a centred control is placed by the layout
+                         pass, which rounds its offset to whole pixels (UseLayoutRounding), and a run that
+                         measures 14.6 px wide then lands a pixel off one way while the run above lands a
+                         pixel off the other ("30" read 10 px left / 12 px right, "FPS" the reverse). The
+                         text layout centres the run at a fractional x, and layout rounding is off on this
+                         panel so nothing snaps that back. -->
+                    <StackPanel Name="_text"
+                                Orientation="Vertical"
+                                Spacing="1"
+                                Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Center"
+                                UseLayoutRounding="False">
+                        <TextBlock Name="_caption"
+                                   Text="{TemplateBinding Caption}"
+                                   FontSize="9"
+                                   FontWeight="Normal"
+                                   LineHeight="10"
+                                   Opacity="0.7"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   HorizontalAlignment="Stretch"
+                                   TextAlignment="Center"
+                                   TextWrapping="NoWrap" />
+                        <TextBlock Name="_value"
+                                   Text="{TemplateBinding Value}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   LineHeight="16"
+                                   Opacity="0.85"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   HorizontalAlignment="Stretch"
+                                   TextAlignment="Center"
+                                   TextWrapping="NoWrap" />
+                    </StackPanel>
+                    <Border Name="_hover"
+                            Background="{x:Static tray:TrayTokens.HoverVeil}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False"
+                            Opacity="0">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity"
+                                                  Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <!-- ============ button life: hover veil and press, exactly as TrayButton ============ -->
+        <Style Selector="^:pointerover /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.96)" />
+        </Style>
+
+        <!-- ============ readout life: the same face, none of the affordances. Declared AFTER the
+             button rules so they win while the pointer rests on the tile; Avalonia still raises
+             :pointerover and :pressed on it (the control is enabled — see TrayFpsButton.cs for why it
+             is not disabled instead), so each one is pinned back here rather than left to chance. ============ -->
+        <Style Selector="^[IsReadout=True]">
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+        <Style Selector="^[IsReadout=True]:pointerover /template/ Border#_hover">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^[IsReadout=True]:pressed">
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
+
+        <!-- a strip may still disable the tile outright (none does today); keep the family look -->
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <Style Selector="^:disabled /template/ Border#_hover">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

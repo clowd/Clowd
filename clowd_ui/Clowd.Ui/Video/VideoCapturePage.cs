@@ -298,8 +298,8 @@ namespace Clowd.UI
 
                 IsRecording = true;
                 _toolbar.SetRecordingState(true);
-                // OnStatusReceived feeds SetElapsed from here on; the FPS in the same status is
-                // not shown anywhere on the strip.
+                // OnStatusReceived feeds SetElapsed and SetActualFps from here on: the primary's
+                // timer and the FPS tile's readout.
             }
             catch (Exception ex)
             {
@@ -931,6 +931,8 @@ namespace Clowd.UI
         {
             _lastStatusElapsed = status.Elapsed;
             _toolbar?.SetElapsed(status.Elapsed);
+            // the measured rate, dropped frames and all: the FPS tile's readout once frames flow.
+            _toolbar?.SetActualFps(status.Fps);
         }
 
         private void OnLevelsReceived(object sender, ObsLevels levels)

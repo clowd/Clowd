@@ -49,8 +49,8 @@ namespace Clowd.UI.Controls.Tray
         /// <summary>White .08 — the hairline between a toggle and its chevron.</summary>
         public static readonly IBrush Divider = new ImmutableSolidColorBrush(Fg, 0.08);
 
-        /// <summary>White .06 — the 1 px highlight ring drawn inside the tray edge.</summary>
-        public static readonly IBrush Ring = new ImmutableSolidColorBrush(Fg, 0.06);
+        /// <summary>White .10 — the 1 px highlight ring drawn inside the tray edge (was .06; too faint to read as an edge).</summary>
+        public static readonly IBrush Ring = new ImmutableSolidColorBrush(Fg, 0.10);
 
         // Active primary rest / Idle hover / rotate hover / Active hover
         public static readonly IBrush WhiteVeil10 = new ImmutableSolidColorBrush(Fg, 0.10),

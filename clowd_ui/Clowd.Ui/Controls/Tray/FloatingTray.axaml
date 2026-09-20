@@ -10,9 +10,9 @@
          Fill and ring are two stacked Borders rather than one Border with Background + BorderThickness:
          Avalonia deflates a Border's background by half its border thickness, which leaves the
          outermost pixel row of a 1 px ring roughly half transparent, so on a dark desktop it reads as
-         a blend with whatever is behind the window instead of the spec's 6 % white over graphite (and
+         a blend with whatever is behind the window instead of the ring's 10 % white over graphite (and
          picks up a tint over a coloured taskbar). Drawing the fill at full size underneath and the
-         ring on top of it means the edge pixel is fill + 6 % white, exactly as specified.
+         ring on top of it means the edge pixel is fill + 10 % white, exactly as specified.
 
          The shadow is a property of the control rather than a literal here because the owning window
          reserves transparent room for it and turns it off when the platform cannot composite a

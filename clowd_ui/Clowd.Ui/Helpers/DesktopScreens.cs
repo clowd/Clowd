@@ -14,6 +14,11 @@ namespace Clowd.UI.Helpers
         public PixelRect WorkingArea { get; init; }
         public double Scaling { get; init; } = 1.0;
         public bool IsPrimary { get; init; }
+
+        /// <summary>The panel's current refresh rate in Hz, or 0 when the platform would not say
+        /// (a failed query, or a display mode that reports none — some built-in and variable-rate
+        /// panels do). Callers treat 0 as "unknown", never as a rate.</summary>
+        public double RefreshRate { get; init; }
     }
 
     /// <summary>
@@ -119,7 +124,44 @@ namespace Clowd.UI.Helpers
                 WorkingArea = screen.WorkingArea,
                 Scaling = screen.Scaling,
                 IsPrimary = screen.IsPrimary,
+                RefreshRate = OperatingSystem.IsMacOS() ? MacRefreshRate(screen.Bounds) : 0,
             };
+        }
+
+        /// <summary>
+        /// The refresh rate of the CoreGraphics display under the centre of <paramref name="bounds"/>
+        /// (CG points, the same space Avalonia's macOS screen bounds are in). Avalonia's Screen has
+        /// no refresh rate of its own, so the display is looked up again by position. 0 when the
+        /// lookup fails or the mode reports none — CGDisplayModeGetRefreshRate is documented to return
+        /// 0 for displays that do not expose one, which includes some built-in panels.
+        /// </summary>
+        private static double MacRefreshRate(PixelRect bounds)
+        {
+            try
+            {
+                var point = new CGPoint { X = bounds.X + bounds.Width / 2.0, Y = bounds.Y + bounds.Height / 2.0 };
+                var displays = new uint[1];
+                if (CGGetDisplaysWithPoint(point, 1, displays, out var count) != 0 || count == 0)
+                    return 0;
+
+                var mode = CGDisplayCopyDisplayMode(displays[0]);
+                if (mode == IntPtr.Zero)
+                    return 0;
+
+                try
+                {
+                    var hz = CGDisplayModeGetRefreshRate(mode);
+                    return hz > 0 && !Double.IsInfinity(hz) ? hz : 0;
+                }
+                finally
+                {
+                    CGDisplayModeRelease(mode);
+                }
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+            {
+                return 0;
+            }
         }
 
         private static DesktopScreen FromHMonitor(IntPtr hMonitor)
@@ -142,7 +184,28 @@ namespace Clowd.UI.Helpers
                 WorkingArea = ToPixelRect(info.rcWork),
                 Scaling = scaling,
                 IsPrimary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0,
+                RefreshRate = WindowsRefreshRate(hMonitor),
             };
+        }
+
+        /// <summary>
+        /// The monitor's current refresh rate from its active display mode: the device name from
+        /// GetMonitorInfo's EX variant, then EnumDisplaySettings for that device's current settings.
+        /// 0 when either call fails, and also for the documented 0 / 1 sentinel values, which mean
+        /// "the hardware default" rather than a rate. Note the field is an integer: a 59.94 Hz panel
+        /// reports 59 or 60 depending on the driver, which is why callers fold near-equal rates.
+        /// </summary>
+        private static double WindowsRefreshRate(IntPtr hMonitor)
+        {
+            var info = new MONITORINFOEXW { cbSize = Marshal.SizeOf<MONITORINFOEXW>() };
+            if (!GetMonitorInfoW(hMonitor, ref info) || String.IsNullOrEmpty(info.szDevice))
+                return 0;
+
+            var mode = new DEVMODEW { dmSize = (ushort)Marshal.SizeOf<DEVMODEW>() };
+            if (!EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, ref mode))
+                return 0;
+
+            return mode.dmDisplayFrequency > 1 ? mode.dmDisplayFrequency : 0;
         }
 
         private static PixelRect ToPixelRect(RECT r) =>
@@ -152,6 +215,7 @@ namespace Clowd.UI.Helpers
         private const uint MONITOR_DEFAULTTOPRIMARY = 1;
         private const uint MONITORINFOF_PRIMARY = 1;
         private const int MDT_EFFECTIVE_DPI = 0;
+        private const int ENUM_CURRENT_SETTINGS = -1;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
@@ -178,6 +242,64 @@ namespace Clowd.UI.Helpers
             public uint dwFlags;
         }
 
+        /// <summary>MONITORINFO plus the device name EnumDisplaySettings wants ("\\.\DISPLAY1").</summary>
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct MONITORINFOEXW
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string szDevice;
+        }
+
+        /// <summary>DEVMODEW laid out in full (220 bytes) so dmSize is right; only dmDisplayFrequency
+        /// is read.</summary>
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct DEVMODEW
+        {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string dmDeviceName;
+            public ushort dmSpecVersion;
+            public ushort dmDriverVersion;
+            public ushort dmSize;
+            public ushort dmDriverExtra;
+            public uint dmFields;
+            public int dmPositionX;
+            public int dmPositionY;
+            public uint dmDisplayOrientation;
+            public uint dmDisplayFixedOutput;
+            public short dmColor;
+            public short dmDuplex;
+            public short dmYResolution;
+            public short dmTTOption;
+            public short dmCollate;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string dmFormName;
+            public ushort dmLogPixels;
+            public uint dmBitsPerPel;
+            public uint dmPelsWidth;
+            public uint dmPelsHeight;
+            public uint dmDisplayFlags;
+            public uint dmDisplayFrequency;
+            public uint dmICMMethod;
+            public uint dmICMIntent;
+            public uint dmMediaType;
+            public uint dmDitherType;
+            public uint dmReserved1;
+            public uint dmReserved2;
+            public uint dmPanningWidth;
+            public uint dmPanningHeight;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct CGPoint
+        {
+            public double X;
+            public double Y;
+        }
+
         private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdc, ref RECT rect, IntPtr lParam);
 
         [DllImport("user32.dll")]
@@ -194,5 +316,25 @@ namespace Clowd.UI.Helpers
 
         [DllImport("shcore.dll")]
         private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFOEXW lpmi);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern bool EnumDisplaySettingsW(string lpszDeviceName, int iModeNum, ref DEVMODEW lpDevMode);
+
+        private const string CoreGraphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
+
+        [DllImport(CoreGraphics)]
+        private static extern int CGGetDisplaysWithPoint(CGPoint point, uint maxDisplays, [Out] uint[] displays, out uint matchingDisplayCount);
+
+        [DllImport(CoreGraphics)]
+        private static extern IntPtr CGDisplayCopyDisplayMode(uint display);
+
+        [DllImport(CoreGraphics)]
+        private static extern double CGDisplayModeGetRefreshRate(IntPtr mode);
+
+        [DllImport(CoreGraphics)]
+        private static extern void CGDisplayModeRelease(IntPtr mode);
     }
 }

@@ -270,6 +270,7 @@ namespace Clowd.UI.Controls.Tray
 
             _region = region ?? throw new ArgumentNullException(nameof(region));
             _manuallyPositioned = false;
+            OnRegionAssigned(region);
 
             if (!IsVisible)
             {
@@ -294,6 +295,33 @@ namespace Clowd.UI.Controls.Tray
         }
 
         /// <summary>
+        /// The region this strip attends has been set or changed: every <see cref="ShowNear"/>,
+        /// <see cref="TryShowNear"/> and <see cref="UpdateRegion"/> lands here, after the field is
+        /// written and before any placement. For a strip whose content depends on WHERE the region
+        /// is — the FPS tile's cycle follows the monitor's refresh rate — rather than on how the
+        /// strip is placed around it. Default: nothing.
+        /// </summary>
+        protected virtual void OnRegionAssigned(ScreenRect region)
+        {
+        }
+
+        /// <summary>
+        /// The refresh rate of the monitor that shows most of <paramref name="region"/>, in Hz, or 0
+        /// when no monitor claims it or the platform would not say. Freshly queried each call (see
+        /// <see cref="DesktopScreens"/> for why nothing here is cached).
+        /// </summary>
+        protected double RegionRefreshRate(ScreenRect region)
+        {
+            if (region == null)
+                return 0;
+
+            var rect = new PixelRect(region.X, region.Y, Math.Max(region.Width, 1), Math.Max(region.Height, 1));
+            var screen = DesktopScreens.FromRect(this, rect)
+                ?? DesktopScreens.FromPoint(this, new PixelPoint(region.Center.X, region.Center.Y));
+            return screen?.RefreshRate ?? 0;
+        }
+
+        /// <summary>
         /// Shows a fixed-size strip outside <paramref name="region"/>, or returns false without ever
         /// showing it when no placement clears the region on the region's own monitor. The position
         /// is applied BEFORE <see cref="Window.Show"/>, so there is no frame in which the strip exists
@@ -306,6 +334,7 @@ namespace Clowd.UI.Controls.Tray
                 throw new InvalidOperationException("A size-to-content tray is shown with ShowNear; TryShowNear needs FixedTraySize.");
 
             _region = region ?? throw new ArgumentNullException(nameof(region));
+            OnRegionAssigned(region);
 
             // pre-show guess: the window has no RenderScaling of its own yet, and the posted
             // Reposition corrects from the real value once it does. Called bare, exactly like the same
@@ -340,6 +369,7 @@ namespace Clowd.UI.Controls.Tray
                 return;
 
             _region = region;
+            OnRegionAssigned(region);
 
             if (_manuallyPositioned)
             {

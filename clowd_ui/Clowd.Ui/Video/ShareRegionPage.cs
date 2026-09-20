@@ -227,6 +227,7 @@ namespace Clowd.UI
                 _driver.RegionChanged += OnRegionChanged;
                 _driver.CommandError += OnCommandError;
                 _driver.Ended += OnEnded;
+                _driver.StatusReceived += OnStatusReceived;
 
                 // Read once, here, and held for the session: the canvas the helper is about to build
                 // is the only frame rate this share will ever have, so latching the value the
@@ -328,8 +329,11 @@ namespace Clowd.UI
             // The toolbar has no clock of its own and this page deliberately does not grow one: an
             // elapsed timer would need a DispatcherTimer whose only job is to say how long a thing
             // that is plainly still happening has been happening. The helper's once-a-second FPS
-            // status is not shown either (it used to ride in the grip tooltip, and did not belong
-            // there); the hide/show eye is the strip's whole account of the session.
+            // status IS shown, on the FPS tile at the head of the strip (OnStatusReceived feeds it):
+            // it is the one live fact about a share the user cannot see for themselves, and a rate
+            // that sags under a heavy scene is worth knowing mid-meeting. Seeded here with the rate
+            // the helper was spawned at, so the tile has a number before the first status lands.
+            _toolbar.SetFps(_mirrorFps);
             _toolbar.ShowNear(_region);
 
             // The GPU effect can fail to build before the toolbar exists (the helper emits its
@@ -1026,6 +1030,14 @@ namespace Clowd.UI
             }
         }
 
+        /// <summary>The helper's 1 Hz status: fps and nothing else, straight onto the strip's FPS
+        /// readout. Null-safe on the toolbar because the status starts with the handshake, before
+        /// the session UI exists, and outlives it during teardown.</summary>
+        private void OnStatusReceived(object sender, double fps)
+        {
+            _toolbar?.SetFps(fps);
+        }
+
         /// <summary>
         /// The helper rejected a command. For an obscure command this is logged and dropped: the
         /// tile's next ack (or the lack of one) is already the user-visible answer, and a modal
@@ -1340,6 +1352,7 @@ namespace Clowd.UI
                 _driver.RegionChanged -= OnRegionChanged;
                 _driver.CommandError -= OnCommandError;
                 _driver.Ended -= OnEnded;
+                _driver.StatusReceived -= OnStatusReceived;
                 // Safety net for the paths that reach here without having awaited a shutdown (the
                 // binary-missing bail-out, a cancelled handshake). Idempotent and memoized, so
                 // racing a shutdown another path already started is a no-op.

@@ -35,6 +35,7 @@ namespace Clowd.UI.Controls
             // file (the dark tooltip/menu look must not leak into the rest of the app), not a dictionary.
             Add(app, "Tray/FloatingTray");
             Add(app, "Tray/TrayButton");
+            Add(app, "Tray/TrayFpsButton");
             Add(app, "Tray/TrayPrimaryButton");
             Add(app, "Tray/TraySplitToggle");
             Add(app, "Tray/TraySplitButton");

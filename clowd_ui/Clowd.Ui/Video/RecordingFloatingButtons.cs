@@ -1,14 +1,17 @@
 ﻿using System;
+using System.Collections.Generic;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Clowd.Config;
+using Clowd.PlatformUtil;
 using Clowd.UI.Controls.Tray;
 
 namespace Clowd.UI
 {
     /// <summary>
-    /// The floating recording strip: grip · primary (Start / timer) · microphone · system audio ·
-    /// camera (Studio mode only) · options · end (Cancel before the recording starts, Finish after).
+    /// The floating recording strip: grip · FPS (target to cycle before, measured readout after) ·
+    /// primary (Start / timer) · microphone · system audio · camera (Studio mode only) · options ·
+    /// end (Cancel before the recording starts, Finish after).
     /// A thin composition over the generic tray chassis: every window, placement, drag, rotate and
     /// tooltip behaviour is <see cref="FloatingTrayWindow"/>'s, the settings mirror and device audit
     /// are <see cref="RecordingSources"/>', the device menus are <see cref="RecordingDeviceMenu"/>'s,
@@ -50,6 +53,7 @@ namespace Clowd.UI
         private const string LockedSuffix = " · locked while recording";
 
         private readonly RecordingSources _sources;
+        private readonly TrayFpsButton _fps;
         private readonly TrayPrimaryButton _primary;
         private readonly TraySplitToggle _mic;
         private readonly TraySplitToggle _spk;
@@ -65,6 +69,13 @@ namespace Clowd.UI
         // the last elapsed time the page reported; null until the first status of a recording, so the
         // primary reads "00:00" from the moment the recording starts rather than a stale value.
         private TimeSpan? _elapsed;
+        // the last measured frame rate the page reported, from the same 1 Hz status; null until the
+        // first status of a recording. While null the readout keeps showing the target, so the tile
+        // does not flash a placeholder for the second between Start and the first status.
+        private double? _actualFps;
+        // the frame rates a click on the FPS tile walks through, for the monitor the region is on.
+        // Seeded with the bare presets and replaced the moment a region is assigned (OnRegionAssigned).
+        private IReadOnlyList<int> _fpsOptions = FpsCycleRules.Options(0);
 
         public RecordingFloatingButtons()
             : base(new FloatingTrayOptions { Title = "Clowd Recording Toolbar" })
@@ -73,6 +84,11 @@ namespace Clowd.UI
             // and writes the result back before the recorder is spawned, so the settings file the
             // recorder reads already agrees with what the strip shows.
             _sources = new RecordingSources(SettingsRoot.Current.Recording);
+
+            // the FPS tile heads the owner's items (right after the chassis's emblem): a target the
+            // user cycles until frames flow, a measured readout after. UpdateFps is its only writer.
+            _fps = new TrayFpsButton { Caption = "FPS" };
+            _fps.Click += (s, e) => OnFpsClicked();
 
             _primary = new TrayPrimaryButton();
             _primary.Click += (s, e) =>
@@ -116,6 +132,7 @@ namespace Clowd.UI
             };
             _end.SideClicked += (s, e) => CancelClicked?.Invoke(this, EventArgs.Empty);
 
+            Tray.Items.Add(_fps);
             Tray.Items.Add(_primary);
             Tray.Items.Add(_mic);
             Tray.Items.Add(_spk);
@@ -129,6 +146,7 @@ namespace Clowd.UI
             // the strip opens in the Waiting state: the primary locked, unaccented and still.
             UpdatePrimary();
             UpdateEnd();
+            UpdateFps();
 
             // the Options button opens the same settings this strip writes: without this, the toggles
             // above go stale and the next click would flip the *old* value back over the user's choice.
@@ -159,9 +177,13 @@ namespace Clowd.UI
             // strip kept the text it was handed across that transition — so a status already in hand
             // survives the way in, and only the way out clears the label back to 00:00.
             _elapsed = recording ? _elapsed : null;
+            // same for the measured rate: the FPS tile becomes a readout of it on the way in and a
+            // target button again on the way out.
+            _actualFps = recording ? _actualFps : null;
             UpdateLocks();
             UpdatePrimary();
             UpdateEnd();
+            UpdateFps();
         }
 
         /// <summary>Flips the primary between the Active timer and the amber Paused state. Statuses
@@ -182,6 +204,17 @@ namespace Clowd.UI
         {
             _elapsed = elapsed;
             UpdatePrimary();
+        }
+
+        /// <summary>The frame rate the recorder actually achieved over the last second, from the same
+        /// 1 Hz status feed as <see cref="SetElapsed"/> — the FPS tile's number once frames flow. A
+        /// recorder dropping frames reports the real figure ("18") and that is what is shown; the
+        /// tile never smooths or clamps it. Kept across the way into a recording (a status can
+        /// arrive before the page hears that frames flow) and only shown while one runs.</summary>
+        public void SetActualFps(double fps)
+        {
+            _actualFps = fps;
+            UpdateFps();
         }
 
         /// <summary>Drives the microphone / system-audio level bars from obs-express's 100 ms levels
@@ -231,6 +264,59 @@ namespace Clowd.UI
         private void UpdateEnd()
         {
             _end.Look = _recording ? TrayButtonLook.Danger : TrayButtonLook.Quiet;
+        }
+
+        /// <summary>The region's monitor decides the FPS cycle: its refresh rate caps and completes
+        /// the presets (<see cref="FpsCycleRules.Options"/>). Re-derived on every assignment so a
+        /// region the page later moves to another monitor gets that monitor's list.</summary>
+        protected override void OnRegionAssigned(ScreenRect region)
+        {
+            base.OnRegionAssigned(region);
+            _fpsOptions = FpsCycleRules.Options(RegionRefreshRate(region));
+            UpdateFps();
+        }
+
+        /// <summary>
+        /// The single writer of the FPS tile's mode, number, tooltip and accessible name. Before a
+        /// recording the tile is a button showing the TARGET rate from the settings and its tooltip
+        /// names the next stop; once frames flow it is a readout of the MEASURED rate from the
+        /// recorder's status (the target until the first status lands), and the tooltip says so.
+        /// </summary>
+        private void UpdateFps()
+        {
+            var target = _sources.Fps;
+            _fps.IsReadout = _recording;
+
+            string tip;
+            if (_recording)
+            {
+                _fps.Value = _actualFps.HasValue ? FpsCycleRules.FormatFps(_actualFps.Value) : FpsCycleRules.FormatFps(target);
+                tip = "Current frame rate";
+            }
+            else
+            {
+                _fps.Value = FpsCycleRules.FormatFps(target);
+                var next = FpsCycleRules.Next(target, _fpsOptions);
+                tip = next == target
+                    ? $"Frame rate: {target} fps"
+                    : $"Frame rate: {target} fps · click for {next}";
+            }
+
+            ToolTip.SetTip(_fps, tip);
+            AutomationProperties.SetName(_fps, tip);
+        }
+
+        /// <summary>A click on the FPS tile: the next stop in the monitor's cycle, written to the
+        /// settings (which the page turns into a <c>configure</c> on the waiting recorder and the
+        /// settings bus mirrors back into the tile through <see cref="OnSourcesChanged"/>). The
+        /// readout swallows its own clicks, so the guard here is only for a race with
+        /// <see cref="SetRecordingState"/>.</summary>
+        private void OnFpsClicked()
+        {
+            if (_recording)
+                return;
+
+            _sources.SetFps(FpsCycleRules.Next(_sources.Fps, _fpsOptions));
         }
 
         /// <summary>
@@ -463,6 +549,9 @@ namespace Clowd.UI
         private void OnSourcesChanged(object sender, string propertyName)
         {
             MirrorSources();
+            // cheap, and the tile is the only reader of the setting: a change made on the settings
+            // page while the strip is open lands here, as does the tile's own write.
+            UpdateFps();
 
             if (propertyName is null or "" or nameof(SettingsRecording.Mode))
             {

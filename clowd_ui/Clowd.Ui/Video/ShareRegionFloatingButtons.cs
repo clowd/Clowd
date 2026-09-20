@@ -7,7 +7,11 @@ using Clowd.UI.Controls.Tray;
 namespace Clowd.UI
 {
     /// <summary>
-    /// The floating strip of a share-region session: grip · Hide/Show · Resize · Options · Stop.
+    /// The floating strip of a share-region session: grip · FPS readout · Hide/Show · Resize ·
+    /// Options · Stop. The FPS tile is a readout and never a button here: the mirror's canvas is
+    /// built once at spawn with the frame rate from <c>SettingsShareRegion.Fps</c> and no stdin
+    /// command can change it, so there is nothing a click could do; the tile shows the helper's
+    /// measured rate from its 1 Hz status instead (<see cref="SetFps"/>).
     /// It knows nothing about the driver, the obscure command bookkeeping or the resize state
     /// machine — those live in <see cref="ShareRegionPage"/>, which pushes the authoritative state in
     /// through <see cref="SetHidden"/>, <see cref="SetResizeState"/> and <see cref="RetireHide"/> and
@@ -17,6 +21,7 @@ namespace Clowd.UI
     /// </summary>
     public sealed class ShareRegionFloatingButtons : FloatingTrayWindow
     {
+        private readonly TrayFpsButton _fps;
         private readonly TraySplitToggle _hide;
         private readonly TrayButton _resize;
         private readonly TrayButton _options;
@@ -54,6 +59,13 @@ namespace Clowd.UI
         public ShareRegionFloatingButtons()
             : base(new FloatingTrayOptions { Title = "Clowd Share Toolbar", PreferAboveBeforeVertical = true })
         {
+            // The FPS readout, permanently a label (see the class summary for why it is never a
+            // button on this strip). The page seeds it with the rate the helper was spawned at and
+            // then feeds it the measured rate every second; SetFps is its only writer.
+            _fps = new TrayFpsButton { Caption = "FPS", IsReadout = true };
+            ToolTip.SetTip(_fps, "Current frame rate");
+            AutomationProperties.SetName(_fps, "Current frame rate");
+
             // Hide/Show. The polarity is the source-toggle one — ON (open eye, green bar) means the
             // meeting CAN see the region, the reading that works from across a room — so hiding
             // dims the tile and turns the bar red. The bar is a state light, never a meter. No
@@ -95,6 +107,7 @@ namespace Clowd.UI
             AutomationProperties.SetName(_stop, "Stop sharing");
             _stop.Click += (s, e) => CancelClicked?.Invoke(this, EventArgs.Empty);
 
+            Tray.Items.Add(_fps);
             Tray.Items.Add(_hide);
             Tray.Items.Add(_resize);
             Tray.Items.Add(_options);
@@ -138,6 +151,14 @@ namespace Clowd.UI
             var tip = ShareStripRules.HideToolTip(hidden);
             _hide.ToggleToolTip = tip;
             AutomationProperties.SetName(_hide, tip);
+        }
+
+        /// <summary>The frame rate to show on the FPS readout: the helper's measured rate from its
+        /// 1 Hz status, or, before the first status lands, the rate it was spawned at. Whole frames
+        /// only (<see cref="FpsCycleRules.FormatFps(double)"/>); the tile never smooths it.</summary>
+        public void SetFps(double fps)
+        {
+            _fps.Value = FpsCycleRules.FormatFps(fps);
         }
 
         /// <summary>
