@@ -23,10 +23,7 @@ pub enum ShaderId {
     Peek,
     Selection,
     Crosshair,
-    UiRect,
     Egui,
-    UiLift,
-    UiText,
 }
 
 impl ShaderId {
@@ -36,10 +33,7 @@ impl ShaderId {
             ShaderId::Peek => "peek",
             ShaderId::Selection => "selection",
             ShaderId::Crosshair => "crosshair",
-            ShaderId::UiRect => "ui_rect",
             ShaderId::Egui => "ui_egui",
-            ShaderId::UiLift => "ui_lift",
-            ShaderId::UiText => "ui_text",
         }
     }
 
@@ -54,16 +48,13 @@ impl ShaderId {
             ShaderId::Peek => shader_bindings::PEEK_BINDINGS,
             ShaderId::Selection => shader_bindings::OVERLAY_BINDINGS,
             ShaderId::Crosshair => shader_bindings::CROSSHAIR_BINDINGS,
-            ShaderId::UiRect => shader_bindings::RECT_BINDINGS,
             ShaderId::Egui => shader_bindings::EGUI_BINDINGS,
-            ShaderId::UiLift => shader_bindings::LIFT_BINDINGS,
-            ShaderId::UiText => shader_bindings::TEXT_BINDINGS,
         }
     }
 }
 
-/// Fixed-function blend state, one of the three combinations the overlay
-/// actually uses. (Backends translate; d3d11 maps these to the three
+/// Fixed-function blend state, one of the two combinations the overlay
+/// actually uses. (Backends translate; d3d11 maps these to the two
 /// `ID3D11BlendState` objects.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlendMode {
@@ -71,22 +62,16 @@ pub enum BlendMode {
     /// touch).
     Replace,
     /// Source-over with premultiplied source (`ONE / ONE_MINUS_SRC_ALPHA`
-    /// for both color and alpha) — rect, icon and lift pipelines.
+    /// for both color and alpha) — the egui painter.
     PremultipliedAlpha,
-    /// Straight-alpha color (`SRC_ALPHA / ONE_MINUS_SRC_ALPHA`) with
-    /// premultiplied alpha channel (`ONE / ONE_MINUS_SRC_ALPHA`) — the
-    /// glyph pipeline, kept pixel-identical to glyphon's blend state.
-    StraightAlpha,
 }
 
-/// Texture formats in use. All non-sRGB except the glyph color atlas
-/// (which glyphon also kept sRGB — pixel identity, see ui/gpu/glyph.rs).
+/// Texture formats in use, all non-sRGB: the surface and the desktop
+/// snapshots are BGRA8, egui's atlases and images are RGBA8.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TexFormat {
     Bgra8Unorm,
     Rgba8Unorm,
-    Rgba8UnormSrgb,
-    R8Unorm,
 }
 
 /// Shared surface policy: surfaces and every pipeline's color target are
@@ -99,8 +84,7 @@ pub const SURFACE_FORMAT: TexFormat = TexFormat::Bgra8Unorm;
 impl TexFormat {
     pub const fn bytes_per_pixel(self) -> u32 {
         match self {
-            TexFormat::Bgra8Unorm | TexFormat::Rgba8Unorm | TexFormat::Rgba8UnormSrgb => 4,
-            TexFormat::R8Unorm => 1,
+            TexFormat::Bgra8Unorm | TexFormat::Rgba8Unorm => 4,
         }
     }
 }
@@ -119,8 +103,6 @@ pub struct TextureDesc<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VertexFormat {
     Float32x2,
-    Float32x4,
-    Sint32x2,
     Uint32,
 }
 
@@ -133,12 +115,13 @@ pub struct VertexAttr {
     pub location: u32,
 }
 
-/// Whether the vertex buffer advances once per instance (every quad
-/// pipeline, driven by `@builtin(vertex_index)`) or once per vertex (the
-/// egui triangle list).
+/// How a vertex buffer advances. Only the egui triangle list has a vertex
+/// buffer at all now, so there is one variant; the field stays because the
+/// backends' descriptors have to state a step function either way, and an
+/// instanced pipeline would arrive as a second variant rather than as a
+/// new parameter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VertexStep {
-    Instance,
     Vertex,
 }
 

@@ -1,25 +1,16 @@
-//! Pure-GPU UI stack. One `UiRenderer` per render thread.
+//! The worker-side UI stack: one `UiRenderer` per render thread.
 //!
 //! Submodules:
-//!   * [`rect`]   — instanced colored/bordered rect pipeline
 //!   * [`egui_painter`] — the egui triangle-list painter
-//!   * [`lift`]   — OCR scanning-sweep band
-//!   * [`ocr_bubbles`] — OCR re-rendered text bubbles
-//!   * [`glyph`]  — glyph atlas + instanced glyph-quad pipeline
-//!   * [`text`]   — text stack (fonts, shaping, glyph renderers)
-//!   * [`tips`]   — per-frame tips-panel draw
 //!   * [`renderer`] — the top-level `UiRenderer`
+//!
+//! Every overlay is laid out and tessellated by egui on the app thread, so
+//! a render thread has exactly one thing to draw: this monitor's egui
+//! frame. The hand-written rect, glyph and text pipelines that used to
+//! draw the panel, hints, tips, reticle, sweep and OCR bubbles are gone
+//! along with their shaders.
 
-pub mod area;
 pub mod egui_painter;
-pub mod glyph;
-pub mod hints;
-pub mod lift;
-pub mod ocr_bubbles;
-pub mod rect;
 pub mod renderer;
-pub mod scope;
-pub mod text;
-pub mod tips;
 
 pub use renderer::UiRenderer;

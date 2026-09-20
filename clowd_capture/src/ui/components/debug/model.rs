@@ -337,14 +337,13 @@ impl<'a> PrimaryPanelData<'a> {
             if let Some(d) = phase_between(w.prep_pipelines.get(), w.prep_device.get()) {
                 out.push(format_args!("        pipes:     {}", DisplayMs(d)));
             }
-            // `prep_ui_pipelines`/`prep_fonts` moved off the critical path onto
-            // the deferred builder thread, so they are no longer phases BETWEEN
-            // neighboring critical-path marks: the two jobs run concurrently
-            // (fonts can land first), and the whole build routinely outlives
-            // frame 0. Shown as absolute offsets at the end of the worker's
-            // block — a delta against `prep_pipelines` would report the deferred
-            // build as critical-path time and print a child larger than the
-            // `worker{i}` total that deliberately excludes it. Mirrors
+            // `prep_ui_pipelines` moved off the critical path onto the deferred
+            // builder thread, so it is no longer a phase BETWEEN neighboring
+            // critical-path marks: the build routinely outlives frame 0. Shown
+            // as an absolute offset at the end of the worker's block — a delta
+            // against `prep_pipelines` would report the deferred build as
+            // critical-path time and print a child larger than the `worker{i}`
+            // total that deliberately excludes it. Mirrors
             // `WorkerTimings::stages`.
             if let Some(d) = phase_between(w.upload.get(), w.upload_start.get()) {
                 out.push(format_args!("      upload:      {}", DisplayMs(d)));
@@ -358,11 +357,8 @@ impl<'a> PrimaryPanelData<'a> {
             if let Some(d) = phase_between(w.first_render.get(), w.first_render_start.get()) {
                 out.push(format_args!("      first render: {}", DisplayMs(d)));
             }
-            // Absolute offsets from process start, not deltas — see the note
+            // An absolute offset from process start, not a delta — see the note
             // above the critical-path rows.
-            if let Some(d) = w.prep_fonts.get() {
-                out.push(format_args!("      deferred_fonts@ {}", DisplayMs(d)));
-            }
             if let Some(d) = w.prep_ui_pipelines.get() {
                 out.push(format_args!("      deferred_ready@ {}", DisplayMs(d)));
             }
@@ -442,7 +438,7 @@ mod tests {
 
     /// The monitor panel's row count is fixed: six identity rows, the two
     /// live summary rows, the three stats rows, the session footer and the
-    /// three blank separators. The sparkline is drawn, not written.
+    /// three blank separators. The plot is drawn, not written.
     #[test]
     fn monitor_panel_writes_fifteen_rows() {
         let perf = snapshot();

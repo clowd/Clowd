@@ -35,9 +35,10 @@ pub const LIFT_PX: f32 = 4.0;
 pub const DIM_MAX: f32 = 0.35;
 
 /// Width (σ) of the sweep band's gaussian falloff, in region-height units.
-/// Defined here rather than hardcoded in `ui_lift.wgsl` so the travel
-/// overshoot below and the fragment falloff cannot drift apart — the value
-/// rides to the GPU per instance (`params.w`, see the shader header).
+/// Defined here rather than inside the overlay so the travel overshoot
+/// below and the falloff cannot drift apart — both are read by
+/// `ui::components::ocr::show::sweep_strips`, which samples the band into
+/// rows of vertex alpha.
 pub const SWEEP_SIGMA: f32 = 0.10;
 
 /// How far past the region's top/bottom edges the band CENTER travels, in

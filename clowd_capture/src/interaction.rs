@@ -57,13 +57,14 @@ impl OcrNoticeKind {
 /// A transient notice pill shown over the selection.
 ///
 /// `anchor` is an absolute `Instant` for the same reason [`OcrState`]'s is:
-/// every render worker free-runs at its own refresh rate, so the fade must
-/// be a pure function of wall-clock elapsed time, not of frame counts.
+/// the fade must be a pure function of wall-clock elapsed time, not of
+/// frame counts, so every host computes the same opacity at the same
+/// moment.
 ///
-/// No extra frame scheduling is needed to animate the fade: the capture
-/// cycle already runs `ControlFlow::Poll` and the render workers free-run,
-/// so frames keep arriving on their own while the notice is up.
-#[derive(Debug, Clone, Copy)]
+/// The egui host schedules the fade: the pill's inputs exist only while it
+/// is visible, and the pass that paints it asks for another run at the
+/// repaint floor until it expires.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OcrNotice {
     pub anchor: Instant,
     pub kind: OcrNoticeKind,
@@ -74,19 +75,15 @@ impl OcrNotice {
     pub fn visible(&self) -> bool {
         self.anchor.elapsed().as_secs_f32() < NOTICE_SECS
     }
-
-    /// Opacity multiplier: solid, then a linear ramp to zero across the
-    /// final [`NOTICE_FADE_SECS`].
-    pub fn alpha(&self) -> f32 {
-        notice_alpha(self.anchor.elapsed().as_secs_f32())
-    }
 }
 
-/// The fade curve, split out as a pure function of elapsed seconds so it is
+/// The fade curve: solid, then a linear ramp to zero across the final
+/// [`NOTICE_FADE_SECS`]. A pure function of elapsed seconds so it is
 /// testable without doing arithmetic on `Instant` (subtracting from
 /// `Instant::now()` can panic on a freshly-booted machine, and adding to it
-/// cannot be observed by `elapsed()`).
-fn notice_alpha(elapsed: f32) -> f32 {
+/// cannot be observed by `elapsed()`), and so the pass that paints the pill
+/// reads it straight off the anchor it was handed.
+pub fn notice_alpha(elapsed: f32) -> f32 {
     let fade_starts = NOTICE_SECS - NOTICE_FADE_SECS;
     if elapsed <= fade_starts {
         return 1.0;
@@ -124,10 +121,9 @@ pub enum OcrState {
     /// Lines recognized; the reveal pass sweeps top→bottom raising them,
     /// and the OCR button set is live.
     /// `req` is the id of the request that produced `outcome` (same
-    /// counter Scanning carries): unique within the cycle, so the bubble
-    /// renderer keys its shaped-layout cache on it — an `Arc` address
-    /// could be reused by a later outcome on a render worker that stalled
-    /// through every intermediate state, an id cannot.
+    /// counter Scanning carries): unique within the cycle, so the overlay's
+    /// inputs compare on it instead of the recognised text — an `Arc`
+    /// address could be reused by a later outcome, an id cannot.
     /// `dpi_scale` is the scale of the monitor containing the region's
     /// center — ONE value for all lift geometry, so a line crossing a
     /// mixed-DPI seam moves by the same physical amount on both halves
@@ -325,6 +321,47 @@ pub(crate) struct InteractionEffects {
 }
 
 impl InteractionState {
+    /// A neutral state for tests: the cursor at the virtual-desktop
+    /// origin, nothing selected, nothing captured, no zoom and the
+    /// overlays on. Every overlay's per-host rule is tested by taking one
+    /// of these and setting only the fields that rule reads, so the
+    /// fixture lives beside the struct rather than being copied into each
+    /// component.
+    #[cfg(test)]
+    pub fn new() -> Self {
+        Self {
+            virtual_cursor: ScreenPointF::new(0.0, 0.0),
+            zoom: 1.0,
+            anchored: false,
+            anchor_just_engaged: false,
+            anchor: ScreenPoint::new(0, 0),
+            mouse_down: false,
+            mouse_down_pt: None,
+            mouse_down_dpi: 1.0,
+            dragging: false,
+            selection: None,
+            selection_radius: 0.0,
+            captured: false,
+            hittest: Hittest::Outside,
+            drag_mode: None,
+            drag_anchor_selection: None,
+            tips_mode: TipsMode::default(),
+            debug_visible: false,
+            last_scroll_end: None,
+            scroll_momentum: false,
+            overlays_visible: true,
+            cursor_overlay_visible: true,
+            peek_suspended: false,
+            has_ever_scrolled: false,
+            show_scroll_hint: false,
+            velocity_tracker: MouseVelocityTracker::new(),
+            has_used_magnifier: false,
+            scroll_pick_mode: false,
+            ocr: OcrState::Idle,
+            ocr_notice: None,
+        }
+    }
+
     /// Point the un-captured selection at whatever the walker found under
     /// the cursor — rect and corner radius together, or neither. The only
     /// path by which `selection_radius` becomes non-zero.
@@ -641,7 +678,7 @@ mod tests {
             kind: OcrNoticeKind::Unavailable,
         };
         assert!(n.visible());
-        assert_eq!(n.alpha(), 1.0);
+        assert_eq!(notice_alpha(n.anchor.elapsed().as_secs_f32()), 1.0);
         assert!(!n.kind.message().is_empty());
     }
 

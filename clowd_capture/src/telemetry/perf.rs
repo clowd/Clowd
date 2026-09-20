@@ -174,7 +174,7 @@ pub struct PerfSnapshot {
     pub window_size: usize,
     /// One entry per retained sample, newest first:
     /// `[overall_ms, cpu_ms (draw + present), gpu_ms (0 when unknown)]`.
-    /// The sparkline draws these directly.
+    /// The frame-time plot draws these directly.
     pub bars: Vec<[f32; 3]>,
 }
 
@@ -452,13 +452,13 @@ impl PerfTracker {
     }
 
     /// Target frame period from the monitor's refresh rate, if known.
-    /// Used by the sparkline to draw a reference line at budget.
+    /// Used by the frame-time plot to draw a reference line at budget.
     pub fn target_period(&self) -> Option<Duration> {
         self.target_period
     }
 
-    /// Iterator over the samples newest-first. Used by the sparkline to
-    /// render the most-recent N bars.
+    /// Iterator over the samples newest-first. Used by the frame-time
+    /// plot to render the most-recent N samples.
     pub fn samples_newest_first(&self) -> impl Iterator<Item = &PerfSample> {
         self.samples.iter().rev()
     }

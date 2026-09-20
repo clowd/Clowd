@@ -5,8 +5,8 @@
 //!
 //! The tray lives in [`place`] (which side of the selection, pure and in
 //! physical pixels), [`theme`] (the design tokens as egui `Style`, fonts
-//! and frames), [`icons`] (the SVG marks as per-DPI textures),
-//! [`widgets`] (the two button styles, the readout, the emblem) and
+//! and frames), [`assets`] (the SVG marks and the sources egui's image
+//! loader rasterises them from), [`widgets`] (the two button styles, the readout, the emblem) and
 //! [`show`] (the analytic strip size, the placement and the `Area`). It is
 //! run by `ui::egui_host` on the app thread and shipped to the workers as
 //! tessellated primitives, so the run that answers a click is the run that
@@ -14,7 +14,7 @@
 //!
 //!   * [`model`]: the static truth. The two button sets ([`model::PanelButtonSet`]:
 //!     `Normal` for a fresh capture, `Ocr` while lifted text is on screen),
-//!     the per-button command / label / accelerator / icon bytes, the two
+//!     the per-button command / label / accelerator / icon, the two
 //!     button styles ([`model::ButtonStyle`]), the shell's opt-out switches
 //!     ([`model::PanelFeatures`]), and the accelerator lookup. No geometry.
 //!
@@ -23,7 +23,6 @@
 //! job (app.rs), not this module's.
 
 pub mod assets;
-pub mod icons;
 pub mod model;
 pub mod place;
 pub mod show;

@@ -4,8 +4,9 @@
 //! key; hides itself once a selection is captured or while the user is
 //! actively dragging.
 //!
-//! Pure layout/model logic only — GPU rendering lives in
-//! [`crate::ui::gpu`].
+//! [`model`] is the static content; [`show`] holds the per-host rule, the
+//! pure layout and the painting, together because the layout is measured
+//! from the galleys of the same pass.
 
-pub mod layout;
 pub mod model;
+pub mod show;

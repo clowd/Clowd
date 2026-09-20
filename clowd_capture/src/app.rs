@@ -30,9 +30,8 @@ use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage
 use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::panel;
-use crate::ui::egui_host::{EguiHosts, PanelOutcome, SyncArgs};
-use crate::ui::shared::{active_panel_set, UiMonitor};
-use crate::ui_state::{build_ui_shared_state, sample_bgra, UiStateBuildInput};
+use crate::ui::egui_host::{EguiHosts, FontInstall, PanelOutcome, SyncArgs};
+use crate::ui::shared::{active_panel_set, cursor_image_rect, peek_covers_cursor, sample_bgra, UiMonitor, UiSharedState};
 use clowd_rust_core::geometry::{
     to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectExt, ScreenRectRounded, WindowPoint,
 };
@@ -282,7 +281,7 @@ fn update_cursor_visibility(windows: &WindowSet, input: &InteractionState) {
     // while picking.
     //
     // Gated on `overlays_visible` for the same reason the reticle is
-    // (`ui::shared::scroll_pick_visibility`): the two must agree, or a state
+    // (`ui::components::scope::show::inputs`): the two must agree, or a state
     // that suppresses the reticle while the pointer stays hidden would leave
     // the user with no pointer at all. Unreachable today — Q is swallowed in
     // pick mode — and this keeps it that way if a path is ever added.
@@ -419,6 +418,19 @@ impl PanelSwapGuard {
     }
 }
 
+/// Recompute the shared UI state, run the egui hosts that need it and
+/// publish the result to every worker.
+///
+/// While the debug panels are up this runs on every `about_to_wait`: the
+/// workers publish a perf snapshot per frame and the panel asks for a tick
+/// at the host's repaint floor, so the app thread broadcasts at roughly
+/// 60 Hz (one walker hit-test and one `Arc<UiSharedState>` per tick) for
+/// as long as `D` is on. That is the steady state during that window only;
+/// with the panels down nothing schedules a tick and the thread goes quiet
+/// between events. Follow-up if it ever costs too much: when the primary
+/// panel's `cpu` row shows the app thread above 2 ms per tick, memoise
+/// `MonitorPanelData::write_lines` on `seq` and `PrimaryPanelData::write_lines`
+/// on its input tuple.
 fn broadcast_ui_state(
     windows: &WindowSet,
     monitors: &[MonitorInfo],
@@ -480,6 +492,14 @@ fn broadcast_ui_state(
             })
     };
 
+    // The cursor image and what the peek does to it, worked out once per
+    // broadcast: the hosts need them for the overlays that point at the
+    // cursor, and the shared state carries the same two answers on to the
+    // workers.
+    let raw_cursor_image = cursor_image_rect(cycle.desktop_buffer.as_deref());
+    let peek_covers = peek_covers_cursor(raw_cursor_image, new_peek.as_ref().map(|p| p.window_rect));
+    let cursor_overlay_visible = cycle.input.cursor_overlay_visible && !peek_covers;
+
     // After the hovered-window block above, so the debug rows the hosts
     // will eventually read see this broadcast's values, and before the
     // build input below, which needs the frames. This is the one call that
@@ -493,32 +513,22 @@ fn broadcast_ui_state(
         ui_monitors,
         desktop_buffer: cycle.desktop_buffer.as_deref(),
         hovered_title: cycle.cached_hovered_title.as_deref(),
+        hovered_monitor_name: hovered_monitor_name.as_deref(),
         hovered_bounds: hovered_window_bounds,
         hovered_index: hovered_window_index,
         hovered_obstructed: hovered_window_obstructed,
+        cursor_image_rect: raw_cursor_image.filter(|_| !peek_covers),
+        cursor_overlay_visible,
     });
     let egui_frames = cycle.egui.frames();
 
-    let state = Arc::new(build_ui_shared_state(UiStateBuildInput {
-        monitors: ui_monitors.clone(),
-        selection: cycle.input.selection,
-        selection_radius: cycle.input.selection_radius,
-        captured: cycle.input.captured,
-        mouse_down: cycle.input.mouse_down,
-        dragging: cycle.input.dragging,
-        zoom: cycle.input.zoom,
-        virtual_cursor: cycle.input.virtual_cursor,
-        accent_color: cycle.settings.accent_color,
-        tips_mode: cycle.input.tips_mode,
+    // What a worker still decides for itself, and the egui primitives it
+    // paints. Built here rather than in a helper: the struct is now small
+    // enough that a builder only hid which tick each field came from.
+    let state = Arc::new(UiSharedState {
         debug_visible: cycle.input.debug_visible,
         overlays_visible: cycle.input.overlays_visible,
-        hovered_monitor_name,
-        hovered_window_title: cycle.cached_hovered_title.clone(),
-        peek_window_bounds: new_peek.as_ref().map(|p| p.window_rect),
-        cursor_overlay_visible: cycle.input.cursor_overlay_visible,
-        desktop_buffer: cycle.desktop_buffer.as_deref(),
-        show_scroll_hint: cycle.input.show_scroll_hint,
-        has_used_magnifier: cycle.input.has_used_magnifier,
+        cursor_overlay_visible,
         scroll_pick_mode: cycle.input.scroll_pick_mode,
         // The cycle keeps its copy, so this one is a genuine clone — but
         // the only heap content is the outcome behind an Arc, so the cost
@@ -526,9 +536,8 @@ fn broadcast_ui_state(
         // broadcast's Arc is finally dropped), even on the per-mouse-move
         // path. Everything else in the enum is Copy.
         ocr: cycle.input.ocr.clone(),
-        ocr_notice: cycle.input.ocr_notice,
         egui: egui_frames,
-    }));
+    });
 
     for h in windows.values() {
         h.update_ui_state(state.clone());
@@ -855,6 +864,18 @@ impl App {
                         // floor — nothing is going to be revealed, so
                         // dragging the error out a full pass would be
                         // pure latency.
+                        // Pickup is where the fallback faces go in, while
+                        // the sweep is still running: `set_fonts` rebuilds
+                        // every host's atlas, and that is a hitch the sweep
+                        // can absorb but the reveal tick cannot. An ASCII
+                        // page never pays for it.
+                        if let Ok(o) = &result {
+                            if !o.lines.is_empty() && crate::ui::fonts::needs_fallback(o.lines.iter().map(|l| l.text.as_str())) {
+                                if let FontInstall::ScanPending = cycle.egui.install_fallback_fonts() {
+                                    log::warn!("system font scan not finished; OCR bubbles may show '?' for non-Latin glyphs");
+                                }
+                            }
+                        }
                         let align = matches!(&result, Ok(o) if !o.lines.is_empty());
                         let release = ocr::anim::scan_release_secs(anchor.elapsed().as_secs_f32(), align);
                         cycle.ocr_ready = Some((release, result));
@@ -874,10 +895,15 @@ impl App {
             } => {
                 let (anchor, req, region) = (*anchor, *req, *region);
                 let elapsed = anchor.elapsed().as_secs_f32();
+                // The second clause turns "the rebuild almost certainly
+                // landed during the sweep" into a guarantee: every host that
+                // was handed new fonts must have run the pass that applies
+                // them before the reveal starts.
                 if cycle
                     .ocr_ready
                     .as_ref()
                     .is_none_or(|(release, _)| elapsed < *release)
+                    || !cycle.egui.fonts_settled()
                 {
                     return;
                 }
@@ -1612,7 +1638,7 @@ impl App {
                 // First OCR press starts the system-font scan, overlapping
                 // it with the recognizer child's own cold start. By
                 // decision, neither runs before OCR is actually used.
-                crate::ui::gpu::text::begin_system_font_scan();
+                crate::ui::fonts::begin_system_font_scan();
                 // Where the recognizer leaves its response file and `ocr.log`
                 // (see ocr::recognize). None is normal: OCR has no session_dir
                 // requirement, and only UPLOAD needs one.
@@ -1643,13 +1669,18 @@ impl App {
                                 return;
                             }
                             // Hold the result until the fallback-font scan
-                            // lands: publishing sooner would let the reveal
-                            // shape non-ASCII lines against the embedded-only
-                            // DB (tofu, cached for the request's lifetime).
-                            // The scan started with this request and runs
-                            // beside the child, so warm it is long done; the
-                            // timeout covers a wedged cold scan.
-                            crate::ui::gpu::text::wait_for_system_font_scan(std::time::Duration::from_secs(10));
+                            // lands, but only for a page that actually needs
+                            // a face the bundled Cascadia lacks: publishing
+                            // sooner would let the reveal lay non-Latin lines
+                            // out against a Cascadia-only font set (tofu,
+                            // cached for the request's lifetime), while an
+                            // ASCII page has nothing to wait for. The scan
+                            // started with this request and runs beside the
+                            // child, so warm it is long done; the timeout
+                            // covers a wedged cold scan.
+                            if matches!(&result, Ok(o) if crate::ui::fonts::needs_fallback(o.lines.iter().map(|l| l.text.as_str()))) {
+                                crate::ui::fonts::wait_for_system_font_scan(std::time::Duration::from_secs(10));
+                            }
                             latch.set(result);
                         })
                 };
@@ -1951,7 +1982,7 @@ impl ApplicationHandler for App {
             let repaint = cycle.egui.repaint_due(now);
             let fresh_perf = cycle
                 .egui
-                .debug_poll(&self.windows, &self.ui_monitors, cycle.input.debug_visible, now);
+                .debug_poll(&self.windows, &self.ui_monitors, cycle.input.debug_visible);
             if repaint || fresh_perf {
                 broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
             }

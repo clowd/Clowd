@@ -10,7 +10,7 @@
 
 use egui::{vec2, Vec2};
 
-use super::icons::IconTextures;
+use super::assets;
 use super::model::{ButtonDef, ButtonStyle, PanelButtonSet, PanelFeatures};
 use super::place::{self, Axis, Fit, Footprint, Near};
 use super::theme::{self, tokens};
@@ -136,7 +136,16 @@ fn union_fit(ctx: &egui::Context, style: ButtonStyle, size: (i32, i32), ppp: f32
 
 /// Build the tray for one monitor and report what the pointer found.
 /// Called inside a host's run closure, so text measurement is legal here.
-pub fn show(ctx: &egui::Context, p: &PanelInputs, icons: &IconTextures, monitor: UiMonitor) -> PanelOutcome {
+///
+/// `visible` is the Q toggle. A hidden tray is still laid out, still
+/// hit-tested and still clicked — that is the overlay's long-standing
+/// behaviour — it simply paints nothing: at opacity 0 every shape the
+/// painter is handed becomes a `Shape::Noop`, while the widget rects and
+/// the hover animation carry on as they are.
+pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: bool) -> PanelOutcome {
+    // Ahead of any measurement: a mark that cannot be rasterised is logged
+    // here rather than drawn as egui's placeholder glyph.
+    assets::preload(ctx);
     let ppp = monitor.dpi_scale.max(0.1);
     // The readout prints the UNCLIPPED selection, so a rect straddling two
     // monitors keeps showing its true size; only placement uses the
@@ -165,6 +174,9 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, icons: &IconTextures, monitor:
         // The dead chassis swallows clicks, as the C# strips do.
         .sense(egui::Sense::CLICK);
     let inner = area.show(ctx, |ui| {
+        if !visible {
+            ui.set_opacity(0.0);
+        }
         theme::tray_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing = Vec2::splat(tokens::GAP);
             let strip = |ui: &mut egui::Ui| {
@@ -176,7 +188,7 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, icons: &IconTextures, monitor:
                     Axis::Row => vec2(tokens::EMBLEM_SLOT, across),
                     Axis::Column => vec2(across, tokens::EMBLEM_SLOT),
                 };
-                widgets::emblem(ui, icons.emblem(), emblem_slot);
+                widgets::emblem(ui, emblem_slot);
                 let readout_slot = match axis {
                     Axis::Row => vec2(m.readout_along, across),
                     Axis::Column => vec2(across, m.thick),
@@ -193,8 +205,8 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, icons: &IconTextures, monitor:
                         Axis::Column => vec2(across, m.thick),
                     };
                     let button = match p.style {
-                        ButtonStyle::KeyHint => widgets::key_hint_button(def, icons.button(def.svg_bytes), id, min),
-                        ButtonStyle::Below => widgets::below_button(def, icons.button(def.svg_bytes), id, min),
+                        ButtonStyle::KeyHint => widgets::key_hint_button(def, id, min),
+                        ButtonStyle::Below => widgets::below_button(def, id, min),
                     };
                     let r = button.show(ui);
                     out.over_button |= r.contains_pointer();
@@ -254,18 +266,17 @@ mod tests {
     /// glyphs and every size assertion would be wrong.
     struct Harness {
         ctx: egui::Context,
-        icons: Option<IconTextures>,
         monitor: UiMonitor,
     }
 
     impl Harness {
         fn new(monitor: UiMonitor) -> Self {
             let ctx = egui::Context::default();
-            ctx.set_fonts(theme::font_definitions());
+            egui_extras::install_image_loaders(&ctx);
+            ctx.set_fonts(crate::ui::fonts::font_definitions(&[]));
             theme::apply_style(&ctx);
             Self {
                 ctx,
-                icons: None,
                 monitor,
             }
         }
@@ -334,12 +345,10 @@ mod tests {
             for pass in 0..3 {
                 let extra: &[egui::Event] = if press && pass == 1 { &press_events } else { &[] };
                 let raw = self.raw_input(pointer, extra);
-                let (icons, monitor) = (&mut self.icons, self.monitor);
+                let monitor = self.monitor;
                 let mut out = PanelOutcome::default();
                 let full = self.ctx.run_ui(raw, |ui| {
-                    let ctx = ui.ctx();
-                    let icons = icons.get_or_insert_with(|| IconTextures::new(ctx, monitor.dpi_scale.max(0.1)));
-                    out = show(ctx, p, icons, monitor);
+                    out = show(ui.ctx(), p, monitor, true);
                 });
                 full.drop_without_applying_deltas();
                 acc = PanelOutcome {
@@ -422,13 +431,9 @@ mod tests {
             mon,
         );
         h.run(&p, None);
-        let icons = h
-            .icons
-            .as_ref()
-            .expect("the run built the icons");
         for set in PanelButtonSet::ALL {
             for def in set.defs() {
-                let button = widgets::key_hint_button(def, icons.button(def.svg_bytes), egui::Id::new(def.label), Vec2::ZERO);
+                let button = widgets::key_hint_button(def, egui::Id::new(def.label), Vec2::ZERO);
                 assert_eq!(
                     button.text.text(),
                     def.accel_key()

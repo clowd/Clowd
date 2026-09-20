@@ -43,7 +43,6 @@ pub struct WorkerTimings {
     pub prep_device: AtomicDuration,
     pub prep_pipelines: AtomicDuration,
     pub prep_ui_pipelines: AtomicDuration,
-    pub prep_fonts: AtomicDuration,
     pub upload_start: AtomicDuration,
     pub upload: AtomicDuration,
     pub surface_start: AtomicDuration,
@@ -67,7 +66,6 @@ impl WorkerTimings {
             prep_device: AtomicDuration::new(),
             prep_pipelines: AtomicDuration::new(),
             prep_ui_pipelines: AtomicDuration::new(),
-            prep_fonts: AtomicDuration::new(),
             upload_start: AtomicDuration::new(),
             upload: AtomicDuration::new(),
             surface_start: AtomicDuration::new(),
@@ -95,14 +93,13 @@ impl WorkerTimings {
             ("first_render_start", self.first_render_start.get()),
             ("first_present", self.first_present.get()),
             ("first_render", self.first_render.get()),
-            // Off the critical path, and printed last because that is where they
-            // actually land on the clock: the UI stack (fonts, glyph atlas, SVG
-            // parses, rect/icon/lift pipelines) is built on a side thread that the
-            // worker only joins after frame 0, so both of these can be — and on a
-            // healthy run are — later than `first_render` and often later than the
-            // overlay being on screen. Their deltas are against `first_render`
-            // above, which is the point they were deferred past.
-            ("deferred_fonts", self.prep_fonts.get()),
+            // Off the critical path, and printed last because that is where it
+            // actually lands on the clock: the UI painter and the peek pipeline
+            // are built on a side thread that the worker only joins after frame
+            // 0, so this can be — and on a healthy run is — later than
+            // `first_render` and often later than the overlay being on screen.
+            // Its delta is against `first_render` above, which is the point it
+            // was deferred past.
             ("deferred_ready", self.prep_ui_pipelines.get()),
         ]
         .into_iter()
@@ -149,13 +146,13 @@ impl BackgroundGroup {
             any = true;
         }
         for w in &self.workers {
-            // `prep_ui_pipelines` / `prep_fonts` are deliberately absent: the UI
-            // stack is built on its own thread that is joined AFTER frame 0 and
-            // routinely finishes after `t_shown`. Folding it in here would let
-            // work the user never waited for inflate `gate()`, and through it the
-            // report header and `total()` — making the deferral read as a
-            // regression. They are still reported, at the end of each worker's
-            // rows, as `deferred_*`.
+            // `prep_ui_pipelines` is deliberately absent: the UI stack is built
+            // on its own thread that is joined AFTER frame 0 and routinely
+            // finishes after `t_shown`. Folding it in here would let work the
+            // user never waited for inflate `gate()`, and through it the report
+            // header and `total()` — making the deferral read as a regression.
+            // It is still reported, at the end of each worker's rows, as
+            // `deferred_ready`.
             for d in [
                 w.prep_start.get(),
                 w.render_prep.get(),

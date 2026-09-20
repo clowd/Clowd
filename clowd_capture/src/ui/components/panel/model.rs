@@ -153,10 +153,10 @@ pub struct ButtonDef {
     /// underline it, and `accel_key` reads the same index as a `chars()`
     /// index (equal only because labels are ASCII).
     pub underline_idx: usize,
-    /// Raw SVG bytes for the icon, embedded at compile time via
-    /// `include_bytes!` in `assets.rs`; [`super::icons::IconTextures`]
-    /// rasterises them per DPI and keys its cache on this pointer.
-    pub svg_bytes: &'static [u8],
+    /// The icon's embedded SVG, from the table in `assets.rs`. egui's
+    /// image loader rasterises it per host at the size the button draws
+    /// it, keyed by the mark's uri.
+    pub icon: &'static super::assets::Svg,
 }
 
 /// The capture-mode panel buttons in strip order.
@@ -189,61 +189,61 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         command: Command::Upload,
         label: "Upload",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_UPLOAD,
+        icon: &super::assets::UPLOAD,
     },
     ButtonDef {
         command: Command::Edit,
         label: "Edit",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_EDIT,
+        icon: &super::assets::EDIT,
     },
     ButtonDef {
         command: Command::Video,
         label: "Video",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_VIDEO,
+        icon: &super::assets::VIDEO,
     },
     ButtonDef {
         command: Command::Share,
         label: "Share",
         underline_idx: 1,
-        svg_bytes: super::assets::SVG_SHARE,
+        icon: &super::assets::SHARE,
     },
     ButtonDef {
         command: Command::ScrollCapture,
         label: "Scroll",
         underline_idx: 4,
-        svg_bytes: super::assets::SVG_SCROLL,
+        icon: &super::assets::SCROLL,
     },
     ButtonDef {
         command: Command::Copy,
         label: "Copy",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_COPY,
+        icon: &super::assets::COPY,
     },
     ButtonDef {
         command: Command::Save,
         label: "Save",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_SAVE,
+        icon: &super::assets::SAVE,
     },
     ButtonDef {
         command: Command::Ocr,
         label: "OCR",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_OCR,
+        icon: &super::assets::OCR,
     },
     ButtonDef {
         command: Command::Reset,
         label: "Reset",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_RESET,
+        icon: &super::assets::RESET,
     },
     ButtonDef {
         command: Command::Exit,
         label: "Exit",
         underline_idx: 1,
-        svg_bytes: super::assets::SVG_EXIT,
+        icon: &super::assets::EXIT,
     },
 ];
 
@@ -258,31 +258,31 @@ const OCR_DEFS: &[ButtonDef] = &[
         command: Command::OcrUpload,
         label: "Upload",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_UPLOAD,
+        icon: &super::assets::UPLOAD,
     },
     ButtonDef {
         command: Command::OcrSearch,
         label: "Search",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_SEARCH,
+        icon: &super::assets::SEARCH,
     },
     ButtonDef {
         command: Command::OcrCopy,
         label: "Copy",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_COPY,
+        icon: &super::assets::COPY,
     },
     ButtonDef {
         command: Command::OcrBack,
         label: "Back",
         underline_idx: 0,
-        svg_bytes: super::assets::SVG_BACK,
+        icon: &super::assets::BACK,
     },
     ButtonDef {
         command: Command::Exit,
         label: "Exit",
         underline_idx: 1,
-        svg_bytes: super::assets::SVG_EXIT,
+        icon: &super::assets::EXIT,
     },
 ];
 
@@ -336,26 +336,65 @@ pub const FEATURE_COMBINATIONS: [PanelFeatures; 32] = {
 
 #[cfg(test)]
 mod tests {
+    use super::super::assets;
     use super::*;
+    use egui::load::{SizeHint, TexturePoll};
 
-    /// Every mark the tray can show must survive `usvg` parsing:
-    /// `icons::rasterise` swallows a parse failure into an empty tree and
-    /// an `error!` line, so a malformed icon ships as a blank button
-    /// rather than a crash. The emblem rides the same path, so it is
-    /// checked here too.
+    /// The size every icon test rasterises at: the tray's icon box at
+    /// 100 %.
+    const ICON_PX: u32 = super::super::theme::tokens::ICON as u32;
+
+    fn exact(px: u32) -> SizeHint {
+        SizeHint::Size {
+            width: px,
+            height: px,
+            maintain_aspect_ratio: false,
+        }
+    }
+
+    /// Every mark the tray can show must rasterise. The SVG loader caches
+    /// failures as well as successes, so a mark that fails once is a blank
+    /// button for the rest of the run; `assets::preload` only logs it. The
+    /// emblem rides the same path, so it is in the table too.
     #[test]
     fn every_panel_icon_parses() {
-        let opts = usvg::Options::default();
-        for set in PanelButtonSet::ALL {
-            for def in set.defs() {
-                assert!(
-                    usvg::Tree::from_data(def.svg_bytes, &opts).is_ok(),
-                    "{} in {set:?} failed to parse",
-                    def.label
-                );
+        for svg in assets::ALL {
+            let image = egui_extras::image::load_svg_bytes_with_size(svg.bytes, exact(ICON_PX), &Default::default())
+                .unwrap_or_else(|err| panic!("{} failed to rasterise: {err}", svg.uri));
+            assert_eq!(image.size, [ICON_PX as usize; 2], "{}", svg.uri);
+        }
+    }
+
+    /// The real path a mark takes on a host: through the installed loader,
+    /// at the pixel size a 20 pt icon asks for at that monitor's DPI. The
+    /// texture must be allocated at exactly that many pixels, which is
+    /// what keeps the tray crisp at 125-200 %.
+    #[test]
+    fn every_icon_loads_through_the_installed_loader_at_each_dpi() {
+        let ctx = egui::Context::default();
+        egui_extras::install_image_loaders(&ctx);
+        for dpi in [1.0_f32, 1.25, 1.5, 2.0] {
+            let px = (super::super::theme::tokens::ICON * dpi).round() as u32;
+            for svg in assets::ALL {
+                let poll = svg
+                    .source()
+                    .load(&ctx, egui::TextureOptions::LINEAR, exact(px))
+                    .unwrap_or_else(|err| panic!("{} at {dpi}: {err}", svg.uri));
+                let TexturePoll::Ready {
+                    texture,
+                } = poll
+                else {
+                    panic!("{} at {dpi} is still loading", svg.uri);
+                };
+                assert!(texture.size.x > 0.0, "{} at {dpi}", svg.uri);
+                let manager = ctx.tex_manager();
+                let meta = manager.read();
+                let meta = meta
+                    .meta(texture.id)
+                    .expect("the loader allocated the texture");
+                assert_eq!(meta.size, [px as usize; 2], "{} at {dpi}", svg.uri);
             }
         }
-        assert!(usvg::Tree::from_data(super::super::assets::SVG_CLOWD_LOGO, &opts).is_ok());
     }
 
     /// `lookup_command_by_key` returns the *first* match, so a duplicate
@@ -556,9 +595,9 @@ mod tests {
     }
 
     /// UPLOAD is a real button with the paper-plane mark; the Clowd logo
-    /// is the tray emblem and must never be a button icon — `icons.rs`
-    /// keys its texture cache on the button bytes and looks the emblem up
-    /// separately.
+    /// is the tray emblem and must never be a button icon — the emblem is
+    /// drawn at its own size, from `widgets::emblem`, with no button
+    /// around it.
     #[test]
     fn upload_icon_is_the_paper_plane() {
         let upload = PanelButtonSet::Normal
@@ -566,28 +605,25 @@ mod tests {
             .iter()
             .find(|d| d.command == Command::Upload)
             .expect("the capture strip has an UPLOAD button");
-        assert_eq!(upload.svg_bytes, super::super::assets::SVG_UPLOAD);
-        assert_ne!(super::super::assets::SVG_UPLOAD, super::super::assets::SVG_CLOWD_LOGO);
+        assert_eq!(upload.icon.uri, assets::UPLOAD.uri);
+        assert_ne!(assets::UPLOAD.uri, assets::CLOWD_LOGO.uri);
         for set in PanelButtonSet::ALL {
             for def in set.defs() {
-                assert_ne!(
-                    def.svg_bytes,
-                    super::super::assets::SVG_CLOWD_LOGO,
-                    "the emblem must not be a button icon"
-                );
+                assert_ne!(def.icon.uri, assets::CLOWD_LOGO.uri, "the emblem must not be a button icon");
             }
         }
     }
 
     /// The emblem is rasterised through the same path as the button icons,
     /// so it must parse, and `widgets::emblem` centres a square mark, so
-    /// the canvas must be square (16 x 16 as authored).
+    /// the canvas must be square (16 x 16 as authored — the rasteriser
+    /// reports the SVG's own point size as `source_size`).
     #[test]
     fn clowd_logo_parses() {
-        let tree =
-            usvg::Tree::from_data(super::super::assets::SVG_CLOWD_LOGO, &usvg::Options::default()).expect("clowd-logo.svg failed to parse");
-        let size = tree.size();
-        assert_eq!((size.width(), size.height()), (16.0, 16.0));
+        let image = egui_extras::image::load_svg_bytes_with_size(assets::CLOWD_LOGO.bytes, exact(ICON_PX), &Default::default())
+            .expect("clowd-logo.svg failed to rasterise");
+        assert_eq!(image.size, [ICON_PX as usize; 2]);
+        assert_eq!(image.source_size, egui::vec2(16.0, 16.0));
     }
 
     #[test]

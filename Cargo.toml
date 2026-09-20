@@ -59,10 +59,11 @@ ort = { version = "2.0.0-rc.13", default-features = false, features = [
 # clowd_ai's STFT/ISTFT for the 48 kHz denoiser.
 realfft = "3.5"
 bytemuck = "1"
-usvg = { version = "0.47", default-features = false }
-resvg = { version = "0.47", default-features = false }
-etagere = "0.3"
-cosmic-text = "0.19"
+# System-font lookup for the OCR bubbles' glyph fallback: fontdb finds and memory-maps the
+# curated faces, skrifa (the same version epaint shapes with) checks a face parses and whether
+# the bundled Cascadia already covers a page.
+fontdb = { version = "0.23", default-features = false, features = ["memmap"] }
+skrifa = "0.44"
 # Immediate-mode UI (layout, widgets, text) for the capture overlay; painted through gxi.
 egui = { version = "0.36", default-features = false, features = ["bytemuck"] }
 # SVG rasterisation into egui textures (resvg under the hood) and live plots for the debug panel.

@@ -11,13 +11,10 @@ use anyhow::Result;
 use windows::core::s;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11BlendState, ID3D11Device, ID3D11InputLayout, ID3D11PixelShader, ID3D11RasterizerState, ID3D11VertexShader, D3D11_BLEND_DESC,
-    D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD, D3D11_BLEND_SRC_ALPHA, D3D11_COLOR_WRITE_ENABLE_ALL, D3D11_CULL_NONE,
-    D3D11_FILL_SOLID, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_INSTANCE_DATA, D3D11_INPUT_PER_VERTEX_DATA, D3D11_RASTERIZER_DESC,
-    D3D11_RENDER_TARGET_BLEND_DESC,
+    D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD, D3D11_COLOR_WRITE_ENABLE_ALL, D3D11_CULL_NONE, D3D11_FILL_SOLID,
+    D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_RASTERIZER_DESC, D3D11_RENDER_TARGET_BLEND_DESC,
 };
-use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT, DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32_SINT, DXGI_FORMAT_R32_UINT,
-};
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32_UINT};
 
 use crate::gxi::types::{BlendMode, PipelineDesc, VertexFormat, VertexStep};
 
@@ -92,11 +89,9 @@ impl Device {
                     InputSlot: 0,
                     AlignedByteOffset: a.offset as u32,
                     InputSlotClass: match v.step {
-                        VertexStep::Instance => D3D11_INPUT_PER_INSTANCE_DATA,
                         VertexStep::Vertex => D3D11_INPUT_PER_VERTEX_DATA,
                     },
                     InstanceDataStepRate: match v.step {
-                        VertexStep::Instance => 1,
                         VertexStep::Vertex => 0,
                     },
                 })
@@ -129,7 +124,6 @@ pub(super) struct SharedStates {
     pub(super) rasterizer: ID3D11RasterizerState,
     blend_replace: ID3D11BlendState,
     blend_premul: ID3D11BlendState,
-    blend_straight: ID3D11BlendState,
 }
 
 // SAFETY: immutable device-child state objects; same argument as
@@ -162,15 +156,11 @@ impl SharedStates {
         let blend_replace = create_blend(device, None)?;
         // Source-over with premultiplied source, both channels.
         let blend_premul = create_blend(device, Some((D3D11_BLEND_ONE, D3D11_BLEND_ONE)))?;
-        // Straight-alpha color + premultiplied alpha channel (the glyph
-        // pipeline, pixel-identical to glyphon's blend state).
-        let blend_straight = create_blend(device, Some((D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_ONE)))?;
 
         Ok(Self {
             rasterizer: rasterizer.expect("CreateRasterizerState succeeded without an object"),
             blend_replace,
             blend_premul,
-            blend_straight,
         })
     }
 
@@ -178,7 +168,6 @@ impl SharedStates {
         match mode {
             BlendMode::Replace => &self.blend_replace,
             BlendMode::PremultipliedAlpha => &self.blend_premul,
-            BlendMode::StraightAlpha => &self.blend_straight,
         }
     }
 }
@@ -221,8 +210,6 @@ fn create_blend(
 fn vertex_format(f: VertexFormat) -> DXGI_FORMAT {
     match f {
         VertexFormat::Float32x2 => DXGI_FORMAT_R32G32_FLOAT,
-        VertexFormat::Float32x4 => DXGI_FORMAT_R32G32B32A32_FLOAT,
-        VertexFormat::Sint32x2 => DXGI_FORMAT_R32G32_SINT,
         VertexFormat::Uint32 => DXGI_FORMAT_R32_UINT,
     }
 }

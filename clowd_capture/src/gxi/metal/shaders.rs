@@ -36,9 +36,6 @@ pub(crate) fn source(id: ShaderId) -> ShaderSource {
         ShaderId::Peek => s!("/peek.metal"),
         ShaderId::Selection => s!("/selection.metal"),
         ShaderId::Crosshair => s!("/crosshair.metal"),
-        ShaderId::UiRect => s!("/ui_rect.metal"),
         ShaderId::Egui => s!("/ui_egui.metal"),
-        ShaderId::UiLift => s!("/ui_lift.metal"),
-        ShaderId::UiText => s!("/ui_text.metal"),
     }
 }

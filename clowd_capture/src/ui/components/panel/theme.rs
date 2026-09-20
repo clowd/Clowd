@@ -1,40 +1,15 @@
-//! The one place the tray's design tokens become egui `Style`, fonts and
-//! frames.
+//! The one place the tray's design tokens become an egui `Style` and the
+//! frames drawn from it. The font families themselves live in
+//! [`crate::ui::fonts`], which every context loads before this applies a
+//! style over them.
 //!
 //! The values mirror the C# `TrayTokens` the floating strips share, so the
 //! Rust overlay and the WPF windows keep looking like one product. Nothing
 //! else in the panel hard-codes a colour, a radius or a font size.
 
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use egui::{Color32, FontFamily, FontId, Margin, Shadow, TextStyle};
-
-use crate::ui::gpu::text::{FONT_MONO_BOLD, FONT_MONO_REGULAR};
-
-/// Family key for the bold Cascadia Mono face. egui picks a face per
-/// family, not per weight, so bold is a family of its own.
-pub const MONO_BOLD_NAME: &str = "CascadiaMonoBold";
-pub static MONO_BOLD: LazyLock<FontFamily> = LazyLock::new(|| FontFamily::Name(Arc::from(MONO_BOLD_NAME)));
-
-/// The bundled Cascadia Mono faces, and nothing else. Mono rather than
-/// Code because Code ships `calt` ligatures, which turn "->" in a label
-/// into an arrow.
-pub fn font_definitions() -> egui::FontDefinitions {
-    let mut d = egui::FontDefinitions::empty();
-    d.font_data
-        .insert("CascadiaMono".into(), Arc::new(egui::FontData::from_static(FONT_MONO_REGULAR)));
-    d.font_data
-        .insert(MONO_BOLD_NAME.into(), Arc::new(egui::FontData::from_static(FONT_MONO_BOLD)));
-    d.families
-        .insert(FontFamily::Monospace, vec!["CascadiaMono".into()]);
-    // Both built-in family keys must exist even though we only draw mono:
-    // egui resolves Proportional for anything it lays out itself.
-    d.families
-        .insert(FontFamily::Proportional, vec!["CascadiaMono".into()]);
-    d.families
-        .insert(MONO_BOLD.clone(), vec![MONO_BOLD_NAME.into()]);
-    d
-}
 
 pub mod tokens {
     use egui::{vec2, Color32, CornerRadius, Shadow, Stroke, Vec2};
@@ -131,11 +106,11 @@ pub mod tokens {
     pub const DEBUG_LEGEND_H: f32 = 16.0;
     /// Debug-panel body fill: black at 70 %.
     pub const DEBUG_FILL: Color32 = Color32::from_black_alpha(179);
-    /// Sparkline plot area: white at 4 %.
+    /// Frame-time plot area: white at 4 %.
     pub const DEBUG_GRAPH_BG: Color32 = white_alpha(10);
-    /// The refresh-rate reference line across the sparkline: white at 35 %.
+    /// The refresh-rate reference line across the plot: white at 35 %.
     pub const DEBUG_BUDGET_LINE: Color32 = white_alpha(89);
-    /// The sparkline's annotations: `max(floor(DEBUG_FONT * 0.85), 9)`.
+    /// The plot's annotations: `max(floor(DEBUG_FONT * 0.85), 9)`.
     pub const DEBUG_LABEL_FONT: f32 = 10.0;
 }
 
@@ -224,7 +199,7 @@ mod tests {
 
     fn styled() -> egui::Context {
         let ctx = egui::Context::default();
-        ctx.set_fonts(font_definitions());
+        ctx.set_fonts(crate::ui::fonts::font_definitions(&[]));
         apply_style(&ctx);
         ctx
     }

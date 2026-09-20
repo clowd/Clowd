@@ -485,15 +485,11 @@ impl Queue {
 
 /// The one `TexFormat` → native translation for this backend. `const` so
 /// `super::SURFACE_FORMAT` can be derived from the shared policy const in
-/// `gxi/types.rs` at compile time. `Rgba8UnormSrgb` is created as sRGB
-/// and written with raw bytes - no view reinterpretation (matches wgpu's
-/// behavior for the glyph color atlas).
+/// `gxi/types.rs` at compile time.
 pub(super) const fn texture_format(format: TexFormat) -> MTLPixelFormat {
     match format {
         TexFormat::Bgra8Unorm => MTLPixelFormat::BGRA8Unorm,
         TexFormat::Rgba8Unorm => MTLPixelFormat::RGBA8Unorm,
-        TexFormat::Rgba8UnormSrgb => MTLPixelFormat::RGBA8Unorm_sRGB,
-        TexFormat::R8Unorm => MTLPixelFormat::R8Unorm,
     }
 }
 

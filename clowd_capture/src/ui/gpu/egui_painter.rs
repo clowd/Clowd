@@ -15,6 +15,7 @@
 
 use std::collections::HashMap;
 use std::ops::Range;
+use std::sync::Arc;
 
 use egui::epaint::textures::{TextureFilter, TextureWrapMode};
 use egui::epaint::{ClippedPrimitive, Primitive, Rect, TextureId, Vertex};
@@ -149,6 +150,14 @@ pub fn pack(prims: &[ClippedPrimitive], ppp: f32, target: (u32, u32)) -> Packed 
     out
 }
 
+/// Whether `frame` is the one already packed into the vertex and index
+/// buffers, for this same viewport. Identity, not equality: the app thread
+/// hands every worker the same `Arc` until a host actually reruns, so a
+/// pointer comparison is exactly the question "has anything changed".
+fn already_uploaded(uploaded: Option<&(Arc<EguiFrame>, (u32, u32))>, frame: &Arc<EguiFrame>, viewport_px: (u32, u32)) -> bool {
+    uploaded.is_some_and(|(staged, vp)| Arc::ptr_eq(staged, frame) && *vp == viewport_px)
+}
+
 /// One egui texture on the GPU. The texture itself is never read again
 /// after the bind group is built, but it owns the GPU resource the bind
 /// group points at, so it is held for the bind group's lifetime.
@@ -170,6 +179,12 @@ pub struct EguiPainter {
     textures: HashMap<TextureId, GpuTexture>,
     applied_version: Option<u64>,
     draws: Vec<DrawCmd>,
+    /// The frame whose meshes are already in the vertex and index buffers,
+    /// and the viewport they were packed for. A host that had nothing new
+    /// to say republishes the same `Arc`, so this is what keeps a quiet
+    /// monitor from re-packing and re-uploading an unchanged tray every
+    /// frame at its refresh rate.
+    uploaded: Option<(Arc<EguiFrame>, (u32, u32))>,
     /// One warning per painter for a surface that does not match its
     /// monitor; the condition is a resize race, not a per-frame event.
     size_warned: bool,
@@ -196,38 +211,40 @@ impl EguiPainter {
             textures: HashMap::new(),
             applied_version: None,
             draws: Vec::new(),
+            uploaded: None,
             size_warned: false,
         }
     }
 
-    /// Stage this frame: resync textures, then (when `draw` is set) pack
-    /// the meshes and upload them.
+    /// Stage this frame: resync textures, then pack the meshes and upload
+    /// them, unless this exact frame is already staged for this viewport.
     ///
     /// Called from `UiRenderer::prepare`, before any draw of the frame, so
     /// the uploads happen while the d3d11 context mutex is free. `frame ==
-    /// None` means nothing to draw at all; textures are still resynced
-    /// whenever a frame is present, so a panel hidden by the overlay toggle
-    /// never comes back against a stale atlas.
+    /// None` means nothing to draw at all.
     pub fn prepare(
         &mut self,
         device: &gxi::Device,
         queue: &gxi::Queue,
         viewport_px: (u32, u32),
         monitor_px: (u32, u32),
-        frame: Option<&EguiFrame>,
-        draw: bool,
+        frame: Option<&Arc<EguiFrame>>,
     ) {
-        self.draws.clear();
         let Some(frame) = frame else {
+            self.draws.clear();
+            // Nothing is staged any more, so the next frame — even this
+            // same `Arc` coming back — has to be packed again.
+            self.uploaded = None;
             return;
         };
         if self.applied_version != Some(frame.textures.version) {
             self.replace_textures(device, queue, &frame.textures);
             self.applied_version = Some(frame.textures.version);
         }
-        if !draw {
+        if already_uploaded(self.uploaded.as_ref(), frame, viewport_px) {
             return;
         }
+        self.draws.clear();
         if viewport_px != monitor_px && !self.size_warned {
             log::warn!("egui: surface {viewport_px:?} != monitor {monitor_px:?}; primitives will scale");
             self.size_warned = true;
@@ -267,6 +284,7 @@ impl EguiPainter {
             self.last_screen = screen;
         }
         self.draws = packed.draws;
+        self.uploaded = Some((frame.clone(), viewport_px));
     }
 
     /// Grow `buf` to fit `bytes` (doubling, as the instance buffers do)
@@ -420,6 +438,31 @@ mod tests {
         assert_eq!(packed.draws[0].texture, TextureId::Managed(1));
         assert_eq!(packed.draws[0].base_vertex, 0);
         assert_eq!(packed.draws[0].indices, 0..3);
+    }
+
+    /// The re-upload memo. A host that reran publishes a new `Arc`, and a
+    /// host that did not republishes the one the worker already staged —
+    /// so the pointer, not the contents, is what says whether this worker
+    /// has to pack and upload the meshes again. A resize invalidates it
+    /// too: the pack bakes the viewport into the vertices.
+    #[test]
+    fn an_unchanged_frame_is_not_repacked() {
+        let frame = || {
+            Arc::new(EguiFrame {
+                pixels_per_point: 1.0,
+                primitives: Vec::new(),
+                textures: Arc::new(TextureSnapshot {
+                    version: 0,
+                    textures: Vec::new(),
+                }),
+            })
+        };
+        let a = frame();
+        let staged = Some((a.clone(), (100u32, 100u32)));
+        assert!(already_uploaded(staged.as_ref(), &a, (100, 100)));
+        assert!(!already_uploaded(staged.as_ref(), &a, (100, 200)), "a resize repacks");
+        assert!(!already_uploaded(staged.as_ref(), &frame(), (100, 100)), "a new frame repacks");
+        assert!(!already_uploaded(None, &a, (100, 100)), "nothing staged yet");
     }
 
     #[test]

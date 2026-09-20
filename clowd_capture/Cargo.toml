@@ -17,10 +17,8 @@ serde_json.workspace = true
 winit.workspace = true
 handy-keys.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
-usvg.workspace = true
-resvg.workspace = true
-etagere.workspace = true
-cosmic-text.workspace = true
+fontdb.workspace = true
+skrifa.workspace = true
 egui.workspace = true
 egui_extras.workspace = true
 egui_plot.workspace = true

@@ -92,7 +92,7 @@ impl Frame {
 
     /// Replay the bind group's pre-resolved slot lists onto the encoder
     /// (see `Device::create_bind_group`) - including the vertex-stage
-    /// lists: ui_text samples its atlases from the vertex shader too.
+    /// lists, which a shader may bind resources into as well.
     pub fn set_bind_group(&mut self, index: u32, bind_group: &BindGroup) {
         assert_eq!(index, 0, "gxi uses a single bind group");
         // SAFETY (all six loops): slots come from the build-time binding

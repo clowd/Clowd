@@ -85,10 +85,27 @@ impl ScopeLayout {
     }
 }
 
+/// The four arms of the cross, each spanning `inner..outer` out from the
+/// center along its axis: left, right, top, bottom, in window-local
+/// physical pixels. The across-axis span comes from [`line_span`], so a
+/// one-pixel hair lands on the cursor's own pixel instead of straddling
+/// two.
+pub fn arm_rects(l: &ScopeLayout, inner: f32, outer: f32, thickness: f32) -> [[f32; 4]; 4] {
+    let (cx, cy) = (l.center_x, l.center_y);
+    let (x0, x1) = line_span(cx, thickness);
+    let (y0, y1) = line_span(cy, thickness);
+    [
+        [cx - outer, y0, cx - inner, y1],
+        [cx + inner, y0, cx + outer, y1],
+        [x0, cy - outer, x1, cy - inner],
+        [x0, cy + inner, x1, cy + outer],
+    ]
+}
+
 /// Pixel span of a `thickness`-wide line centered on `center`. Snapped so a
 /// 1-px hair covers the cursor's own pixel exactly rather than straddling
-/// two at half intensity — the rect pipeline's axis-aligned path has no
-/// anti-aliasing.
+/// two at half intensity, which is what a hair landing on a half pixel
+/// would look like once the painter antialiases it.
 pub fn line_span(center: f32, thickness: f32) -> (f32, f32) {
     let lo = center - (thickness / 2.0).floor();
     (lo, lo + thickness)
@@ -128,6 +145,21 @@ mod tests {
         assert!(s.tick_inner < s.tick_outer);
         let (lo, hi) = line_span(s.center_x, s.hair_thickness);
         assert!(lo < hi, "a hair at a negative origin must keep min < max");
+    }
+
+    /// The arms of one band are mirror images across the center, and the
+    /// two horizontal ones share the hair's y span while the two vertical
+    /// ones share its x span — otherwise the cross would be lopsided.
+    #[test]
+    fn arms_are_symmetric_about_the_center() {
+        let l = ScopeLayout::compute(100.0, 100.0, 1.0);
+        let [left, right, top, bottom] = arm_rects(&l, 4.0, 12.0, 1.0);
+        assert_eq!(left[0], 88.0);
+        assert_eq!(left[2], 96.0);
+        assert_eq!(right[0], 104.0);
+        assert_eq!(right[2], 112.0);
+        assert_eq!((left[1], left[3]), (right[1], right[3]));
+        assert_eq!((top[0], top[2]), (bottom[0], bottom[2]));
     }
 
     #[test]

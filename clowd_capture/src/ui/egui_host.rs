@@ -32,14 +32,16 @@ use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPanelData};
 use crate::ui::components::debug::resources::ResourcePoller;
-use crate::ui::components::debug::show as debug_show;
-use crate::ui::components::panel::icons::IconTextures;
 use crate::ui::components::panel::model::{ButtonStyle, PanelButtonSet, PanelFeatures};
-use crate::ui::components::panel::{show, theme};
+use crate::ui::components::panel::theme;
+use crate::ui::components::{self, accent_color32, area, hints, ocr, scope, tips, InputCtx, OverlayInputs};
 use crate::ui::egui_frame::{EguiFrame, TextureShadow};
-use crate::ui::shared::{active_panel_set, debug_monitor_visibility, debug_primary_visibility, pick_monitor_containing_center, UiMonitor};
-use crate::ui_state::sample_bgra;
-use clowd_rust_core::geometry::{to_screen_point, RectExt, ScreenPointF, ScreenRect};
+use crate::ui::fonts;
+use crate::ui::shared::{
+    active_panel_set, debug_monitor_visibility, debug_primary_visibility, monitor_index_at, pick_monitor_containing_center, sample_bgra,
+    UiMonitor,
+};
+use clowd_rust_core::geometry::{to_screen_point, RectExt, ScreenPointF, ScreenRect, ScreenRectF};
 
 /// The shortest gap between two scheduled runs of one host. egui asks for
 /// those repaints as "immediately", so without a floor a hover fade would
@@ -47,17 +49,13 @@ use clowd_rust_core::geometry::{to_screen_point, RectExt, ScreenPointF, ScreenRe
 /// while something is still owed one — an animation in progress, or the
 /// settling repaint egui pairs with every event — so a capture where
 /// nothing moves schedules nothing at all.
-const REPAINT_FLOOR: Duration = Duration::from_millis(16);
+pub const REPAINT_FLOOR: Duration = Duration::from_millis(16);
 
 /// Bound on the passes of one tick. egui wants an event-less pass after
 /// every pass that saw an event, and a press tick feeds its events only
 /// from the second pass on, so three is the most any tick actually needs;
 /// four leaves a pass of slack and still bounds the loop.
 const MAX_PASSES: u32 = 4;
-
-/// How often the app thread reads the workers' perf slots while the debug
-/// panels are up. The workers publish at the same cadence.
-const DEBUG_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Everything one host's UI depends on. The host reruns egui only when
 /// this changes (or a scheduled repaint comes due), so a mouse move across
@@ -70,6 +68,8 @@ pub struct HostInputs {
     /// monitor's worker has published a perf snapshot.
     pub debug: Option<DebugInputs>,
     pub pointer: Option<Pos2>,
+    /// Everything else this monitor draws.
+    pub overlays: OverlayInputs,
 }
 
 /// Both debug panels' contents, already formatted. The rows are strings
@@ -82,8 +82,8 @@ pub struct DebugInputs {
     pub primary: Option<PrimaryPanelInputs>,
 }
 
-/// The top-left panel: the formatted rows plus the numbers its sparkline
-/// draws from.
+/// The top-left panel: the formatted rows plus the numbers its
+/// frame-time plot draws from.
 #[derive(Clone, PartialEq)]
 pub struct MonitorPanelInputs {
     pub lines: Arc<[(String, Color32)]>,
@@ -142,9 +142,17 @@ pub struct SyncArgs<'a> {
     pub ui_monitors: &'a [UiMonitor],
     pub desktop_buffer: Option<&'a CapturedDesktop>,
     pub hovered_title: Option<&'a str>,
+    /// Name of the monitor under the cursor, which `broadcast_ui_state`
+    /// already works out for the shared state.
+    pub hovered_monitor_name: Option<&'a str>,
     pub hovered_bounds: Option<ScreenRect>,
     pub hovered_index: Option<usize>,
     pub hovered_obstructed: bool,
+    /// The cursor image's rect, already `None` when the peek covers it —
+    /// `broadcast_ui_state` works both facts out once per tick.
+    pub cursor_image_rect: Option<ScreenRectF>,
+    /// Already ANDed with "the peek does not cover the cursor".
+    pub cursor_overlay_visible: bool,
 }
 
 /// The host index that shows the tray and what it shows, or `None` when
@@ -184,19 +192,18 @@ pub struct EguiHosts {
     pollers: HashMap<Option<(u32, u32)>, ResourcePoller>,
     /// The latest snapshot each monitor's worker has published.
     perf: Vec<Option<Arc<PerfSnapshot>>>,
-    /// When the workers' perf slots may be read again.
-    next_debug_poll: Instant,
     /// Reused across every panel of every monitor: the row formatting is
     /// the only allocation-heavy part of a debug tick.
     lines: LineBuf,
+    /// Whether the curated system faces have already been pushed onto every
+    /// context. One install per process: rebuilding the atlas is the cost,
+    /// and the face list never changes within a capture.
+    fonts_installed: bool,
 }
 
 struct MonitorHost {
     ctx: egui::Context,
     monitor: UiMonitor,
-    /// The tray's marks at this monitor's DPI, rasterised on the first
-    /// panel run and kept for the host's life.
-    icons: Option<IconTextures>,
     shadow: TextureShadow,
     /// What the last run's final pass found under the pointer.
     outcome: PanelOutcome,
@@ -218,6 +225,10 @@ struct MonitorHost {
     /// with. `None` once nothing is owed a run, which is what lets the app
     /// thread go quiet between mouse events.
     repaint_after: Option<Instant>,
+    /// True between a `set_fonts` and the pass that applies it. egui swaps
+    /// the font set at the next `begin_pass`, so until this host has run
+    /// once more its published frame still carries the old atlas.
+    fonts_dirty: bool,
 }
 
 impl EguiHosts {
@@ -231,8 +242,8 @@ impl EguiHosts {
             startup,
             pollers: HashMap::new(),
             perf: vec![None; ui_monitors.len()],
-            next_debug_poll: Instant::now(),
             lines: LineBuf::new(),
+            fonts_installed: false,
         }
     }
 
@@ -243,6 +254,21 @@ impl EguiHosts {
         let now = Instant::now();
         let cursor = args.input.virtual_cursor;
         let panel = panel_inputs(args.ui_monitors, args.input, args.settings);
+        // Everything the overlays' `inputs` builders share, computed once
+        // for the whole sync rather than once per monitor.
+        let ictx = InputCtx {
+            input: args.input,
+            monitors: args.ui_monitors,
+            cursor_index: monitor_index_at(args.ui_monitors, cursor),
+            accent: accent_color32(args.settings.accent_color),
+            hovered_window_title: args.hovered_title,
+            hovered_monitor_name: args.hovered_monitor_name,
+            hovered_pixel_bgra: args
+                .desktop_buffer
+                .and_then(|b| sample_bgra(b, to_screen_point(cursor))),
+            cursor_image_rect: args.cursor_image_rect,
+            cursor_overlay_visible: args.cursor_overlay_visible,
+        };
         let mut any_ran = false;
         let mut outcome = PanelOutcome::default();
         for index in 0..self.monitors.len() {
@@ -251,6 +277,16 @@ impl EguiHosts {
             // line buffer and the snapshot table, all of which sit beside
             // the host list rather than on a host.
             let debug = self.debug_inputs(index, monitor, &args);
+            let overlays = OverlayInputs {
+                overlays_visible: args.input.overlays_visible,
+                accent: ictx.accent,
+                area: area::show::inputs(index, &monitor, &ictx),
+                tips: tips::show::inputs(index, &monitor, &ictx),
+                hints: hints::show::inputs(index, &monitor, &ictx),
+                notice: hints::show::notice_inputs(index, &monitor, &ictx),
+                scope: scope::show::inputs(index, &monitor, &ictx),
+                ocr: ocr::show::inputs(index, &monitor, &ictx),
+            };
             let host = &mut self.monitors[index];
             let inputs = HostInputs {
                 panel: panel
@@ -258,6 +294,7 @@ impl EguiHosts {
                     .map(|(_, p)| p),
                 debug,
                 pointer: host.pointer(cursor),
+                overlays,
             };
             let due = host.repaint_after.is_some_and(|t| t <= now);
             if due || host.inputs.as_ref() != Some(&inputs) {
@@ -277,7 +314,8 @@ impl EguiHosts {
     /// Format one monitor's debug panels, or `None` when the toggle is off
     /// or this monitor's worker has not published a snapshot yet. Every
     /// live number on the monitor panel comes from that snapshot, so there
-    /// is nothing worth showing for the ~100 ms before the first one lands.
+    /// is nothing worth showing until the first one lands, which is the
+    /// first frame the worker draws with the toggle on.
     fn debug_inputs(&mut self, index: usize, monitor: UiMonitor, args: &SyncArgs<'_>) -> Option<DebugInputs> {
         let input = args.input;
         if !debug_monitor_visibility(input.overlays_visible, input.debug_visible) {
@@ -356,15 +394,17 @@ impl EguiHosts {
         })
     }
 
-    /// Read every worker's perf slot, at most once per
-    /// [`DEBUG_POLL_INTERVAL`], and report whether any monitor's timings
-    /// moved. The caller broadcasts on `true`, which is what makes the
-    /// panels tick while nothing else in the session changes.
-    pub fn debug_poll(&mut self, windows: &WindowSet, ui_monitors: &[UiMonitor], debug_visible: bool, now: Instant) -> bool {
-        if !debug_visible || now < self.next_debug_poll {
+    /// Read every worker's perf slot and report whether any monitor's
+    /// timings moved. The caller broadcasts on `true`, which is what makes
+    /// the panels tick while nothing else in the session changes. Every
+    /// call reads: the workers publish a snapshot per frame while the
+    /// panels are up, and a poll that quantised that to its own cadence is
+    /// what used to make the plot step rather than scroll. The cost is one
+    /// uncontended mutex per monitor per tick.
+    pub fn debug_poll(&mut self, windows: &WindowSet, ui_monitors: &[UiMonitor], debug_visible: bool) -> bool {
+        if !debug_visible {
             return false;
         }
-        self.next_debug_poll = now + DEBUG_POLL_INTERVAL;
         let mut advanced = false;
         for handle in windows.values() {
             let Some(snapshot) = handle.perf_snapshot() else {
@@ -415,6 +455,13 @@ impl EguiHosts {
                 .as_ref()
                 .and_then(|i| i.debug.clone()),
             pointer: host.pointer(input.virtual_cursor),
+            // Same for the overlays: a press changes nothing they draw, so
+            // whatever the last run gave this host stays on screen.
+            overlays: host
+                .inputs
+                .as_ref()
+                .map(|i| i.overlays.clone())
+                .unwrap_or_default(),
         };
         let outcome = host.run(&inputs, true);
         self.frames = None;
@@ -446,12 +493,61 @@ impl EguiHosts {
             .iter()
             .any(|h| h.repaint_after.is_some_and(|t| t <= now))
     }
+
+    /// Push the curated system faces onto every host and force one pass on
+    /// each, so the atlas rebuild happens now rather than on whichever frame
+    /// first asks for a glyph Cascadia lacks.
+    ///
+    /// Every host, not just the one showing the region: an OCR bubble can
+    /// straddle a seam, so both monitors have to be able to draw the same
+    /// text. Idempotent, and it never touches `ctx.fonts` — reading the font
+    /// set outside a pass panics on a context that has not run one, whereas
+    /// `set_fonts` merely stages the swap for the next `begin_pass`, which
+    /// the forced repaint guarantees on the next `about_to_wait`.
+    pub fn install_fallback_fonts(&mut self) -> FontInstall {
+        if self.fonts_installed {
+            return FontInstall::AlreadyInstalled;
+        }
+        let Some(faces) = fonts::system_faces() else {
+            return FontInstall::ScanPending;
+        };
+        let defs = fonts::font_definitions(&faces);
+        let now = Instant::now();
+        for host in &mut self.monitors {
+            host.ctx.set_fonts(defs.clone());
+            host.fonts_dirty = true;
+            host.repaint_after = Some(now);
+        }
+        self.fonts_installed = true;
+        FontInstall::Installed
+    }
+
+    /// True once no host still owes the pass that applies a `set_fonts`. The
+    /// OCR release waits on this so the reveal never lands on a frame whose
+    /// atlas is still the Cascadia-only one.
+    pub fn fonts_settled(&self) -> bool {
+        !self.monitors.iter().any(|h| h.fonts_dirty)
+    }
+}
+
+/// What [`EguiHosts::install_fallback_fonts`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FontInstall {
+    /// The faces were pushed onto every host by this call.
+    Installed,
+    /// An earlier call already pushed them.
+    AlreadyInstalled,
+    /// The background scan has not landed yet, so nothing was installed.
+    ScanPending,
 }
 
 impl MonitorHost {
     fn new(monitor: UiMonitor) -> Self {
         let ctx = egui::Context::default();
-        ctx.set_fonts(theme::font_definitions());
+        // The tray's marks are SVGs loaded through egui: one loader set per
+        // context, so one set of textures per monitor DPI. Idempotent.
+        egui_extras::install_image_loaders(&ctx);
+        ctx.set_fonts(fonts::font_definitions(&[]));
         theme::apply_style(&ctx);
         ctx.options_mut(|o| {
             // Nothing here reads the keyboard: egui must not swallow the
@@ -464,7 +560,6 @@ impl MonitorHost {
         Self {
             ctx,
             monitor,
-            icons: None,
             shadow: TextureShadow::default(),
             outcome: PanelOutcome::default(),
             last: None,
@@ -472,6 +567,7 @@ impl MonitorHost {
             epoch: Instant::now(),
             repaint_after: None,
             fed_pointer: None,
+            fonts_dirty: false,
         }
     }
 
@@ -524,8 +620,11 @@ impl MonitorHost {
                 egui::vec2(b.width() as f32, b.height() as f32) / ppp,
             )),
             // The font atlas is at least this wide, and the whole atlas is
-            // re-uploaded whenever it grows, so this bounds that upload.
-            max_texture_side: Some(1024),
+            // re-uploaded whenever it grows, so this bounds that upload. A
+            // recognised CJK page at several bubble sizes needs the taller
+            // sheet; the atlas still starts at 2048 x 32 and only grows on
+            // demand, so the higher ceiling costs nothing until it is used.
+            max_texture_side: Some(2048),
             time: Some(self.epoch.elapsed().as_secs_f64()),
             predicted_dt: 1.0 / 60.0,
             focused: true,
@@ -572,20 +671,9 @@ impl MonitorHost {
             let raw = self.raw_input(inputs.pointer, extra);
             let fed_events = !raw.events.is_empty();
             let mut pass = PanelOutcome::default();
-            // Disjoint field borrows: the closure needs the icon cache
-            // mutably while `run_ui` borrows the context.
-            let (icons, monitor) = (&mut self.icons, self.monitor);
-            let panel = inputs.panel.as_ref();
-            let debug = inputs.debug.as_ref();
+            let monitor = self.monitor;
             let mut full = self.ctx.run_ui(raw, |ui| {
-                let ctx = ui.ctx();
-                if let Some(p) = panel {
-                    let icons = icons.get_or_insert_with(|| IconTextures::new(ctx, monitor.dpi_scale.max(0.1)));
-                    pass = show::show(ctx, p, icons, monitor);
-                }
-                if let Some(d) = debug {
-                    debug_show::show(ctx, d);
-                }
+                pass = components::compose(ui.ctx(), inputs, monitor);
             });
             self.shadow.apply(&mut full.textures_delta);
             let primitives = self
@@ -617,6 +705,7 @@ impl MonitorHost {
             }
             self.repaint_after = (delay != Duration::MAX).then(|| Instant::now() + delay.max(REPAINT_FLOOR));
             self.inputs = Some(inputs.clone());
+            self.fonts_dirty = false;
             // A click belongs to the run that answered it, never to the
             // stored flags: a later memo hit must not hand the same
             // command out a second time.
@@ -652,6 +741,7 @@ mod tests {
             panel: None,
             debug: None,
             pointer: Some(egui::pos2(10.0, 10.0)),
+            overlays: OverlayInputs::default(),
         };
         host.run(&inputs, false);
         let frame = host
@@ -699,6 +789,7 @@ mod tests {
             panel: None,
             debug: None,
             pointer: Some(egui::pos2(10.0, 10.0)),
+            overlays: OverlayInputs::default(),
         };
         host.run(&inputs, false);
         let before = host.ctx.cumulative_pass_nr();
@@ -720,6 +811,7 @@ mod tests {
             panel: None,
             debug: None,
             pointer: Some(egui::pos2(10.0, 10.0)),
+            overlays: OverlayInputs::default(),
         };
         host.run(&inputs, false);
         let before = host.ctx.cumulative_pass_nr();
@@ -732,6 +824,165 @@ mod tests {
         host.run(&inputs, false);
         assert_eq!(host.ctx.cumulative_pass_nr() - before, 1);
         assert!(host.repaint_after.is_none());
+    }
+
+    /// Every animation in the migrated stack — the sweep, the reveal, the
+    /// comet, the notice fade, the debug plot — rides on one mechanism: a
+    /// show function asks for a tick inside the pass, and the host turns
+    /// the viewport's repaint delay into its own `repaint_after`. Break
+    /// that link and the sweep freezes at its first band position with
+    /// every other test still green, so it is pinned here at both ends: an
+    /// overlay still animating arms a tick, a settled one arms nothing.
+    #[test]
+    fn an_animated_overlay_schedules_a_tick_and_a_settled_one_does_not() {
+        let region = ScreenRect::from_xy_size(200, 200, 800, 400);
+        let lifted = |anchor: Instant| HostInputs {
+            panel: None,
+            debug: None,
+            pointer: None,
+            overlays: OverlayInputs {
+                overlays_visible: true,
+                ocr: Some(ocr::show::OcrInputs {
+                    region,
+                    radius: 8.0,
+                    phase: ocr::show::Phase::Lifted {
+                        anchor,
+                        req: 1,
+                        dpi: 1.0,
+                        outcome: Arc::new(crate::ocr::OcrOutcome {
+                            lines: Vec::new(),
+                            full_text: String::new(),
+                            text_angle: 0.0,
+                        }),
+                    },
+                }),
+                ..Default::default()
+            },
+        };
+
+        // egui sends a theme command on a context's very first pass, which
+        // arms an immediate repaint of its own, and every immediate repaint
+        // is answered twice. Running the empty host until it goes quiet
+        // settles that, so what the assertions below see is the overlay's
+        // own request and nothing else.
+        let quiet = HostInputs {
+            panel: None,
+            debug: None,
+            pointer: None,
+            overlays: OverlayInputs::default(),
+        };
+        let mut host = MonitorHost::new(monitor(0, 1.0));
+        for _ in 0..4 {
+            host.run(&quiet, false);
+            if host.repaint_after.is_none() {
+                break;
+            }
+        }
+        assert!(host.repaint_after.is_none(), "a host with nothing on it settles");
+
+        host.run(&lifted(Instant::now()), false);
+        assert!(host.repaint_after.is_some(), "the reveal is still in flight");
+
+        // Two seconds is well past the whole reveal (1.38 s), so the
+        // bubbles are at rest and nothing more is owed.
+        if let Some(settled) = Instant::now().checked_sub(Duration::from_secs(2)) {
+            host.run(&lifted(settled), false);
+            assert!(host.repaint_after.is_none(), "a settled overlay schedules nothing");
+        }
+    }
+
+    /// Installing the fallback faces marks every host dirty and arms it to
+    /// run; the pass that applies the new font set is what clears the mark.
+    /// The OCR release gates on `fonts_settled`, so a host that never
+    /// cleared its mark would stall the reveal, and one that cleared it
+    /// without running would let the reveal draw against the old atlas.
+    #[test]
+    fn installing_fonts_forces_one_pass_and_settles() {
+        // The scan is what the install waits on; running it here is also the
+        // only way this test can be deterministic about `Installed`.
+        fonts::begin_system_font_scan();
+        fonts::wait_for_system_font_scan(Duration::from_secs(60));
+        let ui_monitors = [monitor(0, 1.0), monitor(1920, 1.5)];
+        let mut hosts = EguiHosts::new(&ui_monitors, Arc::new(StartupTimings::new(Instant::now(), ui_monitors.len())));
+        assert!(hosts.fonts_settled(), "nothing is owed a pass before an install");
+
+        assert_eq!(hosts.install_fallback_fonts(), FontInstall::Installed);
+        assert!(!hosts.fonts_settled());
+        assert!(hosts.repaint_due(Instant::now()), "every host is armed to run now");
+
+        let inputs = HostInputs {
+            panel: None,
+            debug: None,
+            pointer: None,
+            overlays: OverlayInputs::default(),
+        };
+        for host in &mut hosts.monitors {
+            host.run(&inputs, false);
+        }
+        assert!(hosts.fonts_settled());
+        assert_eq!(hosts.install_fallback_fonts(), FontInstall::AlreadyInstalled);
+        assert!(hosts.fonts_settled(), "a second install is a no-op");
+    }
+
+    /// Q hides the tray by painting it at opacity 0, not by skipping it:
+    /// the strip still runs, so the pointer still finds its buttons and a
+    /// press still routes, while nothing of it reaches the frame. Skipping
+    /// the run instead would drop the clicks the overlay has always kept.
+    #[test]
+    fn the_tray_is_hit_tested_but_invisible_under_q() {
+        let monitor = monitor(0, 1.0);
+        let selection = ScreenRect::from_xy_size(500, 300, 600, 400);
+        let panel = PanelInputs {
+            set: PanelButtonSet::Normal,
+            features: PanelFeatures::ALL,
+            style: ButtonStyle::KeyHint,
+            selection,
+            anchor: selection,
+        };
+        let visible = |on: bool, pointer: Option<Pos2>| HostInputs {
+            panel: Some(panel),
+            debug: None,
+            pointer,
+            overlays: OverlayInputs {
+                overlays_visible: on,
+                ..Default::default()
+            },
+        };
+        // Two layout runs first: an `Area` allocates a provisional
+        // full-height rect on its very first pass, so the buttons' own
+        // rects only exist from the second one. The smallest of them is a
+        // button; the largest is the chassis, which senses clicks whole.
+        let mut host = MonitorHost::new(monitor);
+        host.run(&visible(true, None), false);
+        host.run(&visible(true, None), false);
+        let button = host
+            .ctx
+            .interactive_rects_last_pass()
+            .into_iter()
+            .min_by(|a, b| a.area().total_cmp(&b.area()))
+            .expect("the strip registered its buttons");
+
+        let shown = host.run(&visible(true, Some(button.center())), false);
+        assert!(shown.over_button && shown.over_tray, "{shown:?}");
+        assert!(vertices(&host) > 0, "a visible tray paints");
+
+        let hidden = host.run(&visible(false, Some(button.center())), false);
+        assert!(hidden.over_button, "the button is still under the pointer");
+        assert!(hidden.over_tray);
+        assert_eq!(vertices(&host), 0, "a hidden tray paints nothing");
+    }
+
+    /// Every vertex this host's last published frame carries.
+    fn vertices(host: &MonitorHost) -> usize {
+        host.last.as_ref().map_or(0, |f| {
+            f.primitives
+                .iter()
+                .map(|p| match &p.primitive {
+                    egui::epaint::Primitive::Mesh(m) => m.vertices.len(),
+                    egui::epaint::Primitive::Callback(_) => 0,
+                })
+                .sum()
+        })
     }
 
     /// Decision 2: every host works in its own monitor's points, and a

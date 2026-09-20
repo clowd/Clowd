@@ -1,22 +1,24 @@
-//! Shared UI state + visibility rules.
+//! Shared UI state, the per-monitor descriptor and the rules the overlay
+//! components share.
 //!
 //! The app thread builds one [`UiSharedState`] per tick and broadcasts it
-//! (as an [`Arc`]) to every render thread. Each render thread runs the
-//! pure visibility rules below against its own monitor to decide what to
-//! draw; no coordination between threads is needed.
+//! (as an [`Arc`]) to every render thread. What it carries has shrunk to
+//! what a worker still decides for itself: nearly every overlay is now
+//! tessellated on the app thread by egui — the run that answers a click is
+//! the run that produced the picture — and shipped as primitives, one set
+//! per monitor, for the workers to paint.
 //!
-//! The button panel is the one overlay that is hit-tested as well as
-//! drawn, so it is run by egui on the app thread — the run that answers
-//! the click is the run that produced the picture — and shipped here as
-//! tessellated primitives, one set per monitor, for the workers to paint.
+//! The pure geometry rules below (which monitor holds a point, whether two
+//! rects overlap) stay here because every component's own `inputs` builder
+//! asks the same questions.
 
 use std::sync::Arc;
 
-use crate::interaction::{OcrNotice, OcrState};
-use crate::settings::TipsMode;
+use crate::interaction::OcrState;
+use crate::system::{CapturedDesktop, CursorImage};
 use crate::ui::components::panel::model::PanelButtonSet;
 use crate::ui::egui_frame::EguiFrame;
-use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
+use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectF};
 
 /// Minimal per-monitor info the UI layout rules need.
 ///
@@ -33,79 +35,111 @@ pub struct UiMonitor {
 /// every tick.
 ///
 /// Fields are owned (not borrowed), so the struct is `Send + 'static` and
-/// trivially wrappable in `Arc`. Strings are cloned on build — they're
-/// tiny and only change on mouse move.
+/// trivially wrappable in `Arc`. Nothing in it allocates on build any
+/// more: the four flags are `Copy`, and the OCR outcome and the per-monitor
+/// egui frames are behind `Arc`s, so a broadcast costs a handful of atomic
+/// increments even on the per-mouse-move path.
 #[derive(Debug, Clone)]
 pub struct UiSharedState {
-    pub monitors: Arc<[UiMonitor]>,
-    pub selection: Option<ScreenRect>,
-    /// Corner radius of `selection` in physical px, 0 = square — see
-    /// `InteractionState::selection_radius`. Read by overlays that paint
-    /// INSIDE the selection (the OCR sweep) so they stop at the same curve
-    /// the desktop pass draws the border around.
-    pub selection_radius: f32,
-    pub captured: bool,
-    pub mouse_down: bool,
-    pub dragging: bool,
-    pub zoom: f32,
-    pub virtual_cursor: ScreenPointF,
-    pub accent_color: [f32; 4],
-    pub tips_mode: TipsMode,
     pub debug_visible: bool,
     /// Master overlay switch. When `false`, every UI overlay (tips,
     /// debug, panel, selection border, crosshair, dim) is suppressed so
     /// the desktop shows through unobstructed. Toggled by the Q key
     /// (`DxScreenCapture.cpp:1234-1239`).
     pub overlays_visible: bool,
-    pub hovered_monitor_name: Option<String>,
-    pub hovered_window_title: Option<String>,
     pub cursor_overlay_visible: bool,
-    pub hovered_pixel_bgra: Option<[u8; 4]>,
-    /// Bounding rect of the captured cursor image in virtual-desktop
-    /// physical pixels: `(left, top, right, bottom)`. Computed from the
-    /// cursor position minus hotspot + image dimensions. `None` when
-    /// cursor capture failed or the desktop buffer is unavailable.
-    pub cursor_image_rect: Option<[f32; 4]>,
-    pub show_scroll_hint: bool,
-    pub has_used_magnifier: bool,
     /// Mirror of `InteractionState::scroll_pick_mode`: the user pressed
     /// SCROLL and is now picking the point wheel events will be aimed
-    /// from. The panel is already gone from the broadcast (`active_panel_set`);
-    /// renderers read this for the picker's reticle and hint.
+    /// from. The reticle and its instruction are drawn by egui; what a
+    /// worker still reads this for is the desktop pass's own treatment of
+    /// the picking state.
     pub scroll_pick_mode: bool,
     /// Mirror of `InteractionState::ocr`. Carried whole rather than
     /// decomposed into flags so the lifted lines, the modal state and the
     /// panel set are guaranteed to change together in one broadcast — a
     /// renderer can never see the OCR button set over un-lifted lines.
     pub ocr: OcrState,
-    /// Mirror of `InteractionState::ocr_notice`: the transient "OCR gave
-    /// you nothing" pill.
-    pub ocr_notice: Option<OcrNotice>,
     /// What egui produced for each monitor this broadcast, indexed the same
     /// as `monitors`. `None` in a slot means that monitor has nothing to
     /// draw (no host has run yet, or it drew nothing).
     pub egui: Arc<[Option<Arc<EguiFrame>>]>,
 }
 
+/// The index of the monitor whose bounds hold `p`, or `None` in a gap
+/// between monitors. The point is rounded first and the right and bottom
+/// edges are open, which is the one "which monitor is this on" rule every
+/// overlay shares — the hosts hand the pointer to egui by the same test.
+pub fn monitor_index_at(monitors: &[UiMonitor], p: ScreenPointF) -> Option<usize> {
+    let (x, y) = (p.x.round() as i32, p.y.round() as i32);
+    monitors.iter().position(|m| {
+        let b = m.bounds;
+        x >= b.left() && x < b.right() && y >= b.top() && y < b.bottom()
+    })
+}
+
+/// Strict axis-aligned overlap: rects that merely touch do not intersect,
+/// so a shape ending exactly on a monitor's left edge is the neighbour's
+/// alone and no seam draws it twice.
+pub fn aabb_intersects(a: ScreenRectF, b: ScreenRectF) -> bool {
+    a.right() > b.left() && a.left() < b.right() && a.bottom() > b.top() && a.top() < b.bottom()
+}
+
+/// Sample one desktop pixel as BGRA. Shared by the info overlay and the
+/// SELECT-COLOR command.
+pub fn sample_bgra(buf: &CapturedDesktop, p: ScreenPoint) -> Option<[u8; 4]> {
+    let dx = p.x - buf.bounds.min_x();
+    let dy = p.y - buf.bounds.min_y();
+    if dx < 0 || dy < 0 {
+        return None;
+    }
+    let (w, h) = (buf.width as i32, buf.height as i32);
+    if dx >= w || dy >= h {
+        return None;
+    }
+    let idx = ((dy * w + dx) as usize) * 4;
+    let s = buf.bgra.get(idx..idx + 4)?;
+    Some([s[0], s[1], s[2], s[3]])
+}
+
+/// Bounding rect of the captured cursor image, in virtual-desktop physical
+/// px: the cursor position minus its hotspot, sized by the bitmap. `None`
+/// when the cursor was not captured or the OS reports it hidden.
+pub fn cursor_image_rect(buf: Option<&CapturedDesktop>) -> Option<ScreenRectF> {
+    let cursor = buf?.cursor.as_ref()?;
+    if !cursor.visible {
+        return None;
+    }
+    let (w, h) = match &cursor.image {
+        CursorImage::AlphaBlended {
+            width,
+            height,
+            ..
+        } => (*width, *height),
+        CursorImage::Masked {
+            width,
+            height,
+            ..
+        } => (*width, *height),
+    };
+    let left = cursor.position.x as f32 - cursor.hotspot_x as f32;
+    let top = cursor.position.y as f32 - cursor.hotspot_y as f32;
+    Some(ScreenRectF::from_xy_size(left, top, w as f32, h as f32))
+}
+
+/// Whether the peek window covers any part of the cursor image. The peek
+/// draws a window's true pixels over that area, so the cursor overlay and
+/// everything that points at it are suppressed while it does.
+pub fn peek_covers_cursor(cursor: Option<ScreenRectF>, peek: Option<ScreenRect>) -> bool {
+    cursor
+        .zip(peek)
+        .is_some_and(|(c, p)| aabb_intersects(c, p.to_f32()))
+}
+
 /// The monitor whose bounds hold the point, or `None` in a gap between
 /// monitors.
 fn monitor_at(monitors: &[UiMonitor], x: i32, y: i32) -> Option<UiMonitor> {
-    monitors
-        .iter()
-        .find(|m| {
-            let b = m.bounds;
-            x >= b.left() && x < b.right() && y >= b.top() && y < b.bottom()
-        })
-        .copied()
-}
-
-/// The monitor the virtual cursor is over.
-fn monitor_under_cursor(state: &UiSharedState) -> Option<UiMonitor> {
-    monitor_at(
-        &state.monitors,
-        state.virtual_cursor.x.round() as i32,
-        state.virtual_cursor.y.round() as i32,
-    )
+    let index = monitor_index_at(monitors, ScreenPointF::new(x as f32, y as f32))?;
+    monitors.get(index).copied()
 }
 
 /// The monitor whose bounds contain the center of `rect`.
@@ -148,107 +182,6 @@ pub fn active_panel_set(captured: bool, scroll_pick_mode: bool, ocr: &OcrState) 
     Some(PanelButtonSet::Normal)
 }
 
-/// Whether a worker draws its egui frame this broadcast.
-///
-/// Deliberately not part of `active_panel_set`: the Q toggle is about
-/// *drawing*, not about which buttons are live. The app thread keeps
-/// routing clicks while overlays are hidden (that is pre-existing
-/// behaviour), so folding this gate into the shared function would
-/// silently change it.
-pub fn egui_draw_visible(state: &UiSharedState) -> bool {
-    state.overlays_visible
-}
-
-/// Decide whether the tips panel is visible and on which monitor.
-/// Follows the cursor — shown on whichever monitor contains it.
-pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
-    if !state.overlays_visible {
-        return None;
-    }
-    if state.captured || state.mouse_down || !state.tips_mode.show_tips_panel() || state.debug_visible {
-        return None;
-    }
-    let cx = state.virtual_cursor.x.round() as i32;
-    let cy = state.virtual_cursor.y.round() as i32;
-    let idx = state.monitors.iter().position(|m| {
-        let b = m.bounds;
-        cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
-    })?;
-    let monitor = *state.monitors.get(idx)?;
-    Some((idx, monitor))
-}
-
-/// Result of evaluating the area-indicator visibility rule.
-pub struct AreaIndicatorVisibility {
-    pub monitor: UiMonitor,
-}
-
-/// Decide whether the in-selection area indicator ("W × H" pill) is
-/// visible and on which monitor. Shown on the monitor containing the
-/// cursor, only while a selection exists but has not yet been captured.
-pub fn area_indicator_visibility(state: &UiSharedState) -> Option<AreaIndicatorVisibility> {
-    if !state.overlays_visible {
-        return None;
-    }
-    if state.captured {
-        return None;
-    }
-    let _sel = state.selection?;
-    let cx = state.virtual_cursor.x.round() as i32;
-    let cy = state.virtual_cursor.y.round() as i32;
-    let monitor = state.monitors.iter().find(|m| {
-        let b = m.bounds;
-        cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
-    })?;
-    Some(AreaIndicatorVisibility {
-        monitor: *monitor,
-    })
-}
-
-/// Decide whether the floating hint tooltips are visible and on which
-/// monitor. Follows the cursor — only shown in `Hints` mode.
-/// Exception: when zoomed in, the magnifier hint stays visible even
-/// with overlays off (the renderer decides which hints to show) so the
-/// user can always find their way out of the magnifier. Zoom does *not*
-/// override the mode gate: `Off`/`Tips` never show floating hints.
-pub fn hints_visibility(state: &UiSharedState) -> Option<UiMonitor> {
-    if !state.tips_mode.show_hints() {
-        return None;
-    }
-    let zoomed = state.zoom > 1.0;
-    if !zoomed && !state.overlays_visible {
-        return None;
-    }
-    if state.captured || state.mouse_down {
-        return None;
-    }
-    monitor_under_cursor(state)
-}
-
-/// Decide whether the scroll-point picker's scope reticle (and the one
-/// hint that goes with it) is visible, and which monitor the cursor is on.
-///
-/// While this is `Some`, the picker owns the overlay: every other hint,
-/// the tips panel, the button panel and the selection's resize handles are
-/// suppressed, because the only input the overlay is waiting for is one
-/// click anywhere inside the selection.
-///
-/// The returned monitor is where the *hint* goes. The reticle itself is
-/// drawn by every monitor within `SCOPE_EXTENT` of the cursor, so it is not
-/// cut in half at a seam — see `ui::gpu::hints`.
-///
-/// The magnifier's Q toggle still hides everything, hence the
-/// `overlays_visible` gate. `app::update_cursor_visibility` carries the
-/// same gate: if this returns `None` the OS pointer must come back, or
-/// there would be no pointer at all. Unreachable today (Q is swallowed
-/// while picking) but the two must not drift apart.
-pub fn scroll_pick_visibility(state: &UiSharedState) -> Option<UiMonitor> {
-    if !state.scroll_pick_mode || !state.overlays_visible {
-        return None;
-    }
-    monitor_under_cursor(state)
-}
-
 /// Whether the per-monitor debug panel is visible. Shown on **every**
 /// monitor when the `D`-key toggle is on, so it needs no monitor at all.
 ///
@@ -283,34 +216,6 @@ mod tests {
             bounds: ScreenRect::from_xy_size(0, 0, 200, 120),
             dpi_scale: 1.0,
             is_primary: true,
-        }
-    }
-
-    fn state() -> UiSharedState {
-        UiSharedState {
-            monitors: Arc::from([monitor()]),
-            selection: Some(ScreenRect::from_xy_size(20, 20, 80, 40)),
-            selection_radius: 0.0,
-            captured: false,
-            mouse_down: false,
-            dragging: false,
-            zoom: 1.0,
-            virtual_cursor: ScreenPointF::new(30.0, 30.0),
-            accent_color: [1.0, 0.0, 0.0, 1.0],
-            tips_mode: TipsMode::Tips,
-            debug_visible: false,
-            overlays_visible: true,
-            hovered_monitor_name: None,
-            hovered_window_title: None,
-            cursor_overlay_visible: true,
-            hovered_pixel_bgra: None,
-            cursor_image_rect: None,
-            show_scroll_hint: false,
-            has_used_magnifier: false,
-            scroll_pick_mode: false,
-            ocr: OcrState::Idle,
-            ocr_notice: None,
-            egui: Arc::from([]),
         }
     }
 
@@ -370,16 +275,6 @@ mod tests {
         assert_eq!(active_panel_set(true, false, &retracting), Some(PanelButtonSet::Normal));
     }
 
-    /// The broadcast carries the egui frames unconditionally; the Q
-    /// toggle only gates whether a worker paints them.
-    #[test]
-    fn egui_draw_gate_follows_the_overlay_toggle() {
-        let mut s = state();
-        assert!(egui_draw_visible(&s));
-        s.overlays_visible = false;
-        assert!(!egui_draw_visible(&s));
-    }
-
     /// Scroll picking outranks OCR mode: the panel is gone entirely, so
     /// there is no set to argue about. (Unreachable today — the two modes
     /// cannot both be engaged — but the ordering is what makes that true.)
@@ -398,74 +293,19 @@ mod tests {
         assert_eq!(active_panel_set(false, false, &lifted), None);
     }
 
+    /// Negative-origin virtual desktops (a monitor left of the primary)
+    /// are the case the offset math historically gets wrong. Moved here
+    /// with the rule itself, which every straddling overlay now shares.
     #[test]
-    fn scroll_pick_reticle_follows_the_cursor_and_obeys_the_overlay_toggle() {
-        let mut s = state();
-        s.captured = true;
-
-        // Not picking: no reticle, even though a selection is captured.
-        assert!(scroll_pick_visibility(&s).is_none());
-
-        s.scroll_pick_mode = true;
-        assert!(scroll_pick_visibility(&s).is_some());
-
-        // Cursor off every monitor — nothing to draw it on.
-        s.virtual_cursor = ScreenPointF::new(1000.0, 30.0);
-        assert!(scroll_pick_visibility(&s).is_none());
-        s.virtual_cursor = ScreenPointF::new(30.0, 30.0);
-
-        s.overlays_visible = false;
-        assert!(scroll_pick_visibility(&s).is_none());
-    }
-
-    #[test]
-    fn tips_hide_during_capture_mouse_down_or_debug() {
-        let mut s = state();
-
-        assert!(tips_visibility(&s).is_some());
-        s.mouse_down = true;
-        assert!(tips_visibility(&s).is_none());
-        s.mouse_down = false;
-        s.debug_visible = true;
-        assert!(tips_visibility(&s).is_none());
-        s.debug_visible = false;
-        s.captured = true;
-        assert!(tips_visibility(&s).is_none());
-    }
-
-    #[test]
-    fn area_indicator_visible_only_for_uncaptured_selection() {
-        let mut s = state();
-
-        assert!(area_indicator_visibility(&s).is_some());
-        s.captured = true;
-        assert!(area_indicator_visibility(&s).is_none());
-        s.captured = false;
-        s.selection = None;
-        assert!(area_indicator_visibility(&s).is_none());
-    }
-
-    #[test]
-    fn hints_only_in_hints_mode_even_when_zoomed() {
-        let mut s = state();
-
-        // Hints mode: shown normally, and still shown when zoomed with
-        // overlays toggled off (the exit-magnifier hint must survive).
-        s.tips_mode = TipsMode::Hints;
-        assert!(hints_visibility(&s).is_some());
-        s.zoom = 2.0;
-        s.overlays_visible = false;
-        assert!(hints_visibility(&s).is_some());
-
-        // Off / Tips modes: zoom must NOT force the floating hints on.
-        for mode in [TipsMode::Off, TipsMode::Tips] {
-            s.tips_mode = mode;
-            s.zoom = 1.0;
-            s.overlays_visible = true;
-            assert!(hints_visibility(&s).is_none(), "{mode:?} at zoom 1 should hide hints");
-            s.zoom = 2.0;
-            assert!(hints_visibility(&s).is_none(), "{mode:?} when zoomed should still hide hints");
-        }
+    fn aabb_intersects_negative_coordinates() {
+        let a = ScreenRectF::from_exact(-1920.0, 0.0, -1820.0, 50.0);
+        assert!(aabb_intersects(a, ScreenRectF::from_exact(-1920.0, 0.0, 0.0, 1080.0)));
+        assert!(!aabb_intersects(a, ScreenRectF::from_exact(0.0, 0.0, 1920.0, 1080.0)));
+        // Touching edges do not count — the neighbouring monitor draws it.
+        assert!(!aabb_intersects(
+            ScreenRectF::from_exact(0.0, 0.0, 10.0, 10.0),
+            ScreenRectF::from_exact(10.0, 0.0, 20.0, 10.0)
+        ));
     }
 
     #[test]

@@ -172,21 +172,17 @@ mod tests {
         let _peek = create_peek_gpu(&device);
         let _selection = overlay::create_selection_pipeline(&device);
         let _crosshair = overlay::create_crosshair_pipeline(&device);
-        let _rect = crate::ui::gpu::rect::RectPipeline::new(&device);
         let _egui = crate::ui::gpu::egui_painter::EguiPainter::new(&device);
-        let _lift = crate::ui::gpu::lift::LiftPipeline::new(&device);
-        let _atlas = crate::ui::gpu::glyph::GlyphAtlas::new(&device);
-        let _glyphs = crate::ui::gpu::glyph::GlyphRenderer::new(&device);
 
         // The bind-group tables the constructors above do NOT build —
         // Desktop (the largest register walk, mixed VS/PS visibility, and
         // the frame-0 critical path), Peek and Egui — plus both queue
-        // upload paths (write_buffer: d3d11 Map/WRITE_DISCARD incl. its
-        // size assert; write_texture: UpdateSubresource with a
-        // sub-rectangle D3D11_BOX, the atlas path). On d3d11 this
+        // upload paths (write_buffer: d3d11 Map/WRITE_DISCARD incl. its size
+        // assert; write_texture: UpdateSubresource with a sub-rectangle
+        // D3D11_BOX, the path egui's font atlas takes). On d3d11 this
         // validates the runtime b/t/s register recomputation and
         // per-stage slot split against each table — the exact contract
-        // shared with build.rs — not just the three smallest tables.
+        // shared with build.rs.
         use crate::gxi::{BindingRes, TexFormat, TextureDesc};
         let tex_desc = |label| TextureDesc {
             label,

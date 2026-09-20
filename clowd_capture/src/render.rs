@@ -13,8 +13,7 @@ use crate::interaction::OcrState;
 use crate::sync::ReadyGuard;
 use crate::telemetry::perf::{PerfSample, PerfSlot, PerfTracker, Series};
 use crate::telemetry::startup::{AtomicDuration, StartupTimings, WorkerTimings};
-use crate::ui::gpu::renderer::{UiPipelines, UiText};
-use crate::ui::gpu::text::TextStack;
+use crate::ui::gpu::egui_painter::EguiPainter;
 use crate::ui::gpu::UiRenderer;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
@@ -38,11 +37,12 @@ use worker::RenderWorkerParams;
 /// Frame 0 draws one triangle with the desktop pipeline: `UiRenderer::draw`
 /// is a no-op there (no `UiSharedState` exists until after the visible
 /// latch, so `prepare` stages nothing) and the peek quad needs a hovered
-/// window, which needs a visible overlay. So the whole UI stack — three
-/// pipelines, the glyph atlas + text renderers, ~2.4 MB of embedded fonts
-/// into fontdb, 11 usvg parses — plus the peek pipeline used to sit on the
-/// critical path buying nothing: ~185 ms cold on macOS, 15-60 ms on every
-/// Windows launch.
+/// window, which needs a visible overlay. So the UI painter and the peek
+/// pipeline used to sit on the critical path buying nothing: ~185 ms cold
+/// on macOS, 15-60 ms on every Windows launch. (Fonts, the glyph atlas and
+/// the icon rasterisation are no longer part of it at all: egui owns them
+/// on the app thread now, and pays for them on the first pass that needs
+/// them.)
 ///
 /// It is built on a side thread started the moment the device exists, so it
 /// overlaps the screenshot wait, the window handoff and frame 0 itself. It is
@@ -50,13 +50,13 @@ use worker::RenderWorkerParams;
 /// the software cursor and the crosshair are all Stage-A pipelines — and
 /// polls the handle each iteration, folding the stack in the moment it
 /// lands. On a warm start that is before the overlay is even visible; on a
-/// cold one (driver shader cache empty, the embedded fonts and DLLs not yet
-/// paged in) the build can take a second or more, and an earlier revision
-/// that joined it right after the show gate produced exactly the symptom
-/// this split was meant to kill: overlay on screen, then frozen with no
-/// cursor until the compile finished. Until it lands the user sees the
-/// desktop, the cursor and the selection responding, with the panel, hints
-/// and peek arriving when ready.
+/// cold one (driver shader cache empty, the DLLs not yet paged in) the
+/// build can take a second or more, and an earlier revision that joined it
+/// right after the show gate produced exactly the symptom this split was
+/// meant to kill: overlay on screen, then frozen with no cursor until the
+/// compile finished. Until it lands the user sees the desktop, the cursor
+/// and the selection responding, with the panel, hints and peek arriving
+/// when ready.
 struct DeferredStack {
     peek: gpu::PeekGpu,
     selection: gxi::RenderPipeline,
@@ -90,43 +90,32 @@ fn spawn_deferred_stack(
                 }
             };
 
-            // Three concurrent jobs, longest first on this thread: the
-            // glyph/SVG job is the heavy one (font parse + atlas + ~30
-            // shaped buffers + 11 SVG trees), so it runs here while the
-            // pipeline compiles and the peek compile occupy their own
-            // threads. `scope` lets all of them borrow the one device.
-            let (peek, selection, pipelines, text) = thread::scope(|s| {
+            // Two jobs: peek and the selection pass compile back to back
+            // on one helper thread while the egui painter compiles here.
+            // `scope` lets both borrow the one device. A third thread
+            // would only contend on the platform shader compiler, which is
+            // the real serialization point — `create_pipeline` takes no
+            // device-wide lock on either backend.
+            let (peek, selection, egui) = thread::scope(|s| {
                 let peek = s.spawn(|| {
                     crate::system::lower_thread_priority();
-                    // Peek and the selection pass compile back to back on
-                    // this helper thread — both are small, and a fourth
-                    // thread would only contend on the platform shader
-                    // compiler (see the note below).
                     let peek = gpu::create_peek_gpu(&device);
                     let selection = gpu::overlay::create_selection_pipeline(&device);
                     (peek, selection)
                 });
-                let pipelines = s.spawn(|| {
-                    crate::system::lower_thread_priority();
-                    UiPipelines::build_parallel(&device)
-                });
-                let text_stack = TextStack::new(&device);
-                mark(|t| &t.prep_fonts);
-                let text = UiText::new(text_stack);
+                let egui = EguiPainter::new(&device);
                 let (peek, selection) = peek.join().expect("peek pipeline thread");
-                (peek, selection, pipelines.join().expect("ui pipeline thread"), text)
+                (peek, selection, egui)
             });
-            // Both marks now measure DEFERRED work running beside the
-            // critical path, not work on it — they no longer sit between
-            // `prep_pipelines` and `render_prep` in wall-clock order, and
-            // because the two jobs run concurrently `prep_fonts` can land
-            // before `prep_ui_pipelines`.
+            // The mark measures DEFERRED work running beside the critical
+            // path, not work on it: it no longer sits between
+            // `prep_pipelines` and `render_prep` in wall-clock order.
             mark(|t| &t.prep_ui_pipelines);
 
             DeferredStack {
                 peek,
                 selection,
-                ui: UiRenderer::from_parts(pipelines, text, this_monitor, monitor_index),
+                ui: UiRenderer::new(egui, this_monitor, monitor_index),
             }
         })
         .expect("spawn ui builder")
@@ -531,7 +520,7 @@ fn render_worker_main(
     // gate opening and the first loop iteration — is what made a cold start
     // feel worse than the old blocking layout. The overlay was on screen
     // (frame 0, hardware cursor hidden) while this thread sat in `join()`
-    // for however long a cold shader compile + font/SVG parse took, so
+    // for however long a cold shader compile took, so
     // nothing followed the mouse and nothing drew. Warm the build is long
     // done by now and the first iteration picks it up immediately.
     let mut gpu = gpu::finalize_window_gpu(bundle, snapshot);
@@ -579,9 +568,9 @@ fn render_worker_main(
     let mut ocr: OcrState = OcrState::Idle;
     let mut last_iter = Instant::now();
     // Snapshot publishing state: a monotonic sequence the app thread
-    // compares against, and the wall clock that paces publication.
+    // compares against. One snapshot per frame while the panels are up —
+    // the plot is only as smooth as the samples reaching it.
     let mut perf_seq: u64 = 0;
-    let mut last_snapshot: Option<Instant> = None;
 
     loop {
         // Fold the deferred build in the iteration it finishes. `is_finished`
@@ -601,10 +590,8 @@ fn render_worker_main(
                     mut ui,
                 })) => {
                     info!("render worker {monitor_index}: deferred UI stack folded in");
-                    // No previous cycle's UI may composite into the first UI
-                    // frames, and the animation clock (border trail) starts
-                    // from the moment the chrome appears rather than from
-                    // build time. The state that arrived meanwhile goes in
+                    // No previous cycle's UI may composite into the first
+                    // UI frames. The state that arrived meanwhile goes in
                     // AFTER the reset, which would otherwise clear it.
                     ui.begin_cycle();
                     if let Some(state) = pending_ui_state.take() {
@@ -931,17 +918,14 @@ fn render_worker_main(
 
         if debug_visible {
             // The stats cache refreshes one series per frame on a six-slot
-            // rotation, so the three series the panel shows have to be asked
-            // for every frame; asking only when a snapshot is built would
-            // leave each of them six snapshots stale.
+            // rotation, so the three series the panel shows have to be
+            // asked for every frame or each of them would lag the snapshot
+            // it is published in.
             perf.stats(Series::Cpu);
             perf.stats(Series::Gpu);
             perf.stats(Series::Overall);
-            if last_snapshot.is_none_or(|t| t.elapsed() >= Duration::from_millis(100)) {
-                perf_seq += 1;
-                *perf_slot.lock().unwrap() = Some(Arc::new(perf.snapshot(perf_seq, &adapter_name)));
-                last_snapshot = Some(Instant::now());
-            }
+            perf_seq += 1;
+            *perf_slot.lock().unwrap() = Some(Arc::new(perf.snapshot(perf_seq, &adapter_name)));
         }
     }
 }

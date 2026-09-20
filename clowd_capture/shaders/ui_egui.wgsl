@@ -1,7 +1,7 @@
 // egui triangle-list pipeline (port of egui-wgpu's egui.wgsl, gamma-framebuffer path only).
 // Vertex colours are gamma-space PREMULTIPLIED sRGBA (epaint::Vertex); textures are
 // Rgba8Unorm holding the same encoding; the surface is BGRA8 non-sRGB, so the product
-// is written raw, the same convention as ui_rect.wgsl. Pair with BlendMode::PremultipliedAlpha.
+// is written raw with no conversion. Pair with BlendMode::PremultipliedAlpha.
 
 struct Locals {
     screen_size: vec2<f32>,   // POINTS (surface px / pixels_per_point)

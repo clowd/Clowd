@@ -5,13 +5,13 @@
 //! space and paint into it, so the tray body under them is dead in the
 //! same way the retired composer's chassis was.
 
-use egui::load::SizedTexture;
 use egui::text::{LayoutJob, TextFormat};
 use egui::{
-    Align2, AtomExt as _, AtomLayout, Color32, Direction, Frame, Id, Image, Margin, Response, RichText, Sense, TextStyle, Ui, Vec2,
-    WidgetText,
+    Align2, AtomExt as _, AtomLayout, Color32, Direction, Frame, Id, Image, ImageSource, Margin, Response, RichText, Sense, TextStyle, Ui,
+    Vec2, WidgetText,
 };
 
+use super::assets;
 use super::model::ButtonDef;
 use super::theme::{self, tokens};
 
@@ -20,7 +20,7 @@ use super::theme::{self, tokens};
 /// side in a square, `below` stacks them.
 pub struct StackedButton {
     pub id: Id,
-    pub icon: SizedTexture,
+    pub icon: ImageSource<'static>,
     pub text: WidgetText,
     pub min_size: Vec2,
     pub direction: Direction,
@@ -30,8 +30,13 @@ pub struct StackedButton {
 
 impl StackedButton {
     pub fn show(self, ui: &mut Ui) -> Response {
-        let icon = Image::from_texture(self.icon)
+        // The loader rasterises the mark at the exact pixel size this
+        // quad covers on this host, so it is 1:1 at every DPI. Never a
+        // spinner: `assets::preload` has already loaded (or logged) it,
+        // and the loader is synchronous anyway.
+        let icon = Image::new(self.icon.clone())
             .fit_to_exact_size(tokens::ICON_SIZE)
+            .show_loading_spinner(false)
             .atom_size(tokens::ICON_SIZE);
         let layout = AtomLayout::new((icon, self.text))
             .id(self.id)
@@ -62,7 +67,7 @@ impl StackedButton {
 
 /// `key` style: a 40 pt square, the icon beside the dim accelerator
 /// letter.
-pub fn key_hint_button(def: &ButtonDef, icon: SizedTexture, id: Id, min_size: Vec2) -> StackedButton {
+pub fn key_hint_button(def: &ButtonDef, id: Id, min_size: Vec2) -> StackedButton {
     let letter = RichText::new(
         def.accel_key()
             .to_ascii_uppercase()
@@ -72,7 +77,7 @@ pub fn key_hint_button(def: &ButtonDef, icon: SizedTexture, id: Id, min_size: Ve
     .color(tokens::FG_45);
     StackedButton {
         id,
-        icon,
+        icon: def.icon.source(),
         text: letter.into(),
         min_size,
         direction: Direction::LeftToRight,
@@ -83,10 +88,10 @@ pub fn key_hint_button(def: &ButtonDef, icon: SizedTexture, id: Id, min_size: Ve
 
 /// `below` style: 48 pt tall, the icon over the Title-case label with the
 /// accelerator glyph underlined.
-pub fn below_button(def: &ButtonDef, icon: SizedTexture, id: Id, min_size: Vec2) -> StackedButton {
+pub fn below_button(def: &ButtonDef, id: Id, min_size: Vec2) -> StackedButton {
     StackedButton {
         id,
-        icon,
+        icon: def.icon.source(),
         text: WidgetText::from(underlined_label(def)),
         min_size,
         direction: Direction::TopDown,
@@ -134,9 +139,9 @@ pub fn readout_job(size: (i32, i32)) -> LayoutJob {
         halign: egui::Align::Center,
         ..Default::default()
     };
-    job.append(&format!("{}\n", size.0), 0.0, f(theme::MONO_BOLD.clone(), tokens::FG_80));
+    job.append(&format!("{}\n", size.0), 0.0, f(crate::ui::fonts::MONO_BOLD.clone(), tokens::FG_80));
     job.append("\u{00D7}\n", 0.0, f(egui::FontFamily::Monospace, tokens::FG_70));
-    job.append(&size.1.to_string(), 0.0, f(theme::MONO_BOLD.clone(), tokens::FG_80));
+    job.append(&size.1.to_string(), 0.0, f(crate::ui::fonts::MONO_BOLD.clone(), tokens::FG_80));
     job
 }
 
@@ -156,11 +161,14 @@ pub fn readout(ui: &mut Ui, size: (i32, i32), slot: Vec2) -> egui::Rect {
 
 /// The emblem in a dead slot: no fill, no hover, the mark centred at its
 /// own size (the brand blue is baked into the SVG).
-pub fn emblem(ui: &mut Ui, tex: SizedTexture, slot: Vec2) -> egui::Rect {
+pub fn emblem(ui: &mut Ui, slot: Vec2) -> egui::Rect {
     let (rect, _) = ui.allocate_exact_size(slot, Sense::hover());
     let mark = Vec2::splat(tokens::EMBLEM_MARK);
-    Image::from_texture(tex)
+    // `paint_at` rounds its rect to whole pixels and asks the loader for
+    // exactly that many, so the mark is 1:1 at every DPI.
+    Image::new(assets::CLOWD_LOGO.source())
         .fit_to_exact_size(mark)
+        .show_loading_spinner(false)
         .paint_at(ui, egui::Rect::from_center_size(rect.center(), mark));
     rect
 }

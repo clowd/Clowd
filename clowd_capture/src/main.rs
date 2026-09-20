@@ -23,7 +23,6 @@ mod sync;
 mod system;
 mod telemetry;
 mod ui;
-mod ui_state;
 
 #[macro_use]
 extern crate log;

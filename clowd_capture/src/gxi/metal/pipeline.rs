@@ -97,18 +97,6 @@ impl Device {
                 attachment.setDestinationAlphaBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
                 attachment.setAlphaBlendOperation(MTLBlendOperation::Add);
             }
-            // Straight-alpha color + premultiplied alpha channel (the
-            // glyph pipeline, pixel-identical to glyphon's blend state).
-            // The asymmetry is deliberate - do not simplify.
-            BlendMode::StraightAlpha => {
-                attachment.setBlendingEnabled(true);
-                attachment.setSourceRGBBlendFactor(MTLBlendFactor::SourceAlpha);
-                attachment.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
-                attachment.setRgbBlendOperation(MTLBlendOperation::Add);
-                attachment.setSourceAlphaBlendFactor(MTLBlendFactor::One);
-                attachment.setDestinationAlphaBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
-                attachment.setAlphaBlendOperation(MTLBlendOperation::Add);
-            }
         }
 
         let raw = device
@@ -151,7 +139,6 @@ fn vertex_descriptor(v: &VertexLayout) -> Retained<MTLVertexDescriptor> {
             .objectAtIndexedSubscript(VERTEX_BUFFER_INDEX);
         layout.setStride(v.stride as usize);
         layout.setStepFunction(match v.step {
-            VertexStep::Instance => MTLVertexStepFunction::PerInstance,
             VertexStep::Vertex => MTLVertexStepFunction::PerVertex,
         });
         layout.setStepRate(1);
@@ -162,8 +149,6 @@ fn vertex_descriptor(v: &VertexLayout) -> Retained<MTLVertexDescriptor> {
 fn vertex_format(f: VertexFormat) -> MTLVertexFormat {
     match f {
         VertexFormat::Float32x2 => MTLVertexFormat::Float2,
-        VertexFormat::Float32x4 => MTLVertexFormat::Float4,
-        VertexFormat::Sint32x2 => MTLVertexFormat::Int2,
         VertexFormat::Uint32 => MTLVertexFormat::UInt,
     }
 }
