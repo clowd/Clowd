@@ -7,10 +7,12 @@
 //! both the tray and the accelerator lookup read that one filtered view,
 //! so a switched-off button is unreachable by mouse AND by key.
 //!
-//! Every button is drawn the same way (segment, icon over label, the
-//! accelerator glyph underlined): there is no primary/secondary
-//! distinction. The `below` style sizes each button from its laid-out
-//! label, so the label text is geometry as much as it is copy.
+//! The buttons sit in groups ([`ButtonGroup`]): consecutive runs of the
+//! table that share one rounded fill, the primary group in the user's
+//! accent and the others in the segment grey. A button has no fill of its
+//! own; only the hovered one lights up, inside its group. The `below`
+//! style sizes each button from its laid-out label, so the label text is
+//! geometry as much as it is copy.
 
 use crate::ui::command::Command;
 
@@ -86,8 +88,9 @@ impl PanelFeatures {
 /// Which strip of buttons the panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelButtonSet {
-    /// The capture strip: UPLOAD / EDIT / VIDEO / SHARE / SCROLL /
-    /// COPY / SAVE / OCR / RESET / EXIT (SCROLL and OCR are Windows-only).
+    /// The capture strip: [UPLOAD / EDIT / VIDEO / COPY / SAVE]
+    /// [SHARE / SCROLL / OCR] [RESET / EXIT] (SCROLL and OCR are
+    /// Windows-only).
     Normal,
     /// The strip shown while the OCR overlay owns the selection.
     Ocr,
@@ -109,6 +112,36 @@ impl PanelButtonSet {
         }
     }
 
+    /// How [`Self::defs`] is cut into groups, in strip order. The lengths
+    /// sum to the table's length (a test pins it).
+    pub const fn groups(self) -> &'static [ButtonGroup] {
+        match self {
+            Self::Normal => NORMAL_GROUPS,
+            Self::Ocr => OCR_GROUPS,
+        }
+    }
+
+    /// The groups this set actually shows under `features`, in strip
+    /// order, each with its visible buttons as [`Self::visible_defs`]
+    /// yields them. A group every button of which is switched off is
+    /// dropped altogether: no empty fill, no gap.
+    pub fn visible_groups(self, features: PanelFeatures) -> Vec<(GroupTone, Vec<(usize, &'static ButtonDef)>)> {
+        let defs = self.defs();
+        let mut start = 0;
+        self.groups()
+            .iter()
+            .filter_map(|g| {
+                let end = start + g.len;
+                let members: Vec<_> = (start..end)
+                    .map(|i| (i, &defs[i]))
+                    .filter(|(_, def)| features.allows(def.command))
+                    .collect();
+                start = end;
+                (!members.is_empty()).then_some((g.tone, members))
+            })
+            .collect()
+    }
+
     /// The buttons this set actually shows under `features`, in the same
     /// order, each with its index into [`Self::defs`] — the single
     /// definition of "the strip on screen", shared by `show` and the
@@ -121,6 +154,41 @@ impl PanelButtonSet {
             .enumerate()
             .filter(move |(_, def)| features.allows(def.command))
     }
+}
+
+/// What the tray's readout slot shows beside the emblem.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Readout {
+    /// The capture strip: the selection's size, "W / × / H".
+    Size { width: i32, height: i32 },
+    /// The OCR strip: how many words were lifted, "N / words".
+    Words(usize),
+}
+
+impl Readout {
+    /// The word count of a lifted result: whitespace-separated runs of
+    /// the newline-joined `full_text`, which is what COPY hands over.
+    pub fn words_in(text: &str) -> Self {
+        Self::Words(text.split_whitespace().count())
+    }
+}
+
+/// Which fill a group of buttons sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupTone {
+    /// The user's capture accent: the actions that finish the capture.
+    Primary,
+    /// The segment grey (`theme::tokens::SEG_FILL`).
+    Secondary,
+}
+
+/// A run of consecutive buttons in a set's table that share one rounded
+/// fill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ButtonGroup {
+    pub tone: GroupTone,
+    /// How many table entries this group covers.
+    pub len: usize,
 }
 
 /// How a button presents its def. Chosen once per run by `--panel-buttons`.
@@ -159,28 +227,27 @@ pub struct ButtonDef {
     pub icon: &'static super::assets::Svg,
 }
 
-/// The capture-mode panel buttons in strip order.
+/// The capture-mode panel buttons in strip order, cut by
+/// [`NORMAL_GROUPS`] into three groups.
 ///
-/// SHARE and SCROLL sit after VIDEO because they are the other "hand off
-/// to a capture driver" actions — SHARE first, since like VIDEO it hands
-/// the region to a live helper rather than producing a file. OCR sits
-/// last of the actions, immediately left of RESET: it does not finish
-/// the capture the way the others do, it swaps the strip for a second
-/// round of decisions.
+/// The primary group (accent) is the five actions that finish the
+/// capture with the image as it is. The second group is the hand-offs:
+/// SHARE and SCROLL give the region to a live helper, OCR swaps the strip
+/// for a second round of decisions. The last group is the two ways out.
 ///
 /// Accelerator keys (not stored — derived from `underline_idx`):
 ///   0: Upload — U   (0x55)
 ///   1: Edit   — E
 ///   2: Video  — V   (0x56)
-///   3: Share  — H   (0x48), underlined on the second char because every
+///   3: Copy   — C   (0x43)
+///   4: Save   — S   (0x53)
+///   5: Share  — H   (0x48), underlined on the second char because every
 ///      other letter of Share is spoken for (S=Save, A/R/E=Edit, Reset).
 ///      'h' is also the pre-capture color-sampler key, which does not
 ///      collide: that branch only runs while nothing is captured, and the
 ///      panel — and therefore this lookup — only exists once something is.
-///   4: Scroll — L   (0x4C), underlined on the fifth char because
+///   6: Scroll — L   (0x4C), underlined on the fifth char because
 ///      S, C and R already belong to Save, Copy and Reset
-///   5: Copy   — C   (0x43)
-///   6: Save   — S   (0x53)
 ///   7: OCR    — O   (0x4F)
 ///   8: Reset  — R   (0x52)
 ///   9: Exit   — X   (0x58), underlined on the second char
@@ -204,18 +271,6 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         icon: &super::assets::VIDEO,
     },
     ButtonDef {
-        command: Command::Share,
-        label: "Share",
-        underline_idx: 1,
-        icon: &super::assets::SHARE,
-    },
-    ButtonDef {
-        command: Command::ScrollCapture,
-        label: "Scroll",
-        underline_idx: 4,
-        icon: &super::assets::SCROLL,
-    },
-    ButtonDef {
         command: Command::Copy,
         label: "Copy",
         underline_idx: 0,
@@ -226,6 +281,18 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         label: "Save",
         underline_idx: 0,
         icon: &super::assets::SAVE,
+    },
+    ButtonDef {
+        command: Command::Share,
+        label: "Share",
+        underline_idx: 1,
+        icon: &super::assets::SHARE,
+    },
+    ButtonDef {
+        command: Command::ScrollCapture,
+        label: "Scroll",
+        underline_idx: 4,
+        icon: &super::assets::SCROLL,
     },
     ButtonDef {
         command: Command::Ocr,
@@ -244,6 +311,22 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         label: "Exit",
         underline_idx: 1,
         icon: &super::assets::EXIT,
+    },
+];
+
+/// [Upload Edit Video Copy Save] [Share Scroll OCR] [Reset Exit].
+const NORMAL_GROUPS: &[ButtonGroup] = &[
+    ButtonGroup {
+        tone: GroupTone::Primary,
+        len: 5,
+    },
+    ButtonGroup {
+        tone: GroupTone::Secondary,
+        len: 3,
+    },
+    ButtonGroup {
+        tone: GroupTone::Secondary,
+        len: 2,
     },
 ];
 
@@ -283,6 +366,18 @@ const OCR_DEFS: &[ButtonDef] = &[
         label: "Exit",
         underline_idx: 1,
         icon: &super::assets::EXIT,
+    },
+];
+
+/// [Upload Search Copy] [Back Exit].
+const OCR_GROUPS: &[ButtonGroup] = &[
+    ButtonGroup {
+        tone: GroupTone::Primary,
+        len: 3,
+    },
+    ButtonGroup {
+        tone: GroupTone::Secondary,
+        len: 2,
     },
 ];
 
@@ -569,7 +664,7 @@ mod tests {
             .collect();
         assert_eq!(
             normal,
-            ["Upload", "Edit", "Video", "Share", "Scroll", "Copy", "Save", "OCR", "Reset", "Exit"]
+            ["Upload", "Edit", "Video", "Copy", "Save", "Share", "Scroll", "OCR", "Reset", "Exit"]
         );
         let ocr: Vec<&str> = PanelButtonSet::Ocr
             .defs()
@@ -577,6 +672,97 @@ mod tests {
             .map(|d| d.label)
             .collect();
         assert_eq!(ocr, ["Upload", "Search", "Copy", "Back", "Exit"]);
+    }
+
+    /// The group lengths are a partition of the table: a length that
+    /// drifts from the table would silently drop a button off the strip
+    /// (or index past it).
+    #[test]
+    fn groups_partition_each_table() {
+        for set in PanelButtonSet::ALL {
+            let total: usize = set.groups().iter().map(|g| g.len).sum();
+            assert_eq!(total, set.defs().len(), "{set:?}");
+            assert!(set.groups().iter().all(|g| g.len > 0), "{set:?} has an empty group");
+        }
+    }
+
+    /// The design: the accent group holds the actions that finish the
+    /// capture, the grey groups the hand-offs and the ways out.
+    #[test]
+    fn groups_match_the_design() {
+        let labels = |set: PanelButtonSet| -> Vec<(GroupTone, Vec<&str>)> {
+            set.visible_groups(PanelFeatures::ALL)
+                .into_iter()
+                .map(|(tone, members)| {
+                    (
+                        tone,
+                        members
+                            .iter()
+                            .map(|(_, d)| d.label)
+                            .collect(),
+                    )
+                })
+                .collect()
+        };
+        assert_eq!(
+            labels(PanelButtonSet::Normal),
+            vec![
+                (GroupTone::Primary, vec!["Upload", "Edit", "Video", "Copy", "Save"]),
+                (GroupTone::Secondary, vec!["Share", "Scroll", "OCR"]),
+                (GroupTone::Secondary, vec!["Reset", "Exit"]),
+            ]
+        );
+        assert_eq!(
+            labels(PanelButtonSet::Ocr),
+            vec![
+                (GroupTone::Primary, vec!["Upload", "Search", "Copy"]),
+                (GroupTone::Secondary, vec!["Back", "Exit"]),
+            ]
+        );
+    }
+
+    /// Flattening the visible groups gives exactly `visible_defs`, under
+    /// every switch combination, and a group whose every button is off
+    /// vanishes rather than leaving an empty fill behind.
+    #[test]
+    fn visible_groups_flatten_to_visible_defs_and_never_empty() {
+        for set in PanelButtonSet::ALL {
+            for features in FEATURE_COMBINATIONS {
+                let groups = set.visible_groups(features);
+                assert!(groups.iter().all(|(_, m)| !m.is_empty()), "{set:?} {features:?}");
+                let flat: Vec<usize> = groups
+                    .iter()
+                    .flat_map(|(_, m)| m.iter().map(|(i, _)| *i))
+                    .collect();
+                let expected: Vec<usize> = set
+                    .visible_defs(features)
+                    .map(|(i, _)| i)
+                    .collect();
+                assert_eq!(flat, expected, "{set:?} {features:?}");
+            }
+        }
+        let no_handoffs = PanelFeatures {
+            share: false,
+            scroll_capture: false,
+            ocr: false,
+            ..PanelFeatures::ALL
+        };
+        assert_eq!(
+            PanelButtonSet::Normal
+                .visible_groups(no_handoffs)
+                .len(),
+            2
+        );
+    }
+
+    /// The count the OCR readout shows is the number of whitespace-
+    /// separated runs across every line, since `full_text` joins the
+    /// lines with newlines.
+    #[test]
+    fn readout_counts_words_across_lines() {
+        assert_eq!(Readout::words_in(""), Readout::Words(0));
+        assert_eq!(Readout::words_in("   \n  "), Readout::Words(0));
+        assert_eq!(Readout::words_in("one two\nthree  four\n"), Readout::Words(4));
     }
 
     /// Title-casing the labels moved the accelerator glyphs of Share,

@@ -11,6 +11,8 @@ use std::sync::Arc;
 
 use egui::{Color32, FontFamily, FontId, Margin, Shadow, TextStyle};
 
+use super::model::GroupTone;
+
 pub mod tokens {
     use egui::{vec2, Color32, CornerRadius, Shadow, Stroke, Vec2};
 
@@ -23,7 +25,7 @@ pub mod tokens {
 
     /// Chassis fill, `#25272B`.
     pub const TRAY_FILL: Color32 = Color32::from_rgb(0x25, 0x27, 0x2B);
-    /// Item fill, `#3A3E44`.
+    /// Secondary group fill, `#3A3E44`.
     pub const SEG_FILL: Color32 = Color32::from_rgb(0x3A, 0x3E, 0x44);
     /// The hairline ring just inside the chassis edge: white at 6 %.
     pub const RING: Stroke = Stroke {
@@ -59,16 +61,23 @@ pub mod tokens {
     pub const NEAR_MAX: f32 = 15.0;
     /// Hover fade, linear, in and out.
     pub const HOVER_FADE_SECS: f32 = 0.18;
-    /// Hover veil: white at 12 % over an item fill.
+    /// Hover veil on a grey group: white at 12 % over the group fill
+    /// (the C# strips' `WhiteVeil12`).
     pub const HOVER_VEIL: f32 = 0.12;
+    /// Hover veil on the accent group: white at 28 %. The accent is a
+    /// saturated mid tone, so the grey group's 12 % step reads as barely
+    /// a change on it.
+    pub const HOVER_VEIL_PRIMARY: f32 = 0.28;
 
     pub const FG: Color32 = Color32::WHITE;
-    /// White text at 80 %: the readout's digits.
+    /// White text at 85 %: the readout's number.
+    pub const FG_85: Color32 = white_alpha(217);
+    /// White text at 80 %: the accelerator letter beside a `key`-style
+    /// icon.
     pub const FG_80: Color32 = white_alpha(204);
-    /// White text at 70 %: the readout's separator glyph.
+    /// White text at 70 %: the readout's second line (the × sign or the
+    /// "words" caption).
     pub const FG_70: Color32 = white_alpha(179);
-    /// White text at 45 %: the dim accelerator tag beside an icon.
-    pub const FG_45: Color32 = white_alpha(115);
 
     /// `key` style: a 40 pt square holding the icon and the accelerator
     /// letter side by side.
@@ -174,15 +183,42 @@ pub fn tray_frame() -> egui::Frame {
         .shadow(tokens::SHADOW)
 }
 
-/// The item fill at hover phase `t`: `SEG_FILL` lightened toward white by
-/// `HOVER_VEIL * t` in gamma space, which is what the old rect shader's
-/// `lighten` lane did. One rect, not two: a second translucent rect would
-/// feather the anti-aliased fringe twice.
-pub fn seg_fill(t: f32) -> Color32 {
-    let k = tokens::HOVER_VEIL * t.clamp(0.0, 1.0);
+/// A group's fill for its tone: the accent for the primary group, the
+/// segment grey for the rest.
+pub fn group_fill(tone: GroupTone, accent: Color32) -> Color32 {
+    match tone {
+        GroupTone::Primary => accent,
+        GroupTone::Secondary => tokens::SEG_FILL,
+    }
+}
+
+/// A group's chassis: its fill, the item radius, no margin — the buttons
+/// sit flush inside it and the hovered one paints its own veil over it.
+pub fn group_frame(fill: Color32) -> egui::Frame {
+    egui::Frame::new()
+        .fill(fill)
+        .corner_radius(tokens::RADIUS)
+}
+
+/// How far a hovered button in a group of this tone lightens toward
+/// white.
+pub fn hover_veil(tone: GroupTone) -> f32 {
+    match tone {
+        GroupTone::Primary => tokens::HOVER_VEIL_PRIMARY,
+        GroupTone::Secondary => tokens::HOVER_VEIL,
+    }
+}
+
+/// A button's fill at hover phase `t` over its group's `base`: the base
+/// lightened toward white by `veil * t` in gamma space, which is what the
+/// old rect shader's `lighten` lane did. One opaque rect, not a
+/// translucent one over the group: at `t = 0` it is the group colour
+/// exactly, so its anti-aliased corners vanish into the group, and a
+/// second translucent rect would feather the fringe twice.
+pub fn hover_fill(base: Color32, veil: f32, t: f32) -> Color32 {
+    let k = veil * t.clamp(0.0, 1.0);
     let mix = |c: u8| (c as f32 + (255.0 - c as f32) * k).round() as u8;
-    let s = tokens::SEG_FILL;
-    Color32::from_rgb(mix(s.r()), mix(s.g()), mix(s.b()))
+    Color32::from_rgb(mix(base.r()), mix(base.g()), mix(base.b()))
 }
 
 /// A debug panel's body: no border, a dark translucent fill and even
@@ -235,12 +271,38 @@ mod tests {
     }
 
     #[test]
-    fn seg_fill_mixes_toward_white_in_gamma_space() {
-        assert_eq!(seg_fill(0.0), tokens::SEG_FILL);
-        let hot = seg_fill(1.0);
-        let expect = |c: u8| (c as f32 + (255.0 - c as f32) * tokens::HOVER_VEIL).round() as u8;
-        let seg = tokens::SEG_FILL;
-        assert_eq!((hot.r(), hot.g(), hot.b()), (expect(seg.r()), expect(seg.g()), expect(seg.b())));
+    fn hover_fill_mixes_toward_white_in_gamma_space() {
+        let accent = Color32::from_rgb(0x2F, 0x7C, 0xAE);
+        for (base, veil) in [(tokens::SEG_FILL, tokens::HOVER_VEIL), (accent, tokens::HOVER_VEIL_PRIMARY)] {
+            assert_eq!(hover_fill(base, veil, 0.0), base);
+            let hot = hover_fill(base, veil, 1.0);
+            let expect = |c: u8| (c as f32 + (255.0 - c as f32) * veil).round() as u8;
+            assert_eq!((hot.r(), hot.g(), hot.b()), (expect(base.r()), expect(base.g()), expect(base.b())));
+        }
+    }
+
+    /// The accent hover has to be a bigger step than the grey one: 12 %
+    /// white on a saturated mid tone was invisible on screen.
+    #[test]
+    fn primary_hover_veil_is_stronger_than_secondary() {
+        assert!(hover_veil(GroupTone::Primary) > hover_veil(GroupTone::Secondary));
+        assert_eq!(hover_veil(GroupTone::Primary), tokens::HOVER_VEIL_PRIMARY);
+        assert_eq!(hover_veil(GroupTone::Secondary), tokens::HOVER_VEIL);
+    }
+
+    #[test]
+    fn group_fill_is_the_accent_for_primary_and_grey_otherwise() {
+        let accent = Color32::from_rgb(0x2F, 0x7C, 0xAE);
+        assert_eq!(group_fill(GroupTone::Primary, accent), accent);
+        assert_eq!(group_fill(GroupTone::Secondary, accent), tokens::SEG_FILL);
+    }
+
+    /// The buttons are flush with the group edge: any margin here would
+    /// leave a rim of group colour the hover veil never covers, and would
+    /// shift the analytic strip size `show` computes without it.
+    #[test]
+    fn group_frame_has_no_margin() {
+        assert_eq!(group_frame(tokens::SEG_FILL).total_margin(), Margin::ZERO.into());
     }
 
     /// The ring is part of the frame's margin, so the distance from the

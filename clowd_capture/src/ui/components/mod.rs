@@ -218,6 +218,11 @@ mod tests {
             set: PanelButtonSet::Normal,
             features: PanelFeatures::ALL,
             style: ButtonStyle::KeyHint,
+            accent: Color32::from_rgb(0x2F, 0x7C, 0xAE),
+            readout: panel::model::Readout::Size {
+                width: selection.width(),
+                height: selection.height(),
+            },
             selection,
             anchor: intersect_rects(monitor.bounds, selection).expect("the selection is on this monitor"),
         }

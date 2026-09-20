@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use egui::{Color32, Pos2};
 
-use crate::interaction::InteractionState;
+use crate::interaction::{InteractionState, OcrState};
 use crate::render::window::WindowSet;
 use crate::selection::intersect_rects;
 use crate::settings::CapturerSettings;
@@ -32,7 +32,7 @@ use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPanelData};
 use crate::ui::components::debug::resources::ResourcePoller;
-use crate::ui::components::panel::model::{ButtonStyle, PanelButtonSet, PanelFeatures};
+use crate::ui::components::panel::model::{ButtonStyle, PanelButtonSet, PanelFeatures, Readout};
 use crate::ui::components::panel::theme;
 use crate::ui::components::{self, accent_color32, area, hints, ocr, scope, tips, InputCtx, OverlayInputs};
 use crate::ui::egui_frame::{EguiFrame, TextureShadow};
@@ -111,8 +111,13 @@ pub struct PanelInputs {
     pub set: PanelButtonSet,
     pub features: PanelFeatures,
     pub style: ButtonStyle,
-    /// The selection as the user made it: the readout prints this, so a
-    /// rect straddling two monitors keeps showing its true size.
+    /// The user's capture accent: the primary group's fill.
+    pub accent: Color32,
+    /// What the readout slot shows: the selection's size on the capture
+    /// strip, the lifted word count on the OCR strip.
+    pub readout: Readout,
+    /// The selection as the user made it: the size readout prints this,
+    /// so a rect straddling two monitors keeps showing its true size.
     pub selection: ScreenRect,
     /// The selection clipped to the host's monitor: what placement
     /// anchors to.
@@ -166,12 +171,27 @@ fn panel_inputs(ui_monitors: &[UiMonitor], input: &InteractionState, settings: &
         .iter()
         .position(|m| m.bounds == monitor.bounds)?;
     let anchor = intersect_rects(monitor.bounds, selection)?;
+    let readout = match (&set, &input.ocr) {
+        (
+            PanelButtonSet::Ocr,
+            OcrState::Lifted {
+                outcome,
+                ..
+            },
+        ) => Readout::words_in(&outcome.full_text),
+        _ => Readout::Size {
+            width: selection.width(),
+            height: selection.height(),
+        },
+    };
     Some((
         index,
         PanelInputs {
             set,
             features: settings.panel_features,
             style: settings.panel_buttons,
+            accent: accent_color32(settings.accent_color),
+            readout,
             selection,
             anchor,
         },
@@ -936,6 +956,11 @@ mod tests {
             set: PanelButtonSet::Normal,
             features: PanelFeatures::ALL,
             style: ButtonStyle::KeyHint,
+            accent: Color32::from_rgb(0x2F, 0x7C, 0xAE),
+            readout: Readout::Size {
+                width: selection.width(),
+                height: selection.height(),
+            },
             selection,
             anchor: selection,
         };

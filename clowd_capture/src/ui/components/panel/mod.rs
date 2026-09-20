@@ -1,7 +1,8 @@
 //! The button panel shown once a selection is captured: one floating tray
 //! (the design shared with the C# recording / share-region / scrolling
 //! strips) holding the Clowd emblem, the "W × H" readout and the action
-//! buttons, anchored beneath or beside the selection.
+//! buttons in their groups (the accent group first, then the grey ones),
+//! anchored beneath or beside the selection.
 //!
 //! The tray lives in [`place`] (which side of the selection, pure and in
 //! physical pixels), [`theme`] (the design tokens as egui `Style`, fonts

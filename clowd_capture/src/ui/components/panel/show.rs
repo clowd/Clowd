@@ -1,6 +1,7 @@
 //! The tray as one egui `Area`: measure the strip, place it beside the
-//! selection, then lay the emblem, the readout and the buttons out along
-//! the chosen axis.
+//! selection, then lay the emblem, the readout and the button groups out
+//! along the chosen axis. Inside a group the buttons are flush; between
+//! groups (and before the first) there is one `GAP`.
 //!
 //! The strip's size is analytic — computed from the same numbers the
 //! widgets are laid out with — because placement needs it before the Area
@@ -11,7 +12,7 @@
 use egui::{vec2, Vec2};
 
 use super::assets;
-use super::model::{ButtonDef, ButtonStyle, PanelButtonSet, PanelFeatures};
+use super::model::{ButtonDef, ButtonStyle, GroupTone, PanelButtonSet, PanelFeatures, Readout};
 use super::place::{self, Axis, Fit, Footprint, Near};
 use super::theme::{self, tokens};
 use super::widgets;
@@ -22,6 +23,10 @@ use clowd_rust_core::geometry::RectExt;
 /// The Area id. One tray per context, so one id per context.
 pub const PANEL_ID: &str = "clowd-tray";
 
+/// One visible button as measured: table index, def, and its length
+/// along a row.
+pub type MeasuredButton = (usize, &'static ButtonDef, f32);
+
 /// Every number the strip is laid out with, in points, measured before the
 /// Area is positioned.
 pub struct StripMetrics {
@@ -30,37 +35,62 @@ pub struct StripMetrics {
     pub thick: f32,
     /// The readout slot's length along a row.
     pub readout_along: f32,
-    /// The visible buttons in strip order: table index, def, and the
-    /// button's length along a row.
-    pub buttons: Vec<(usize, &'static ButtonDef, f32)>,
+    /// The visible groups in strip order, each with its buttons: table
+    /// index, def, and the button's length along a row.
+    pub groups: Vec<(GroupTone, Vec<MeasuredButton>)>,
 }
 
 impl StripMetrics {
     /// Measure one set under one feature switch set. Only valid inside a
     /// run: `Context::fonts_mut` panics before the first pass.
-    pub fn measure(ctx: &egui::Context, set: PanelButtonSet, features: PanelFeatures, style: ButtonStyle, size: (i32, i32)) -> Self {
+    pub fn measure(ctx: &egui::Context, set: PanelButtonSet, features: PanelFeatures, style: ButtonStyle, readout: Readout) -> Self {
         let thick = match style {
             ButtonStyle::KeyHint => tokens::KEY_TILE,
             ButtonStyle::Below => tokens::BELOW_HEIGHT,
         };
-        let buttons = set
-            .visible_defs(features)
-            .map(|(i, def)| {
-                let along = match style {
-                    ButtonStyle::KeyHint => tokens::KEY_TILE,
-                    ButtonStyle::Below => {
-                        let label = ctx.fonts_mut(|f| f.layout_job(widgets::underlined_label(def)));
-                        tokens::BUTTON_MIN_LENGTH.max(label.size().x + 2.0 * tokens::BELOW_PAD_H)
-                    }
-                };
-                (i, def, along)
+        let groups = set
+            .visible_groups(features)
+            .into_iter()
+            .map(|(tone, members)| {
+                let buttons = members
+                    .into_iter()
+                    .map(|(i, def)| {
+                        let along = match style {
+                            ButtonStyle::KeyHint => tokens::KEY_TILE,
+                            ButtonStyle::Below => {
+                                let label = ctx.fonts_mut(|f| f.layout_job(widgets::underlined_label(def)));
+                                tokens::BUTTON_MIN_LENGTH.max(label.size().x + 2.0 * tokens::BELOW_PAD_H)
+                            }
+                        };
+                        (i, def, along)
+                    })
+                    .collect();
+                (tone, buttons)
             })
             .collect();
-        let readout = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(size)));
+        let readout = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(readout)));
         Self {
             thick,
             readout_along: thick.max(readout.size().x + 2.0 * tokens::READOUT_PAD_H),
-            buttons,
+            groups,
+        }
+    }
+
+    /// Every visible button, in strip order, with its length along a row.
+    pub fn buttons(&self) -> impl Iterator<Item = &MeasuredButton> {
+        self.groups
+            .iter()
+            .flat_map(|(_, b)| b.iter())
+    }
+
+    /// One group's length along `axis`: its buttons flush, no gaps.
+    fn group_along(&self, axis: Axis, buttons: &[MeasuredButton]) -> f32 {
+        match axis {
+            Axis::Row => buttons
+                .iter()
+                .map(|(_, _, along)| *along)
+                .sum(),
+            Axis::Column => buttons.len() as f32 * self.thick,
         }
     }
 
@@ -68,21 +98,18 @@ impl StripMetrics {
     /// axis. A column is `col_inner` wide throughout, so a set swap or a
     /// feature change can never change its width.
     pub fn content_size(&self, axis: Axis, col_inner: f32) -> Vec2 {
-        let n = self.buttons.len() as f32;
-        let gaps = tokens::GAP * (n - 1.0).max(0.0);
-        let buttons_along: f32 = match axis {
-            Axis::Row => self
-                .buttons
-                .iter()
-                .map(|(_, _, along)| *along)
-                .sum(),
-            Axis::Column => n * self.thick,
-        };
+        // One gap before each group, so `n` groups cost `n` gaps: the
+        // first follows the readout.
+        let groups_along: f32 = self
+            .groups
+            .iter()
+            .map(|(_, buttons)| tokens::GAP + self.group_along(axis, buttons))
+            .sum();
         let readout_along = match axis {
             Axis::Row => self.readout_along,
             Axis::Column => self.thick,
         };
-        let along = tokens::EMBLEM_SLOT + tokens::GAP + readout_along + tokens::GAP + buttons_along + gaps;
+        let along = tokens::EMBLEM_SLOT + tokens::GAP + readout_along + groups_along;
         match axis {
             Axis::Row => vec2(along, self.thick),
             Axis::Column => vec2(col_inner, along),
@@ -97,19 +124,40 @@ fn outer_px(content: Vec2, ppp: f32) -> (i32, i32) {
     (((content.x + pad) * ppp).round() as i32, ((content.y + pad) * ppp).round() as i32)
 }
 
+/// The readout each set would show, given the current inputs: the size
+/// for the capture strip, the word count for the OCR strip. Before any
+/// text is lifted the count is unknown, and zero stands in: the "words"
+/// caption is the wide line, so the slot's width does not depend on the
+/// number.
+fn readout_for(set: PanelButtonSet, p: &PanelInputs) -> Readout {
+    match (set, p.readout) {
+        (PanelButtonSet::Normal, _) => Readout::Size {
+            width: p.selection.width(),
+            height: p.selection.height(),
+        },
+        (PanelButtonSet::Ocr, words @ Readout::Words(_)) => words,
+        (
+            PanelButtonSet::Ocr,
+            Readout::Size {
+                ..
+            },
+        ) => Readout::Words(0),
+    }
+}
+
 /// The longest box either set can become in each orientation with every
 /// feature on, plus the column's inner width — so neither the side choice
 /// nor the column thickness depends on which set is up or which switches
 /// are on.
-fn union_fit(ctx: &egui::Context, style: ButtonStyle, size: (i32, i32), ppp: f32) -> (Fit, f32) {
+fn union_fit(ctx: &egui::Context, p: &PanelInputs, ppp: f32) -> (Fit, f32) {
     let metrics: Vec<StripMetrics> = PanelButtonSet::ALL
         .iter()
-        .map(|&set| StripMetrics::measure(ctx, set, PanelFeatures::ALL, style, size))
+        .map(|&set| StripMetrics::measure(ctx, set, PanelFeatures::ALL, p.style, readout_for(set, p)))
         .collect();
     let mut col_inner = tokens::EMBLEM_SLOT;
     for m in &metrics {
         col_inner = col_inner.max(m.readout_along);
-        for (_, _, along) in &m.buttons {
+        for (_, _, along) in m.buttons() {
             col_inner = col_inner.max(*along);
         }
     }
@@ -147,12 +195,11 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
     // here rather than drawn as egui's placeholder glyph.
     assets::preload(ctx);
     let ppp = monitor.dpi_scale.max(0.1);
-    // The readout prints the UNCLIPPED selection, so a rect straddling two
-    // monitors keeps showing its true size; only placement uses the
+    // The size readout prints the UNCLIPPED selection, so a rect straddling
+    // two monitors keeps showing its true size; only placement uses the
     // clipped anchor.
-    let sel = (p.selection.width(), p.selection.height());
-    let (fit, col_inner) = union_fit(ctx, p.style, sel, ppp);
-    let m = StripMetrics::measure(ctx, p.set, p.features, p.style, sel);
+    let (fit, col_inner) = union_fit(ctx, p, ppp);
+    let m = StripMetrics::measure(ctx, p.set, p.features, p.style, p.readout);
     let (side, rect_px) = place::place(p.anchor, monitor.bounds, fit, Near::at_dpi(ppp), |axis| {
         outer_px(m.content_size(axis, col_inner), ppp)
     });
@@ -193,26 +240,41 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
                     Axis::Row => vec2(m.readout_along, across),
                     Axis::Column => vec2(across, m.thick),
                 };
-                widgets::readout(ui, sel, readout_slot);
-                for (table_idx, def, along) in &m.buttons {
-                    // The set is part of the id, so hover state and hit
-                    // tests can never resolve against the other strip; the
-                    // table index keeps a switched-off button from
-                    // renumbering its neighbours.
-                    let id = egui::Id::new(("panel", p.set as u8, *table_idx));
-                    let min = match axis {
-                        Axis::Row => vec2(*along, across),
-                        Axis::Column => vec2(across, m.thick),
+                widgets::readout(ui, p.readout, readout_slot);
+                for (tone, buttons) in &m.groups {
+                    let base = theme::group_fill(*tone, p.accent);
+                    let veil = theme::hover_veil(*tone);
+                    let group = |ui: &mut egui::Ui| {
+                        // Flush inside the group; the tray's gap is
+                        // between groups only.
+                        ui.spacing_mut().item_spacing = Vec2::ZERO;
+                        for (table_idx, def, along) in buttons {
+                            // The set is part of the id, so hover state
+                            // and hit tests can never resolve against the
+                            // other strip; the table index keeps a
+                            // switched-off button from renumbering its
+                            // neighbours.
+                            let id = egui::Id::new(("panel", p.set as u8, *table_idx));
+                            let min = match axis {
+                                Axis::Row => vec2(*along, across),
+                                Axis::Column => vec2(across, m.thick),
+                            };
+                            let button = match p.style {
+                                ButtonStyle::KeyHint => widgets::key_hint_button(def, id, min, base, veil),
+                                ButtonStyle::Below => widgets::below_button(def, id, min, base, veil),
+                            };
+                            let r = button.show(ui);
+                            out.over_button |= r.contains_pointer();
+                            if r.clicked() {
+                                out.clicked = Some(def.command);
+                            }
+                        }
                     };
-                    let button = match p.style {
-                        ButtonStyle::KeyHint => widgets::key_hint_button(def, id, min),
-                        ButtonStyle::Below => widgets::below_button(def, id, min),
-                    };
-                    let r = button.show(ui);
-                    out.over_button |= r.contains_pointer();
-                    if r.clicked() {
-                        out.clicked = Some(def.command);
-                    }
+                    // The frame's content ui inherits the strip's layout,
+                    // so the buttons run along the same axis; a nested
+                    // `horizontal`/`vertical` here would pad the cross
+                    // axis with its own initial size.
+                    theme::group_frame(base).show(ui, group);
                 }
             };
             match axis {
@@ -251,11 +313,22 @@ mod tests {
         }
     }
 
+    const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x2F, 0x7C, 0xAE);
+
     fn inputs(set: PanelButtonSet, features: PanelFeatures, style: ButtonStyle, selection: ScreenRect, monitor: UiMonitor) -> PanelInputs {
+        let readout = match set {
+            PanelButtonSet::Normal => Readout::Size {
+                width: selection.width(),
+                height: selection.height(),
+            },
+            PanelButtonSet::Ocr => Readout::Words(1234),
+        };
         PanelInputs {
             set,
             features,
             style,
+            accent: ACCENT,
+            readout,
             selection,
             anchor: crate::selection::intersect_rects(monitor.bounds, selection).expect("the selection overlaps the monitor"),
         }
@@ -379,9 +452,8 @@ mod tests {
             let full = self.ctx.run_ui(raw, |ui| {
                 let ctx = ui.ctx();
                 let ppp = monitor.dpi_scale.max(0.1);
-                let sel = (p.selection.width(), p.selection.height());
-                let (fit, col_inner) = union_fit(ctx, p.style, sel, ppp);
-                let m = StripMetrics::measure(ctx, p.set, p.features, p.style, sel);
+                let (fit, col_inner) = union_fit(ctx, p, ppp);
+                let m = StripMetrics::measure(ctx, p.set, p.features, p.style, p.readout);
                 got = Some(place::place(p.anchor, monitor.bounds, fit, Near::at_dpi(ppp), |axis| {
                     outer_px(m.content_size(axis, col_inner), ppp)
                 }));
@@ -419,6 +491,38 @@ mod tests {
         }
     }
 
+    /// The OCR strip's readout is the word count over a "words" caption,
+    /// and the caption is what sets the slot's width, so the count's
+    /// digits never change the strip.
+    #[test]
+    fn ocr_readout_shows_words_and_the_caption_sets_the_width() {
+        let job = widgets::readout_job(Readout::Words(1234));
+        assert_eq!(job.text, "1234\nwords");
+        let size = widgets::readout_job(Readout::Size {
+            width: 600,
+            height: 400,
+        });
+        assert_eq!(size.text, "600\n\u{00D7}\n400");
+
+        let mon = hd(1.0);
+        let mut h = Harness::new(mon);
+        let mut widths = Vec::new();
+        for n in [0, 7, 1234, 99_999] {
+            let p = PanelInputs {
+                readout: Readout::Words(n),
+                ..inputs(PanelButtonSet::Ocr, PanelFeatures::ALL, ButtonStyle::KeyHint, row_selection(), mon)
+            };
+            h.run(&p, None);
+            widths.push(h.area_rect().width());
+        }
+        assert!(
+            widths
+                .iter()
+                .all(|w| (w - widths[0]).abs() <= 0.01),
+            "{widths:?}"
+        );
+    }
+
     #[test]
     fn key_hint_letters_match_accelerators() {
         let mon = hd(1.0);
@@ -433,7 +537,7 @@ mod tests {
         h.run(&p, None);
         for set in PanelButtonSet::ALL {
             for def in set.defs() {
-                let button = widgets::key_hint_button(def, egui::Id::new(def.label), Vec2::ZERO);
+                let button = widgets::key_hint_button(def, egui::Id::new(def.label), Vec2::ZERO, ACCENT, tokens::HOVER_VEIL_PRIMARY);
                 assert_eq!(
                     button.text.text(),
                     def.accel_key()

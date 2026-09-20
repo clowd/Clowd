@@ -3,7 +3,10 @@
 //!
 //! Only the buttons are interactive. The readout and the emblem allocate
 //! space and paint into it, so the tray body under them is dead in the
-//! same way the retired composer's chassis was.
+//! same way the retired composer's chassis was. A button has no fill of
+//! its own at rest: it sits on its group's fill (`theme::group_frame`)
+//! and paints a rounded veil in the group's colour lightened only while
+//! hovered.
 
 use egui::text::{LayoutJob, TextFormat};
 use egui::{
@@ -12,7 +15,7 @@ use egui::{
 };
 
 use super::assets;
-use super::model::ButtonDef;
+use super::model::{ButtonDef, Readout};
 use super::theme::{self, tokens};
 
 /// An icon and a piece of text in a rounded segment. The two panel styles
@@ -26,6 +29,11 @@ pub struct StackedButton {
     pub direction: Direction,
     pub gap: f32,
     pub pad_h: f32,
+    /// The fill of the group this button sits in: what the hover veil
+    /// lightens, and what the button paints (invisibly) at rest.
+    pub base: Color32,
+    /// How far the hover lightens `base` (`theme::hover_veil`).
+    pub veil: f32,
 }
 
 impl StackedButton {
@@ -55,26 +63,27 @@ impl StackedButton {
             );
         // Allocate first so the fill can be chosen from this pass's hover
         // state, then paint: one rect at the blended colour, never a
-        // second translucent rect over the first.
+        // second translucent rect over the group.
         let mut allocated = layout.allocate(ui);
         let t = ui
             .ctx()
             .animate_bool_with_time(self.id.with("hover"), allocated.response.hovered(), tokens::HOVER_FADE_SECS);
-        allocated.sized.frame.fill = theme::seg_fill(t);
+        allocated.sized.frame.fill = theme::hover_fill(self.base, self.veil, t);
         allocated.paint(ui).response
     }
 }
 
-/// `key` style: a 40 pt square, the icon beside the dim accelerator
-/// letter.
-pub fn key_hint_button(def: &ButtonDef, id: Id, min_size: Vec2) -> StackedButton {
+/// `key` style: a 40 pt square, the icon beside the accelerator letter
+/// (white at 80 %: the earlier 45 % tag was too dim to read on either
+/// group fill).
+pub fn key_hint_button(def: &ButtonDef, id: Id, min_size: Vec2, base: Color32, veil: f32) -> StackedButton {
     let letter = RichText::new(
         def.accel_key()
             .to_ascii_uppercase()
             .to_string(),
     )
     .text_style(TextStyle::Small)
-    .color(tokens::FG_45);
+    .color(tokens::FG_80);
     StackedButton {
         id,
         icon: def.icon.source(),
@@ -83,12 +92,14 @@ pub fn key_hint_button(def: &ButtonDef, id: Id, min_size: Vec2) -> StackedButton
         direction: Direction::LeftToRight,
         gap: tokens::KEY_GAP,
         pad_h: tokens::KEY_PAD_H,
+        base,
+        veil,
     }
 }
 
 /// `below` style: 48 pt tall, the icon over the Title-case label with the
 /// accelerator glyph underlined.
-pub fn below_button(def: &ButtonDef, id: Id, min_size: Vec2) -> StackedButton {
+pub fn below_button(def: &ButtonDef, id: Id, min_size: Vec2, base: Color32, veil: f32) -> StackedButton {
     StackedButton {
         id,
         icon: def.icon.source(),
@@ -97,6 +108,8 @@ pub fn below_button(def: &ButtonDef, id: Id, min_size: Vec2) -> StackedButton {
         direction: Direction::TopDown,
         gap: tokens::BELOW_GAP,
         pad_h: tokens::BELOW_PAD_H,
+        base,
+        veil,
     }
 }
 
@@ -125,36 +138,49 @@ pub fn underlined_label(def: &ButtonDef) -> LayoutJob {
     job
 }
 
-/// Width, the multiplication sign and height stacked on 1 em line boxes
-/// so the three lines sit tight. Bold digits at 80 %; the sign regular and
-/// a shade dimmer so it reads as a separator, not a fourth digit.
-pub fn readout_job(size: (i32, i32)) -> LayoutJob {
+/// The readout stacked on 1 em line boxes so the lines sit tight. Bold
+/// numbers at 85 %; the × sign and the "words" caption regular at 70 % so
+/// they read as separators, not as another number.
+pub fn readout_job(readout: Readout) -> LayoutJob {
     let f = |family: egui::FontFamily, color: Color32| TextFormat {
         font_id: egui::FontId::new(tokens::READOUT_FONT, family),
         color,
         line_height: Some(tokens::READOUT_LINE),
         ..Default::default()
     };
+    let bold = || f(crate::ui::fonts::MONO_BOLD.clone(), tokens::FG_85);
+    let dim = || f(egui::FontFamily::Monospace, tokens::FG_70);
     let mut job = LayoutJob {
         halign: egui::Align::Center,
         ..Default::default()
     };
-    job.append(&format!("{}\n", size.0), 0.0, f(crate::ui::fonts::MONO_BOLD.clone(), tokens::FG_80));
-    job.append("\u{00D7}\n", 0.0, f(egui::FontFamily::Monospace, tokens::FG_70));
-    job.append(&size.1.to_string(), 0.0, f(crate::ui::fonts::MONO_BOLD.clone(), tokens::FG_80));
+    match readout {
+        Readout::Size {
+            width,
+            height,
+        } => {
+            job.append(&format!("{width}\n"), 0.0, bold());
+            job.append("\u{00D7}\n", 0.0, dim());
+            job.append(&height.to_string(), 0.0, bold());
+        }
+        Readout::Words(n) => {
+            job.append(&format!("{n}\n"), 0.0, bold());
+            job.append("words", 0.0, dim());
+        }
+    }
     job
 }
 
 /// The readout in a dead slot. `halign: Center` makes the galley's x
 /// origin its centre line, so the block is centred by placing that origin
 /// on the slot's centre.
-pub fn readout(ui: &mut Ui, size: (i32, i32), slot: Vec2) -> egui::Rect {
-    let galley = ui.painter().layout_job(readout_job(size));
+pub fn readout(ui: &mut Ui, readout: Readout, slot: Vec2) -> egui::Rect {
+    let galley = ui.painter().layout_job(readout_job(readout));
     let (rect, _) = ui.allocate_exact_size(slot, Sense::hover());
     ui.painter().galley(
         egui::pos2(rect.center().x, rect.center().y - galley.size().y / 2.0),
         galley,
-        tokens::FG_80,
+        tokens::FG_85,
     );
     rect
 }
