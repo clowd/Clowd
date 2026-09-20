@@ -13,7 +13,7 @@
 
     <!-- IsHitTestVisible=False is the Avalonia-level pass-through; the real click-through is the
          WS_EX_TRANSPARENT ex-style + WM_NCHITTEST->HTTRANSPARENT hook applied in code-behind. -->
-    <Grid IsHitTestVisible="False">
+    <Grid Name="Root" IsHitTestVisible="False">
 
         <!-- 3px accent frame with a 2px white inner line. The window is positioned/sized so both
              lines (plus >=1 physical px of slack) sit entirely OUTSIDE the recorded region.

@@ -26,8 +26,9 @@ namespace Clowd.UI
     /// out (acks carry no request id, so a second one in flight could not be told from the first),
     /// and restoring afterwards exactly the obscure state the user had before it started.</para>
     /// <para>The border and the overlay are a SWAP, never a stack (spec addendum 8.1): the border
-    /// is hidden for exactly as long as the overlay is up, the overlay draws the frame in its
-    /// place, and the border comes back on the region the helper ACTUALLY applied. Sequencing that
+    /// is blanked (<see cref="BorderWindow.SetFrameVisible"/>) for exactly as long as the overlay is up, the overlay draws the frame in its
+    /// place, and the border comes back on the region being committed, corrected to the one the
+    /// helper ACTUALLY applied by its ack (see <see cref="RestoreBorder"/>). Sequencing that
     /// is this page's job, and the rule it holds is that a live session always has exactly one of
     /// the two marking the region — <see cref="RestoreBorder"/> is on every way out of the mode,
     /// including the ones nobody asked for (a refused move, the backstop timer, Esc). The overlay
@@ -560,9 +561,12 @@ namespace Clowd.UI
         }
 
         /// <summary>Shows the overlay. Gated on the helper's Hide ack (or the arm timer) because the
-        /// wash and the handles are drawn INSIDE the mirrored rectangle and there is no
-        /// capture-exclusion mechanism anywhere in clowd_ui — this is the one deliberate, bounded
-        /// exception to the rule that this page draws nothing into the pixels being broadcast. It
+        /// wash and the handles are drawn INSIDE the mirrored rectangle — this is the one
+        /// deliberate, bounded exception to the rule that this page draws nothing into the pixels
+        /// being broadcast. The overlay also excludes itself from screen capture
+        /// (<c>WindowNativeExtensions.ExcludeFromScreenCapture</c>), which on Windows 10 2004+ and
+        /// macOS keeps its pixels out of the meeting on its own; the hide gate stays because that
+        /// exclusion is best-effort and the builds it cannot help are the ones this must hold on. It
         /// does not close the window: the ack is emitted by the helper's command drain BEFORE the
         /// graphics thread has drawn the hidden frame, so roughly one frame (~33 ms at the default
         /// 30 fps, and longer on a session configured slower) is still exposed. It bounds the
@@ -586,7 +590,11 @@ namespace Clowd.UI
             // frames between this and the Show below leave the region unframed; that is invisible
             // in practice and in any case lands while the region is obscured, which is the one
             // thing this method is gated on.
-            _border?.Hide();
+            // Blanked rather than hidden: a hidden Avalonia window stops rendering, and re-showing
+            // it composites its stale last frame for a tick before the first new one — the flicker
+            // the commit used to show. Blank, the window keeps rendering transparent frames on
+            // every SetRegion, so RestoreBorder's first visible frame is already correct.
+            _border?.SetFrameVisible(false);
 
             _resizeWindow = new ShareResizeWindow(_region);
             _resizeWindow.RegionPreview += OnResizePreview;
@@ -756,12 +764,16 @@ namespace Clowd.UI
 
             if (_closing) { AbortResize(); return; }
 
-            // …and the border straight back behind it, on what is being mirrored right now.
-            // Pointedly not on `target`: that rectangle has not been applied yet and may never be
-            // (the helper clamps it, or refuses the move outright), and the border must never frame
-            // pixels that are not in the meeting. OnRegionChanged moves it the rest of the way when
-            // the ack says what was actually applied.
-            RestoreBorder();
+            // …and the border straight back behind it, on the rectangle being COMMITTED. `target`
+            // has not been applied yet, so for the length of one round trip the frame marks pixels
+            // the meeting is not yet being shown; showing it on `_region` instead was correct in
+            // that sense but read as a bug — the frame popped up where the drag started and then
+            // jumped to where it ended. `target` is already clamped to the helper's rule
+            // (ShareRegionGeometry.Clamp, applied to every drag result), so the applied rect
+            // normally equals it and the ack in OnRegionChanged is a no-op; where the helper
+            // clamps differently or refuses the move, that ack (or the refusal path) re-asserts
+            // `_region` and the frame corrects by the difference.
+            RestoreBorder(target);
 
             if (target == _region || _driver == null)    // ScreenRect is a record: value equality
             {
@@ -879,12 +891,15 @@ namespace Clowd.UI
                 _toolbar?.ShowStatusBlip(blip);
         }
 
-        /// <summary>Puts the border window back up, on the rectangle the helper is ACTUALLY
-        /// mirroring — <c>_region</c>, which only an applied ack ever writes — and never on a
-        /// dragged or a merely requested one, which would frame pixels the meeting is not being
-        /// shown. The other half of the swap performed in <see cref="TryShowResizeChrome"/>:
-        /// between them they hold the rule that a live session always has exactly one of the two
-        /// windows marking the region.
+        /// <summary>Puts the border window back up, on <paramref name="rect"/> if given and on
+        /// <c>_region</c> — the rectangle the helper is ACTUALLY mirroring, which only an applied
+        /// ack ever writes — otherwise. The one caller that passes a rect is the commit
+        /// (<see cref="BeginExitResize"/>), which shows the frame on the rectangle it is about to
+        /// ask for rather than the one it is leaving, so the frame does not appear at the drag's
+        /// start and then jump to its end; every other way out of the mode restores on
+        /// <c>_region</c>. The other half of the swap performed in
+        /// <see cref="TryShowResizeChrome"/>: between them they hold the rule that a live session
+        /// always has exactly one of the two windows marking the region.
         /// <para>Idempotent and cheap, which is why callers do not check first: showing a window
         /// that is already up is at worst a redundant platform Show, and the border is
         /// <c>ShowActivated="False"</c> with <c>WS_EX_NOACTIVATE</c>, so it cannot pull focus off
@@ -892,18 +907,22 @@ namespace Clowd.UI
         /// geometry pass. Silent once <see cref="_closing"/> is latched, because every teardown path
         /// is taking the border DOWN and re-showing it there would flash a frame around a region
         /// that is no longer being shared.</para></summary>
-        private void RestoreBorder()
+        private void RestoreBorder(ScreenRect rect = null)
         {
             if (_closing || _border == null)
                 return;
 
-            // Region before Show, so the window is never composited for even one frame on the rect
-            // it was hidden at — which, after a drag, is wherever the last preview left it.
-            _border.SetRegion(_region);
-            _border.Show();
+            // Region before the frame comes back, so it is never drawn for even one frame on the
+            // rect it was blanked at — which, after a drag, is wherever the last preview left it.
+            // The window itself was never hidden by the swap (see SetFrameVisible for why), so the
+            // Show is only for the paths that reach here with the window genuinely down.
+            _border.SetRegion(rect ?? _region);
+            _border.SetFrameVisible(true);
+            if (!_border.IsVisible)
+                _border.Show();
 
-            // Re-showing a topmost window puts it above its topmost peers, and the strip can sit
-            // right against the region edge the frame is drawn on. The toolbar was raised over the
+            // A re-shown topmost window sits above its topmost peers, and the strip can sit right
+            // against the region edge the frame is drawn on. The toolbar was raised over the
             // overlay on the way in for a stronger reason; this keeps it there on the way out.
             if (_toolbar != null)
                 WindowNativeExtensions.RaiseTopmostNoActivate(_toolbar);

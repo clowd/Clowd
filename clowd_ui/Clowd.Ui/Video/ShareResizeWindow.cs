@@ -39,7 +39,10 @@ namespace Clowd.UI
     /// one deliberate, bounded exception: <c>ShareRegionPage</c> shows this window only after the
     /// helper has acknowledged an <c>obscure hide</c> — or after its 400 ms arm timer gives up —
     /// so the wash and the handles are drawn over a region the meeting is already being shown as a
-    /// black card, and the window is closed again before the hide is lifted.</para>
+    /// black card, and the window is closed again before the hide is lifted. Underneath that, the
+    /// window is also excluded from screen capture outright in <see cref="OnOpened"/>
+    /// (<c>WindowNativeExtensions.ExcludeFromScreenCapture</c>), so on Windows 10 2004+ and macOS
+    /// none of its pixels reach the meeting even where the hide did not arm.</para>
     /// </summary>
     internal sealed class ShareResizeWindow : Window
     {
@@ -180,6 +183,11 @@ namespace Clowd.UI
             // so a position set below would not stick and the handles would sit off the region
             // near the top of the screen (issue #56).
             WindowNativeExtensions.SetCanCoverMenuBar(this);
+            // This window sits ON the mirrored region — the wash and the handles are inside it by
+            // design — so unlike the border it cannot stay out of the meeting by geometry. The page
+            // shows it over an obscure-hide black card for that reason; the capture exclusion is the
+            // second line under that, and the only one if the hide never armed (400 ms timeout).
+            WindowNativeExtensions.ExcludeFromScreenCapture(this);
             ApplyGeometry(RenderScaling);
 
             // Activation is the page's job (Activate() right after Show(), because ShowActivated
@@ -217,9 +225,15 @@ namespace Clowd.UI
             var toCapture = OperatingSystem.IsMacOS() ? 1.0 : scaling;
             _padCapture = (int)Math.Ceiling(PadLogical * toCapture);
 
-            Position = new PixelPoint(Region.X - _padCapture, Region.Y - _padCapture);   // CAPTURE units
-            Width = (Region.Width + 2 * _padCapture) / toCapture;                        // LOGICAL units
-            Height = (Region.Height + 2 * _padCapture) / toCapture;
+            // Position (CAPTURE units) and size in ONE native call: a left- or top-edge drag changes
+            // both, and applying them as two SetWindowPos calls a layout pass apart made the whole
+            // window slide and then snap back to size every step (visible as the right edge
+            // jittering). The helper derives the logical size the same way this line used to.
+            WindowNativeExtensions.SetPhysicalBounds(this,
+                                                     new PixelPoint(Region.X - _padCapture, Region.Y - _padCapture),
+                                                     Region.Width + 2 * _padCapture,
+                                                     Region.Height + 2 * _padCapture,
+                                                     toCapture);
 
             // How far outside the region the frame's OUTER edge sits, derived exactly as
             // BorderWindow.ApplyGeometry derives its own inflation — whole capture units plus one of

@@ -11,8 +11,10 @@ namespace Clowd.UI
     /// Click-through accent frame drawn around the region being recorded (design §4.2). A plain
     /// topmost transparent Window (not SystemThemedWindow): the 3px accent + 2px white inner
     /// border are inflated OUTSIDE the capture region so no border pixel can ever appear in the
-    /// recording, and the window is made input-invisible natively (WS_EX_TRANSPARENT + layered +
-    /// WM_NCHITTEST->HTTRANSPARENT on Windows; setIgnoresMouseEvents: on macOS).
+    /// recording, the window is excluded from screen capture outright as a second line of defence
+    /// (WindowNativeExtensions.ExcludeFromScreenCapture), and it is made input-invisible natively
+    /// (WS_EX_TRANSPARENT + layered + WM_NCHITTEST->HTTRANSPARENT on Windows;
+    /// setIgnoresMouseEvents: on macOS).
     /// </summary>
     public partial class BorderWindow : Window
     {
@@ -122,6 +124,23 @@ namespace Clowd.UI
             ApplyGeometry(RenderScaling);
         }
 
+        /// <summary>
+        /// Blanks or restores everything this window draws, WITHOUT hiding the window. The
+        /// share-region resize swap (addendum 8.1) used Hide/Show for this and flickered on the way
+        /// back: <c>WindowBase.Hide</c> stops the renderer, and <c>Show</c> calls the platform show
+        /// BEFORE it starts rendering again, so for a frame DWM composites the layered window's last
+        /// surface — the frame as it was drawn at the OLD region size — inside the new rect, until
+        /// the first fresh frame lands. Setting the root's opacity to 0 instead keeps the window
+        /// shown and rendering (fully transparent frames, which cost nothing to composite), so when
+        /// it is set back to 1 the first frame DWM sees is already the right one at the right size.
+        /// The window stays click-through, non-activating and capture-excluded throughout, so
+        /// nothing but pixels changes.
+        /// </summary>
+        public void SetFrameVisible(bool visible)
+        {
+            Root.Opacity = visible ? 1 : 0;
+        }
+
         /// <summary>Sets the centered overlay text ("WAIT…"/"PRESS\nSTART"); null or empty hides
         /// it. Newlines break it into centered lines, and the text is scaled down to fit a small
         /// capture region rather than being clipped by it.
@@ -129,7 +148,10 @@ namespace Clowd.UI
         /// which nothing is being captured yet: a recording clears it before frames flow, and a
         /// share session — whose region is mirrored continuously from the moment the helper starts
         /// — has no such window and must never call it, or the words go into the meeting.
-        /// ScrollCapturePage.cs:86-91 documents the same constraint for the same reason.</summary>
+        /// ScrollCapturePage.cs:86-91 documents the same constraint for the same reason. The
+        /// capture exclusion applied in OnOpened keeps the words out on Windows 10 2004+ regardless,
+        /// but it is a backstop, not a licence: the rule stands so the older builds it cannot help
+        /// stay safe too.</summary>
         public void SetOverlayText(string text)
         {
             var value = text ?? String.Empty;
@@ -151,10 +173,12 @@ namespace Clowd.UI
         /// </para>
         /// <para>
         /// It is worth being precise about "not seeing": <c>hide</c> replaces the region outright,
-        /// but <c>blur</c> and <c>pixelate</c> only degrade it, so under those two the glyph does
-        /// reach the meeting as a large soft shape. That is the intended reading — the region is
-        /// obscured and something is deliberately covering it — rather than a leak, because the
-        /// glyph carries no information the obscure mode was hiding.
+        /// but <c>blur</c> and <c>pixelate</c> only degrade it. Where the capture exclusion applied
+        /// in OnOpened is honoured (Windows 10 2004+, macOS) the glyph never reaches the meeting at
+        /// all; on older builds it reaches it under those two modes as a large soft shape. That is
+        /// an acceptable reading — the region is obscured and something is deliberately covering
+        /// it — rather than a leak, because the glyph carries no information the obscure mode was
+        /// hiding.
         /// </para>
         /// </summary>
         public void SetHiddenIndicator(bool hidden)
@@ -179,6 +203,10 @@ namespace Clowd.UI
             // SetLayeredWindowAttributes call is never repainted (design §4.2).
             WindowNativeExtensions.SetLayeredFullyOpaque(this);
             WindowNativeExtensions.SetIgnoresMouseEvents(this);
+            // Backstop under the outward inflation in ApplyGeometry: the whole window is hidden
+            // from every capture API, so neither the frame nor the in-region indicators can ever
+            // land in the recording or the meeting, whatever the DPI rounding does.
+            WindowNativeExtensions.ExcludeFromScreenCapture(this);
             // Raise above the menu bar BEFORE re-applying geometry: at the default level AppKit
             // constrains the frame away from the menu bar at Show(), so the position set below
             // only sticks once the level is lifted (issue #56).
@@ -232,9 +260,13 @@ namespace Clowd.UI
             int l = left ? inflate : 0, t = top ? inflate : 0;
             int r = right ? inflate : 0, b2 = bottom ? inflate : 0;
 
-            Position = new PixelPoint(_region.X - l, _region.Y - t);
-            Width = (_region.Width + l + r) / toCapture;
-            Height = (_region.Height + t + b2) / toCapture;
+            // One native move+resize rather than Position then Width/Height: a region whose origin
+            // moved would otherwise be framed for a frame at the new origin and the OLD size.
+            WindowNativeExtensions.SetPhysicalBounds(this,
+                                                     new PixelPoint(_region.X - l, _region.Y - t),
+                                                     _region.Width + l + r,
+                                                     _region.Height + t + b2,
+                                                     toCapture);
 
             AccentBorder.BorderThickness = new Thickness(left ? AccentLogicalWidth : 0, top ? AccentLogicalWidth : 0,
                                                          right ? AccentLogicalWidth : 0, bottom ? AccentLogicalWidth : 0);
