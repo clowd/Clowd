@@ -3,13 +3,21 @@
 //! along the chosen axis. Inside a group the buttons are flush; between
 //! groups (and before the first) there is one `GAP`.
 //!
+//! The `key` style has no labels, so — as the C# strips do — a button
+//! hovered for 350 ms grows a tooltip chip naming it, hung off the strip's
+//! far edge (below a row, right of a column) and flipped to the other
+//! side when the monitor has no room there. Once a chip is up, the next
+//! button's chip follows the pointer without the wait, across the gap
+//! between groups too, until the pointer has been off every button for
+//! the same 350 ms.
+//!
 //! The strip's size is analytic — computed from the same numbers the
 //! widgets are laid out with — because placement needs it before the Area
 //! is positioned, and because each strip must be centred with its own
 //! width for the set-swap guard's premise to hold. A test pins the
 //! analytic size against what egui actually lays out at every DPI.
 
-use egui::{vec2, Vec2};
+use egui::{pos2, vec2, Rect, Vec2};
 
 use super::assets;
 use super::model::{ButtonDef, ButtonStyle, GroupTone, PanelButtonSet, PanelFeatures, Readout};
@@ -22,6 +30,105 @@ use clowd_rust_core::geometry::RectExt;
 
 /// The Area id. One tray per context, so one id per context.
 pub const PANEL_ID: &str = "clowd-tray";
+/// The tooltip chip's Area id, and the key its hover clock is kept under.
+pub const TIP_ID: &str = "clowd-tray-tip";
+
+/// The tooltip's clock, in egui input time, kept in the context's temp
+/// data so it survives between passes: which button the pointer is on and
+/// since when, and when a chip was last on screen. The last-shown mark is
+/// what makes the chip follow the pointer between buttons without a fresh
+/// wait — and outlives the pointer leaving the strip by the grace period.
+#[derive(Clone, Copy, Default)]
+struct TipClock {
+    button: Option<egui::Id>,
+    since: f64,
+    shown_at: Option<f64>,
+}
+
+/// The tooltip chip's rect for a button at `button` inside a strip at
+/// `tray`, in points, kept inside `screen`. Below a row / right of a
+/// column, flipped to the near side when the far side has no room; then
+/// slid along the strip so it stays on the monitor.
+fn tip_rect(axis: Axis, tray: Rect, button: Rect, chip: Vec2, screen: Rect) -> Rect {
+    let rect = match axis {
+        Axis::Row => {
+            let top = tray.bottom() + tokens::TIP_GAP_BOTTOM;
+            let top = if top + chip.y > screen.bottom() {
+                tray.top() - tokens::TIP_GAP_BOTTOM - chip.y
+            } else {
+                top
+            };
+            Rect::from_min_size(pos2(button.center().x - chip.x / 2.0, top), chip)
+        }
+        Axis::Column => {
+            let left = tray.right() + tokens::TIP_GAP_RIGHT;
+            let left = if left + chip.x > screen.right() {
+                tray.left() - tokens::TIP_GAP_RIGHT - chip.x
+            } else {
+                left
+            };
+            Rect::from_min_size(pos2(left, button.center().y - chip.y / 2.0), chip)
+        }
+    };
+    let dx = (screen.left() - rect.left()).max(0.0) - (rect.right() - screen.right()).max(0.0);
+    let dy = (screen.top() - rect.top()).max(0.0) - (rect.bottom() - screen.bottom()).max(0.0);
+    rect.translate(vec2(dx, dy))
+}
+
+/// Run the hover clock for this pass and paint the chip once it has
+/// waited long enough. `hovered` is the button under the pointer (its id,
+/// rect and def), `None` when the pointer is on no button.
+///
+/// A new button restarts the wait unless a chip was on screen within the
+/// last `TIP_DELAY_SECS`: then it shows at once, so a pointer sliding
+/// along the strip — through the gap between two groups included — keeps
+/// its chip. Only a pause off every button as long as the wait itself
+/// brings the wait back.
+fn show_tip(ctx: &egui::Context, axis: Axis, tray: Rect, hovered: Option<(egui::Id, Rect, &'static ButtonDef)>, visible: bool) {
+    let key = egui::Id::new(TIP_ID);
+    let now = ctx.input(|i| i.time);
+    let mut clock = ctx.data(|d| {
+        d.get_temp::<TipClock>(key)
+            .unwrap_or_default()
+    });
+    let Some((button, rect, def)) = hovered else {
+        clock.button = None;
+        ctx.data_mut(|d| d.insert_temp(key, clock));
+        return;
+    };
+    if clock.button != Some(button) {
+        clock.button = Some(button);
+        let in_grace = clock
+            .shown_at
+            .is_some_and(|t| now - t <= tokens::TIP_DELAY_SECS);
+        clock.since = if in_grace { now - tokens::TIP_DELAY_SECS } else { now };
+    }
+    let waited = now - clock.since;
+    if waited < tokens::TIP_DELAY_SECS {
+        ctx.data_mut(|d| d.insert_temp(key, clock));
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(tokens::TIP_DELAY_SECS - waited));
+        return;
+    }
+    clock.shown_at = Some(now);
+    ctx.data_mut(|d| d.insert_temp(key, clock));
+    let text = ctx.fonts_mut(|f| f.layout_job(widgets::tip_job(def)));
+    // Whole points, so the chip's edges land where egui pins the Area.
+    let chip = (text.size() + 2.0 * vec2(tokens::TIP_PAD_H, tokens::TIP_PAD_V)).ceil();
+    let chip_rect = tip_rect(axis, tray, rect, chip, ctx.viewport_rect());
+    egui::Area::new(key)
+        .order(egui::Order::Tooltip)
+        .fixed_pos(chip_rect.min)
+        .constrain(false)
+        .fade_in(false)
+        .interactable(false)
+        .show(ctx, |ui| {
+            if !visible {
+                ui.set_opacity(0.0);
+            }
+            let (r, _) = ui.allocate_exact_size(chip, egui::Sense::hover());
+            widgets::tip(ui.painter(), r, def);
+        });
+}
 
 /// One visible button as measured: table index, def, and its length
 /// along a row.
@@ -210,6 +317,7 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
     );
 
     let mut out = PanelOutcome::default();
+    let mut hovered: Option<(egui::Id, Rect, &'static ButtonDef)> = None;
     let area = egui::Area::new(egui::Id::new(PANEL_ID))
         .order(egui::Order::Foreground)
         .fixed_pos(local)
@@ -265,6 +373,9 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
                             };
                             let r = button.show(ui);
                             out.over_button |= r.contains_pointer();
+                            if r.contains_pointer() {
+                                hovered = Some((id, r.rect, def));
+                            }
                             if r.clicked() {
                                 out.clicked = Some(def.command);
                             }
@@ -289,6 +400,10 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
     });
     // The whole tray: emblem, readout, padding and gaps included.
     out.over_tray = inner.response.contains_pointer();
+    // Only the label-less style needs naming; `below` already says it.
+    if p.style == ButtonStyle::KeyHint {
+        show_tip(ctx, axis, inner.response.rect, hovered, visible);
+    }
     out
 }
 
@@ -521,6 +636,133 @@ mod tests {
                 .all(|w| (w - widths[0]).abs() <= 0.01),
             "{widths:?}"
         );
+    }
+
+    /// The chip hangs off the strip's far edge, centred on the button,
+    /// and flips to the near edge when the far one is off the monitor.
+    #[test]
+    fn tip_rect_hangs_off_the_far_edge_and_flips_when_out_of_room() {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1920.0, 1080.0));
+        let chip = vec2(50.0, 20.0);
+        let tray = Rect::from_min_size(pos2(600.0, 700.0), vec2(500.0, 48.0));
+        let button = Rect::from_min_size(pos2(700.0, 704.0), vec2(40.0, 40.0));
+        let below = tip_rect(Axis::Row, tray, button, chip, screen);
+        assert_eq!(below.top(), tray.bottom() + tokens::TIP_GAP_BOTTOM);
+        assert_eq!(below.center().x, button.center().x);
+
+        let low_tray = Rect::from_min_size(pos2(600.0, 1030.0), vec2(500.0, 48.0));
+        let low_button = Rect::from_min_size(pos2(700.0, 1034.0), vec2(40.0, 40.0));
+        let above = tip_rect(Axis::Row, low_tray, low_button, chip, screen);
+        assert_eq!(above.bottom(), low_tray.top() - tokens::TIP_GAP_BOTTOM);
+
+        let col = Rect::from_min_size(pos2(1000.0, 100.0), vec2(48.0, 500.0));
+        let col_button = Rect::from_min_size(pos2(1004.0, 200.0), vec2(40.0, 40.0));
+        let right = tip_rect(Axis::Column, col, col_button, chip, screen);
+        assert_eq!(right.left(), col.right() + tokens::TIP_GAP_RIGHT);
+        assert_eq!(right.center().y, col_button.center().y);
+
+        let edge_col = Rect::from_min_size(pos2(1870.0, 100.0), vec2(48.0, 500.0));
+        let edge_button = Rect::from_min_size(pos2(1874.0, 200.0), vec2(40.0, 40.0));
+        let left = tip_rect(Axis::Column, edge_col, edge_button, chip, screen);
+        assert_eq!(left.right(), edge_col.left() - tokens::TIP_GAP_RIGHT);
+
+        // Slid back onto the monitor along the strip.
+        let corner_button = Rect::from_min_size(pos2(1900.0, 704.0), vec2(40.0, 40.0));
+        let slid = tip_rect(Axis::Row, tray, corner_button, chip, screen);
+        assert!(slid.right() <= screen.right(), "{slid:?}");
+    }
+
+    /// The tooltip is a `key`-style affair only, and it waits: a pointer
+    /// resting on a button for a tick shows nothing, one resting for the
+    /// delay shows the chip, and moving off the button removes it at
+    /// once. Once a chip has been up, the next button gets its chip
+    /// straight away — even after a short hop across no button — until
+    /// the pointer has been off the buttons for the whole delay. The
+    /// harness feeds no clock, so egui steps time by its predicted frame
+    /// (1/60 s) per pass.
+    #[test]
+    fn key_hint_tooltip_appears_after_the_delay_and_names_the_button() {
+        let mon = hd(1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(
+            PanelButtonSet::Normal,
+            PanelFeatures::ALL,
+            ButtonStyle::KeyHint,
+            row_selection(),
+            mon,
+        );
+        h.run(&p, None);
+        let first = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.width() <= tokens::KEY_TILE + 0.5)
+            .min_by(|a, b| a.left().total_cmp(&b.left()))
+            .expect("a button rect");
+        let tip_layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::new(TIP_ID));
+        let tip_shown = |h: &Harness| {
+            h.ctx
+                .memory(|m| m.areas().visible_last_frame(&tip_layer))
+        };
+
+        h.run(&p, Some(first.center()));
+        assert!(!tip_shown(&h), "the chip must wait out the delay");
+        let passes = (tokens::TIP_DELAY_SECS * 60.0).ceil() as usize + 3;
+        for _ in 0..passes / 3 {
+            h.run(&p, Some(first.center()));
+        }
+        assert!(tip_shown(&h), "the chip is up after {passes} passes");
+        let tip = h
+            .ctx
+            .memory(|m| m.area_rect(egui::Id::new(TIP_ID)))
+            .expect("the chip has a rect");
+        let tray = h.area_rect();
+        assert!(
+            (tip.top() - (tray.bottom() + tokens::TIP_GAP_BOTTOM)).abs() < 0.01,
+            "{tip:?} vs {tray:?}"
+        );
+        // Centred to the pixel the Area was pinned on.
+        assert!((tip.center().x - first.center().x).abs() <= 0.5, "{tip:?} vs {first:?}");
+
+        h.run(&p, None);
+        assert!(!tip_shown(&h), "the chip goes with the pointer");
+
+        // Within the grace period, the next button shows at once — one
+        // tick off every button (a gap between groups) does not reset it.
+        let second = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.width() <= tokens::KEY_TILE + 0.5 && r.left() > first.left() + 1.0)
+            .min_by(|a, b| a.left().total_cmp(&b.left()))
+            .expect("a second button rect");
+        h.run(&p, Some(second.center()));
+        assert!(tip_shown(&h), "the chip follows the pointer within the grace period");
+        let tip = h
+            .ctx
+            .memory(|m| m.area_rect(egui::Id::new(TIP_ID)))
+            .expect("the chip has a rect");
+        assert!((tip.center().x - second.center().x).abs() <= 0.5, "{tip:?} vs {second:?}");
+
+        // Off every button for the whole delay: the wait is back.
+        for _ in 0..passes / 3 {
+            h.run(&p, None);
+        }
+        h.run(&p, Some(first.center()));
+        assert!(!tip_shown(&h), "a long pause brings the wait back");
+
+        // `below` has labels and never shows a chip.
+        let below = inputs(PanelButtonSet::Normal, PanelFeatures::ALL, ButtonStyle::Below, row_selection(), mon);
+        let mut h = Harness::new(mon);
+        h.run(&below, None);
+        let first = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::BELOW_HEIGHT + 0.5 && r.width() < 200.0)
+            .min_by(|a, b| a.left().total_cmp(&b.left()))
+            .expect("a button rect");
+        for _ in 0..passes / 3 {
+            h.run(&below, Some(first.center()));
+        }
+        assert!(!tip_shown(&h));
     }
 
     #[test]

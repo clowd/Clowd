@@ -225,6 +225,9 @@ pub struct ButtonDef {
     /// image loader rasterises it per host at the size the button draws
     /// it, keyed by the mark's uri.
     pub icon: &'static super::assets::Svg,
+    /// What the button does, as the `key` style's hover tooltip says it:
+    /// a short verb phrase, one line, no trailing stop.
+    pub tip: &'static str,
 }
 
 /// The capture-mode panel buttons in strip order, cut by
@@ -257,60 +260,70 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         label: "Upload",
         underline_idx: 0,
         icon: &super::assets::UPLOAD,
+        tip: "Upload to default destination",
     },
     ButtonDef {
         command: Command::Edit,
         label: "Edit",
         underline_idx: 0,
         icon: &super::assets::EDIT,
+        tip: "Open image editor",
     },
     ButtonDef {
         command: Command::Video,
         label: "Video",
         underline_idx: 0,
         icon: &super::assets::VIDEO,
+        tip: "Record screen video",
     },
     ButtonDef {
         command: Command::Copy,
         label: "Copy",
         underline_idx: 0,
         icon: &super::assets::COPY,
+        tip: "Copy to clipboard",
     },
     ButtonDef {
         command: Command::Save,
         label: "Save",
         underline_idx: 0,
         icon: &super::assets::SAVE,
+        tip: "Save image to a file",
     },
     ButtonDef {
         command: Command::Share,
         label: "Share",
         underline_idx: 1,
         icon: &super::assets::SHARE,
+        tip: "Share region to meeting app",
     },
     ButtonDef {
         command: Command::ScrollCapture,
         label: "Scroll",
         underline_idx: 4,
         icon: &super::assets::SCROLL,
+        tip: "Capture scrolling content",
     },
     ButtonDef {
         command: Command::Ocr,
         label: "OCR",
         underline_idx: 0,
         icon: &super::assets::OCR,
+        tip: "Recognize text (OCR)",
     },
     ButtonDef {
         command: Command::Reset,
         label: "Reset",
         underline_idx: 0,
         icon: &super::assets::RESET,
+        tip: "Reset selection",
     },
     ButtonDef {
         command: Command::Exit,
         label: "Exit",
         underline_idx: 1,
         icon: &super::assets::EXIT,
+        tip: "Cancel and exit",
     },
 ];
 
@@ -342,30 +355,35 @@ const OCR_DEFS: &[ButtonDef] = &[
         label: "Upload",
         underline_idx: 0,
         icon: &super::assets::UPLOAD,
+        tip: "Upload text to default destination",
     },
     ButtonDef {
         command: Command::OcrSearch,
         label: "Search",
         underline_idx: 0,
         icon: &super::assets::SEARCH,
+        tip: "Search the web for this text",
     },
     ButtonDef {
         command: Command::OcrCopy,
         label: "Copy",
         underline_idx: 0,
         icon: &super::assets::COPY,
+        tip: "Copy text to clipboard",
     },
     ButtonDef {
         command: Command::OcrBack,
         label: "Back",
         underline_idx: 0,
         icon: &super::assets::BACK,
+        tip: "Back to previous options",
     },
     ButtonDef {
         command: Command::Exit,
         label: "Exit",
         underline_idx: 1,
         icon: &super::assets::EXIT,
+        tip: "Cancel and exit",
     },
 ];
 
@@ -763,6 +781,31 @@ mod tests {
         assert_eq!(Readout::words_in(""), Readout::Words(0));
         assert_eq!(Readout::words_in("   \n  "), Readout::Words(0));
         assert_eq!(Readout::words_in("one two\nthree  four\n"), Readout::Words(4));
+    }
+
+    /// The tips are one-line verb phrases: a chip long enough to wrap
+    /// belongs in a window, not over the desktop (the C# strips' rule).
+    #[test]
+    fn tips_are_short_single_line_phrases() {
+        for set in PanelButtonSet::ALL {
+            for def in set.defs() {
+                let tip = def.tip;
+                assert!(
+                    !tip.is_empty() && !tip.lines().nth(1).is_some(),
+                    "{} in {set:?}: {tip:?}",
+                    def.label
+                );
+                assert!(tip.len() <= 40, "{} in {set:?}: tip too long: {tip:?}", def.label);
+                assert!(!tip.ends_with('.'), "{} in {set:?}: {tip:?}", def.label);
+                assert!(
+                    tip.chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_uppercase()),
+                    "{} in {set:?}: {tip:?}",
+                    def.label
+                );
+            }
+        }
     }
 
     /// Title-casing the labels moved the accelerator glyphs of Share,

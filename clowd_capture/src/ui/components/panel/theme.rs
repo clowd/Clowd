@@ -27,10 +27,13 @@ pub mod tokens {
     pub const TRAY_FILL: Color32 = Color32::from_rgb(0x25, 0x27, 0x2B);
     /// Secondary group fill, `#3A3E44`.
     pub const SEG_FILL: Color32 = Color32::from_rgb(0x3A, 0x3E, 0x44);
-    /// The hairline ring just inside the chassis edge: white at 6 %.
+    /// The hairline ring just inside the chassis edge. The C# strips
+    /// paint it at white 10 % on a pixel row of its own; egui feathers a
+    /// 1 pt stroke across two half-covered rows, so the same alpha read
+    /// as half that. 20 % here lands the same visible edge.
     pub const RING: Stroke = Stroke {
         width: 1.0,
-        color: white_alpha(15),
+        color: white_alpha(51),
     };
     /// `ShadowCompact`: `0 3 10 #59000000`.
     pub const SHADOW: Shadow = Shadow {
@@ -99,6 +102,18 @@ pub mod tokens {
     pub const READOUT_FONT: f32 = 11.0;
     pub const READOUT_LINE: f32 = 11.0;
     pub const READOUT_PAD_H: f32 = 4.0;
+
+    /// The hover tooltip on a `key`-style button (the C# strips' tip chip,
+    /// spec §10): `#F2141619`, white 11 pt text, padding 8 × 4, radius 6,
+    /// shown after 350 ms, 7 pt below a row / 8 pt beside a column.
+    pub const TIP_FILL: Color32 = Color32::from_rgba_unmultiplied_const(0x14, 0x16, 0x19, 0xF2);
+    pub const TIP_FONT: f32 = 11.0;
+    pub const TIP_PAD_H: f32 = 8.0;
+    pub const TIP_PAD_V: f32 = 4.0;
+    pub const TIP_RADIUS: f32 = 6.0;
+    pub const TIP_GAP_BOTTOM: f32 = 7.0;
+    pub const TIP_GAP_RIGHT: f32 = 8.0;
+    pub const TIP_DELAY_SECS: f64 = 0.35;
 
     /// 12 pt debug-panel body.
     pub const DEBUG_FONT: f32 = 12.0;

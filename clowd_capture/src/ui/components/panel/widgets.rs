@@ -113,6 +113,25 @@ pub fn below_button(def: &ButtonDef, id: Id, min_size: Vec2, base: Color32, veil
     }
 }
 
+/// The tooltip chip's text: what the button does (`ButtonDef::tip`),
+/// 11 pt, white.
+pub fn tip_job(def: &ButtonDef) -> LayoutJob {
+    LayoutJob::simple_singleline(
+        def.tip.to_owned(),
+        egui::FontId::new(tokens::TIP_FONT, egui::FontFamily::Monospace),
+        tokens::FG,
+    )
+}
+
+/// The tooltip chip at `rect`: the dark fill and the label centred in it.
+/// A plain painter call rather than a widget: the chip is never
+/// interactive and must not take the hover from the button under it.
+pub fn tip(painter: &egui::Painter, rect: egui::Rect, def: &ButtonDef) {
+    painter.rect_filled(rect, tokens::TIP_RADIUS, tokens::TIP_FILL);
+    let galley = painter.layout_job(tip_job(def));
+    painter.galley(rect.center() - galley.size() / 2.0, galley, tokens::FG);
+}
+
 /// The label in three sections, the middle one underlined: `RichText`
 /// underlines a whole run, not a substring. Labels are ASCII (a model
 /// test pins it), so the byte index is also the glyph index.
