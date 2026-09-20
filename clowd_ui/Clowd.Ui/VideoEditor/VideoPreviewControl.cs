@@ -95,13 +95,15 @@ namespace Clowd.UI.VideoEditor
         public Rect VideoRect { get; private set; }
 
         public static readonly StyledProperty<bool> FitToWindowProperty =
-            AvaloniaProperty.Register<VideoPreviewControl, bool>(nameof(FitToWindow), true);
+            AvaloniaProperty.Register<VideoPreviewControl, bool>(nameof(FitToWindow), false);
 
         /// <summary>
-        /// True (the default) letterboxes the frame into whatever room the preview has, magnifying a
-        /// small video past 100% to fill it. False caps the picture at 100% — one video pixel per
+        /// True letterboxes the frame into whatever room the preview has, magnifying a small video
+        /// past 100% to fill it. False (the default) caps the picture at 100% — one video pixel per
         /// device pixel — but still shrinks it when the window is too small to show the frame whole,
-        /// so the picture is never cropped either way.
+        /// so the picture is never cropped either way. Off by default because a magnified screen
+        /// recording is sampled bilinearly and its text always reads soft, which users take for a
+        /// pipeline fault; at 100% the preview shows exactly the pixels the render will produce.
         /// </summary>
         public bool FitToWindow
         {
@@ -439,8 +441,23 @@ namespace Clowd.UI.VideoEditor
             var w = _videoPixelSize.Width * scale;
             var h = _videoPixelSize.Height * scale;
 
-            return new Rect((finalSize.Width - w) / 2, (finalSize.Height - h) / 2, w, h);
+            // Snapped to whole device pixels: the picture is sampled bilinearly, so an origin at a
+            // half pixel (any odd panel-minus-video gap) averages every neighbouring pixel pair
+            // and blurs the whole frame — at 100% too. Rounding in device pixels rather than DIPs
+            // keeps the snap exact on a scaled display; the size is snapped the same way so the
+            // draw operation's compose size and scale factor stay integral.
+            double x = SnapToDevicePixels((finalSize.Width - w) / 2, renderScaling);
+            double y = SnapToDevicePixels((finalSize.Height - h) / 2, renderScaling);
+            w = Math.Max(1.0 / renderScaling, SnapToDevicePixels(w, renderScaling));
+            h = Math.Max(1.0 / renderScaling, SnapToDevicePixels(h, renderScaling));
+
+            return new Rect(x, y, w, h);
         }
+
+        /// <summary>Rounds a DIP length to the nearest whole device pixel at
+        /// <paramref name="renderScaling"/> device pixels per DIP.</summary>
+        private static double SnapToDevicePixels(double dips, double renderScaling) =>
+            Math.Round(dips * renderScaling) / renderScaling;
 
         /// <summary>The change is announced off the layout pass: the readout that listens lives in
         /// the window's top bar, and touching it from inside arrange would invalidate layout while
