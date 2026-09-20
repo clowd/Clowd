@@ -129,6 +129,8 @@ pub fn tip_job(def: &ButtonDef) -> LayoutJob {
 pub fn tip(painter: &egui::Painter, rect: egui::Rect, def: &ButtonDef) {
     painter.rect_filled(rect, tokens::TIP_RADIUS, tokens::TIP_FILL);
     let galley = painter.layout_job(tip_job(def));
+    // Centred on the box, not the ink: a tip with a descender must not
+    // sit higher than one without, and the chip is padded for the box.
     painter.galley(rect.center() - galley.size() / 2.0, galley, tokens::FG);
 }
 
@@ -190,18 +192,27 @@ pub fn readout_job(readout: Readout) -> LayoutJob {
     job
 }
 
-/// The readout in a dead slot. `halign: Center` makes the galley's x
-/// origin its centre line, so the block is centred by placing that origin
-/// on the slot's centre.
+/// The readout in a dead slot, centred on its ink: the galley's box
+/// carries Cascadia's tall ascent above the digits, so centring the box
+/// leaves the glyphs riding high, more so at every DPI step.
+/// `mesh_bounds` is the glyphs' own extent, relative to the galley's
+/// origin (`halign: Center` puts that origin on the block's centre line).
 pub fn readout(ui: &mut Ui, readout: Readout, slot: Vec2) -> egui::Rect {
     let galley = ui.painter().layout_job(readout_job(readout));
     let (rect, _) = ui.allocate_exact_size(slot, Sense::hover());
-    ui.painter().galley(
-        egui::pos2(rect.center().x, rect.center().y - galley.size().y / 2.0),
-        galley,
-        tokens::FG_85,
-    );
+    ui.painter()
+        .galley(ink_centred(rect, &galley), galley, tokens::FG_85);
     rect
+}
+
+/// Where to put a galley so its ink, not its box, is centred in `rect`.
+pub fn ink_centred(rect: egui::Rect, galley: &egui::Galley) -> egui::Pos2 {
+    let ink = galley.mesh_bounds;
+    if ink.is_positive() {
+        rect.center() - ink.center().to_vec2()
+    } else {
+        rect.center() - galley.size() / 2.0
+    }
 }
 
 /// The emblem in a dead slot: no fill, no hover, the mark centred at its

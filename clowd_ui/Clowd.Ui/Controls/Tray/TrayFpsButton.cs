@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
 
 namespace Clowd.UI.Controls.Tray
 {
@@ -20,12 +21,15 @@ namespace Clowd.UI.Controls.Tray
     /// </para>
     /// <para>
     /// Everything visual lives in <c>TrayFpsButton.axaml</c>. The layout is the same stacked pair in
-    /// a row and in a column (the tile is a 40 px square either way), so unlike the primary this
-    /// control needs no orientation of its own.
+    /// a row and in a column (the tile is a 40 px square either way); the orientation exists only so
+    /// the theme can turn the tile's nudge toward the emblem with the strip.
     /// </para>
     /// </summary>
-    public class TrayFpsButton : Button
+    public class TrayFpsButton : Button, ITrayOrientable
     {
+        public static readonly StyledProperty<Orientation> OrientationProperty =
+            AvaloniaProperty.Register<TrayFpsButton, Orientation>(nameof(Orientation), Orientation.Horizontal);
+
         /// <summary>The small upper line. "FPS" on every shipped strip; a property rather than a
         /// literal in the template so the spike harness and a future tile can say something else.</summary>
         public static readonly StyledProperty<string> CaptionProperty =
@@ -62,6 +66,12 @@ namespace Clowd.UI.Controls.Tray
         {
             get => GetValue(IsReadoutProperty);
             set => SetValue(IsReadoutProperty, value);
+        }
+
+        public Orientation Orientation
+        {
+            get => GetValue(OrientationProperty);
+            set => SetValue(OrientationProperty, value);
         }
 
         /// <summary>A readout is not clickable, whatever the pointer or the keyboard does: the

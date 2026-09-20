@@ -25,6 +25,12 @@
         <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
         <Setter Property="MinWidth" Value="{x:Static tray:TrayTokens.ButtonMinWidth}" />
         <Setter Property="Padding" Value="4,0" />
+        <!-- Pulled 5 px toward the emblem it always follows. The emblem's mark stops short of its own
+             40 px box while the primary beside this tile paints its fill right up to its edge, so at
+             the spec's uniform 4 px gap the tile READS closer to the primary than to the mark. A
+             negative margin overlaps the emblem's empty edge to even the two out by eye; the vertical
+             style below turns it the same way the strip does. -->
+        <Setter Property="Margin" Value="-5,0,0,0" />
         <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.Corner}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
@@ -124,6 +130,10 @@
         </Style>
         <Style Selector="^[IsReadout=True]:pressed">
             <Setter Property="RenderTransform" Value="none" />
+        </Style>
+
+        <Style Selector="^[Orientation=Vertical]">
+            <Setter Property="Margin" Value="0,-5,0,0" />
         </Style>
 
         <!-- a strip may still disable the tile outright (none does today); keep the family look -->

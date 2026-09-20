@@ -27,13 +27,15 @@ pub mod tokens {
     pub const TRAY_FILL: Color32 = Color32::from_rgb(0x25, 0x27, 0x2B);
     /// Secondary group fill, `#3A3E44`.
     pub const SEG_FILL: Color32 = Color32::from_rgb(0x3A, 0x3E, 0x44);
-    /// The hairline ring just inside the chassis edge. The C# strips
-    /// paint it at white 10 % on a pixel row of its own; egui feathers a
-    /// 1 pt stroke across two half-covered rows, so the same alpha read
-    /// as half that. 20 % here lands the same visible edge.
+    /// The hairline ring just inside the chassis edge, baked opaque so
+    /// it never shows the desktop through it. The C# strips paint
+    /// `#3B3D40` (`TRAY_FILL` + 10 % white) on a pixel row of its own;
+    /// egui feathers a 1 pt stroke across two half-covered rows, so the
+    /// same colour read as half the step. `#515255` (`TRAY_FILL` + 20 %)
+    /// lands the same visible edge.
     pub const RING: Stroke = Stroke {
         width: 1.0,
-        color: white_alpha(51),
+        color: Color32::from_rgb(0x51, 0x52, 0x55),
     };
     /// `ShadowCompact`: `0 3 10 #59000000`.
     pub const SHADOW: Shadow = Shadow {
