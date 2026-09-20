@@ -65,6 +65,9 @@ etagere = "0.3"
 cosmic-text = "0.19"
 # Immediate-mode UI (layout, widgets, text) for the capture overlay; painted through gxi.
 egui = { version = "0.36", default-features = false, features = ["bytemuck"] }
+# SVG rasterisation into egui textures (resvg under the hood) and live plots for the debug panel.
+egui_extras = { version = "0.36", default-features = false, features = ["svg"] }
+egui_plot = "0.37"
 arboard = "3.6"
 rfd = { version = "0.17", default-features = false }
 xdialog = "3.1"

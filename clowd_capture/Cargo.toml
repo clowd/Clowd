@@ -22,6 +22,8 @@ resvg.workspace = true
 etagere.workspace = true
 cosmic-text.workspace = true
 egui.workspace = true
+egui_extras.workspace = true
+egui_plot.workspace = true
 arboard.workspace = true
 rfd.workspace = true
 xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
