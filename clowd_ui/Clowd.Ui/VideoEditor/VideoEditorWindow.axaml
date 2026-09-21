@@ -218,6 +218,41 @@
             </Style>
         </ControlTheme>
 
+        <!--  The X on a user preset's flyout row: a small borderless target inside the row button,
+              dimmed until hovered so a list of presets does not read as a list of warnings.  -->
+        <ControlTheme x:Key="RenderPresetDeleteTheme" TargetType="Button">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="4">
+                        <Path
+                            Width="9"
+                            Height="9"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="{StaticResource IconClose}"
+                            Fill="{TemplateBinding Foreground}"
+                            Stretch="Uniform" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+            </Style>
+        </ControlTheme>
+
         <!--  The add-track tips are rich panels (ve:TrackTip) rather than a line of text, and they
               draw their own dark chrome, so the ToolTip around them is a bare presenter: no
               theme padding, background or border to double up on the panel's.  -->
@@ -279,9 +314,18 @@
 
             <StackPanel>
                 <controls:DropDownButton
-                    x:Name="ddResolution"
-                    MinWidth="104"
+                    x:Name="ddAspectRatio"
+                    MinWidth="76"
                     VerticalAlignment="Center" />
+                <!--  swaps the canvas's width and height: 16:9 <-> 9:16, and the native shape too  -->
+                <controls:ToolButton
+                    x:Name="btnRotateAspect"
+                    Margin="2,0,0,0"
+                    Padding="6"
+                    VerticalAlignment="Center"
+                    Click="rotateAspect_Click"
+                    IconPath="{StaticResource IconRotateOrientation}"
+                    ToolTip.Tip="Rotate aspect ratio (swap width and height)" />
             </StackPanel>
 
             <StackPanel>
@@ -879,7 +923,7 @@
                                 <TextBlock
                                     FontSize="11"
                                     Foreground="{DynamicResource SemiColorText2}"
-                                    Text="Plays everywhere, sensible size"
+                                    Text="Plays everywhere, sensible size · full resolution"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <Path
@@ -903,7 +947,7 @@
                                 <TextBlock
                                     FontSize="11"
                                     Foreground="{DynamicResource SemiColorText2}"
-                                    Text="For YouTube or keeping a master"
+                                    Text="For YouTube or keeping a master · full resolution"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <Path
@@ -927,7 +971,7 @@
                                 <TextBlock
                                     FontSize="11"
                                     Foreground="{DynamicResource SemiColorText2}"
-                                    Text="Fits chat upload limits"
+                                    Text="Fits chat upload limits · max 720p"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <Path
@@ -943,6 +987,10 @@
                                 Stretch="Uniform" />
                         </Grid>
                     </Button>
+
+                    <!--  the user's own presets (saved from the render dialog), built in code by
+                          RebuildUserPresetRows: a separator, then one row each with an X  -->
+                    <StackPanel x:Name="userPresetRows" />
 
                     <Border
                         Height="1"

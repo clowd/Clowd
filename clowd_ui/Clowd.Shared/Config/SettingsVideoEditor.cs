@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace Clowd.Config
@@ -23,6 +25,41 @@ namespace Clowd.Config
 
         /// <summary>Whatever was last set in the render dialog.</summary>
         Custom,
+
+        /// <summary>One of the user's own presets, named by
+        /// <see cref="SettingsVideoEditor.LastUserRenderPresetId"/>.</summary>
+        User,
+    }
+
+    /// <summary>
+    /// A render preset the user saved from the "Render video" dialog ("Save current settings as
+    /// new preset"): quality, size cap and encoder, and the after-render actions ticked with them —
+    /// "Delete session" included, so a preset made with it closes the editor and deletes the
+    /// session on every successful one-click render.
+    /// </summary>
+    public class RenderUserPreset
+    {
+        /// <summary>Stable identity, so renaming or re-saving a preset never confuses the flyout's
+        /// "last used" check mark with another one.</summary>
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+        public string Name { get; set; }
+
+        /// <summary>x264 CRF, 0-51.</summary>
+        public int Crf { get; set; }
+
+        /// <summary>Encode-time height cap, 0 for none.</summary>
+        public int MaxHeight { get; set; }
+
+        public bool HardwareEncoder { get; set; }
+
+        public bool CopyToClipboard { get; set; }
+
+        public bool ShowInFolder { get; set; }
+
+        public bool DeleteSession { get; set; }
+
+        public DateTime CreatedUtc { get; set; }
     }
 
     /// <summary>
@@ -121,6 +158,42 @@ namespace Clowd.Config
             set => Set(ref _hardwareEncodeRender, value);
         }
 
+        /// <summary>The user's own presets, in the order they were saved; the Render flyout lists
+        /// them under the built-in rows. Replace the list rather than mutating it, so the change is
+        /// raised.</summary>
+        [Browsable(false)]
+        public List<RenderUserPreset> RenderUserPresets
+        {
+            get => _renderUserPresets;
+            set => Set(ref _renderUserPresets, value ?? new List<RenderUserPreset>());
+        }
+
+        /// <summary>Which of <see cref="RenderUserPresets"/> the last render used, when
+        /// <see cref="LastRenderPreset"/> is <see cref="RenderPreset.User"/>.</summary>
+        [Browsable(false)]
+        public string LastUserRenderPresetId
+        {
+            get => _lastUserRenderPresetId;
+            set => Set(ref _lastUserRenderPresetId, value);
+        }
+
+        /// <summary>The last size entered in the aspect picker's "Custom…" dialog, offered as the
+        /// picker's second row in every project from then on. 0 until one has been entered.</summary>
+        [Browsable(false)]
+        public int CustomOutputWidthPx
+        {
+            get => _customOutputWidthPx;
+            set => Set(ref _customOutputWidthPx, value);
+        }
+
+        /// <summary>See <see cref="CustomOutputWidthPx"/>.</summary>
+        [Browsable(false)]
+        public int CustomOutputHeightPx
+        {
+            get => _customOutputHeightPx;
+            set => Set(ref _customOutputHeightPx, value);
+        }
+
         private double _sidebarWidth = 230;
         private string _windowBounds;
         private bool _windowMaximized;
@@ -132,5 +205,9 @@ namespace Clowd.Config
         private bool _copyToClipboardAfterRender;
         private bool _showInFolderAfterRender;
         private bool _hardwareEncodeRender;
+        private List<RenderUserPreset> _renderUserPresets = new List<RenderUserPreset>();
+        private string _lastUserRenderPresetId;
+        private int _customOutputWidthPx;
+        private int _customOutputHeightPx;
     }
 }

@@ -36,6 +36,15 @@ namespace Clowd.UI.Services
 
         /// <summary>Reveal the finished file in the file manager.</summary>
         public bool ShowInFolder { get; init; }
+
+        /// <summary>Delete the edited session (the Recents entry the editor was opened on) once the
+        /// render has succeeded. Set by the dialog, or by a user preset saved with it ticked; it is
+        /// not a standing setting, so the built-in rows never delete anything.</summary>
+        public bool DeleteSession { get; init; }
+
+        /// <summary>Save this request's settings (encoder and after-render) as a new preset under
+        /// this name when the render starts, or null. Only the dialog sets this.</summary>
+        public string SaveAsPresetName { get; init; }
     }
 
     /// <summary>
@@ -91,6 +100,18 @@ namespace Clowd.UI.Services
                 ShowInFolder = settings?.ShowInFolderAfterRender ?? false,
             };
         }
+
+        /// <summary>The request a user preset renders: everything it was saved with, the
+        /// after-render actions included. Nothing comes from the standing settings.</summary>
+        public static RenderRequest Create(RenderUserPreset preset) => new RenderRequest
+        {
+            Crf = ClampCrf(preset.Crf),
+            MaxHeight = Math.Max(0, preset.MaxHeight),
+            HardwareEncoder = preset.HardwareEncoder,
+            CopyToClipboard = preset.CopyToClipboard,
+            ShowInFolder = preset.ShowInFolder,
+            DeleteSession = preset.DeleteSession,
+        };
 
         /// <summary>The CRF range x264 accepts. A settings file edited by hand (or written by a
         /// future build) must never reach the encoder out of range.</summary>

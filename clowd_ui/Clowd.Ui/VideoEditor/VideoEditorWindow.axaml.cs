@@ -13,9 +13,12 @@ using Avalonia.Controls.Notifications;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Clowd.Config;
@@ -109,6 +112,10 @@ namespace Clowd.UI.VideoEditor
         // InitRenderPopup; the rows themselves live in the XAML.
         private List<Button> _renderRows;
 
+        // the user presets' rows as RebuildUserPresetRows made them, in display order
+        private readonly List<(RenderUserPreset Preset, Button Row, Avalonia.Controls.Shapes.Path Check)> _userPresetRows =
+            new List<(RenderUserPreset, Button, Avalonia.Controls.Shapes.Path)>();
+
         private const string RenderTooltip = "Render edited video";
         private const string CancelRenderTooltip = "Cancel render";
 
@@ -126,8 +133,8 @@ namespace Clowd.UI.VideoEditor
         // the top bar's resolution picker: rebuilt from the project on every change (the native
         // entry follows the media, and a Custom… size has to join the list), so the flag keeps that
         // refresh from reading back as a user pick.
-        private List<ResolutionOption> _resolutionOptions = new List<ResolutionOption>();
-        private bool _syncingResolution;
+        private List<AspectRatioOption> _aspectRatioOptions = new List<AspectRatioOption>();
+        private bool _syncingAspectRatio;
 
         // the frame-rate picker, on the same terms: its native entry follows the media too, so it is
         // rebuilt from the project rather than filled once.
@@ -320,7 +327,7 @@ namespace Clowd.UI.VideoEditor
             InitRenderPopup();
             InitVoiceRecorder();
 
-            ddResolution.PropertyChanged += Resolution_PropertyChanged;
+            ddAspectRatio.PropertyChanged += AspectRatio_PropertyChanged;
             ddFrameRate.PropertyChanged += FrameRate_PropertyChanged;
 
             // the zoom readout is derived, not set: the preview owns the letterbox math and
@@ -491,6 +498,12 @@ namespace Clowd.UI.VideoEditor
 
             return false;
         }
+
+        /// <summary>Whether a video editor window is open on <paramref name="session"/>. The video
+        /// editor does not mark sessions with OpenEditor (that is the image editor's), so this is
+        /// the check for "the user is working on it".</summary>
+        internal static bool IsOpenFor(SessionInfo session) =>
+            GetOpenEditors().Any(w => ReferenceEquals(w._session, session));
 
         internal static IEnumerable<VideoEditorWindow> GetOpenEditors()
         {
@@ -664,9 +677,9 @@ namespace Clowd.UI.VideoEditor
             preview.Session = _editor;
             preview.SetVideo(new Size(project.Output.WidthPx, project.Output.HeightPx));
 
-            // resolution and frame rate only: the duration lives on the transport readout, beside
+            // aspect ratio and frame rate only: the duration lives on the transport readout, beside
             // the playhead.
-            RefreshResolutionPicker();
+            RefreshAspectRatioPicker();
             RefreshFrameRatePicker();
             RefreshTimelineCollapse();
 
@@ -787,7 +800,7 @@ namespace Clowd.UI.VideoEditor
             // both pickers follow the model on every change rather than only at open.
             var output = _editor.Project.Output;
             preview.SetVideo(new Size(output.WidthPx, output.HeightPx));
-            RefreshResolutionPicker();
+            RefreshAspectRatioPicker();
             RefreshFrameRatePicker();
             RefreshAddSpeedButton();
             RefreshInputOverlayButtons();
@@ -1700,7 +1713,7 @@ namespace Clowd.UI.VideoEditor
         /// popup keyboard behaviour, which is the app's convention for a button flyout.</summary>
         private void InitRenderPopup()
         {
-            _renderRows = new List<Button> { btnPresetShare, btnPresetBest, btnPresetSmall, btnRenderMore };
+            RebuildUserPresetRows();
 
             btnPresetShare.Click += (_, _) => RenderPresetPicked(RenderPreset.Share);
             btnPresetBest.Click += (_, _) => RenderPresetPicked(RenderPreset.BestQuality);
@@ -1757,6 +1770,8 @@ namespace Clowd.UI.VideoEditor
         /// preset the last render used.</summary>
         private void OpenRenderFlyout()
         {
+            // another editor window may have saved or deleted a preset since this one last opened
+            RebuildUserPresetRows();
             SyncRenderPresetChecks();
             renderPopup.PlacementTarget = btnRender;
             renderPopup.IsOpen = true;
@@ -1775,6 +1790,10 @@ namespace Clowd.UI.VideoEditor
             // a custom render has no row of its own, so the mark (and the focus) go to the row that
             // would repeat it: the dialog.
             checkRenderMore.IsVisible = last == RenderPreset.Custom;
+
+            var lastUser = LastUserPreset();
+            foreach (var (preset, _, check) in _userPresetRows)
+                check.IsVisible = ReferenceEquals(preset, lastUser);
         }
 
         private Button RowForPreset(RenderPreset preset) => preset switch
@@ -1782,8 +1801,179 @@ namespace Clowd.UI.VideoEditor
             RenderPreset.BestQuality => btnPresetBest,
             RenderPreset.SmallFile => btnPresetSmall,
             RenderPreset.Custom => btnRenderMore,
+            RenderPreset.User => _userPresetRows.FirstOrDefault(r => ReferenceEquals(r.Preset, LastUserPreset())).Row ?? btnPresetShare,
             _ => btnPresetShare,
         };
+
+        private static List<RenderUserPreset> UserPresets => Settings?.RenderUserPresets ?? new List<RenderUserPreset>();
+
+        /// <summary>The user preset the last render used, or null — also when it has since been
+        /// deleted (from this window or another).</summary>
+        private static RenderUserPreset LastUserPreset()
+        {
+            if (Settings?.LastRenderPreset != RenderPreset.User)
+                return null;
+
+            var id = Settings.LastUserRenderPresetId;
+            return UserPresets.FirstOrDefault(p => p != null && p.Id == id);
+        }
+
+        /// <summary>Rebuilds the user presets' rows between the built-ins and "More options…":
+        /// a separator, then per preset its name, "Created {date}" under it, the last-used check
+        /// mark and an X that deletes it. The arrow keys walk them with the built-in rows.</summary>
+        private void RebuildUserPresetRows()
+        {
+            userPresetRows.Children.Clear();
+            _userPresetRows.Clear();
+
+            var presets = UserPresets.Where(p => p != null && !String.IsNullOrEmpty(p.Name)).ToList();
+            if (presets.Count > 0)
+            {
+                userPresetRows.Children.Add(new Border
+                {
+                    Height = 1,
+                    Margin = new Thickness(6, 5),
+                    [!Border.BackgroundProperty] = new DynamicResourceExtension("SemiColorBorder"),
+                });
+            }
+
+            var rowTheme = (ControlTheme)this.FindResource("RenderPresetRowTheme");
+            var deleteTheme = (ControlTheme)this.FindResource("RenderPresetDeleteTheme");
+
+            foreach (var preset in presets)
+            {
+                var caption = new TextBlock
+                {
+                    FontSize = 11,
+                    Text = "Created " + preset.CreatedUtc.ToLocalTime().ToString("d", CultureInfo.CurrentCulture) +
+                           (preset.DeleteSession ? " · deletes session" : ""),
+                    TextWrapping = TextWrapping.Wrap,
+                    [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SemiColorText2"),
+                };
+
+                var check = new Avalonia.Controls.Shapes.Path
+                {
+                    Width = 11,
+                    Height = 11,
+                    Margin = new Thickness(8, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Data = (Geometry)this.FindResource("IconCheckmark"),
+                    Stretch = Stretch.Uniform,
+                    IsVisible = false,
+                    [!Avalonia.Controls.Shapes.Shape.FillProperty] = new DynamicResourceExtension("SemiColorPrimary"),
+                };
+
+                var delete = new Button
+                {
+                    Theme = deleteTheme,
+                    Margin = new Thickness(6, 0, -4, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Focusable = false,
+                };
+                ToolTip.SetTip(delete, "Delete preset");
+                Grid.SetColumn(check, 1);
+                Grid.SetColumn(delete, 2);
+
+                var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };
+                grid.Children.Add(new StackPanel
+                {
+                    Spacing = 2,
+                    Children =
+                    {
+                        new TextBlock { FontWeight = FontWeight.SemiBold, Text = preset.Name, TextTrimming = TextTrimming.CharacterEllipsis },
+                        caption,
+                    },
+                });
+                grid.Children.Add(check);
+                grid.Children.Add(delete);
+
+                var row = new Button { Theme = rowTheme, Content = grid };
+                row.Click += (_, _) => UserPresetPicked(preset);
+                delete.Click += (_, e) =>
+                {
+                    // the X sits inside the row button: the row must not render as well
+                    e.Handled = true;
+                    DeleteUserPreset(preset);
+                };
+
+                userPresetRows.Children.Add(row);
+                _userPresetRows.Add((preset, row, check));
+            }
+
+            _renderRows = new List<Button> { btnPresetShare, btnPresetBest, btnPresetSmall };
+            _renderRows.AddRange(_userPresetRows.Select(r => r.Row));
+            _renderRows.Add(btnRenderMore);
+        }
+
+        /// <summary>A user preset's row was activated: the same one-click render as a built-in.</summary>
+        private void UserPresetPicked(RenderUserPreset preset)
+        {
+            renderPopup.IsOpen = false;
+
+            if (Settings != null)
+            {
+                Settings.LastRenderPreset = RenderPreset.User;
+                Settings.LastUserRenderPresetId = preset.Id;
+                TrySaveSettings();
+            }
+
+            _ = StartRenderAsync(RenderPresets.Create(preset));
+        }
+
+        /// <summary>The row's X. No confirmation: a preset is three settings and a name, and the
+        /// flyout stays open so several can be cleared in a row. Focus moves to the row that took
+        /// its place (or Share) so the keyboard is not left on a removed control.</summary>
+        private void DeleteUserPreset(RenderUserPreset preset)
+        {
+            if (Settings == null)
+                return;
+
+            var index = _userPresetRows.FindIndex(r => ReferenceEquals(r.Preset, preset));
+
+            Settings.RenderUserPresets = UserPresets.Where(p => !ReferenceEquals(p, preset)).ToList();
+            if (Settings.LastRenderPreset == RenderPreset.User && Settings.LastUserRenderPresetId == preset.Id)
+            {
+                Settings.LastRenderPreset = RenderPreset.Share;
+                Settings.LastUserRenderPresetId = null;
+            }
+            TrySaveSettings();
+
+            RebuildUserPresetRows();
+            SyncRenderPresetChecks();
+
+            var next = _userPresetRows.Count == 0 ? btnPresetShare
+                : _userPresetRows[Math.Clamp(index, 0, _userPresetRows.Count - 1)].Row;
+            FocusRenderRow(next);
+        }
+
+        /// <summary>The dialog's "Save current settings as new preset": the request's encoder and
+        /// after-render settings under the typed name. A name already in the list (ignoring case) is updated in
+        /// place rather than listed twice. Returns the saved preset.</summary>
+        private static RenderUserPreset SaveUserPreset(RenderRequest request)
+        {
+            var presets = UserPresets.Where(p => p != null).ToList();
+            var existing = presets.FirstOrDefault(p => String.Equals(p.Name, request.SaveAsPresetName, StringComparison.OrdinalIgnoreCase));
+            var preset = new RenderUserPreset
+            {
+                Id = existing?.Id ?? Guid.NewGuid().ToString("N"),
+                Name = request.SaveAsPresetName,
+                Crf = request.Crf,
+                MaxHeight = request.MaxHeight,
+                HardwareEncoder = request.HardwareEncoder,
+                CopyToClipboard = request.CopyToClipboard,
+                ShowInFolder = request.ShowInFolder,
+                DeleteSession = request.DeleteSession,
+                CreatedUtc = DateTime.UtcNow,
+            };
+
+            if (existing != null)
+                presets[presets.IndexOf(existing)] = preset;
+            else
+                presets.Add(preset);
+
+            Settings.RenderUserPresets = presets;
+            return preset;
+        }
 
         /// <summary>Posted: on open the popup root is still laying out, so an immediate Focus() is
         /// dropped on the way in (the image editor's popups do the same). Skipped if the popup
@@ -1851,8 +2041,10 @@ namespace Clowd.UI.VideoEditor
                 project.Output.FpsNum, project.Output.FpsDen,
                 TimeSpan.FromTicks(Math.Max(0, durationTicks)));
 
-            var initial = RenderPresets.Create(LastRenderPreset, Settings);
-            var request = await RenderOptionsDialog.ShowAsync(this, info, initial, DefaultRenderOutputPath());
+            // a user preset opens the dialog on its own values; anything else as before
+            var lastUser = LastUserPreset();
+            var initial = lastUser != null ? RenderPresets.Create(lastUser) : RenderPresets.Create(LastRenderPreset, Settings);
+            var request = await RenderOptionsDialog.ShowAsync(this, info, initial, DefaultRenderOutputPath(), _session != null);
             if (request == null)
                 return; // canceled
 
@@ -1866,6 +2058,15 @@ namespace Clowd.UI.VideoEditor
                 Settings.ShowInFolderAfterRender = request.ShowInFolder;
                 Settings.HardwareEncodeRender = request.HardwareEncoder;
                 Settings.LastRenderPreset = RenderPresets.Match(request.Crf, request.MaxHeight);
+
+                // a new preset becomes the last-used row, so the flyout's Enter repeats it
+                if (!String.IsNullOrEmpty(request.SaveAsPresetName))
+                {
+                    var saved = SaveUserPreset(request);
+                    Settings.LastRenderPreset = RenderPreset.User;
+                    Settings.LastUserRenderPresetId = saved.Id;
+                }
+
                 TrySaveSettings();
             }
 
@@ -1891,6 +2092,10 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
+            // a render of this recording already in flight means the manager starts nothing and just
+            // walks the user to it — that render carries its own request, not this one.
+            var alreadyRunning = VideoRenderManager.FindExisting(_session)?.ActiveRender != null;
+
             // a snapshot of the very project the preview is composing, so the render is what was
             // on screen (and later edits cannot race the render job file).
             var created = await VideoRenderManager.StartRenderAsync(_session, _editor.SnapshotForPlayer(), request);
@@ -1902,6 +2107,15 @@ namespace Clowd.UI.VideoEditor
                 // the user to it, whether it was just created or is the one already in flight.
                 if (PageManager.Current.GetSettingsPage() is MainWindow main)
                     main.OpenRecents(created);
+
+                // "Delete session": the render works from a snapshot, so the editor has nothing
+                // left to do. Closing now flushes the edit and releases the session (the manager
+                // skips a session open in an editor); it is deleted once the file is written. Not
+                // when the render in flight is an earlier one — its own request decides that.
+                if (request.DeleteSession && alreadyRunning)
+                    Toast.Show(this, "A render of this video is already running — the session was kept");
+                else if (request.DeleteSession && created.ActiveRender != null)
+                    Close();
             }
         }
 
@@ -2347,35 +2561,43 @@ namespace Clowd.UI.VideoEditor
                 : "";
         }
 
-        /// <summary>Rebuilds the resolution picker from the project and re-selects the size it is
+        /// <summary>Rebuilds the aspect-ratio picker from the project and re-selects the shape it is
         /// actually set to — the list depends on the media (the native entry) and on the current
-        /// size, so undo, a Custom… size and an import all have to be able to change it.</summary>
-        private void RefreshResolutionPicker()
+        /// size, so undo and an import both have to be able to change it. The tooltip carries the
+        /// canvas's pixel size, which the ratio label no longer says.</summary>
+        private void RefreshAspectRatioPicker()
         {
             if (_editor == null)
                 return;
 
-            _syncingResolution = true;
+            _syncingAspectRatio = true;
             try
             {
-                _resolutionOptions = ResolutionOptions.Build(_editor.Project);
-                ddResolution.ItemsSource = _resolutionOptions;
-                ddResolution.SelectedItem = ResolutionOptions.FindCurrent(_resolutionOptions, _editor.Project);
+                _aspectRatioOptions = AspectRatioOptions.Build(_editor.Project, RememberedCustomSize());
+                ddAspectRatio.ItemsSource = _aspectRatioOptions;
+                ddAspectRatio.SelectedItem = AspectRatioOptions.FindCurrent(_aspectRatioOptions, _editor.Project);
+
+                var output = _editor.Project.Output;
+                ToolTip.SetTip(ddAspectRatio, output == null ? null :
+                    String.Format(CultureInfo.InvariantCulture, "Aspect ratio · canvas {0}×{1}", output.WidthPx, output.HeightPx));
+
+                // a square has no other orientation
+                btnRotateAspect.IsEnabled = output != null && output.WidthPx != output.HeightPx;
             }
             finally
             {
-                _syncingResolution = false;
+                _syncingAspectRatio = false;
             }
         }
 
-        private void Resolution_PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
+        private void AspectRatio_PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
         {
             // qualified: Avalonia has a DropDownButton of its own, and this is not it
-            if (_syncingResolution || _editor == null ||
+            if (_syncingAspectRatio || _editor == null ||
                 e.Property != Clowd.UI.Controls.DropDownButton.SelectedItemProperty)
                 return;
 
-            if (e.GetNewValue<object>() is not ResolutionOption option)
+            if (e.GetNewValue<object>() is not AspectRatioOption option)
                 return;
 
             if (option.IsCustomPrompt)
@@ -2387,6 +2609,61 @@ namespace Clowd.UI.VideoEditor
             // a committed resize raises ProjectChanged, which re-selects this entry anyway; a pick
             // of the size already set changes nothing and needs no refresh.
             _editor.SetOutputSize(option.WidthPx, option.HeightPx, this);
+        }
+
+        /// <summary>The last "Custom…" size, for the picker's second row; null until one is entered.</summary>
+        private static (int WidthPx, int HeightPx)? RememberedCustomSize()
+        {
+            var settings = Settings;
+            return settings is { CustomOutputWidthPx: > 0, CustomOutputHeightPx: > 0 }
+                ? (settings.CustomOutputWidthPx, settings.CustomOutputHeightPx)
+                : null;
+        }
+
+        /// <summary>The "Custom…" row: prompts for an exact width and height, starting from the
+        /// canvas's, and remembers what was entered as the picker's second row. The picker is
+        /// showing "Custom…" as its label while the dialog is up, so the refresh at the end is what
+        /// puts the real selection back — including when the user cancels.</summary>
+        private async Task PromptCustomResolutionAsync()
+        {
+            var output = _editor.Project.Output;
+            try
+            {
+                var size = await CustomResolutionDialog.ShowAsync(this, output.WidthPx, output.HeightPx);
+                if (size != null && !_closing && _editor != null)
+                {
+                    var w = EditorSession.ClampOutputDimension(size.Value.WidthPx);
+                    var h = EditorSession.ClampOutputDimension(size.Value.HeightPx);
+                    if (Settings != null)
+                    {
+                        Settings.CustomOutputWidthPx = w;
+                        Settings.CustomOutputHeightPx = h;
+                        TrySaveSettings();
+                    }
+
+                    _editor.SetOutputSize(w, h, this);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Custom resolution dialog failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "videoeditor.custom-resolution");
+            }
+
+            if (!_closing)
+                RefreshAspectRatioPicker();
+        }
+
+        /// <summary>Swaps the canvas's width and height — whatever shape it is, a standard ratio or
+        /// the material's own. One undoable resize, the same as picking the other orientation from
+        /// the list; the picker follows through ProjectChanged.</summary>
+        private void rotateAspect_Click(object sender, RoutedEventArgs e)
+        {
+            var output = _editor?.Project.Output;
+            if (output == null || output.WidthPx == output.HeightPx)
+                return;
+
+            _editor.SetOutputSize(output.HeightPx, output.WidthPx, this);
         }
 
         /// <summary>Rebuilds the frame-rate picker from the project and re-selects the rate it is
@@ -2423,28 +2700,6 @@ namespace Clowd.UI.VideoEditor
             // as above: the committed change raises ProjectChanged and re-selects this entry, and
             // picking the rate already set is a no-op.
             _editor.SetOutputFrameRate(option.Num, option.Den, this);
-        }
-
-        /// <summary>The "Custom…" row. The picker is showing that row as its label while the dialog
-        /// is up, so the refresh at the end is what puts the real size back on the button —
-        /// including when the user cancels.</summary>
-        private async Task PromptCustomResolutionAsync()
-        {
-            var output = _editor.Project.Output;
-            try
-            {
-                var size = await CustomResolutionDialog.ShowAsync(this, output.WidthPx, output.HeightPx);
-                if (size != null && !_closing && _editor != null)
-                    _editor.SetOutputSize(size.Value.WidthPx, size.Value.HeightPx, this);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("Custom resolution dialog failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "videoeditor.custom-resolution");
-            }
-
-            if (!_closing)
-                RefreshResolutionPicker();
         }
 
         private void UpdatePlayPauseButton()

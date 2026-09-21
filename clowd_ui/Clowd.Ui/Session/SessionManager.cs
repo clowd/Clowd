@@ -196,7 +196,35 @@ namespace Clowd
                 if (ReferenceEquals(LastCreated, session))
                     LastCreated = null;
                 session.Dispose();
-                Directory.Delete(sessionDir, true);
+                DeleteDirectoryWithRetry(sessionDir);
+            }
+        }
+
+        /// <summary>
+        /// Deletes a session directory, retrying briefly while something still holds a file in it.
+        /// The usual holder is the window that just let go of the session — an editor closing,
+        /// decoders and preview readers still winding down — and a recursive delete that gives up
+        /// part-way leaves a half-deleted directory that is re-imported, broken, on the next launch.
+        /// The directory cannot be deleted before the session is disposed instead: its watcher
+        /// re-creates the session file the moment it sees it deleted.
+        /// </summary>
+        private static void DeleteDirectoryWithRetry(string dir)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                    return;
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    return;
+                }
+                catch (Exception ex) when (attempt < 5 && ex is IOException or UnauthorizedAccessException)
+                {
+                    System.Threading.Thread.Sleep(100 * attempt);
+                }
             }
         }
 

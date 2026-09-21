@@ -2,6 +2,7 @@
     x:Class="Clowd.UI.VideoEditor.RenderOptionsDialog"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:u="https://irihi.tech/ursa"
     Title="Render video"
     Width="520"
     Background="{DynamicResource ApplicationBackgroundBrush}"
@@ -60,8 +61,9 @@
 
     <Window.Styles>
         <!--  the label column: one style rather than four copies of the same three setters  -->
+        <!--  top of its row, whether the row is one control or a stack of them  -->
         <Style Selector="TextBlock.rowLabel">
-            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="Margin" Value="0,0,12,0" />
         </Style>
         <Style Selector="TextBlock.hint">
@@ -112,8 +114,9 @@
         </Border>
 
         <Grid Margin="16,18,16,16" ColumnDefinitions="96,*">
-            <!--  quality · the CRF slider · size · encoder · save to · after render  -->
+            <!--  quality · the CRF slider · size · encoder · save to · after render · preset  -->
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -123,9 +126,11 @@
             </Grid.RowDefinitions>
 
             <!--  Quality: the three recording presets as shortcuts onto the CRF slider below  -->
+            <!--  +6: level with the text inside the segment bar beside it  -->
             <TextBlock
                 Grid.Row="0"
                 Grid.Column="0"
+                Margin="0,6,12,0"
                 Classes="rowLabel"
                 Text="Quality" />
             <Border
@@ -183,25 +188,19 @@
             <TextBlock
                 Grid.Row="2"
                 Grid.Column="0"
-                Margin="0,14,12,0"
+                Margin="0,20,12,0"
                 Classes="rowLabel"
                 Text="Size" />
             <StackPanel
                 Grid.Row="2"
                 Grid.Column="1"
                 Margin="0,14,0,0"
-                Orientation="Horizontal"
-                Spacing="10">
+                Spacing="8">
                 <Border Classes="segments">
                     <StackPanel Orientation="Horizontal">
                         <RadioButton
                             x:Name="SizeActual"
                             Content="Actual"
-                            GroupName="size"
-                            Theme="{StaticResource SegmentCell}" />
-                        <RadioButton
-                            x:Name="Size1440"
-                            Content="1440p"
                             GroupName="size"
                             Theme="{StaticResource SegmentCell}" />
                         <RadioButton
@@ -214,12 +213,32 @@
                             Content="720p"
                             GroupName="size"
                             Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="Size480"
+                            Content="480p"
+                            GroupName="size"
+                            Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="SizeCustom"
+                            Content="Custom"
+                            GroupName="size"
+                            Theme="{StaticResource SegmentCell}" />
                     </StackPanel>
                 </Border>
-                <TextBlock
-                    x:Name="SizeCaption"
-                    VerticalAlignment="Center"
-                    Classes="hint" />
+                <!--  Custom: a height of the user's own, still a cap (never an upscale); the
+                      caption is the size the file will actually be, whichever cell is on.  -->
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <u:NumericIntUpDown
+                        x:Name="CustomHeightBox"
+                        Width="130"
+                        InnerRightContent="px"
+                        Minimum="2"
+                        Step="2" />
+                    <TextBlock
+                        x:Name="SizeCaption"
+                        VerticalAlignment="Center"
+                        Classes="hint" />
+                </StackPanel>
             </StackPanel>
 
             <!--  Encoder: the GPU paths exist (NVENC, AMF, VideoToolbox, with x264 as the fallback
@@ -244,10 +263,11 @@
             </StackPanel>
 
             <!--  Save to: the full path, pre-filled from the recording settings  -->
+            <!--  +7: level with the text inside the path box  -->
             <TextBlock
                 Grid.Row="4"
                 Grid.Column="0"
-                Margin="0,14,12,0"
+                Margin="0,21,12,0"
                 Classes="rowLabel"
                 Text="Save to" />
             <Grid
@@ -280,10 +300,42 @@
                 Grid.Row="5"
                 Grid.Column="1"
                 Margin="0,16,0,0"
-                Orientation="Horizontal"
-                Spacing="18">
+                Spacing="6">
                 <CheckBox x:Name="CopyCheck" Content="Copy file to clipboard" />
                 <CheckBox x:Name="RevealCheck" Content="Show in folder" />
+                <!--  closes the editor as the render starts; the entry goes only once the file is
+                      written, so a failed or canceled render loses nothing  -->
+                <CheckBox
+                    x:Name="DeleteSessionCheck"
+                    Content="Delete session"
+                    ToolTip.Tip="Closes the editor and deletes this session from Recents once the video has rendered successfully" />
+                <!--  shown while "Delete session" is ticked: the one row here that destroys something  -->
+                <TextBlock
+                    x:Name="DeleteSessionWarning"
+                    Margin="24,0,0,0"
+                    Classes="hint"
+                    Foreground="{DynamicResource SemiColorWarning}"
+                    IsVisible="False"
+                    Text="The editor will close when you click Render. When the render is complete, the source recording and all metadata will be deleted." />
+            </StackPanel>
+
+            <!--  Preset: saves every row above but "Save to" as a row of the Render button's list  -->
+            <TextBlock
+                Grid.Row="6"
+                Grid.Column="0"
+                Margin="0,16,12,0"
+                Classes="rowLabel"
+                Text="Preset" />
+            <StackPanel
+                Grid.Row="6"
+                Grid.Column="1"
+                Margin="0,16,0,0"
+                Spacing="6">
+                <CheckBox x:Name="SavePresetCheck" Content="Save current settings as new preset" />
+                <TextBox
+                    x:Name="PresetNameBox"
+                    MaxLength="60"
+                    PlaceholderText="Preset name" />
             </StackPanel>
         </Grid>
 

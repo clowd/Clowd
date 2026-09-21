@@ -7,7 +7,9 @@ using Avalonia.Platform.Storage;
 using Clowd.Config;
 using Clowd.UI.Helpers;
 using Clowd.UI.Services;
+using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Render;
+using Ursa.Controls;
 
 namespace Clowd.UI.VideoEditor
 {
@@ -61,7 +63,8 @@ namespace Clowd.UI.VideoEditor
             throw new NotSupportedException("RenderOptionsDialog requires a project and a starting request.");
         }
 
-        private RenderOptionsDialog(RenderProjectInfo project, RenderRequest initial, string defaultOutputPath)
+        private RenderOptionsDialog(RenderProjectInfo project, RenderRequest initial, string defaultOutputPath,
+            bool canDeleteSession)
         {
             _project = project;
 
@@ -75,9 +78,10 @@ namespace Clowd.UI.VideoEditor
 
             // a cap that cannot shrink this project would be a lie — 720p on a 640x360 canvas
             // would have to upscale, which a render never does.
-            Size1440.IsEnabled = _project.HeightPx > 1440;
             Size1080.IsEnabled = _project.HeightPx > 1080;
             Size720.IsEnabled = _project.HeightPx > 720;
+            Size480.IsEnabled = _project.HeightPx > 480;
+            CustomHeightBox.Maximum = EditorSession.MaxOutputDimension;
 
             SelectQuality(initial.Crf);
             SelectSize(initial.MaxHeight);
@@ -86,6 +90,19 @@ namespace Clowd.UI.VideoEditor
             HardwareCheck.IsChecked = initial.HardwareEncoder;
             CopyCheck.IsChecked = initial.CopyToClipboard;
             RevealCheck.IsChecked = initial.ShowInFolder;
+            DeleteSessionCheck.IsChecked = initial.DeleteSession && canDeleteSession;
+            DeleteSessionCheck.IsVisible = canDeleteSession;
+            DeleteSessionWarning.IsVisible = DeleteSessionCheck.IsChecked == true;
+            DeleteSessionCheck.IsCheckedChanged += (_, _) =>
+                DeleteSessionWarning.IsVisible = DeleteSessionCheck.IsChecked == true;
+
+            PresetNameBox.IsVisible = false;
+            SavePresetCheck.IsCheckedChanged += (_, _) =>
+            {
+                PresetNameBox.IsVisible = SavePresetCheck.IsChecked == true;
+                if (PresetNameBox.IsVisible)
+                    PresetNameBox.Focus();
+            };
             MetaText.Text = DescribeProject(_project);
 
             // the segments are shortcuts onto the slider: checking one moves it, and the slider
@@ -99,8 +116,9 @@ namespace Clowd.UI.VideoEditor
                 };
             }
             CrfSlider.ValueChanged += (_, _) => SyncQualitySegments();
-            foreach (var size in new[] { SizeActual, Size1440, Size1080, Size720 })
+            foreach (var size in new[] { SizeActual, Size1080, Size720, Size480, SizeCustom })
                 size.IsCheckedChanged += (_, _) => SyncSizeCaption();
+            CustomHeightBox.ValueChanged += (_, _) => SyncSizeCaption();
 
             SyncQualitySegments();
             SyncSizeCaption();
@@ -122,14 +140,16 @@ namespace Clowd.UI.VideoEditor
         /// for, or null when they canceled. <paramref name="initial"/> is what the rows start on
         /// (the last-used preset, or the last custom values), and
         /// <paramref name="defaultOutputPath"/> the full path the "Save to" box is pre-filled with.
+        /// <paramref name="canDeleteSession"/> offers "Delete session", which needs a session to
+        /// delete (the dev harness edits a bare file).
         /// </summary>
         public static async Task<RenderRequest> ShowAsync(Window owner, RenderProjectInfo project,
-            RenderRequest initial, string defaultOutputPath)
+            RenderRequest initial, string defaultOutputPath, bool canDeleteSession)
         {
             ArgumentNullException.ThrowIfNull(initial);
 
 #pragma warning disable CS0618 // the private constructor is the intended one
-            var dialog = new RenderOptionsDialog(project, initial, defaultOutputPath);
+            var dialog = new RenderOptionsDialog(project, initial, defaultOutputPath, canDeleteSession);
 #pragma warning restore CS0618
 
             if (owner is { IsVisible: true })
@@ -199,31 +219,43 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>Checks the size segment for <paramref name="maxHeight"/>, falling back to Actual
-        /// when that cap is one this project cannot use (a remembered 720p meeting a 720p project).</summary>
+        /// when that cap is one this project cannot use (a remembered 720p meeting a 720p project).
+        /// Any other height (a remembered custom one, or the 1440p this row used to offer) opens on
+        /// Custom with that height filled in; the Custom box otherwise starts on the project's own
+        /// height, the most any cap can be.</summary>
         private void SelectSize(int maxHeight)
         {
-            if (maxHeight == 1440 && Size1440.IsEnabled)
-                Size1440.IsChecked = true;
-            else if (maxHeight == 1080 && Size1080.IsEnabled)
-                Size1080.IsChecked = true;
-            else if (maxHeight == 720 && Size720.IsEnabled)
-                Size720.IsChecked = true;
-            else
+            CustomHeightBox.Value = maxHeight is > 0 and not (1080 or 720 or 480)
+                ? maxHeight
+                : Math.Max(2, _project.HeightPx);
+
+            if (maxHeight <= 0)
                 SizeActual.IsChecked = true;
+            else if (maxHeight == 1080)
+                (Size1080.IsEnabled ? Size1080 : SizeActual).IsChecked = true;
+            else if (maxHeight == 720)
+                (Size720.IsEnabled ? Size720 : SizeActual).IsChecked = true;
+            else if (maxHeight == 480)
+                (Size480.IsEnabled ? Size480 : SizeActual).IsChecked = true;
+            else
+                SizeCustom.IsChecked = true;
         }
 
         private int SelectedCrf() => RenderPresets.ClampCrf((int)Math.Round(CrfSlider.Value));
 
         private int SelectedMaxHeight() =>
-            Size1440.IsChecked == true ? 1440 :
             Size1080.IsChecked == true ? 1080 :
-            Size720.IsChecked == true ? 720 : 0;
+            Size720.IsChecked == true ? 720 :
+            Size480.IsChecked == true ? 480 :
+            SizeCustom.IsChecked == true ? Math.Max(0, CustomHeightBox.Value ?? 0) : 0;
 
         /// <summary>The caption beside the size segments: what the encoder will actually be opened
         /// at, straight from the SDK's own rounding (even dimensions, aspect preserved) so the
         /// number here is the number in the file.</summary>
         private void SyncSizeCaption()
         {
+            CustomHeightBox.IsVisible = SizeCustom.IsChecked == true;
+
             if (_project.WidthPx <= 0 || _project.HeightPx <= 0)
             {
                 SizeCaption.Text = "";
@@ -279,6 +311,31 @@ namespace Clowd.UI.VideoEditor
 
         private async Task AcceptCoreAsync()
         {
+            // a cleared Custom box is null, which would otherwise read as "no cap" and render at
+            // full size behind a checked Custom
+            if (SizeCustom.IsChecked == true && (CustomHeightBox.Value ?? 0) <= 0)
+            {
+                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
+                    "Enter the maximum height for the video, or pick one of the other sizes.",
+                    "The custom size needs a height");
+                CustomHeightBox.Focus();
+                return;
+            }
+
+            string presetName = null;
+            if (SavePresetCheck.IsChecked == true)
+            {
+                presetName = PresetNameBox.Text?.Trim();
+                if (String.IsNullOrEmpty(presetName))
+                {
+                    await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
+                        "Give the preset a name, or untick \"Save current settings as new preset\".",
+                        "The preset needs a name");
+                    PresetNameBox.Focus();
+                    return;
+                }
+            }
+
             var path = ResolveTypedPath(out var problem);
             if (path == null)
             {
@@ -309,6 +366,8 @@ namespace Clowd.UI.VideoEditor
                 OutputPath = path,
                 CopyToClipboard = CopyCheck.IsChecked == true,
                 ShowInFolder = RevealCheck.IsChecked == true,
+                DeleteSession = DeleteSessionCheck.IsVisible && DeleteSessionCheck.IsChecked == true,
+                SaveAsPresetName = presetName,
             };
 
             Close(_result);

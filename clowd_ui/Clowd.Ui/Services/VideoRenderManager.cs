@@ -399,7 +399,7 @@ namespace Clowd.UI.Services
             runner.ProgressChanged += (s, percent) => render.SetProgress(percent);
             session.ActiveRender = render;
 
-            _ = RenderAsync(session, render, runner, renderArgsPath, outputPath, request);
+            _ = RenderAsync(source, session, render, runner, renderArgsPath, outputPath, request);
             return session;
         }
 
@@ -527,8 +527,8 @@ namespace Clowd.UI.Services
             }
         }
 
-        private static async Task RenderAsync(SessionInfo session, VideoRender render, VidRenderRunner runner,
-            string renderArgsPath, string outputPath, RenderRequest request)
+        private static async Task RenderAsync(SessionInfo source, SessionInfo session, VideoRender render,
+            VidRenderRunner runner, string renderArgsPath, string outputPath, RenderRequest request)
         {
             VidRenderResult result;
             try
@@ -547,11 +547,11 @@ namespace Clowd.UI.Services
                 runner.Dispose();
             }
 
-            await Dispatcher.UIThread.InvokeAsync(() => FinishAsync(session, render, outputPath, result, request));
+            await Dispatcher.UIThread.InvokeAsync(() => FinishAsync(source, session, render, outputPath, result, request));
         }
 
-        private static async Task FinishAsync(SessionInfo session, VideoRender render, string outputPath,
-            VidRenderResult result, RenderRequest request)
+        private static async Task FinishAsync(SessionInfo source, SessionInfo session, VideoRender render,
+            string outputPath, VidRenderResult result, RenderRequest request)
         {
             // the entry stops being an in-progress row here whatever happened next.
             if (ReferenceEquals(session.ActiveRender, render))
@@ -579,9 +579,12 @@ namespace Clowd.UI.Services
                     // the after-render actions belong to this render only — they are what the user
                     // ticked in the dialog (or last ticked, for a preset render), not a standing
                     // preference the next render re-reads. The toast says which of them ran.
-                    await RenderAfterActions.RunAsync(null,
-                        String.IsNullOrEmpty(result.OutputPath) ? outputPath : result.OutputPath,
+                    var writtenPath = String.IsNullOrEmpty(result.OutputPath) ? outputPath : result.OutputPath;
+                    await RenderAfterActions.RunAsync(null, writtenPath,
                         request.CopyToClipboard, request.ShowInFolder);
+
+                    if (request.DeleteSession)
+                        DeleteSourceSession(source, writtenPath);
                     break;
 
                 case VidRenderOutcome.Canceled:
@@ -601,6 +604,36 @@ namespace Clowd.UI.Services
 
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, message, "Video render failed");
                     break;
+            }
+        }
+
+        /// <summary>The dialog's "Delete session", run once the render has succeeded. Skipped (the
+        /// entry kept) when it is already gone, when it was reopened in an editor while the render
+        /// ran, or when the rendered file was written inside its directory (the fallback output
+        /// location, or a path the user typed), which deleting the directory would take with it.
+        /// A recording saved to the user's output folder stays on disk, as "Remove from Recents"
+        /// leaves it.</summary>
+        private static void DeleteSourceSession(SessionInfo source, string writtenPath)
+        {
+            try
+            {
+                if (!IsLive(source) || source.OpenEditor != null || VideoEditorWindow.IsOpenFor(source))
+                    return;
+
+                var sessionDir = Path.GetFullPath(Path.GetDirectoryName(source.FilePath))
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (Path.GetFullPath(writtenPath).StartsWith(sessionDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    Debug.WriteLine("Not deleting the edited session: the render was written inside it (" + writtenPath + ")");
+                    return;
+                }
+
+                SessionManager.Current.DeleteSession(source);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to delete the edited session after render: " + ex);
+                SentryConfig.CaptureHandled(ex, "render.delete-source-session");
             }
         }
 
