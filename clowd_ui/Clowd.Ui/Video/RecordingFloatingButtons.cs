@@ -73,9 +73,15 @@ namespace Clowd.UI
         // first status of a recording. While null the readout keeps showing the target, so the tile
         // does not flash a placeholder for the second between Start and the first status.
         private double? _actualFps;
-        // the frame rates a click on the FPS tile walks through, for the monitor the region is on.
-        // Seeded with the bare presets and replaced the moment a region is assigned (OnRegionAssigned).
-        private IReadOnlyList<int> _fpsOptions = FpsCycleRules.Options(0);
+        // the refresh rate of the monitor the region is on, which caps the FPS cycle. Zero until a
+        // region is assigned (OnRegionAssigned), which Options reads as "unknown".
+        private double _regionHz;
+
+        /// <summary>The frame rates a click on the FPS tile walks through: the user's configured
+        /// presets capped and completed by the monitor's refresh rate. Derived on each read rather
+        /// than cached, so presets edited on the settings page while the strip is open take effect
+        /// without a change notification for them (<see cref="RecordingSources.FpsPresets"/>).</summary>
+        private IReadOnlyList<int> FpsOptions => FpsCycleRules.Options(_regionHz, _sources?.FpsPresets);
 
         public RecordingFloatingButtons()
             : base(new FloatingTrayOptions { Title = "Clowd Recording Toolbar" })
@@ -272,7 +278,7 @@ namespace Clowd.UI
         protected override void OnRegionAssigned(ScreenRect region)
         {
             base.OnRegionAssigned(region);
-            _fpsOptions = FpsCycleRules.Options(RegionRefreshRate(region));
+            _regionHz = RegionRefreshRate(region);
             UpdateFps();
         }
 
@@ -296,7 +302,7 @@ namespace Clowd.UI
             else
             {
                 _fps.Value = FpsCycleRules.FormatFps(target);
-                var next = FpsCycleRules.Next(target, _fpsOptions);
+                var next = FpsCycleRules.Next(target, FpsOptions);
                 tip = next == target
                     ? $"Frame rate: {target} fps"
                     : $"Frame rate: {target} fps · click for {next}";
@@ -316,7 +322,7 @@ namespace Clowd.UI
             if (_recording)
                 return;
 
-            _sources.SetFps(FpsCycleRules.Next(_sources.Fps, _fpsOptions));
+            _sources.SetFps(FpsCycleRules.Next(_sources.Fps, FpsOptions));
         }
 
         /// <summary>

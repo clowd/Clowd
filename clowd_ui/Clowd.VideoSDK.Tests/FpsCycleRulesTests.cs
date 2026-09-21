@@ -78,6 +78,51 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Configured_presets_replace_the_built_in_ones()
+        {
+            // issue #101: 48 fps is reachable from the tile once it is one of the user's presets.
+            Assert.Equal(new[] { 24, 48, 60 }, FpsCycleRules.Options(60, new[] { 24, 48, 60 }).ToArray());
+            Assert.Equal(new[] { 24, 48, 144 }, FpsCycleRules.Options(144, new[] { 24, 48, 200 }).ToArray());
+        }
+
+        [Fact]
+        public void Configured_presets_are_sorted_and_deduplicated()
+        {
+            Assert.Equal(new[] { 24, 48, 90 }, FpsCycleRules.Options(90, new[] { 48, 24, 48 }).ToArray());
+        }
+
+        [Fact]
+        public void No_configured_presets_falls_back_to_the_built_in_ones()
+        {
+            Assert.Equal(FpsCycleRules.Presets, FpsCycleRules.Options(0, null));
+            Assert.Equal(FpsCycleRules.Presets, FpsCycleRules.Options(0, Array.Empty<int>()));
+        }
+
+        [Fact]
+        public void Presets_setting_clamps_and_orders_what_the_cycle_reads()
+        {
+            var presets = new Clowd.Config.FpsPresets { First = 60, Second = 0, Third = 9999 };
+
+            Assert.Equal(1, presets.Second);
+            Assert.Equal(240, presets.Third);
+            Assert.Equal(new[] { 1, 60, 240 }, presets.Values.ToArray());
+        }
+
+        [Fact]
+        public void Presets_setting_defaults_to_the_built_in_cycle()
+        {
+            Assert.Equal(FpsCycleRules.Presets, new Clowd.Config.FpsPresets().Values);
+        }
+
+        [Fact]
+        public void Duplicate_presets_shorten_the_cycle_rather_than_breaking_it()
+        {
+            var presets = new Clowd.Config.FpsPresets { First = 60, Second = 60, Third = 60 };
+            Assert.Equal(new[] { 60 }, presets.Values.ToArray());
+            Assert.Equal(60, FpsCycleRules.Next(60, FpsCycleRules.Options(60, presets.Values)));
+        }
+
+        [Fact]
         public void Next_with_a_single_option_stays_there()
         {
             Assert.Equal(24, FpsCycleRules.Next(24, new[] { 24 }));

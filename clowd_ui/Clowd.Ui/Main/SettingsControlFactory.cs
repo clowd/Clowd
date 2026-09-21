@@ -513,6 +513,19 @@ namespace Clowd.UI.Config
                 });
             }
 
+            // the three frame-rate presets sit side by side in one row: they are one choice made of
+            // three numbers, and stacking them as three rows would read as three unrelated settings.
+            if (Is(pd, typeof(FpsPresets)))
+            {
+                var child = new SettingsControlFactory(_wndFn, pd.GetValue(_obj));
+                var boxes = new[] { nameof(FpsPresets.First), nameof(FpsPresets.Second), nameof(FpsPresets.Third) }
+                    .Select(name => pd.GetChildProperties().OfType<PropertyDescriptor>().First(t => t.Name == name))
+                    .Select((childPd, i) => child.FpsPresetBox(childPd, i + 1))
+                    .ToArray();
+
+                return StackCtrl(boxes);
+            }
+
             if (Is(pd, typeof(TimeOption)))
             {
                 var child = new SettingsControlFactory(_wndFn, pd.GetValue(_obj));
@@ -653,6 +666,25 @@ namespace Clowd.UI.Config
                 Converter = converter,
                 Source = _obj,
             };
+        }
+
+        /// <summary>One of the three frame-rate preset boxes: narrow (the value is at most three
+        /// digits) and bounded by the same range the Fps setting itself accepts, so a preset can
+        /// never be a rate the recorder would refuse. The property clamps too — typing past the
+        /// bound in the box is corrected on commit rather than stored.</summary>
+        Control FpsPresetBox(PropertyDescriptor pd, int ordinal)
+        {
+            var box = new NumericUpDown
+            {
+                Width = 64,
+                Minimum = FpsPresets.MinFps,
+                Maximum = FpsPresets.MaxFps,
+                Increment = 1,
+                FormatString = "0",
+                ShowButtonSpinner = false,
+            };
+            Avalonia.Automation.AutomationProperties.SetName(box, $"Frame rate preset {ordinal}");
+            return SimpleControlBinding(box, pd, NumericUpDown.ValueProperty, new NumericTypeConverter());
         }
 
         Panel StackCtrl(params Control[] children)

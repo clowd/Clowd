@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace Clowd.UI
 {
@@ -10,8 +11,8 @@ namespace Clowd.UI
     /// rate is printed. Nothing in here reads settings or screens, so all of it is testable
     /// (<c>FpsCycleRulesTests</c>).
     /// <para>
-    /// The cycle is the three presets (30, 60, 120) capped and completed by the monitor's own
-    /// refresh rate: a preset above what the panel can show is dropped (an 80 Hz screen offers 30,
+    /// The cycle is the user's three configured presets (30, 60, 120 out of the box) capped and
+    /// completed by the monitor's own refresh rate: a preset above what the panel can show is dropped (an 80 Hz screen offers 30,
     /// 60, 80 — never 120), the native rate itself is always the last stop, and a preset within
     /// <see cref="NativeTolerance"/> of the native rate is folded into it so the list never carries
     /// two entries that mean the same thing (a 59 Hz panel offers 30 and 59, not 30, 59, 60).
@@ -19,8 +20,9 @@ namespace Clowd.UI
     /// </summary>
     public static class FpsCycleRules
     {
-        /// <summary>The fixed stops, low to high. Public so the tests and the spike harness quote
-        /// the same list this class reasons about.</summary>
+        /// <summary>The stops used when the caller has no configured presets to offer (the spike
+        /// harness, and any call made before the settings are loaded). The real cycle reads
+        /// <c>SettingsRecording.FpsPresets</c>, which defaults to these same three.</summary>
         public static readonly IReadOnlyList<int> Presets = new[] { 30, 60, 120 };
 
         /// <summary>How close (in Hz) a preset has to be to the native rate to count as the same
@@ -35,14 +37,26 @@ namespace Clowd.UI
         /// choice, and a wrong 120 on a screen that cannot show it costs a bigger file, not a broken
         /// recording.
         /// </summary>
-        public static IReadOnlyList<int> Options(double nativeHz)
+        public static IReadOnlyList<int> Options(double nativeHz) => Options(nativeHz, Presets);
+
+        /// <summary>
+        /// <see cref="Options(double)"/> over a caller's own presets — the user's configured three
+        /// (issue #101). An empty or null list falls back to the built-in <see cref="Presets"/>, so
+        /// the tile always has somewhere to cycle to; the list need not be sorted or distinct.
+        /// </summary>
+        public static IReadOnlyList<int> Options(double nativeHz, IReadOnlyList<int> presets)
         {
+            if (presets == null || presets.Count == 0)
+                presets = Presets;
+
+            var sorted = presets.Distinct().OrderBy(p => p).ToList();
+
             if (!(nativeHz > 0) || Double.IsInfinity(nativeHz))
-                return Presets;
+                return sorted;
 
             var native = (int)Math.Round(nativeHz);
-            var options = new List<int>(Presets.Count + 1);
-            foreach (var preset in Presets)
+            var options = new List<int>(sorted.Count + 1);
+            foreach (var preset in sorted)
             {
                 // strictly below the native rate AND not the native rate in disguise
                 if (preset < native && Math.Abs(preset - native) > NativeTolerance)

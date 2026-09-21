@@ -243,6 +243,16 @@ namespace Clowd.Config
             set => Set(ref _fps, value);
         }
 
+        [Category("Video")]
+        [VisibleWhen(nameof(Mode), Studio, Instant)]
+        [DisplayName("Frame rate presets")]
+        [Description("The frame rates the FPS tile on the recording toolbar cycles through. A preset higher than the monitor refresh rate is skipped.")]
+        public FpsPresets FpsPresets
+        {
+            get => _fpsPresets;
+            set => Set(ref _fpsPresets, value);
+        }
+
         /// <summary>Instant mode only: a Studio recording is raw material for the editor and is
         /// always captured at <see cref="StudioCrf"/>. Consumers read <see cref="Crf"/>, never
         /// this directly, so the hidden value can never leak into a Studio recording.</summary>
@@ -475,6 +485,7 @@ namespace Clowd.Config
         }
 
         private int _fps = 30;
+        private FpsPresets _fpsPresets = new FpsPresets();
         private VideoQuality _quality = VideoQuality.Medium;
         private int _maxResolutionWidth = 0;
         private int _maxResolutionHeight = 0;

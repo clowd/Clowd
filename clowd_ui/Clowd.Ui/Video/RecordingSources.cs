@@ -194,6 +194,11 @@ namespace Clowd.UI
         /// button and what the recorder's settings file carries.</summary>
         public int Fps => _settings.Fps;
 
+        /// <summary>The frame rates the FPS tile cycles through before the monitor caps them
+        /// (<c>FpsCycleRules.Options</c>). Read live rather than cached: the settings page can
+        /// change them while the strip is open, and nothing raises a change for it.</summary>
+        public IReadOnlyList<int> FpsPresets => _settings.FpsPresets.Values;
+
         /// <summary>Writes the target frame rate and queues the save. The settings bus does the rest:
         /// the page hears the change and pushes a <c>configure</c> to the waiting recorder, and this
         /// model's own <see cref="Changed"/> brings the new value back to the tile.</summary>
