@@ -7,19 +7,19 @@
       "items": [
         {
           "name": "Avalonia",
-          "version": "12.1.0",
+          "version": "12.1.2",
           "license": "MIT",
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
         {
           "name": "Avalonia.Desktop",
-          "version": "12.1.0",
+          "version": "12.1.2",
           "license": "MIT",
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
         {
           "name": "Avalonia.Fonts.Inter",
-          "version": "12.1.0",
+          "version": "12.1.2",
           "license": "MIT",
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
@@ -85,7 +85,7 @@
         },
         {
           "name": "Semi.Avalonia",
-          "version": "12.1.0",
+          "version": "12.1.0.1",
           "license": "MIT",
           "url": "https://github.com/irihitech/Semi.Avalonia"
         },
@@ -174,28 +174,40 @@
           "url": "https://github.com/servo/core-foundation-rs"
         },
         {
-          "name": "cosmic-text",
-          "version": "0.19.0",
-          "license": "MIT OR Apache-2.0",
-          "url": "https://github.com/pop-os/cosmic-text"
-        },
-        {
           "name": "DPDFNet",
           "version": "",
           "license": "Apache-2.0",
           "url": "https://huggingface.co/Ceva-IP/DPDFNet"
         },
         {
-          "name": "etagere",
-          "version": "0.3.0",
+          "name": "egui",
+          "version": "0.36.2",
           "license": "MIT OR Apache-2.0",
-          "url": "https://github.com/nical/etagere"
+          "url": "https://github.com/emilk/egui"
+        },
+        {
+          "name": "egui_extras",
+          "version": "0.36.2",
+          "license": "MIT OR Apache-2.0",
+          "url": "https://github.com/emilk/egui"
+        },
+        {
+          "name": "egui_plot",
+          "version": "0.37.0",
+          "license": "MIT OR Apache-2.0",
+          "url": "https://github.com/emilk/egui_plot"
         },
         {
           "name": "euclid",
           "version": "0.22.14",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/servo/euclid"
+        },
+        {
+          "name": "fontdb",
+          "version": "0.23.0",
+          "license": "MIT",
+          "url": "https://github.com/RazrFalcon/fontdb"
         },
         {
           "name": "foreign-types",
@@ -306,12 +318,6 @@
           "url": "https://github.com/HEnquist/realfft"
         },
         {
-          "name": "resvg",
-          "version": "0.47.0",
-          "license": "Apache-2.0 OR MIT",
-          "url": "https://github.com/linebender/resvg"
-        },
-        {
           "name": "rfd",
           "version": "0.17.2",
           "license": "MIT",
@@ -348,10 +354,10 @@
           "url": "https://github.com/drakulix/simplelog.rs"
         },
         {
-          "name": "usvg",
-          "version": "0.47.0",
-          "license": "Apache-2.0 OR MIT",
-          "url": "https://github.com/linebender/resvg"
+          "name": "skrifa",
+          "version": "0.44.0",
+          "license": "MIT OR Apache-2.0",
+          "url": "https://github.com/googlefonts/fontations"
         },
         {
           "name": "windows",
