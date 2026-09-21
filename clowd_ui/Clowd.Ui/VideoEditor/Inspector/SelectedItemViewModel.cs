@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Clowd.Config;
 using Clowd.UI.Helpers;
 using Clowd.UI.Services;
 using Clowd.VideoSDK.Composition;
@@ -559,6 +560,8 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         private bool _denoise;
         private double _denoiseStrength = 1.0;
+        private bool _showSpeedWarpExempt;
+        private bool _speedWarpExempt;
 
         private AiAnalysisManager _analysis;
 
@@ -602,6 +605,13 @@ namespace Clowd.UI.VideoEditor.Inspector
         private bool _rampExitEnabled;
         private double _rampExitMs = DefaultTransitionMs;
         private TransitionEasing _rampExitEasing = DefaultTransitionEasing;
+
+        private bool _showVoiceRecorder;
+
+        /// <summary>Empty until the recorder's settings are opened for the first time: enumerating
+        /// the machine's capture endpoints is not work the editor should do just to have a panel
+        /// in the window (see <see cref="ShowVoiceRecorderSettings"/>).</summary>
+        private IReadOnlyList<NamedOption> _voiceRecorderDevices = Array.Empty<NamedOption>();
 
         public SelectedItemViewModel()
         {
@@ -672,6 +682,16 @@ namespace Clowd.UI.VideoEditor.Inspector
         // ------------------------------------------------------------------- section visibility
 
         public bool HasSelection => _hasSelection;
+
+        /// <summary>Whether the panel shows the selected item's properties at all. The voice
+        /// recorder's own settings take the whole panel while they are up (see
+        /// <see cref="ShowVoiceRecorder"/>), so the item sections stand down even though the
+        /// selection is still there and every one of their bindings stays live.</summary>
+        public bool ShowProperties => _hasSelection && !_showVoiceRecorder;
+
+        /// <summary>Whether the "Nothing selected" placeholder is on show: nothing selected and
+        /// no mode that fills the panel on its own.</summary>
+        public bool ShowNothingSelected => !_hasSelection && !_showVoiceRecorder;
 
         /// <summary>Position/scale/rotation/opacity — anything the compositor draws.</summary>
         public bool ShowTransform => _showTransform;
@@ -1898,6 +1918,35 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        /// <summary>The AUDIO section's speed-warp opt-out row, audio media clips only. The
+        /// other audio rows are about a track or a clip of any kind; this one needs a
+        /// <see cref="MediaContent"/> to write to.</summary>
+        public bool ShowSpeedWarpExempt => _showSpeedWarpExempt;
+
+        /// <summary>
+        /// Whether this clip ignores the project's Speed effects and is mixed by the output clock
+        /// instead, so it plays in real time wherever the rest of the timeline is sped up or
+        /// slowed down (<see cref="MediaContent.SpeedWarpExempt"/>). Recorded voice-overs are
+        /// created exempt; any audio clip can be made one.
+        ///
+        /// Single-item, not row-wide: this is a property of the clip's own sound, like
+        /// <see cref="Volume"/>, and the session re-fits the clip's project-time duration under
+        /// the current warp as part of the same write.
+        /// </summary>
+        public bool SpeedWarpExempt
+        {
+            get => _speedWarpExempt;
+            set
+            {
+                if (!Set(ref _speedWarpExempt, value) || _syncing)
+                    return;
+
+                var item = SelectedItem;
+                if (item?.Content is MediaContent media && media.SpeedWarpExempt != value)
+                    _session.SetSpeedWarpExempt(item.Id, value, this);
+            }
+        }
+
         /// <summary>The row's AI-denoise toggle — a property of the track, like the mute it sits
         /// under, so it fans out over the row by construction. Turning it on is what queues the
         /// sidecar generation (the analysis manager watches the same change).</summary>
@@ -2923,12 +2972,140 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        // --------------------------------------------------------------------- voice recorder
+
+        /// <summary>Raised when the user picks another microphone, with the id to open. The recorder overlay's mic is already running by the time this
+        /// section is reachable, so the window reopens it on the new device rather than waiting
+        /// for the next take.</summary>
+        public event Action<string> VoiceRecorderDeviceChanged;
+
+        /// <summary>
+        /// Whether the panel is showing the voice recorder's settings instead of the selection's
+        /// properties. Pure UI state, like <see cref="CropModeActive"/>: nothing in the project
+        /// changes with it, and it is cleared whenever the selection moves.
+        /// </summary>
+        public bool ShowVoiceRecorder => _showVoiceRecorder;
+
+        /// <summary>Puts the recorder's settings up (the overlay's gear button). Re-enumerates the
+        /// microphones on the way in, so one plugged in since the editor opened is offered, and
+        /// re-publishes the stored pick, which the settings page or the capture panel could have
+        /// changed behind the panel's back.</summary>
+        public void ShowVoiceRecorderSettings()
+        {
+            // the list before the pick, and both before the mode: the picker resolves the stored
+            // id against the list currently on offer, so the list has to be there first.
+            _voiceRecorderDevices = BuildVoiceRecorderDevices();
+            OnPropertyChanged(nameof(VoiceRecorderDevices));
+            OnPropertyChanged(nameof(VoiceRecorderDeviceId));
+            OnPropertyChanged(nameof(VoiceRecorderDevice));
+
+            SetVoiceRecorderMode(true);
+        }
+
+        /// <summary>Takes the recorder's settings back down, leaving the selection's properties
+        /// where they were. The selection moving does this on its own; the window calls it when
+        /// the recorder overlay itself is closed.</summary>
+        public void HideVoiceRecorderSettings() => SetVoiceRecorderMode(false);
+
+        private void SetVoiceRecorderMode(bool value)
+        {
+            Set(ref _showVoiceRecorder, value, nameof(ShowVoiceRecorder),
+                nameof(ShowProperties), nameof(ShowNothingSelected));
+        }
+
+        /// <summary>
+        /// The microphone picker's entries: the default-device row the recorder starts on, then
+        /// every active capture endpoint. Rebuilt each time the section is opened rather than
+        /// held for the life of the window, because the set of microphones is not fixed.
+        ///
+        /// <see cref="NamedOption"/> rather than the enumerator's own
+        /// <c>AudioDeviceInfo</c> for the reason every other picker in this panel uses it: the
+        /// dropdown labels its rows with <c>ToString</c>.
+        /// </summary>
+        public IReadOnlyList<NamedOption> VoiceRecorderDevices => _voiceRecorderDevices;
+
+        /// <summary>The picked microphone as one of <see cref="VoiceRecorderDevices"/>, which is
+        /// what the dropdown binds to. The id is the stored value; this resolves it against the list
+        /// currently on offer, exactly as <see cref="CursorVariant"/> does, so a device that has
+        /// since been unplugged reads as the default row (which is what the recorder will open)
+        /// without the stored id being thrown away.</summary>
+        public NamedOption VoiceRecorderDevice
+        {
+            get
+            {
+                var devices = _voiceRecorderDevices;
+                var id = VoiceRecorderDeviceId;
+                // the default row, never null, until the list has been built for the first time
+                return devices.FirstOrDefault(d => d.Value == id) ?? devices.FirstOrDefault();
+            }
+            set => VoiceRecorderDeviceId = value?.Value;
+        }
+
+        /// <summary>
+        /// The microphone the recorder opens, which is the screen recorder's own
+        /// <see cref="SettingsRecording.MicrophoneDeviceId"/>: one microphone setting for the app,
+        /// so picking it here also changes what the next screen recording captures, and the
+        /// reverse. An app setting, not project state.
+        ///
+        /// Read back as <see cref="AudioDeviceManager.DefaultDeviceId"/> when empty, so the
+        /// picker always has a row selected.
+        /// </summary>
+        public string VoiceRecorderDeviceId
+        {
+            get
+            {
+                var stored = RecordingSettings?.MicrophoneDeviceId;
+                return String.IsNullOrEmpty(stored) ? AudioDeviceManager.DefaultDeviceId : stored;
+            }
+            set
+            {
+                var id = String.IsNullOrEmpty(value) ? AudioDeviceManager.DefaultDeviceId : value;
+
+                var settings = RecordingSettings;
+                if (settings == null || settings.MicrophoneDeviceId == id)
+                    return;
+
+                settings.MicrophoneDeviceId = id;
+                OnPropertyChanged(nameof(VoiceRecorderDeviceId));
+                OnPropertyChanged(nameof(VoiceRecorderDevice));
+                VoiceRecorderDeviceChanged?.Invoke(id);
+            }
+        }
+
+        /// <summary>Null before the app has loaded its settings (and in the tests), which every
+        /// read above tolerates: the picker then shows the default row and writes nowhere.</summary>
+        private static SettingsRecording RecordingSettings => SettingsRoot.Current?.Recording;
+
+        private static IReadOnlyList<NamedOption> BuildVoiceRecorderDevices()
+        {
+            // the leading row is written here rather than taken from the enumeration: that one is
+            // labelled "Default - <whatever is current>", and this picker is about which mic the
+            // recorder opens, not which one Windows happens to be pointing at right now.
+            var options = new List<NamedOption>
+            {
+                new NamedOption(AudioDeviceManager.DefaultDeviceId, "Default device"),
+            };
+
+            foreach (var device in AudioDeviceManager.GetMicrophones())
+            {
+                if (device.DeviceId == AudioDeviceManager.DefaultDeviceId)
+                    continue;
+
+                options.Add(new NamedOption(device.DeviceId, device.FriendlyName));
+            }
+
+            return options;
+        }
+
         // ---------------------------------------------------------------------- session events
 
         private void Session_SelectionChanged(object sender, EventArgs e)
         {
             // crop mode is a conversation about one item; a new selection ends it.
             CropModeActive = false;
+            // so is the recorder's settings mode, which is about the take the user is *about* to
+            // record: picking a clip means they want that clip's properties back.
+            HideVoiceRecorderSettings();
             Sync();
         }
 
@@ -2989,7 +3166,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // the route to that state either.
                 var isCroppable = isPicture && item.Content is not BackgroundContent;
 
-                Set(ref _hasSelection, item != null, nameof(HasSelection));
+                Set(ref _hasSelection, item != null, nameof(HasSelection),
+                    nameof(ShowProperties), nameof(ShowNothingSelected));
                 Set(ref _showTransform, visual, nameof(ShowTransform));
                 Set(ref _showScale, visual && !isText, nameof(ShowScale));
                 // the keystroke overlay keeps placement but not rotation: the composer draws the
@@ -3031,6 +3209,12 @@ namespace Clowd.UI.VideoEditor.Inspector
                 var media = item?.Content as MediaContent;
                 Set(ref _showSpeed, media != null && item.GroupId == null, nameof(ShowSpeed));
                 Set(ref _speed, TimelineOps.SpeedOf(media), nameof(SpeedChoice));
+
+                // the speed-warp opt-out is written on the content, so it needs one: an audio row
+                // whose item is not a media clip (nothing writes one today, but the section's
+                // bindings stay live either way) simply does not offer the row.
+                Set(ref _showSpeedWarpExempt, isAudio && media != null, nameof(ShowSpeedWarpExempt));
+                Set(ref _speedWarpExempt, media?.SpeedWarpExempt ?? false, nameof(SpeedWarpExempt));
 
                 if (item?.Content is SpeedContent speedEffect)
                 {

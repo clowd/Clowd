@@ -366,7 +366,7 @@ namespace Clowd.VideoSDK.Render
                         if (DenoisedAudioSource.HasDenoise(project))
                             mixSource = denoisedSource = new DenoisedAudioSource(
                                 audioSource, project, options.SidecarCacheDir);
-                        audioWarp = new WarpAudioResampler(new AudioMixer(project, mixSource),
+                        audioWarp = new WarpAudioResampler(new AudioMixer(project, mixSource, warp),
                             warp, output.SampleRate);
                         // one video frame's worth of audio is the largest per-iteration chunk
                         long perFrame = AudioTime.SamplesCeil(

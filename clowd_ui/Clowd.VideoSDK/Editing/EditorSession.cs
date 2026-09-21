@@ -45,6 +45,15 @@ namespace Clowd.VideoSDK.Editing
         public object Origin { get; }
     }
 
+    /// <summary>A voice take in progress, as the timeline draws it: the audio row it will land
+    /// on, where it starts, and the project span its recording covers so far: a ghost clip, not
+    /// a model item (see <see cref="EditorSession.BeginVoiceTake"/>).</summary>
+    public sealed record VoiceTakeGhost(Guid TrackId, long StartTicks, long DurationTicks)
+    {
+        /// <summary>Exclusive end of the ghost on the project timeline.</summary>
+        public long EndTicks => StartTicks + DurationTicks;
+    }
+
     /// <summary>Raised when a mutation produced a project that fails <see cref="Project.Validate"/>
     /// and was rolled back. Surfaced as an event rather than an exception because the mutators are
     /// driven from pointer/keyboard handlers where a throw would tear the interaction down — the
@@ -105,6 +114,17 @@ namespace Clowd.VideoSDK.Editing
         /// <summary>The strongest kind any inner mutation carried — what <see cref="Commit"/>
         /// raises, so a gesture containing a delete still announces itself as structural.</summary>
         internal ProjectChangeKind Kind { get; set; } = ProjectChangeKind.Mapping;
+
+        /// <summary>The exempt clips' real-time extents as the gesture began, or null when there
+        /// were none: every step of a speed-item drag re-fits them from these rather than from
+        /// the previous step, so a long drag cannot accumulate rounding (see
+        /// <see cref="EditorSession.RefitExemptItems"/>).</summary>
+        internal EditorSession.ExemptSnapshot ExemptBefore { get; set; }
+
+        /// <summary>True once a step of this gesture re-fit the exempt clips: the flag that
+        /// lets a drag which comes back to its starting mapping put their original durations
+        /// back instead of leaving a re-fit in place.</summary>
+        internal bool ExemptRefitApplied { get; set; }
 
         /// <summary>Ends the gesture, pushing one undo entry and persisting — unless nothing
         /// actually changed, in which case a no-op drag costs nothing.</summary>
@@ -176,6 +196,11 @@ namespace Clowd.VideoSDK.Editing
         private EditGesture _gesture;
         private bool _suppressCoalesce;
         private string _pendingSaveJson;
+        private TimeWarp _warpCache;
+        private int _warpCacheStamp = -1;
+        private int _changeStamp;
+        private VoiceTake _voiceTake;
+        private Guid? _lastVoiceTrackId;
 
         /// <summary>Test seam for the coalesce window; production time is
         /// <see cref="Environment.TickCount64"/>.</summary>
@@ -210,6 +235,24 @@ namespace Clowd.VideoSDK.Editing
         /// <summary>The timeline's current length in 100ns ticks (see
         /// <see cref="Model.Project.GetDurationTicks"/>).</summary>
         public long DurationTicks => Project.GetDurationTicks();
+
+        /// <summary>The project's speed warp (<see cref="TimeWarp.Build"/> of the live model),
+        /// rebuilt lazily after every observable change and cached in between: the
+        /// project-time to output-time mapping a host needs to turn a wall-clock elapsed into
+        /// project ticks (the voice recorder) or to label the ruler. Never null; an unwarped
+        /// project gets an identity warp.</summary>
+        public TimeWarp CurrentWarp
+        {
+            get
+            {
+                if (_warpCache == null || _warpCacheStamp != _changeStamp)
+                {
+                    _warpCache = TimeWarp.Build(Project);
+                    _warpCacheStamp = _changeStamp;
+                }
+                return _warpCache;
+            }
+        }
 
         public event EventHandler<ProjectChangedEventArgs> ProjectChanged;
 
@@ -293,7 +336,10 @@ namespace Clowd.VideoSDK.Editing
             if (_gesture != null)
                 throw new InvalidOperationException($"Gesture '{_gesture.Label}' is still in progress.");
 
-            _gesture = new EditGesture(this, label, origin, Project.ToJson(), SelectionSnapshot());
+            _gesture = new EditGesture(this, label, origin, Project.ToJson(), SelectionSnapshot())
+            {
+                ExemptBefore = CaptureExemptSpans(Project),
+            };
             return _gesture;
         }
 
@@ -302,30 +348,34 @@ namespace Clowd.VideoSDK.Editing
             _gesture = null;
 
             var after = Project.ToJson();
-            if (after == gesture.BeforeJson)
-                return;
-
-            PushUndo(new UndoEntry
+            if (after != gesture.BeforeJson)
             {
-                Label = gesture.Label,
-                BeforeJson = gesture.BeforeJson,
-                BeforeSelection = gesture.BeforeSelection,
-                TimestampMs = Clock(),
-            });
-            SchedulePersist(after);
-            RaiseProjectChanged(gesture.Kind, gesture.Origin);
+                PushUndo(new UndoEntry
+                {
+                    Label = gesture.Label,
+                    BeforeJson = gesture.BeforeJson,
+                    BeforeSelection = gesture.BeforeSelection,
+                    TimestampMs = Clock(),
+                });
+                SchedulePersist(after);
+                RaiseProjectChanged(gesture.Kind, gesture.Origin);
+            }
+
+            DiscardPendingVoiceTrack();
         }
 
         internal void CancelGesture(EditGesture gesture)
         {
             _gesture = null;
 
-            if (Project.ToJson() == gesture.BeforeJson)
-                return;
+            if (Project.ToJson() != gesture.BeforeJson)
+            {
+                RestoreInPlace(gesture.BeforeJson);
+                RestoreSelection(gesture.BeforeSelection);
+                RaiseProjectChanged(gesture.Kind, gesture.Origin);
+            }
 
-            RestoreInPlace(gesture.BeforeJson);
-            RestoreSelection(gesture.BeforeSelection);
-            RaiseProjectChanged(gesture.Kind, gesture.Origin);
+            DiscardPendingVoiceTrack();
         }
 
         // ------------------------------------------------------------------------------ output box
@@ -643,6 +693,42 @@ namespace Clowd.VideoSDK.Editing
                 var item = RequireItem(p, itemId);
                 if (item.Content is SpeedContent speed)
                     speed.PitchCorrect = pitchCorrect;
+            });
+
+        /// <summary>
+        /// Sets a media clip's <see cref="MediaContent.SpeedWarpExempt"/> flag and re-fits its
+        /// project span so the same source keeps playing over the same real time. Flipping the
+        /// flag on turns the clip's project span into its output span (it played that many
+        /// project ticks; from now on it plays that many output ticks, wherever the warp puts
+        /// them); flipping it off does the reverse. Under an identity warp nothing but the flag
+        /// changes. The re-fit is clamped like a speed change is (<see cref="TimelineOps.SetSpeed"/>):
+        /// never under <see cref="TimelineOps.MinSegmentTicks"/>, never into the next clip on
+        /// the row. A mapping change: the flag decides which clock the mixer runs the clip on,
+        /// not which streams are decoded. No-op for non-media items.
+        /// </summary>
+        public void SetSpeedWarpExempt(Guid itemId, bool value, object origin = null) =>
+            Mutate(value ? "Exempt from Speed Warp" : "Follow Speed Warp", ProjectChangeKind.Mapping,
+                null, origin, p =>
+            {
+                var item = RequireItem(p, itemId);
+                if (item.Content is not MediaContent media || media.SpeedWarpExempt == value)
+                    return;
+
+                var warp = TimeWarp.Build(p);
+                media.SpeedWarpExempt = value;
+                if (warp.IsIdentity)
+                    return;
+
+                if (value)
+                {
+                    // the project span it covered is the real time it played for
+                    FitExemptItem(p, warp, item, item.DurationTicks);
+                }
+                else
+                {
+                    var outputSpan = warp.ToOutput(item.TimelineEndTicks) - warp.ToOutput(item.TimelineStartTicks);
+                    item.DurationTicks = TimelineOps.ClampDurationToRow(p, item, outputSpan);
+                }
             });
 
         /// <summary>Wraps <see cref="TimelineOps.Split"/> (whole group, all-or-nothing).</summary>
@@ -1631,24 +1717,8 @@ namespace Clowd.VideoSDK.Editing
 
                 for (var i = 0; i < audioStreams.Count; i++)
                 {
-                    // above every existing row except the pinned speed row, which stays on top:
-                    // shift it (and only it) up, as the insert helpers renumber.
-                    var belowSpeed = p.Tracks.Where(t => !IsSpeedTrack(p, t))
-                                             .Select(t => t.Order).ToList();
-                    var order = belowSpeed.Count > 0 ? belowSpeed.Max() + 1 : 0;
-                    foreach (var existing in p.Tracks)
-                    {
-                        if (existing.Order >= order)
-                            existing.Order++;
-                    }
-                    var track = new Track
-                    {
-                        Id = Guid.NewGuid(),
-                        Kind = TrackKind.Audio,
-                        Name = audioStreams.Count == 1 ? baseName : $"{baseName} {i + 1}",
-                        Order = order,
-                    };
-                    p.Tracks.Add(track);
+                    var track = InsertAudioTrackBelow(p,
+                        audioStreams.Count == 1 ? baseName : $"{baseName} {i + 1}");
                     created.Add(NewImportItem(track, source, audioStreams[i], probe, startTicks,
                         linkGroup, null));
                 }
@@ -1876,6 +1946,9 @@ namespace Clowd.VideoSDK.Editing
         {
             var before = Project.ToJson();
             var beforeSelection = SelectionSnapshot();
+            // inside a gesture the exempt clips are re-fit from the gesture's own starting
+            // point (see EditGesture.ExemptBefore); a single mutation re-fits from its own
+            var exemptBefore = _gesture?.ExemptBefore ?? CaptureExemptSpans(Project);
 
             T result;
             try
@@ -1885,6 +1958,9 @@ namespace Clowd.VideoSDK.Editing
                 // deleted or ungrouped, a row's last items cut — ends with the group dissolved,
                 // inside the same mutation so one undo restores both.
                 TimelineOps.CollapseLoneGroups(Project);
+                // a speed edit moved the output clock under the exempt clips: refit them to
+                // the real time they cover, inside the same mutation so one undo restores both
+                RefitExemptItems(Project, exemptBefore);
                 Project.Normalize();
             }
             catch
@@ -1999,8 +2075,410 @@ namespace Clowd.VideoSDK.Editing
             _persist.Write(Encoding.UTF8.GetBytes(json));
         }
 
-        private void RaiseProjectChanged(ProjectChangeKind kind, object origin) =>
+        private void RaiseProjectChanged(ProjectChangeKind kind, object origin)
+        {
+            _changeStamp++;
             ProjectChanged?.Invoke(this, new ProjectChangedEventArgs(kind, origin));
+        }
+
+        // ------------------------------------------------------------------- speed warp exemption
+
+        /// <summary>One exempt clip's extent as a snapshot remembers it: where it started on the
+        /// output clock, how many output ticks it covered (its real-time length, the truth the
+        /// re-fit preserves), and the project duration it had (what a drag that returns to its
+        /// starting mapping puts back).</summary>
+        internal readonly record struct ExemptSpan(Guid ItemId, long OutputStart, long OutputSpan, long DurationTicks);
+
+        /// <summary>The exempt clips' extents under one warp, captured before a mutation (or a
+        /// gesture) so the re-fit after it can tell whether the mapping moved and by how
+        /// much.</summary>
+        internal sealed class ExemptSnapshot
+        {
+            public TimeWarp Warp { get; init; }
+
+            public List<ExemptSpan> Spans { get; init; }
+        }
+
+        /// <summary>Snapshots every exempt clip's output-clock extent, or null when the project
+        /// has none, the common case, which then costs nothing per mutation (no warp is even
+        /// built).</summary>
+        internal static ExemptSnapshot CaptureExemptSpans(Project project)
+        {
+            List<ExemptSpan> spans = null;
+            TimeWarp warp = null;
+            foreach (var item in project.Items)
+            {
+                if (item.Content is not MediaContent { SpeedWarpExempt: true })
+                    continue;
+
+                warp ??= TimeWarp.Build(project);
+                var outputStart = warp.ToOutput(item.TimelineStartTicks);
+                (spans ??= new List<ExemptSpan>()).Add(new ExemptSpan(item.Id, outputStart,
+                    warp.ToOutput(item.TimelineEndTicks) - outputStart, item.DurationTicks));
+            }
+
+            return spans == null ? null : new ExemptSnapshot { Warp = warp, Spans = spans };
+        }
+
+        /// <summary>
+        /// The re-fit rule: an exempt clip's real-time (output) span is the truth and its
+        /// project duration is derived from it, so once a mutation has moved the warp's mapping
+        /// (a speed item added, moved, trimmed, re-factored, ramped, deleted, hidden) every clip
+        /// that was exempt before and still is gets <c>DurationTicks = ToProject(ToOutput(start)
+        /// + span) - start</c> under the new warp. Nothing happens while the mapping is
+        /// unchanged: a trim of the clip itself, say, must keep the trim. Inside a gesture the
+        /// snapshot is the gesture's starting state, so a drag that arrives back at its starting
+        /// mapping restores the starting durations rather than leaving an intermediate re-fit.
+        /// </summary>
+        private void RefitExemptItems(Project project, ExemptSnapshot before)
+        {
+            if (before == null)
+                return;
+
+            var warp = TimeWarp.Build(project);
+            if (warp.MappingEquals(before.Warp))
+            {
+                if (_gesture is not { ExemptRefitApplied: true })
+                    return;
+
+                foreach (var span in before.Spans)
+                {
+                    var item = project.Items.FirstOrDefault(i => i.Id == span.ItemId);
+                    if (item?.Content is MediaContent { SpeedWarpExempt: true })
+                        item.DurationTicks = span.DurationTicks;
+                }
+                _gesture.ExemptRefitApplied = false;
+                return;
+            }
+
+            foreach (var span in before.Spans)
+            {
+                var item = project.Items.FirstOrDefault(i => i.Id == span.ItemId);
+                if (item?.Content is not MediaContent { SpeedWarpExempt: true })
+                    continue;
+
+                FitExemptItem(project, warp, item, span.OutputSpan);
+            }
+            if (_gesture != null)
+                _gesture.ExemptRefitApplied = true;
+        }
+
+        /// <summary>Sets an exempt clip's project duration so it covers
+        /// <paramref name="outputSpan"/> output ticks from its start under <paramref name="warp"/>,
+        /// clamped to the row (see <see cref="TimelineOps.ClampDurationToRow"/>).</summary>
+        private static void FitExemptItem(Project project, TimeWarp warp, Item item, long outputSpan)
+        {
+            var duration = warp.ToProject(warp.ToOutput(item.TimelineStartTicks) + outputSpan) - item.TimelineStartTicks;
+            item.DurationTicks = TimelineOps.ClampDurationToRow(project, item, duration);
+        }
+
+        // ------------------------------------------------------------------------- voice takes
+
+        /// <summary>The name a row created for a voice take carries.</summary>
+        public const string VoiceTrackName = "Voice";
+
+        /// <summary>The undo label a take is recorded under: the row it created (if any) and
+        /// the clip it produced read as this one entry.</summary>
+        public const string RecordVoiceLabel = "Record Voice";
+
+        /// <summary>The voice take in progress, or null: the row the take will land on, where it
+        /// started and how much project time it has covered so far (see
+        /// <see cref="UpdateVoiceTake"/>). The timeline draws it as a growing ghost clip.</summary>
+        public VoiceTakeGhost VoiceTakeGhost { get; private set; }
+
+        /// <summary>Raised whenever <see cref="VoiceTakeGhost"/> changes: appears, grows, or
+        /// goes away. Deliberately not a <see cref="ProjectChanged"/>: the ghost is not part of
+        /// the model, and a project-change per meter tick would push a fresh snapshot through
+        /// the player for nothing.</summary>
+        public event EventHandler VoiceTakeGhostChanged;
+
+        /// <summary>True between <see cref="BeginVoiceTake"/> and its finish or cancel.</summary>
+        public bool IsVoiceTakeActive => _voiceTake != null;
+
+        private sealed class VoiceTake
+        {
+            public Guid Id { get; init; }
+
+            public Guid TrackId { get; init; }
+
+            public long StartTicks { get; init; }
+
+            /// <summary>The undo entry that created the take's row, or null when an existing
+            /// row was reused: what the finish folds its own entry into, and what a cancel
+            /// pops.</summary>
+            public UndoEntry TrackEntry { get; init; }
+
+            /// <summary>The redo stack as it stood before the row was created (creating it is
+            /// a mutation, which clears redo), or null when there was nothing to keep. A
+            /// cancel that pops the row's entry puts this back, so a take that never happened
+            /// leaves the history exactly as it found it.</summary>
+            public List<UndoEntry> RedoBefore { get; init; }
+        }
+
+        /// <summary>A take cancelled while a gesture was open: its row cannot come out inside
+        /// the gesture (the removal would fold into the drag), so it comes out when the
+        /// gesture ends (see <see cref="DiscardPendingVoiceTrack"/>).</summary>
+        private VoiceTake _voiceDiscardPending;
+
+        /// <summary>
+        /// Starts a voice take at <paramref name="startTicks"/> (project time) and decides its
+        /// row now: the row the last take of this session landed on, when it still exists and no
+        /// clip on it covers the start instant; otherwise a new audio row named
+        /// <see cref="VoiceTrackName"/> at the bottom of the timeline, created undoably (one
+        /// <see cref="RecordVoiceLabel"/> entry, which the finish shares). Publishes the
+        /// <see cref="VoiceTakeGhost"/> on that row with zero length. Refused (throws) while
+        /// another take or a gesture is open.
+        /// </summary>
+        public Guid BeginVoiceTake(long startTicks, object origin = null)
+        {
+            if (_voiceTake != null)
+                throw new InvalidOperationException("A voice take is already in progress.");
+            if (_gesture != null)
+                throw new InvalidOperationException($"Gesture '{_gesture.Label}' is still in progress.");
+
+            startTicks = Math.Max(0, startTicks);
+            var track = FindReusableVoiceTrack(Project, startTicks);
+            UndoEntry entry = null;
+            List<UndoEntry> redoBefore = null;
+            if (track == null)
+            {
+                redoBefore = _redo.Count > 0 ? new List<UndoEntry>(_redo) : null;
+                Track created = null;
+                var committed = Mutate(RecordVoiceLabel, ProjectChangeKind.Structural, null, origin,
+                    p => { created = InsertAudioTrackBelow(p, VoiceTrackName); });
+                if (!committed)
+                    throw new InvalidOperationException("The voice row could not be added to the project.");
+
+                track = created;
+                entry = _undo.Count > 0 ? _undo[^1] : null;
+            }
+
+            _voiceTake = new VoiceTake
+            {
+                Id = Guid.NewGuid(),
+                TrackId = track.Id,
+                StartTicks = startTicks,
+                TrackEntry = entry,
+                RedoBefore = redoBefore,
+            };
+            SetVoiceGhost(new VoiceTakeGhost(track.Id, startTicks, 0));
+            return _voiceTake.Id;
+        }
+
+        /// <summary>Grows the ghost: <paramref name="elapsedOutputTicks"/> is how long the take
+        /// has been recording on the output clock (real time), which under the current warp
+        /// covers <c>ToProject(ToOutput(start) + elapsed) - start</c> project ticks.</summary>
+        public void UpdateVoiceTake(Guid takeId, long elapsedOutputTicks)
+        {
+            var take = RequireVoiceTake(takeId);
+            var duration = VoiceTakeDuration(CurrentWarp, take.StartTicks, elapsedOutputTicks);
+            if (VoiceTakeGhost is { } ghost && ghost.TrackId == take.TrackId && ghost.DurationTicks == duration)
+                return;
+
+            SetVoiceGhost(new VoiceTakeGhost(take.TrackId, take.StartTicks, duration));
+        }
+
+        /// <summary>
+        /// Ends the take with its recording: registers <paramref name="wavPath"/> as a source
+        /// (exactly as <see cref="ImportMedia"/> would) and adds one clip playing its audio
+        /// stream, flagged <see cref="MediaContent.SpeedWarpExempt"/>, from the take's start
+        /// for the project span its <paramref name="elapsedOutputTicks"/> of real time covers
+        /// (the stream's probed duration when that is not positive; never shorter than
+        /// <see cref="TimelineOps.MinSegmentTicks"/>). The clip lands on the row the take began
+        /// on unless a clip there now overlaps it, in which case a fresh
+        /// <see cref="VoiceTrackName"/> row is added: nothing already on the timeline is ever
+        /// trimmed or covered. The row (if the take created one) and the clip make one undo
+        /// entry; the row is remembered as where the next take goes; the new clip is selected.
+        /// Returns the live item, or null when the recording carries no audio stream or the add
+        /// was rolled back; the take is over either way. Refused (throws, with the take still
+        /// open) while a gesture is in progress: a clip added inside a drag would be folded
+        /// into the drag's preview, unrecorded and lost with its cancel, so the host waits for
+        /// the drag to end and calls again.
+        /// </summary>
+        public Item FinishVoiceTake(Guid takeId, string wavPath, MediaProbeResult probe, long elapsedOutputTicks,
+            object origin = null)
+        {
+            var take = RequireVoiceTake(takeId);
+            if (_gesture != null)
+                throw new InvalidOperationException($"Gesture '{_gesture.Label}' is still in progress.");
+            if (String.IsNullOrEmpty(wavPath))
+                throw new ArgumentException("The recording path is empty.", nameof(wavPath));
+            ArgumentNullException.ThrowIfNull(probe);
+
+            var streams = MapStreams(probe);
+            var audio = streams.FirstOrDefault(s => s.Kind == StreamKind.Audio);
+            if (audio == null)
+            {
+                CancelVoiceTake(takeId);
+                return null;
+            }
+
+            var outputSpan = elapsedOutputTicks > 0 ? elapsedOutputTicks
+                : audio.DurationTicks > 0 ? audio.DurationTicks
+                : probe.DurationTicks;
+            var warp = CurrentWarp;
+
+            Item created = null;
+            var committed = Mutate(RecordVoiceLabel, ProjectChangeKind.Structural, null, origin, p =>
+            {
+                var source = new Source { Id = Guid.NewGuid(), Path = wavPath, Streams = streams };
+                p.Sources.Add(source);
+
+                var duration = Math.Max(TimelineOps.MinSegmentTicks,
+                    VoiceTakeDuration(warp, take.StartTicks, outputSpan));
+                var track = p.Tracks.FirstOrDefault(t => t.Id == take.TrackId && t.Kind == TrackKind.Audio);
+                if (track == null || RowOverlaps(p, track.Id, take.StartTicks, duration))
+                    track = InsertAudioTrackBelow(p, VoiceTrackName);
+
+                created = new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = track.Id,
+                    TimelineStartTicks = take.StartTicks,
+                    DurationTicks = duration,
+                    Content = new MediaContent
+                    {
+                        SourceId = source.Id,
+                        StreamIndex = audio.Index,
+                        SourceInTicks = 0,
+                        SpeedWarpExempt = true,
+                    },
+                };
+                p.Items.Add(created);
+            });
+
+            _voiceTake = null;
+            SetVoiceGhost(null);
+
+            if (!committed)
+            {
+                DiscardVoiceTrack(take);
+                return null;
+            }
+
+            MergeVoiceUndo(take);
+            _lastVoiceTrackId = created.TrackId;
+            Select(created.Id);
+            return created;
+        }
+
+        /// <summary>Abandons the take: the ghost goes away and a row <see cref="BeginVoiceTake"/>
+        /// created comes out again, together with its undo entry (and the redo stack that
+        /// entry displaced), so nothing of the take is left behind. A reused row is untouched.
+        /// Never refused: under an open gesture the row stays until the gesture ends and comes
+        /// out then.</summary>
+        public void CancelVoiceTake(Guid takeId)
+        {
+            var take = RequireVoiceTake(takeId);
+            _voiceTake = null;
+            SetVoiceGhost(null);
+            DiscardVoiceTrack(take);
+        }
+
+        private VoiceTake RequireVoiceTake(Guid takeId)
+        {
+            if (_voiceTake == null || _voiceTake.Id != takeId)
+                throw new InvalidOperationException($"Voice take {takeId} is not in progress.");
+            return _voiceTake;
+        }
+
+        private void SetVoiceGhost(VoiceTakeGhost ghost)
+        {
+            if (Equals(VoiceTakeGhost, ghost))
+                return;
+
+            VoiceTakeGhost = ghost;
+            VoiceTakeGhostChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>The project span a take covers: it records on the output clock, so its
+        /// elapsed real time is laid onto the project through the warp from its start.</summary>
+        private static long VoiceTakeDuration(TimeWarp warp, long startTicks, long elapsedOutputTicks) =>
+            Math.Max(0, warp.ToProject(warp.ToOutput(startTicks) + Math.Max(0, elapsedOutputTicks)) - startTicks);
+
+        /// <summary>The row the last take landed on, when it is still an audio row of the
+        /// project and no clip on it covers <paramref name="startTicks"/>; null otherwise (a
+        /// first take, a deleted row, or a clip already under the playhead).</summary>
+        private Track FindReusableVoiceTrack(Project project, long startTicks)
+        {
+            if (_lastVoiceTrackId is not Guid id)
+                return null;
+
+            var track = project.Tracks.FirstOrDefault(t => t.Id == id && t.Kind == TrackKind.Audio);
+            if (track == null || project.Items.Any(i => i.TrackId == id && Covers(i, startTicks)))
+                return null;
+
+            return track;
+        }
+
+        /// <summary>Whether any item on the row overlaps <c>[start, start + duration)</c>.</summary>
+        private static bool RowOverlaps(Project project, Guid trackId, long startTicks, long durationTicks)
+        {
+            var end = startTicks + durationTicks;
+            return project.Items.Any(i => i.TrackId == trackId &&
+                                          i.TimelineStartTicks < end && startTicks < i.TimelineEndTicks);
+        }
+
+        /// <summary>Folds the finish's undo entry into the one that created the take's row, so
+        /// the two read as one <see cref="RecordVoiceLabel"/> step. Only when the two sit
+        /// together at the top of the stack: an edit made between them keeps its own place, and
+        /// then the take undoes in two steps rather than swallowing that edit.</summary>
+        private void MergeVoiceUndo(VoiceTake take)
+        {
+            if (take.TrackEntry == null || _undo.Count < 2 || !ReferenceEquals(_undo[^2], take.TrackEntry))
+                return;
+
+            // the row entry's before-state precedes both; dropping the clip entry leaves it
+            // describing the whole take
+            _undo.RemoveAt(_undo.Count - 1);
+            HistoryChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>Removes the row <see cref="BeginVoiceTake"/> created when it is still empty.
+        /// When its undo entry is still on top the removal pops that entry too and puts back
+        /// the redo stack the entry cleared (the take never happened); otherwise the removal is
+        /// an ordinary undoable delete. Under an open gesture the removal waits for the
+        /// gesture's end (see <see cref="DiscardPendingVoiceTrack"/>).</summary>
+        private void DiscardVoiceTrack(VoiceTake take)
+        {
+            if (take.TrackEntry == null)
+                return;
+
+            if (_gesture != null)
+            {
+                _voiceDiscardPending = take;
+                return;
+            }
+
+            var stillEmpty = Project.Tracks.Any(t => t.Id == take.TrackId) &&
+                             Project.Items.All(i => i.TrackId != take.TrackId);
+            if (!stillEmpty)
+                return;
+
+            var onTop = _undo.Count > 0 && ReferenceEquals(_undo[^1], take.TrackEntry);
+            var committed = Mutate(RecordVoiceLabel, ProjectChangeKind.Structural, null, null,
+                p => { p.Tracks.RemoveAll(t => t.Id == take.TrackId); });
+            if (!committed || !onTop || _undo.Count < 2 || !ReferenceEquals(_undo[^2], take.TrackEntry))
+                return;
+
+            _undo.RemoveRange(_undo.Count - 2, 2);
+            if (take.RedoBefore != null)
+                _redo.AddRange(take.RedoBefore);
+            HistoryChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>The end of a gesture: a take cancelled while it was open gets its row
+        /// removed now, as an ordinary <see cref="DiscardVoiceTrack"/> (which pops the row's
+        /// entry when the gesture left it on top, and is an undoable delete otherwise).</summary>
+        private void DiscardPendingVoiceTrack()
+        {
+            var take = _voiceDiscardPending;
+            if (take == null)
+                return;
+
+            _voiceDiscardPending = null;
+            DiscardVoiceTrack(take);
+        }
 
         // -------------------------------------------------------------------- selection internals
 
@@ -2141,6 +2619,26 @@ namespace Clowd.VideoSDK.Editing
             }
 
             var created = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Background", Order = order };
+            project.Tracks.Add(created);
+            return created;
+        }
+
+        /// <summary>Adds an audio row at the bottom of the timeline: above every existing row
+        /// except the pinned speed row, which stays on top: that one (and only that one) is
+        /// shifted up, as the other insert helpers renumber. Where an imported file's audio and
+        /// a voice take both land.</summary>
+        private static Track InsertAudioTrackBelow(Project project, string name)
+        {
+            var belowSpeed = project.Tracks.Where(t => !IsSpeedTrack(project, t))
+                                           .Select(t => t.Order).ToList();
+            var order = belowSpeed.Count > 0 ? belowSpeed.Max() + 1 : 0;
+            foreach (var existing in project.Tracks)
+            {
+                if (existing.Order >= order)
+                    existing.Order++;
+            }
+
+            var created = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Audio, Name = name, Order = order };
             project.Tracks.Add(created);
             return created;
         }

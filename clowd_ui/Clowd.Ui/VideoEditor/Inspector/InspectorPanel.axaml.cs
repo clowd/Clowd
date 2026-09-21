@@ -75,6 +75,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotRampExitEnabled.DefaultValue = false;
             dotCursorDebounce.DefaultValue = true;
             dotDenoise.DefaultValue = false;
+            dotSpeedWarpExempt.DefaultValue = false;
             // the model's own starting amount, so the dot resets to what a fresh kind seeds
             dotEffectAmount.DefaultValue = VideoEffect.DefaultAmount;
             dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
@@ -137,6 +138,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             RefreshTrackIcons();
             RefreshBackgroundThemes();
             RefreshCropWindows();
+            RefreshVoiceRecorderDevices();
         }
 
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -163,6 +165,9 @@ namespace Clowd.UI.VideoEditor.Inspector
                     break;
                 case nameof(SelectedItemViewModel.CropWindowOptions):
                     RefreshCropWindows();
+                    break;
+                case nameof(SelectedItemViewModel.VoiceRecorderDevices):
+                    RefreshVoiceRecorderDevices();
                     break;
                 case nameof(SelectedItemViewModel.TrackHidden):
                 case nameof(SelectedItemViewModel.TrackMuted):
@@ -275,6 +280,19 @@ namespace Clowd.UI.VideoEditor.Inspector
             var options = _vm?.CropWindowOptions;
             if (!ReferenceEquals(ddCropWindow.ItemsSource, options))
                 ddCropWindow.ItemsSource = options;
+        }
+
+        /// <summary>
+        /// The microphone picker's list, pushed rather than bound for the same reason the window
+        /// picker's is (see <see cref="RefreshCropWindows"/>): it is rebuilt whenever the recorder
+        /// section is opened, and the list must be in place before the selection resolves against
+        /// it. The view model raises <c>VoiceRecorderDevices</c> first for that order.
+        /// </summary>
+        private void RefreshVoiceRecorderDevices()
+        {
+            var options = _vm?.VoiceRecorderDevices;
+            if (!ReferenceEquals(ddVoiceMic.ItemsSource, options))
+                ddVoiceMic.ItemsSource = options;
         }
 
         /// <summary>The hide/mute buttons flip their glyphs with the state (eye/eye-off,

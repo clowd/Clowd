@@ -163,12 +163,21 @@ namespace Clowd.UI.VideoEditor.Timeline
                 if (_dragMode != DragMode.None)
                     CancelDrag();
 
+                if (_session != null)
+                    _session.VoiceTakeGhostChanged -= Session_VoiceTakeGhostChanged;
                 _session = value;
+                if (_session != null)
+                    _session.VoiceTakeGhostChanged += Session_VoiceTakeGhostChanged;
                 _hoverItemId = Guid.Empty;
                 ClearPreviewCaches();
                 RebuildRows();
             }
         }
+
+        /// <summary>The voice take's ghost appeared, grew or went away: it is drawn from the
+        /// session on every paint, so a repaint is all it takes (the parent control adjusts the
+        /// viewport's reach for a take running past the project end).</summary>
+        private void Session_VoiceTakeGhostChanged(object sender, EventArgs e) => InvalidateVisual();
 
         /// <summary>Where filmstrips and waveforms come from. Never null — defaults to
         /// <see cref="NullTimelinePreviewProvider.Instance"/>.</summary>
@@ -556,8 +565,15 @@ namespace Clowd.UI.VideoEditor.Timeline
             // a no-op commit (dragged out and back) raises no ProjectChanged, but the duration may
             // have grown mid-gesture and the viewport kept the growth (shrinks are deferred while a
             // gesture is open) — re-sync so the zoom/scroll limits match the real project again.
+            // A voice take running past the end keeps the view reaching to it (the parent
+            // control's reach rule, restated here for the same reason).
             if (_session != null)
-                _viewport.SetDuration(_session.DurationTicks);
+            {
+                var reach = _session.DurationTicks;
+                if (_session.VoiceTakeGhost is { } ghost)
+                    reach = Math.Max(reach, ghost.EndTicks);
+                _viewport.SetDuration(reach);
+            }
 
             InvalidateVisual();
         }
@@ -999,6 +1015,10 @@ namespace Clowd.UI.VideoEditor.Timeline
                 }
             }
 
+            // the voice take being recorded, over the row's clips: where the take will land
+            if (_session.VoiceTakeGhost is { } ghost)
+                RenderVoiceGhost(context, palette, ghost);
+
             // the boundary itself, over the items: the last frame of the project is on its left.
             if (endVisible && endX >= 0)
                 DrawFullHeightLine(context, palette.ProjectEndPen, endX);
@@ -1021,6 +1041,73 @@ namespace Clowd.UI.VideoEditor.Timeline
                 DrawFullHeightLine(context, palette.PlayheadPen,
                     _viewport.TickToX(Math.Clamp(_positionTicks, 0, duration)));
             }
+        }
+
+        /// <summary>The label a voice take's ghost carries while it records.</summary>
+        private const string RecordingLabel = "Recording";
+
+        /// <summary>Diameter of the recording dot on the ghost.</summary>
+        private const double RecordingDotSize = 8;
+
+        /// <summary>A ghost narrower than this (a take a few frames old) is drawn at this width
+        /// anyway, so the row shows where the take is from its first tick.</summary>
+        private const double VoiceGhostMinWidth = 6;
+
+        /// <summary>
+        /// The voice take in progress (<see cref="EditorSession.VoiceTakeGhost"/>): a translucent,
+        /// dash-outlined block in the audio hue over the row the take will land on, from the
+        /// take's start to where its recording has reached, with a red dot and a "Recording"
+        /// label once it is wide enough to hold them. No waveform: there is nothing to draw yet.
+        /// Drawn over the row's clips, since the take's clip will be placed around them by the
+        /// session when it finishes (never on top of them). Nothing is drawn when the ghost's
+        /// row is not in the layout (an undo mid-take took it out); the session picks a row
+        /// again when the take finishes.
+        /// </summary>
+        private void RenderVoiceGhost(DrawingContext context, TimelinePalette palette, VoiceTakeGhost ghost)
+        {
+            TimelineRow row = null;
+            foreach (var candidate in _rows)
+            {
+                if (candidate.TrackId == ghost.TrackId)
+                {
+                    row = candidate;
+                    break;
+                }
+            }
+            if (row == null)
+                return;
+
+            var x = _viewport.TickToX(ghost.StartTicks);
+            var w = Math.Max(VoiceGhostMinWidth, ghost.DurationTicks / _viewport.TicksPerPixel);
+            if (x > Bounds.Width + OffscreenSlackPx || x + w < -OffscreenSlackPx)
+                return;
+
+            var body = new Rect(x, row.Top + ItemPadY, w, Math.Max(1, row.Height - ItemPadY * 2));
+            context.DrawRectangle(palette.VoiceGhostFill, palette.VoiceGhostPen, body.Deflate(0.5),
+                ItemCornerRadius, ItemCornerRadius);
+
+            // the dot leads the label, in the slot the card glyph takes on every other row; both
+            // only once the block is wide enough that they do not spill past its end.
+            var inset = TrimHandleWidth + 2;
+            if (body.Width < inset * 2 + RecordingDotSize)
+                return;
+
+            var dotCenter = new Point(body.Left + inset + RecordingDotSize / 2, body.Center.Y);
+            context.DrawEllipse(palette.RecordingDotBrush, null, dotCenter, RecordingDotSize / 2, RecordingDotSize / 2);
+
+            var textX = body.Left + inset + RecordingDotSize + 6;
+            var maxWidth = body.Right - inset - textX;
+            if (maxWidth <= 8)
+                return;
+
+            var text = new FormattedText(RecordingLabel, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                new Typeface(FontFamily.Default), 11, palette.ItemLabelBrush)
+            {
+                MaxTextWidth = maxWidth,
+                MaxLineCount = 1,
+                Trimming = TextTrimming.CharacterEllipsis,
+            };
+            context.DrawText(text, new Point(textX, body.Center.Y - text.Height / 2));
         }
 
         private void DrawFullHeightLine(DrawingContext context, IPen pen, double x)

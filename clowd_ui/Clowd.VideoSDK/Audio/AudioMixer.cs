@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Model;
+using Clowd.VideoSDK.Playback;
 
 namespace Clowd.VideoSDK.Audio
 {
@@ -29,6 +30,18 @@ namespace Clowd.VideoSDK.Audio
     /// computed once per item as a constant sample offset (<see cref="AudioTime.SourceSampleOffset"/>)
     /// so chunk boundaries never re-round through ticks — back-to-back cut items read their
     /// shared stream gaplessly.
+    ///
+    /// <para>
+    /// Items flagged <see cref="MediaContent.SpeedWarpExempt"/> live on the OUTPUT clock when
+    /// the project's <see cref="TimeWarp"/> bends time: they are left out of
+    /// <see cref="MixChunk"/> (the project-domain mix the warp stages bend) and mixed by
+    /// <see cref="MixOutputChunk"/> instead, at output sample positions, with the very same
+    /// per-item code. The two consumers of the mixer (the render's <c>WarpAudioResampler</c> and
+    /// the preview's <c>AudioMixWorker</c>) both add that output-domain mix on top of the bent
+    /// project mix, so an exempt clip sounds identical in both. Under an identity warp the two
+    /// clocks coincide and exempt items are ordinary items: nothing about the unwarped path
+    /// changes, sample for sample.
+    /// </para>
     /// </summary>
     public sealed class AudioMixer
     {
@@ -37,8 +50,11 @@ namespace Clowd.VideoSDK.Audio
 
         private readonly IAudioSource _source;
         private readonly int _rate;
+        private readonly TimeWarp _warp;
         private readonly List<ActiveItem> _items = new List<ActiveItem>();
+        private readonly List<ActiveItem> _outputItems = new List<ActiveItem>();
         private float[] _scratch = Array.Empty<float>();
+        private float[] _outputScratch = Array.Empty<float>();
 
         private sealed class ActiveItem
         {
@@ -74,8 +90,10 @@ namespace Clowd.VideoSDK.Audio
         }
 
         /// <summary>Snapshots the project's audible items; the project must not be mutated while
-        /// this mixer is in use (render treats it as immutable).</summary>
-        public AudioMixer(Project project, IAudioSource source)
+        /// this mixer is in use (render treats it as immutable). <paramref name="warp"/> is the
+        /// project's speed warp, which decides which clock each item is mixed on (see the class
+        /// remarks); null or an identity warp puts every item on the project clock.</summary>
+        public AudioMixer(Project project, IAudioSource source, TimeWarp warp = null)
         {
             ArgumentNullException.ThrowIfNull(project);
             ArgumentNullException.ThrowIfNull(source);
@@ -84,6 +102,7 @@ namespace Clowd.VideoSDK.Audio
 
             _source = source;
             _rate = project.Output.SampleRate;
+            _warp = warp is { IsIdentity: false } ? warp : null;
 
             var audioTracks = new Dictionary<Guid, Track>();
             foreach (var track in project.Tracks ?? new List<Track>())
@@ -99,6 +118,25 @@ namespace Clowd.VideoSDK.Audio
                 if (!audioTracks.TryGetValue(item.TrackId, out var track) || track.Muted)
                     continue;
 
+                if (_warp != null && media.SpeedWarpExempt)
+                {
+                    // the output clock: the span is the warp image of the item's project span,
+                    // and the source offset anchors on where that image starts
+                    long outputStart = _warp.ToOutput(item.TimelineStartTicks);
+                    long outputEnd = _warp.ToOutput(item.TimelineEndTicks);
+                    if (outputEnd <= outputStart)
+                        continue;
+
+                    _outputItems.Add(new ActiveItem(item, media,
+                        AudioTime.SamplesCeil(outputStart, _rate),
+                        AudioTime.SamplesCeil(outputEnd, _rate),
+                        AudioTime.SourceSampleOffset(media.SourceInTicks, outputStart, _rate),
+                        IsActive(item.Entry) || IsActive(item.Exit),
+                        TimelineOps.SpeedOf(media),
+                        AudioTime.SamplesNearest(media.SourceInTicks, _rate)));
+                    continue;
+                }
+
                 _items.Add(new ActiveItem(item, media,
                     AudioTime.SamplesCeil(item.TimelineStartTicks, _rate),
                     AudioTime.SamplesCeil(item.TimelineEndTicks, _rate),
@@ -109,8 +147,18 @@ namespace Clowd.VideoSDK.Audio
             }
         }
 
-        /// <summary>Number of items that can contribute to the mix (test/diagnostic).</summary>
-        public int AudibleItemCount => _items.Count;
+        /// <summary>Number of items that can contribute to the mix (test/diagnostic), on either
+        /// clock.</summary>
+        public int AudibleItemCount => _items.Count + _outputItems.Count;
+
+        /// <summary>True when any item is mixed on the output clock: exempt clips under a warp
+        /// that bends time. False under an identity warp however many clips are flagged, which
+        /// is what lets the consumers skip <see cref="MixOutputChunk"/> entirely on the unwarped
+        /// fast paths.</summary>
+        public bool HasOutputItems => _outputItems.Count > 0;
+
+        /// <summary>Number of items mixed on the output clock (test/diagnostic).</summary>
+        public int OutputItemCount => _outputItems.Count;
 
         /// <summary>True when the project has any audio-stream item at all (audible or muted) —
         /// the renderer writes an audio stream exactly when this holds, so muting a track
@@ -166,17 +214,72 @@ namespace Clowd.VideoSDK.Audio
         /// </summary>
         public void MixChunk(long firstFrame, int frames, float[] dst)
         {
+            ValidateChunk(firstFrame, frames, dst);
+            Array.Clear(dst, 0, frames * Channels);
+            MixItems(_items, firstFrame, frames, dst, outputClock: false);
+            Clamp(dst, frames);
+        }
+
+        /// <summary>
+        /// The output-clock counterpart of <see cref="MixChunk"/>: fills <paramref name="dst"/>
+        /// with the mix of the exempt items over OUTPUT samples [<paramref name="firstOutputFrame"/>,
+        /// <paramref name="firstOutputFrame"/> + <paramref name="frames"/>). Silence (and no
+        /// source read at all) when <see cref="HasOutputItems"/> is false. Forward order only,
+        /// like <see cref="MixChunk"/>; the two sequences are independent of each other.
+        /// </summary>
+        public void MixOutputChunk(long firstOutputFrame, int frames, float[] dst)
+        {
+            ValidateChunk(firstOutputFrame, frames, dst);
+            Array.Clear(dst, 0, frames * Channels);
+            if (_outputItems.Count == 0)
+                return;
+
+            MixItems(_outputItems, firstOutputFrame, frames, dst, outputClock: true);
+            Clamp(dst, frames);
+        }
+
+        /// <summary>
+        /// Adds the exempt items' output-clock mix on top of a chunk of already-bent project mix
+        /// (<see cref="MixOutputChunk"/> into scratch, summed in, clamped again): what a warp
+        /// stage calls once it has produced output samples [<paramref name="firstOutputFrame"/>,
+        /// <paramref name="firstOutputFrame"/> + <paramref name="frames"/>) into
+        /// <paramref name="dst"/>. Leaves <paramref name="dst"/> untouched, byte for byte, when
+        /// <see cref="HasOutputItems"/> is false.
+        /// </summary>
+        public void AddOutputChunk(long firstOutputFrame, int frames, float[] dst)
+        {
+            ValidateChunk(firstOutputFrame, frames, dst);
+            if (_outputItems.Count == 0)
+                return;
+
+            int floats = frames * Channels;
+            if (_outputScratch.Length < floats)
+                _outputScratch = new float[floats];
+            MixOutputChunk(firstOutputFrame, frames, _outputScratch);
+            for (int i = 0; i < floats; i++)
+                dst[i] += _outputScratch[i];
+            Clamp(dst, frames);
+        }
+
+        private static void ValidateChunk(long firstFrame, int frames, float[] dst)
+        {
             ArgumentNullException.ThrowIfNull(dst);
             ArgumentOutOfRangeException.ThrowIfNegative(frames);
             ArgumentOutOfRangeException.ThrowIfNegative(firstFrame);
             if ((long)frames * Channels > dst.Length)
                 throw new ArgumentOutOfRangeException(nameof(frames),
                     $"{frames} stereo frames do not fit in a buffer of {dst.Length} floats.");
+        }
 
-            Array.Clear(dst, 0, frames * Channels);
+        /// <summary>The per-item sum shared by both clocks: each item's covered run is read (or
+        /// resampled) and added into <paramref name="dst"/> with its volume and transition gain.
+        /// <paramref name="outputClock"/> says which domain the frames are in; it only matters
+        /// for the transition ramps, which are defined in project time.</summary>
+        private void MixItems(List<ActiveItem> items, long firstFrame, int frames, float[] dst, bool outputClock)
+        {
             long chunkEnd = firstFrame + frames;
 
-            foreach (var active in _items)
+            foreach (var active in items)
             {
                 long runStart = Math.Max(firstFrame, active.FirstSample);
                 long runEnd = Math.Min(chunkEnd, active.EndSample);
@@ -187,7 +290,7 @@ namespace Clowd.VideoSDK.Audio
 
                 if (active.Speed != 1.0)
                 {
-                    MixResampledRun(active, runStart, runFrames, firstFrame, dst);
+                    MixResampledRun(active, runStart, runFrames, firstFrame, dst, outputClock);
                     continue;
                 }
 
@@ -213,7 +316,7 @@ namespace Clowd.VideoSDK.Audio
                 {
                     for (int s = 0; s < runFrames; s++)
                     {
-                        long tick = AudioTime.TicksFloor(runStart + s, _rate);
+                        long tick = ProjectTickOf(runStart + s, outputClock);
                         double gain = volume
                             * TransitionMath.EntryProgress(active.Item, tick)
                             * TransitionMath.ExitProgress(active.Item, tick);
@@ -226,8 +329,20 @@ namespace Clowd.VideoSDK.Audio
                     }
                 }
             }
+        }
 
-            // hard clamp (see class remarks)
+        /// <summary>The project instant a sample frame's gain is evaluated at: the frame's own
+        /// tick on the project clock, its warp pre-image on the output clock (so an exempt
+        /// clip's fades land where its project span says they do).</summary>
+        private long ProjectTickOf(long frame, bool outputClock)
+        {
+            long tick = AudioTime.TicksFloor(frame, _rate);
+            return outputClock && _warp != null ? _warp.ToProject(tick) : tick;
+        }
+
+        /// <summary>The hard clamp (see class remarks).</summary>
+        private static void Clamp(float[] dst, int frames)
+        {
             int floats = frames * Channels;
             for (int i = 0; i < floats; i++)
             {
@@ -249,7 +364,7 @@ namespace Clowd.VideoSDK.Audio
         /// realtime path.
         /// </summary>
         private void MixResampledRun(ActiveItem active, long runStart, int runFrames,
-            long chunkFirstFrame, float[] dst)
+            long chunkFirstFrame, float[] dst, bool outputClock)
         {
             double volume = Math.Max(0, active.Item.Volume);
             if (volume <= 0)
@@ -310,7 +425,7 @@ namespace Clowd.VideoSDK.Audio
                 double gain = volume;
                 if (active.Ramped)
                 {
-                    long tick = AudioTime.TicksFloor(runStart + s, _rate);
+                    long tick = ProjectTickOf(runStart + s, outputClock);
                     gain *= TransitionMath.EntryProgress(active.Item, tick)
                           * TransitionMath.ExitProgress(active.Item, tick);
                     if (gain <= 0)

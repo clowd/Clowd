@@ -1,7 +1,8 @@
 # Track tip demo GIFs
 
 The looping demos shown in the rich flyouts behind the add-track buttons on the video editor's left
-tool strip (Video, Audio, Image, Text, Background, Zoom, Speed, Cursor, Keyboard). Each flyout is a header, a
+tool strip (Video, Audio, Image, Text, Background, Zoom, Speed, Cursor, Keyboard, Voice-over). Each flyout is a
+header, a
 one or two sentence description, a demo GIF, and, when the button is disabled, the reason why.
 
 This folder holds the generator. The GIFs are never hand-edited: change `generate.py`, re-run it,
@@ -27,7 +28,7 @@ file just hides the demo area, so the app builds and runs with or without the GI
 
 - Python 3 with Pillow: `pip3 install Pillow` (any Pillow 10+ works; 11 was used).
 - Run from the repo root:
-  - `python3 tools/track-tips/generate.py` regenerates all nine into the assets folder.
+  - `python3 tools/track-tips/generate.py` regenerates all ten into the assets folder.
   - `python3 tools/track-tips/generate.py speed cursor` regenerates only the GIFs whose names contain
     those words.
   - `python3 tools/track-tips/generate.py --sheet /tmp/contact.png` also writes a review contact
@@ -120,7 +121,9 @@ it and 1x after, so it has a few more frames and its own path code.
 
 ## Copy rules (flyout text)
 
-- Header: `Add <Kind> Track` (Add Video Track, Add Speed Track, and so on).
+- Header: `Add <Kind> Track` (Add Video Track, Add Speed Track, and so on). A tool that records
+  rather than adds a finished item names the action instead: the voice-over tool's header is
+  `Record Voice-over`, because toggling it arms a recorder and adds nothing on its own.
 - Description: one or two plain sentences saying what it adds, where it lands (at the playhead), and
   what you can do with it next.
 - Disabled reason: a full sentence that names the cause and the fix ("The playhead is inside an
@@ -149,3 +152,9 @@ it and 1x after, so it has a few more frames and its own path code.
   rounded and shadowed, uncovering a still mesh wallpaper in the Big Sur artwork's colours (still
   because Big Sur is one of the library's static styles, and because a moving backdrop repaints the
   whole canvas every frame - see the size note under Style rules).
+- `track-voice.gif`: a Voice row appears in the audio block under Audio, a recorder pill fades in at
+  the bottom of the preview, and a large microphone with animated sound arcs sits over the window
+  while a red take grows out of the playhead with its waveform drawn behind it; the take settles
+  into an ordinary selected audio item and the pill's record button goes back to a round dot. The
+  Voice row is a normal audio row and the finished take is a normal audio clip: nothing about the
+  row or the item is special, only the way it gets there.

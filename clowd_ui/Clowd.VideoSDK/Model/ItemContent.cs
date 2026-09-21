@@ -49,12 +49,29 @@ public sealed class MediaContent : ItemContent
     /// carry a non-unity speed — linked rows must keep the recording's own clock.</summary>
     public double Speed { get; set; } = 1.0;
 
+    /// <summary>
+    /// When true the clip is mixed on the OUTPUT clock and ignores every speed effect item: it
+    /// always plays in real time, however the project around it is sped up or slowed down. The
+    /// voice-over recorder sets this on every take, because a narration recorded against the
+    /// warped preview must stay locked to what the viewer hears, not to the project seconds it
+    /// happens to span. Audio only (the composer ignores it on a picture row).
+    ///
+    /// <para>For output tick <c>o</c> an exempt clip is active while
+    /// <c>ToOutput(TimelineStartTicks) &lt;= o &lt; ToOutput(TimelineEndTicks)</c> and reads
+    /// source tick <c>SourceInTicks + (o - ToOutput(TimelineStartTicks)) * Speed</c>. Its source
+    /// span is the truth and its project-time <see cref="Item.DurationTicks"/> is derived from it
+    /// under the current warp; <c>EditorSession</c> re-fits it whenever the warp changes. With no
+    /// speed item in the project the two clocks coincide and the flag changes nothing.</para>
+    /// </summary>
+    public bool SpeedWarpExempt { get; set; }
+
     public override ItemContent Clone() => new MediaContent
     {
         SourceId = SourceId,
         StreamIndex = StreamIndex,
         SourceInTicks = SourceInTicks,
         Speed = Speed,
+        SpeedWarpExempt = SpeedWarpExempt,
     };
 }
 

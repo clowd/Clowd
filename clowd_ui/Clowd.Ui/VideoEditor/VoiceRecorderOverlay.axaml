@@ -1,0 +1,263 @@
+<UserControl
+    x:Class="Clowd.UI.VideoEditor.VoiceRecorderOverlay"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:tray="clr-namespace:Clowd.UI.Controls.Tray">
+
+    <!--  Dark chrome on purpose, whatever the app theme: this sits over the #1e1e1e preview, and a
+          surface that followed the system theme would read as a white slab on top of the video. The
+          palette is the floating tray's (Controls/Tray/TrayTokens.cs), the app's other always-dark
+          surface that floats over arbitrary pixels, so the two read as one family: the #25272B fill,
+          the 8px radius, the 1px inner ring, and the level pill's track and fill colours.  -->
+    <UserControl.Resources>
+
+        <!--  The gear and the close button: the row-icon idiom (transparent fill, white hover veil,
+              stronger pressed veil, dimmed when disabled), sized for the 40px pill rather than for a
+              20px list row, so it is written out here instead of borrowing RowIconButtonTheme.  -->
+        <ControlTheme x:Key="VoiceRecorderIconButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#DCDCDE" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="6">
+                        <ContentPresenter
+                            Name="PART_ContentPresenter"
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="#33FFFFFF" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#_bg">
+                <Setter Property="Background" Value="#55FFFFFF" />
+            </Style>
+            <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Opacity" Value="0.35" />
+            </Style>
+        </ControlTheme>
+
+        <!--  The record/stop button: the same veils, a 30x30 target to match the transport buttons,
+              and no padding because its content is a shape rather than a glyph.  -->
+        <ControlTheme x:Key="VoiceRecorderRecordButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="8">
+                        <ContentPresenter
+                            Name="PART_ContentPresenter"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="#33FFFFFF" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#_bg">
+                <Setter Property="Background" Value="#55FFFFFF" />
+            </Style>
+            <!--  disabled reads as a greyed-out dot, not a red one the user could still press  -->
+            <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Opacity" Value="0.3" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+        </ControlTheme>
+
+    </UserControl.Resources>
+
+    <!--  The control covers the whole preview area so the countdown can be centred in it; nothing but
+          the pill paints a background, and a Panel with no background is not hit-testable, so clicks
+          anywhere else still reach the preview underneath (selection, the gizmo, the zoom reticle).  -->
+    <Panel>
+
+        <!--  3-2-1 over the middle of the frame. The disc is what makes the number readable over a
+              bright frame: the editor replaced WPF's DropShadowEffect with BoxShadow everywhere
+              (decision table #61), and a shadow under glyph-shaped text is not the same thing.  -->
+        <Border
+            x:Name="countdownDisc"
+            Width="140"
+            Height="140"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Background="#A6111214"
+            BorderBrush="#26FFFFFF"
+            BorderThickness="1"
+            CornerRadius="70"
+            IsHitTestVisible="False"
+            IsVisible="False">
+            <TextBlock
+                x:Name="txtCountdown"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontSize="84"
+                FontWeight="SemiBold"
+                Foreground="#F5F5F7" />
+        </Border>
+
+        <!--  the recorder itself, parked at the bottom of the preview  -->
+        <Border
+            x:Name="pill"
+            Margin="12,0,12,18"
+            Padding="5,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Background="{x:Static tray:TrayTokens.TrayBrush}"
+            BorderBrush="{x:Static tray:TrayTokens.Ring}"
+            BorderThickness="1"
+            BoxShadow="0 2 8 0 #80000000"
+            CornerRadius="{x:Static tray:TrayTokens.Corner}">
+            <StackPanel
+                Height="38"
+                Orientation="Horizontal"
+                Spacing="8">
+
+                <Button
+                    x:Name="btnRecord"
+                    VerticalAlignment="Center"
+                    Theme="{StaticResource VoiceRecorderRecordButtonTheme}">
+                    <Panel Width="16" Height="16">
+                        <!--  idle: a red dot. Recording: a red square. One button, one place to look.  -->
+                        <Ellipse
+                            x:Name="recordDot"
+                            Width="14"
+                            Height="14"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Fill="{x:Static tray:TrayTokens.RecBrush}" />
+                        <Border
+                            x:Name="recordSquare"
+                            Width="12"
+                            Height="12"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="{x:Static tray:TrayTokens.RecBrush}"
+                            CornerRadius="2"
+                            IsVisible="False" />
+                    </Panel>
+                </Button>
+
+                <!--  Level: the tray's meter lying on its side. The fill width is written from
+                      code-behind (it is a number, not a state) and eased, because the level arrives
+                      about ten times a second and unsmoothed it reads as a row of steps.  -->
+                <Border
+                    x:Name="levelTrack"
+                    Width="64"
+                    Height="4"
+                    VerticalAlignment="Center"
+                    Background="{x:Static tray:TrayTokens.Track}"
+                    ClipToBounds="True"
+                    CornerRadius="2"
+                    IsHitTestVisible="False">
+                    <Border
+                        x:Name="levelFill"
+                        Width="8"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Stretch"
+                        CornerRadius="2">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Width" Duration="{x:Static tray:TrayTokens.LevelTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                </Border>
+
+                <!--  The take's length. Monospace digits and a fixed minimum width, like the
+                      transport's position readout, so the pill does not twitch every second. The
+                      1px top margin is the same optical nudge the transport makes: digits have no
+                      descenders, so a centred line box rides visibly high.  -->
+                <TextBlock
+                    x:Name="txtElapsed"
+                    MinWidth="34"
+                    Margin="0,1,0,0"
+                    VerticalAlignment="Center"
+                    FontFamily="Consolas,Cascadia Mono,monospace"
+                    Foreground="#F0F0F0"
+                    Text="0:00" />
+
+                <Rectangle
+                    x:Name="dividerDevice"
+                    Width="1"
+                    Height="20"
+                    VerticalAlignment="Center"
+                    Fill="{x:Static tray:TrayTokens.Divider}" />
+
+                <!--  which microphone is live. Dropped from the pill on a narrow preview rather than
+                      letting the pill overflow and be clipped by the preview border.  -->
+                <StackPanel
+                    x:Name="deviceGroup"
+                    Orientation="Horizontal"
+                    Spacing="6">
+                    <Path
+                        Width="11"
+                        Height="14"
+                        VerticalAlignment="Center"
+                        Data="{StaticResource IconMic}"
+                        Fill="#9A9AA0"
+                        Stretch="Uniform" />
+                    <TextBlock
+                        x:Name="txtDevice"
+                        MaxWidth="160"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="#B8B8BC"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
+                </StackPanel>
+
+                <Rectangle
+                    Width="1"
+                    Height="20"
+                    VerticalAlignment="Center"
+                    Fill="{x:Static tray:TrayTokens.Divider}" />
+
+                <Button
+                    x:Name="btnSettings"
+                    VerticalAlignment="Center"
+                    Theme="{StaticResource VoiceRecorderIconButtonTheme}">
+                    <Path
+                        Width="15"
+                        Height="15"
+                        Data="{StaticResource IconNavGeneral}"
+                        Fill="#DCDCDE"
+                        Stretch="Uniform" />
+                </Button>
+
+                <Button
+                    x:Name="btnClose"
+                    VerticalAlignment="Center"
+                    Theme="{StaticResource VoiceRecorderIconButtonTheme}">
+                    <Path
+                        Width="11"
+                        Height="11"
+                        Data="{StaticResource IconClose}"
+                        Fill="#DCDCDE"
+                        Stretch="Uniform" />
+                </Button>
+
+            </StackPanel>
+        </Border>
+
+    </Panel>
+</UserControl>

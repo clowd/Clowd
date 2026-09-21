@@ -318,6 +318,7 @@ namespace Clowd.UI.VideoEditor
 
             BuildSpeedMenu();
             InitRenderPopup();
+            InitVoiceRecorder();
 
             ddResolution.PropertyChanged += Resolution_PropertyChanged;
             ddFrameRate.PropertyChanged += FrameRate_PropertyChanged;
@@ -632,6 +633,7 @@ namespace Clowd.UI.VideoEditor
             CommandRedo.RaiseCanExecuteChanged();
             RefreshAddSpeedButton();
             RefreshInputOverlayButtons();
+            RefreshVoiceRecordEnabled(); // a project to record into now exists
 
             Inspector.Session = _editor;
             timeline.Session = _editor;
@@ -705,7 +707,9 @@ namespace Clowd.UI.VideoEditor
 
             _player = new CompositionPlayer(a => Dispatcher.UIThread.Post(a));
             _player.Volume = volumeSlider.Value;
-            _player.PlaybackRate = _playbackRate; // set before the open so the clock starts scaled
+            // set before the open so the clock starts scaled; a voice take in progress pins the
+            // preview to 1x whatever the picker says (see StartVoiceRecording)
+            _player.PlaybackRate = IsVoiceRecording ? 1.0 : _playbackRate;
             _player.PositionChanged += Player_PositionChanged;
             _player.StateChanged += Player_StateChanged;
             preview.AttachPlayer(_player);
@@ -772,6 +776,11 @@ namespace Clowd.UI.VideoEditor
             if (_closing || _editor == null)
                 return;
 
+            // a finished voice take asks for the playhead on its clip's end (see StopVoiceTake);
+            // taken here, on the change the finish raises, so no later change can inherit it
+            var seekOverrideTicks = _seekAfterTakeTicks;
+            _seekAfterTakeTicks = null;
+
             UpdatePositionReadout(_player?.Position ?? TimeSpan.Zero);
 
             // the canvas size and the frame rate are editable (and undoable), so the letterbox and
@@ -818,7 +827,7 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
-            var positionTicks = Math.Clamp(_player.Position.Ticks, 0, _editor.DurationTicks);
+            var positionTicks = Math.Clamp(seekOverrideTicks ?? _player.Position.Ticks, 0, _editor.DurationTicks);
             var snapshot = _editor.SnapshotForPlayer();
             preview.SetProject(snapshot);
 
@@ -953,7 +962,16 @@ namespace Clowd.UI.VideoEditor
 
         private void TogglePlayPause()
         {
-            if (!PlayerReady)
+            // a take in progress owns the transport: pausing it is stopping the take (Space, the
+            // play/pause button and the media key all mean "stop" then), and the countdown before
+            // one is not interrupted by a stray Space.
+            if (IsVoiceRecording)
+            {
+                StopVoiceTake();
+                return;
+            }
+
+            if (IsVoiceCountingDown || IsVoiceFinishPending || !PlayerReady)
                 return;
 
             if (_player.State == PlayerState.Playing)
@@ -995,6 +1013,11 @@ namespace Clowd.UI.VideoEditor
 
         private void Timeline_ScrubStarted(object sender, EventArgs e)
         {
+            // the take starts where the playhead stood when Record was pressed; moving it during
+            // the countdown would put the take somewhere else, so the countdown is dropped instead
+            if (IsVoiceCountingDown)
+                CancelVoiceCountdown();
+
             _scrubbing = true;
             _wasPlayingBeforeScrub = _player?.State == PlayerState.Playing;
             _player?.Pause();
@@ -1055,8 +1078,9 @@ namespace Clowd.UI.VideoEditor
 
         private void Undo()
         {
-            // a drag in progress owns the model (a gesture is open); history is off-limits
-            if (_editor == null || _editor.IsGestureActive || IsTextEditorFocused())
+            // a drag in progress owns the model (a gesture is open); history is off-limits. So
+            // does a voice take: its ghost sits on a row an undo could take away underneath it.
+            if (_editor == null || _editor.IsGestureActive || _editor.IsVoiceTakeActive || IsTextEditorFocused())
                 return;
 
             _editor.Undo();
@@ -1064,7 +1088,7 @@ namespace Clowd.UI.VideoEditor
 
         private void Redo()
         {
-            if (_editor == null || _editor.IsGestureActive || IsTextEditorFocused())
+            if (_editor == null || _editor.IsGestureActive || _editor.IsVoiceTakeActive || IsTextEditorFocused())
                 return;
 
             _editor.Redo();
@@ -1441,6 +1465,19 @@ namespace Clowd.UI.VideoEditor
             if (e.Key == Key.Escape && Inspector.CropModeActive && _editor?.IsGestureActive != true)
             {
                 Inspector.CropModeActive = false;
+                e.Handled = true;
+                return;
+            }
+
+            // Escape also ends a voice take from anywhere (the countdown is abandoned, a recording
+            // is stopped and kept), on the same terms as crop mode. Space reaches the take through
+            // TogglePlayPause below.
+            if (e.Key == Key.Escape && IsVoiceTakeBusy && _editor?.IsGestureActive != true)
+            {
+                if (IsVoiceCountingDown)
+                    CancelVoiceCountdown();
+                else
+                    StopVoiceTake();
                 e.Handled = true;
                 return;
             }
@@ -2060,6 +2097,10 @@ namespace Clowd.UI.VideoEditor
         {
             _closing = true;
 
+            // a voice take in progress is finished (its clip joins the edit flushed below) and
+            // the microphone released, ahead of the save so the take is part of it.
+            ShutdownVoiceRecorder();
+
             // flush the (debounced) edit before anything else — the edit is the work. FlushSave
             // hands the newest bytes to the autosave; Flush waits the disk write out.
             _saveDebounce?.Stop();
@@ -2276,7 +2317,8 @@ namespace Clowd.UI.VideoEditor
             foreach (var item in _speedItems)
                 item.IsChecked = (double)item.Tag == rate;
 
-            if (_player != null)
+            // a take in progress keeps the player at 1x; the stop applies the picked rate
+            if (_player != null && !IsVoiceRecording)
                 _player.PlaybackRate = rate;
         }
 

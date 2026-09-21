@@ -38,17 +38,26 @@ namespace Clowd.VideoSDK.Audio
         /// <param name="onMixError">When set, an exception out of <see cref="AudioMixer.MixChunk"/>
         /// is reported here and the failed range reads as silence (the preview's per-chunk error
         /// isolation); when null the exception propagates (the render fails the job).</param>
-        public MixerWindow(AudioMixer mixer, int guardFrames, Action<Exception> onMixError = null)
+        /// <param name="outputClock">When true the window holds OUTPUT-clock frames pulled
+        /// through <see cref="AudioMixer.MixOutputChunk"/> (the exempt clips) instead of
+        /// project-clock frames from <see cref="AudioMixer.MixChunk"/>; everything else about the
+        /// window is the same.</param>
+        public MixerWindow(AudioMixer mixer, int guardFrames, Action<Exception> onMixError = null,
+            bool outputClock = false)
         {
             ArgumentNullException.ThrowIfNull(mixer);
             ArgumentOutOfRangeException.ThrowIfNegative(guardFrames);
             Mixer = mixer;
             _guardFrames = guardFrames;
             _onMixError = onMixError;
+            OutputClock = outputClock;
         }
 
         /// <summary>The mixer new frames are pulled from; swap freely (see class remarks).</summary>
         public AudioMixer Mixer { get; set; }
+
+        /// <summary>Which of the mixer's two clocks this window reads (see the constructor).</summary>
+        public bool OutputClock { get; }
 
         /// <summary>Exclusive project frame the mixer is never asked past; requested frames at or
         /// beyond it fill as silence. Default unbounded.</summary>
@@ -111,7 +120,10 @@ namespace Clowd.VideoSDK.Audio
             {
                 try
                 {
-                    Mixer.MixChunk(readStart, mixCount, _scratch);
+                    if (OutputClock)
+                        Mixer.MixOutputChunk(readStart, mixCount, _scratch);
+                    else
+                        Mixer.MixChunk(readStart, mixCount, _scratch);
                 }
                 catch (Exception ex) when (_onMixError != null)
                 {

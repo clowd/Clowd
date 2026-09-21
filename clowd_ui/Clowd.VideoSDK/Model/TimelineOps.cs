@@ -49,7 +49,11 @@ public static class TimelineOps
     }
 
     /// <summary>Shifts the item's whole group along the timeline by
-    /// <paramref name="deltaTicks"/>, clamped so no member starts before 0. Returns the delta
+    /// <paramref name="deltaTicks"/>, clamped so no member starts before 0. A
+    /// <see cref="MediaContent.SpeedWarpExempt"/> member keeps the real-time (output) span it
+    /// had, which is the truth for such a clip: it plays on the output clock, so its project
+    /// duration is re-derived at the new position and changes when the move crosses into or
+    /// out of a speed item (clamped to the row like <see cref="SetSpeed"/>). Returns the delta
     /// actually applied.</summary>
     public static long Move(Project project, Guid itemId, long deltaTicks)
     {
@@ -62,8 +66,31 @@ public static class TimelineOps
         if (deltaTicks == 0)
             return 0;
 
+        // the exempt members' output spans under the warp before anything moves; a moved
+        // audio clip never changes the warp itself, so the same warp re-fits them afterwards
+        List<(Item Item, long OutputSpan)> exempt = null;
+        Playback.TimeWarp warp = null;
+        foreach (var m in members)
+        {
+            if (m.Content is not MediaContent { SpeedWarpExempt: true })
+                continue;
+
+            warp ??= Playback.TimeWarp.Build(project);
+            (exempt ??= new List<(Item, long)>()).Add((m,
+                warp.ToOutput(m.TimelineEndTicks) - warp.ToOutput(m.TimelineStartTicks)));
+        }
+
         foreach (var m in members)
             m.TimelineStartTicks += deltaTicks;
+
+        if (exempt != null)
+        {
+            foreach (var (m, outputSpan) in exempt)
+            {
+                var duration = warp.ToProject(warp.ToOutput(m.TimelineStartTicks) + outputSpan) - m.TimelineStartTicks;
+                m.DurationTicks = ClampDurationToRow(project, m, duration);
+            }
+        }
 
         return deltaTicks;
     }
@@ -90,19 +117,25 @@ public static class TimelineOps
 
         // a timeline tick consumes `speed` source ticks, so the room before the source's start
         // is SourceInTicks / speed timeline ticks (floored — never let rounding rewind past 0).
+        // An exempt clip consumes source on the output clock, so its room is measured there and
+        // mapped back into project ticks (see ExemptStartHeadroom).
         var maxExtend = media == null
             ? item.TimelineStartTicks
-            : Math.Min(item.TimelineStartTicks, (long)Math.Floor(media.SourceInTicks / speed));
+            : media.SpeedWarpExempt
+                ? Math.Min(item.TimelineStartTicks, ExemptStartHeadroom(project, item, media, speed))
+                : Math.Min(item.TimelineStartTicks, (long)Math.Floor(media.SourceInTicks / speed));
         if (deltaTicks < -maxExtend)
             deltaTicks = -maxExtend;
 
         if (deltaTicks == 0)
             return 0;
 
+        var oldStart = item.TimelineStartTicks;
         item.TimelineStartTicks += deltaTicks;
         item.DurationTicks -= deltaTicks;
         if (media != null)
-            media.SourceInTicks = Math.Max(0, media.SourceInTicks + ToSourceTicks(deltaTicks, speed));
+            media.SourceInTicks = Math.Max(0, media.SourceInTicks
+                + SourceTicksBetween(project, media, oldStart, oldStart + deltaTicks));
 
         return deltaTicks;
     }
@@ -133,7 +166,19 @@ public static class TimelineOps
                 // remaining source, expressed in timeline ticks at the item's speed
                 var speed = SpeedOf(media);
                 var remainingTimeline = (long)Math.Floor((streamDuration - media.SourceInTicks) / speed);
-                var maxExtend = Math.Max(0, remainingTimeline - item.DurationTicks);
+                long maxExtend;
+                if (media.SpeedWarpExempt)
+                {
+                    // the remaining source plays out in output ticks; where that lands in
+                    // project time depends on the warp between here and there.
+                    var warp = Playback.TimeWarp.Build(project);
+                    var allowedEnd = warp.ToProject(warp.ToOutput(item.TimelineStartTicks) + Math.Max(0, remainingTimeline));
+                    maxExtend = Math.Max(0, allowedEnd - item.TimelineEndTicks);
+                }
+                else
+                {
+                    maxExtend = Math.Max(0, remainingTimeline - item.DurationTicks);
+                }
                 if (deltaTicks > maxExtend)
                     deltaTicks = maxExtend;
             }
@@ -226,7 +271,7 @@ public static class TimelineOps
 
             var content = m.Content?.Clone();
             if (content is MediaContent media)
-                media.SourceInTicks += ToSourceTicks(leftLength, SpeedOf(media));
+                media.SourceInTicks += SourceTicksBetween(project, media, m.TimelineStartTicks, timelineTicks);
 
             var right = new Item
             {
@@ -314,7 +359,7 @@ public static class TimelineOps
             {
                 var content = m.Content?.Clone();
                 if (content is MediaContent media)
-                    media.SourceInTicks += ToSourceTicks(end - m.TimelineStartTicks, SpeedOf(media));
+                    media.SourceInTicks += SourceTicksBetween(project, media, m.TimelineStartTicks, end);
 
                 project.Items.Add(new Item
                 {
@@ -490,9 +535,33 @@ public static class TimelineOps
         if (speed == oldSpeed)
             return speed;
 
-        var sourceSpan = ToSourceTicks(item.DurationTicks, oldSpeed);
-        var newDuration = (long)Math.Round(sourceSpan / speed);
+        var sourceSpan = SourceTicksBetween(project, media, item.TimelineStartTicks, item.TimelineEndTicks);
+        long newDuration;
+        if (media.SpeedWarpExempt)
+        {
+            // the same source plays out over sourceSpan / speed OUTPUT ticks; the project span
+            // that covers is whatever the warp makes of it from the item's start.
+            var warp = Playback.TimeWarp.Build(project);
+            var outputStart = warp.ToOutput(item.TimelineStartTicks);
+            newDuration = warp.ToProject(outputStart + (long)Math.Round(sourceSpan / speed)) - item.TimelineStartTicks;
+        }
+        else
+        {
+            newDuration = (long)Math.Round(sourceSpan / speed);
+        }
 
+        media.Speed = speed;
+        item.DurationTicks = ClampDurationToRow(project, item, newDuration);
+        return speed;
+    }
+
+    /// <summary>A duration <paramref name="item"/> may take without breaking the model: at
+    /// least <see cref="MinSegmentTicks"/>, and short of the next item on its row. The clamp
+    /// every re-timing applies (<see cref="SetSpeed"/>, an exempt clip's re-fit under a changed
+    /// warp or at a new position): a duration that ran the clip into its neighbor would be
+    /// rolled back by validation, and end-trimming the clip is the useful answer.</summary>
+    public static long ClampDurationToRow(Project project, Item item, long duration)
+    {
         var limit = long.MaxValue;
         foreach (var other in project.Items)
         {
@@ -501,9 +570,7 @@ public static class TimelineOps
                 limit = Math.Min(limit, other.TimelineStartTicks - item.TimelineStartTicks);
         }
 
-        media.Speed = speed;
-        item.DurationTicks = Math.Clamp(newDuration, MinSegmentTicks, Math.Max(MinSegmentTicks, limit));
-        return speed;
+        return Math.Clamp(duration, MinSegmentTicks, Math.Max(MinSegmentTicks, limit));
     }
 
     /// <summary>The item's playback speed with the model's "unset means realtime" collapsed:
@@ -515,6 +582,36 @@ public static class TimelineOps
     /// for realtime so speed-1 projects keep their integer-perfect math.</summary>
     private static long ToSourceTicks(long timelineTicks, double speed) =>
         speed == 1.0 ? timelineTicks : (long)Math.Round(timelineTicks * speed);
+
+    /// <summary>
+    /// The source ticks a media item consumes between two project instants. For an ordinary
+    /// clip that is the project span at the clip's speed; for a <see cref="MediaContent.SpeedWarpExempt"/>
+    /// clip it is the OUTPUT span between the two instants (the clip plays in real time under
+    /// the project's speed items) at the clip's speed. Every operation that moves an in-point
+    /// (trim, split, cut) goes through here so the two clocks cannot drift apart.
+    /// </summary>
+    public static long SourceTicksBetween(Project project, MediaContent media, long fromProjectTicks,
+        long toProjectTicks)
+    {
+        var speed = SpeedOf(media);
+        if (media == null || !media.SpeedWarpExempt)
+            return ToSourceTicks(toProjectTicks - fromProjectTicks, speed);
+
+        var warp = Playback.TimeWarp.Build(project);
+        return ToSourceTicks(warp.ToOutput(toProjectTicks) - warp.ToOutput(fromProjectTicks), speed);
+    }
+
+    /// <summary>How far an exempt clip's start may move earlier before its in-point would rewind
+    /// past the start of its source, in project ticks: the source it has behind the in-point
+    /// plays out in output ticks, mapped back through the warp from the clip's output start.</summary>
+    private static long ExemptStartHeadroom(Project project, Item item, MediaContent media, double speed)
+    {
+        var warp = Playback.TimeWarp.Build(project);
+        var outputStart = warp.ToOutput(item.TimelineStartTicks);
+        var roomOutput = (long)Math.Floor(media.SourceInTicks / speed);
+        var earliest = warp.ToProject(Math.Max(0, outputStart - roomOutput));
+        return Math.Max(0, item.TimelineStartTicks - earliest);
+    }
 
     private static bool Covers(Item item, long timelineTicks) =>
         timelineTicks >= item.TimelineStartTicks && timelineTicks < item.TimelineEndTicks;

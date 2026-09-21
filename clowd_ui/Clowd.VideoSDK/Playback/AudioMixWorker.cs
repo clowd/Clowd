@@ -107,6 +107,11 @@ namespace Clowd.VideoSDK.Playback
         private int _stretchSpanIndex = -1;
         private Func<long, double> _stretchTarget;
 
+        // the exempt clips' window (output clock, see AudioMixer.MixOutputChunk): only read
+        // under a warp, where those clips are summed over each bent chunk exactly as
+        // Render.WarpAudioResampler adds them after its own spans.
+        private MixerWindow _exemptWindow;
+
         // playback speed state (mix-thread-owned; all unused while _speed == 1). _srcPos is the
         // fractional timeline frame the next output frame samples at, _carry holds the tail
         // timeline frames of the previous chunk that the next one still interpolates from — the
@@ -141,8 +146,9 @@ namespace Clowd.VideoSDK.Playback
             _source = new SeekableAudioSource(_project);
             _denoised = new DenoisedAudioSource(_source, _project, sidecarCacheDir);
             _readSource = new FaultIsolatingSource(this);
-            _mixer = new AudioMixer(_project, _readSource);
+            _mixer = new AudioMixer(_project, _readSource, warp);
             _window = new MixerWindow(_mixer, WarpGuardFrames, RecordError);
+            _exemptWindow = new MixerWindow(_mixer, WarpGuardFrames, RecordError, outputClock: true);
             AdoptWarp(warp);
             UpdateEndFrames(_project);
         }
@@ -265,9 +271,11 @@ namespace Clowd.VideoSDK.Playback
                 _sink.ResetTiming(_speed);
                 _source.Reset(); // the timeline moved: every stream repositions on its next read
                 _denoised.Reset();
-                _mixer = new AudioMixer(_project, _readSource);
+                _mixer = new AudioMixer(_project, _readSource, _warp);
                 _window.Reset();
                 _window.Mixer = _mixer;
+                _exemptWindow.Reset();
+                _exemptWindow.Mixer = _mixer;
                 _stretcher?.Reset();
                 _stretchSpanIndex = -1;
                 long streamTicks = _warped ? _warp.ToOutput(seek) : seek;
@@ -482,6 +490,9 @@ namespace Clowd.VideoSDK.Playback
                 produced += run;
             }
 
+            if (_mixer.HasOutputItems)
+                AddExemptRun(_outPos, produced);
+
             if (_basePtsPending)
             {
                 _sink.TrySetBasePts(new TimeSpan(AudioTime.TicksFloor((long)Math.Floor(_outPos), _rate)));
@@ -493,6 +504,54 @@ namespace Clowd.VideoSDK.Playback
 
             _outPos += produced * _speed;
             _nextFrame = (long)Math.Floor(_outPos);
+        }
+
+        /// <summary>Sums the exempt clips (the mixer's output-clock items) over a just-produced
+        /// run of device frames: each frame's output position is read from the exempt window,
+        /// interpolated between its neighbors at a fractional position and copied verbatim at an
+        /// integer one, which at playback speed 1 is every position, so the sum matches
+        /// <see cref="AudioMixer.AddOutputChunk"/> in the render sample for sample. Re-clamped
+        /// afterwards like every mix.</summary>
+        private void AddExemptRun(double firstPos, int run)
+        {
+            double lastPos = firstPos + (run - 1) * _speed;
+            long firstNeeded = (long)Math.Floor(firstPos);
+            long endNeeded = (long)Math.Floor(lastPos) + 2; // right neighbor, exclusive
+            _exemptWindow.Ensure(firstNeeded, endNeeded);
+
+            long windowLast = _exemptWindow.StartFrame + _exemptWindow.Frames - 1;
+            var buffer = _exemptWindow.Buffer;
+            for (int i = 0; i < run; i++)
+            {
+                double p = firstPos + i * _speed;
+                long f0 = _exemptWindow.Clamp((long)Math.Floor(p));
+                long f1 = Math.Min(f0 + 1, windowLast);
+                float frac = (float)(p - f0);
+                if (frac < 0f)
+                    frac = 0f;
+                else if (frac > 1f)
+                    frac = 1f;
+
+                int b0 = (int)(f0 - _exemptWindow.StartFrame) * Channels;
+                int b1 = (int)(f1 - _exemptWindow.StartFrame) * Channels;
+                int di = i * Channels;
+                for (int ch = 0; ch < Channels; ch++)
+                {
+                    float a = buffer[b0 + ch];
+                    float b = buffer[b1 + ch];
+                    _chunk[di + ch] += a + (b - a) * frac;
+                }
+            }
+
+            int floats = run * Channels;
+            for (int i = 0; i < floats; i++)
+            {
+                float v = _chunk[i];
+                if (v > 1f)
+                    _chunk[i] = 1f;
+                else if (v < -1f)
+                    _chunk[i] = -1f;
+            }
         }
 
         /// <summary>A run of device frames through a direct or plainly-resampled span: warp-map
@@ -640,7 +699,7 @@ namespace Clowd.VideoSDK.Playback
             AudioMixer mixer;
             try
             {
-                mixer = new AudioMixer(project, _readSource);
+                mixer = new AudioMixer(project, _readSource, update.Warp ?? _warp);
             }
             catch (Exception ex)
             {
@@ -654,6 +713,7 @@ namespace Clowd.VideoSDK.Playback
             // the window keeps its already-mixed frames: a volume edit becomes audible on the
             // next mixed frame, never by re-mixing (and so repositioning) a source
             _window.Mixer = mixer;
+            _exemptWindow.Mixer = mixer;
             if (update.Warp != null && !ReferenceEquals(update.Warp, _warp))
                 AdoptWarp(update.Warp);
             UpdateEndFrames(project);
@@ -676,6 +736,7 @@ namespace Clowd.VideoSDK.Playback
             _srcEndFrame = AudioTime.SamplesCeil(endTicks, _rate);
             _endFrame = _warped ? AudioTime.SamplesCeil(_warp.ToOutput(endTicks), _rate) : _srcEndFrame;
             _window.LimitFrame = _srcEndFrame;
+            _exemptWindow.LimitFrame = _endFrame;
         }
 
         /// <summary>One warp segment in the output sample-frame domain (the audio mirror of

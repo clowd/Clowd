@@ -554,6 +554,30 @@
                     </ToolTip.Tip>
                 </controls:ToolButton>
 
+                <!--  The voice-over recorder is a toggle, not an add: checked shows the recorder
+                      overlay on the preview (VoiceRecorderOverlay), unchecked hides it, and neither
+                      touches the project. Takes are started from the overlay itself. The code-behind
+                      disables it (with the tip's footer saying why) where there is no microphone to
+                      record from (RefreshVoiceRecorderButton).  -->
+                <controls:ToolButton
+                    x:Name="btnVoice"
+                    Padding="6"
+                    CanToggle="True"
+                    IconPath="{StaticResource IconMic}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipVoice"
+                                DemoName="voice"
+                                Description="Opens the recorder over the preview so you can check your mic. Recording counts down, plays the project from the playhead, and drops the take on a Voice audio track you can move and trim like any other clip."
+                                Header="Record Voice-over" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
                 <controls:ToolButton
                     x:Name="btnAddBackground"
                     Padding="6"
@@ -599,6 +623,9 @@
                           sits on top of it and the letterbox shows it through  -->
                     <Panel Background="{x:Static util:CheckerBrushes.Canvas}" IsHitTestVisible="False" />
                     <ve:VideoPreviewControl x:Name="preview" />
+                    <!--  the voice-over recorder's pill and countdown: over the preview and its
+                          gizmo, under the status notice, shown while btnVoice is checked  -->
+                    <ve:VoiceRecorderOverlay x:Name="voiceRecorder" IsVisible="False" />
                     <Border
                         x:Name="statusOverlay"
                         Padding="14,10"

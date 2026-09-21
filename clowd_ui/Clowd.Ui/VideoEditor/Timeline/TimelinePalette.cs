@@ -306,6 +306,22 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// dragged by its grip would land.</summary>
         public IBrush DropIndicatorBrush { get; private init; }
 
+        // ------------------------------------------------------------------------- voice take
+
+        /// <summary>The growing ghost of a voice take being recorded: the audio hue at under half
+        /// strength, so it reads as "a clip is arriving here" rather than as a clip that is there,
+        /// and the waveform it does not yet have is not missed.</summary>
+        public IBrush VoiceGhostFill { get; private init; }
+
+        /// <summary>The ghost's dashed outline, in the audio hue at full strength: the one hard
+        /// edge on an otherwise translucent block, so its right end (the take's live position)
+        /// stays readable as it grows.</summary>
+        public Pen VoiceGhostPen { get; private init; }
+
+        /// <summary>The recording dot on the ghost: the playhead's red, which is what "recording"
+        /// looks like everywhere else.</summary>
+        public IBrush RecordingDotBrush { get; private init; }
+
         public Pen PlayheadPen { get; private init; }
 
 
@@ -432,6 +448,10 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _speedFastTint = dark ? Color.FromRgb(255, 176, 64) : Color.FromRgb(230, 138, 20),
                 _speedSlowTint = dark ? Color.FromRgb(96, 186, 255) : Color.FromRgb(38, 132, 214),
                 DropIndicatorBrush = new SolidColorBrush(accent),
+
+                VoiceGhostFill = new SolidColorBrush(audio, 0.4),
+                VoiceGhostPen = new Pen(new SolidColorBrush(audio), 1, new DashStyle(new double[] { 4, 3 }, 0)),
+                RecordingDotBrush = new SolidColorBrush(playheadColor),
 
                 // fully opaque, and an even whole-pixel width so the snapped center puts both
                 // halves of the stroke on real pixels (1.5 could only ever be antialiased).

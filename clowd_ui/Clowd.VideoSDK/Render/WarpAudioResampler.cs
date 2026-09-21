@@ -31,6 +31,14 @@ namespace Clowd.VideoSDK.Render
     /// right neighbor, or a stretcher's alignment look-behind, is needed again by the next hop
     /// or chunk, and re-requesting it would be a backwards read.
     /// </para>
+    ///
+    /// <para>
+    /// Clips the mixer keeps on the output clock (<see cref="Model.MediaContent.SpeedWarpExempt"/>
+    /// under a bending warp) are not bent at all: once a chunk of project mix has been warped
+    /// onto the output grid, <see cref="AudioMixer.AddOutputChunk"/> sums them in at their
+    /// output positions. The preview's <c>AudioMixWorker</c> does the same, so both paths hear
+    /// them alike; under an identity warp the mixer has no such clips and nothing is added.
+    /// </para>
     /// </summary>
     public sealed class WarpAudioResampler
     {
@@ -159,6 +167,11 @@ namespace Clowd.VideoSDK.Render
                     ResampleRun(o, run, dst, done * Channels);
                 done += run;
             }
+
+            // the exempt clips ride the output clock straight over the bent mix
+            var mixer = _window.Mixer;
+            if (mixer.HasOutputItems)
+                mixer.AddOutputChunk(firstFrame, frames, dst);
         }
 
         /// <summary>The speed-1 run: verbatim copy of project frames at the span's constant

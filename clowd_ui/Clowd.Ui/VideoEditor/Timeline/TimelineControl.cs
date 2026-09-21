@@ -262,6 +262,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 {
                     _session.ProjectChanged -= Session_ProjectChanged;
                     _session.SelectionChanged -= Session_SelectionChanged;
+                    _session.VoiceTakeGhostChanged -= Session_VoiceTakeGhostChanged;
                 }
 
                 _session = value;
@@ -270,11 +271,12 @@ namespace Clowd.UI.VideoEditor.Timeline
                 {
                     _session.ProjectChanged += Session_ProjectChanged;
                     _session.SelectionChanged += Session_SelectionChanged;
+                    _session.VoiceTakeGhostChanged += Session_VoiceTakeGhostChanged;
                 }
 
                 _surface.Session = value;
                 _headers.SetSession(value);
-                _viewport.SetDuration(value?.DurationTicks ?? 0);
+                _viewport.SetDuration(ReachTicks);
                 UpdateWarp();
 
                 // a new project opens at the default scale, not fitted: one second is always the
@@ -397,8 +399,8 @@ namespace Clowd.UI.VideoEditor.Timeline
             // the project would feed on itself and collapse the item under a stationary pointer.
             // Growing only raises the zoom/scroll limits, so it is safe; a shrink lands once, when
             // the gesture commits (or cancels).
-            if (e.Kind != ProjectChangeKind.Preview || _session.DurationTicks > _viewport.DurationTicks)
-                _viewport.SetDuration(_session.DurationTicks);
+            if (e.Kind != ProjectChangeKind.Preview || ReachTicks > _viewport.DurationTicks)
+                _viewport.SetDuration(ReachTicks);
 
             // the warp follows every change, Preview included: it moves no coordinate on the
             // horizontal axis (only the times the ruler prints), so unlike the duration it cannot
@@ -417,6 +419,30 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _headers.RefreshGroupBadges();
             }
 
+            _surface.InvalidateVisual();
+        }
+
+        /// <summary>How far the timeline reaches: the project's duration, or the end of the voice
+        /// take being recorded when that has run past it: the take's clip will extend the
+        /// project the moment it lands, and the view has to be able to scroll to where the
+        /// recording is before then.</summary>
+        private long ReachTicks
+        {
+            get
+            {
+                var duration = _session?.DurationTicks ?? 0;
+                return _session?.VoiceTakeGhost is { } ghost ? Math.Max(duration, ghost.EndTicks) : duration;
+            }
+        }
+
+        /// <summary>The voice take's ghost changed: the surface repaints itself, but the reach
+        /// (see <see cref="ReachTicks"/>) is the viewport's to know.</summary>
+        private void Session_VoiceTakeGhostChanged(object sender, EventArgs e)
+        {
+            if (_session == null)
+                return;
+
+            _viewport.SetDuration(ReachTicks);
             _surface.InvalidateVisual();
         }
 

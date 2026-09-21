@@ -982,6 +982,117 @@ def gif_background():
     return frames
 
 
+# ---- 10. voice-over --------------------------------------------------------------------------
+# The voice-over tool is the odd one out: it does not drop a finished item at the playhead, it
+# arms a recorder. So the demo shows the recorder pill appearing over the preview, the take
+# growing out of the playhead while the mic listens, and only then a normal audio item settling
+# on the Voice row. The row itself is an ordinary audio row in the audio block under Audio.
+VOICE_REC = (240, 82, 82)        # the record dot, the same red as the playhead
+VOICE_TAKE = (168, 78, 84)       # the in-progress take: audio, tinted red while the mic is live
+PILL_BG = (26, 26, 30)
+PILL_TEXT = (240, 240, 242)
+
+
+def mic_glyph(d, cx, cy, ink, arc_col, arcs=0.0, s=1.0):
+    """The focal element: one large studio microphone with sound arcs on both sides. Drawn at
+    roughly twice a realistic size, the way the cursor demo draws its pointer, because the glyph
+    is what the demo is about. arcs is 0..1 and animates which of the three rings are lit."""
+    # capsule body
+    rrect(d, (cx - 6.5 * s, cy - 17 * s, cx + 6.5 * s, cy + 4 * s), 6.5 * s, fill=ink)
+    # the U shaped cradle under it, the stem and the base
+    r = 11 * s
+    d.arc((P(cx - r), P(cy - r), P(cx + r), P(cy + r)), start=0, end=180, fill=ink,
+          width=int(round(2.0 * s * SS)))
+    line(d, (cx, cy + 11 * s), (cx, cy + 17 * s), ink, 2.0 * s)
+    line(d, (cx - 6 * s, cy + 17 * s), (cx + 6 * s, cy + 17 * s), ink, 2.0 * s)
+    for k in range(3):
+        lit = arcs > 0 and ((int(arcs * 26) + k) % 3 != 0)
+        rr = (16 + k * 5.5) * s
+        col = mix(arc_col[0], arc_col[1], 1.0 if lit else 0.32)
+        box = (P(cx - rr), P(cy - rr), P(cx + rr), P(cy + rr))
+        d.arc(box, start=-36, end=36, fill=col, width=int(round(1.5 * s * SS)))
+        d.arc(box, start=144, end=216, fill=col, width=int(round(1.5 * s * SS)))
+
+
+def recorder_pill(img, alpha, recording, level_phase, seconds):
+    """The recorder overlay itself: a dark pill at the bottom centre of the preview holding the
+    record button, the live level meter and the elapsed take time. Painted on its own layer so it
+    can fade in over the recording the way the real overlay does."""
+    if alpha <= 0.02:
+        return
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    x0, x1, y0, y1 = 96.0, 156.0, 59.0, 73.0
+    cy = (y0 + y1) / 2
+    rrect(d, (x0, y0 + 1.0, x1, y1 + 1.0), 7, fill=(8, 8, 10))
+    rrect(d, (x0, y0, x1, y1), 7, fill=PILL_BG, outline=(70, 70, 78), width=0.5)
+    # record button: a round dot while armed, a square while the take is running
+    bx = x0 + 7.0
+    if recording:
+        rrect(d, (bx - 2.4, cy - 2.4, bx + 2.4, cy + 2.4), 0.8, fill=VOICE_REC)
+    else:
+        ellipse(d, (bx - 3.0, cy - 3.0, bx + 3.0, cy + 3.0), fill=VOICE_REC)
+    # level meter: five bars driven by a rolling sine so it reads as a live mic, quiet while the
+    # overlay is only armed and lively once the take is running
+    mx = x0 + 14.0
+    for k in range(5):
+        a = 0.5 + 0.5 * math.sin(level_phase * 2.6 + k * 1.15) * math.cos(level_phase * 1.7 + k * 0.6)
+        a = 0.18 + a * (0.82 if recording else 0.24)
+        hh = max(0.7, 4.4 * a)
+        col = mix(mix(AUDIO, (255, 255, 255), 0.35), VOICE_REC, 0.55 if a > 0.8 else 0.0)
+        rrect(d, (mx + k * 4.4, cy - hh, mx + k * 4.4 + 2.2, cy + hh), 1.0, fill=col)
+    text(d, (x1 - 5.0, cy + 0.3), f"0:{int(seconds):02d}", F_ITEM, PILL_TEXT, anchor="rm")
+    a = layer.split()[3].point(lambda v: int(v * alpha))
+    img.paste(layer.convert("RGB"), (0, 0), a)
+
+
+def gif_voice():
+    frames = []
+    desktop, _ = render_desktop(show_button=False)
+    thumb = thumb_of(render_desktop()[0])
+    for i in range(N):
+        pop, sweep, settled = phases(i)
+        recording = 0 < sweep < 1.0 and not settled
+        img = new_frame()
+        paste_canvas(img, desktop)
+        d = ImageDraw.Draw(img)
+        if pop > 0:
+            e = ease_out(pop)
+            # the glyph sits over the light app window, so its ink darkens in rather than
+            # brightening the way an overlay on the dark preview ground would
+            ink = mix((232, 233, 238), (38, 42, 54), e)
+            hot = (170, 48, 54) if recording else (44, 82, 72)
+            arc_col = (mix((232, 233, 238), hot, e * 0.34), mix((232, 233, 238), hot, e))
+            mic_glyph(d, *canvas_pt(0.38, 0.36), ink=ink, arc_col=arc_col,
+                      arcs=sweep if recording else 0.0)
+        recorder_pill(img, ease_out(pop), recording, i * 0.55, sweep * 5.0)
+
+        take_x1 = sweep_playhead(pop, sweep)
+
+        def painter(dd, box, gi, th, recording=recording):
+            rrect(dd, box, 1.5, fill=VOICE_TAKE if recording else AUDIO)
+            if box[2] - box[0] > 8:
+                waveform(dd, box, seed=3.4)
+            if recording:
+                rrect(dd, box, 1.5, outline=mix(VOICE_REC, (255, 255, 255), 0.35), width=0.6)
+
+        tl = Timeline()
+        # The take is written from the playhead as the project plays, so unlike the other demos
+        # the item is not popped in at full width: it grows to the right with the playhead and
+        # only settles into an ordinary audio item on the closing hold.
+        items = []
+        if take_x1 > x_of_sec(ITEM_T0) + 0.5:
+            # no item label: the row header already reads Voice, and a label over the waveform
+            # is unreadable at this size (the music row in the audio demo does the same)
+            items.append((x_of_sec(ITEM_T0), take_x1, None, painter, 1.0))
+        new_row = dict(name="Voice", h=R_AUDIO, fill=AUDIO, block="audio",
+                       grow=min(1.0, pop * 1.4), items=items)
+        base_rows(tl, new_row, "audio")
+        tl.draw(d, take_x1, thumb, selected=new_row if settled else None)
+        frames.append(finish(img))
+    return frames
+
+
 GIFS = {
     "track-video.gif": gif_video,
     "track-audio.gif": gif_audio,
@@ -992,6 +1103,7 @@ GIFS = {
     "track-cursor.gif": gif_cursor,
     "track-keyboard.gif": gif_keyboard,
     "track-background.gif": gif_background,
+    "track-voice.gif": gif_voice,
 }
 
 

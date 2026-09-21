@@ -388,7 +388,7 @@
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Foreground="#88FFFFFF"
-            IsVisible="{Binding !HasSelection}"
+            IsVisible="{Binding ShowNothingSelected}"
             Text="Nothing selected"
             TextAlignment="Center"
             TextWrapping="Wrap" />
@@ -399,7 +399,7 @@
               time it is realized, and that request bubbles up to this ScrollViewer and lands the
               panel halfway down its own content the first time a section holding a picker is
               shown. Every picker therefore sets AutoScrollToSelectedItem="False".  -->
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasSelection}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowProperties}">
             <StackPanel Margin="10" Spacing="14">
 
                 <!--  subject: which row/kind the numbers below belong to, with the row's own
@@ -1243,6 +1243,28 @@
                             SpinAmount="0.05"
                             Suffix="%"
                             Value="{Binding Volume, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  The clip's opt-out of the project's Speed effects: an exempt clip is
+                          mixed by the output clock, so it stays at real time wherever the rest of
+                          the timeline is re-timed (a recorded voice-over is created exempt). The
+                          tooltip rides the row rather than the checkbox so the whole line
+                          explains itself, as the denoise row below does.  -->
+                    <DockPanel
+                        Classes="row"
+                        Background="Transparent"
+                        IsVisible="{Binding ShowSpeedWarpExempt}"
+                        ToolTip.Tip="Plays in real time even where Speed effects change the pace of everything else. On by default for recorded voice-overs.">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  bool default is assigned in code-behind for the same reason the
+                                  enum ones are: a XAML DefaultValue is a string  -->
+                            <controls:ResetDefaultButton x:Name="dotSpeedWarpExempt" CurrentValue="{Binding SpeedWarpExempt, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock
+                            Classes="label"
+                            Text="Exempt from speed warp"
+                            TextWrapping="Wrap" />
+                        <CheckBox IsChecked="{Binding SpeedWarpExempt, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
                     </DockPanel>
 
                     <!--  AI denoise, a property of the row like the mute it sits under: the mix
@@ -2291,6 +2313,39 @@
                     </DockPanel>
                 </StackPanel>
 
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  the voice recorder's own settings, which take the whole panel while the recorder
+              overlay's gear has them up (see SelectedItemViewModel.ShowVoiceRecorder): these are
+              about the take the user is about to record, not about anything selected, so they
+              stand in for the sections above rather than joining them. The mode ends by itself
+              when the selection moves.  -->
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowVoiceRecorder}">
+            <StackPanel Margin="10" Spacing="14">
+                <StackPanel Classes="section">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="VOICE RECORDER" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  the dot slot is empty: this is an app setting, not an item property, so
+                          there is no project default to reset it to, but the label still lines
+                          up with every other row in the panel  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Device" />
+                        <controls:DropDownButton x:Name="ddVoiceMic" SelectedItem="{Binding VoiceRecorderDevice, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  indented to the label column, like the analysis note in AUDIO  -->
+                    <TextBlock
+                        Margin="14,2,0,0"
+                        FontSize="11"
+                        Foreground="#999999"
+                        Text="Playback starts from the playhead after a 3 second countdown. Takes land on the Voice track as ordinary audio clips."
+                        TextWrapping="Wrap" />
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
