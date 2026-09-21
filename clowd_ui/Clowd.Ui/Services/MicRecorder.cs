@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using NAudio.CoreAudioApi;
 using NAudio.Dsp;
 using NAudio.Wave;
 
@@ -16,18 +15,18 @@ namespace Clowd.UI.Services
     /// WAV file on demand.
     /// </summary>
     /// <remarks>
-    /// <para>Windows only for now. Capture is WASAPI shared mode through NAudio
-    /// (<see cref="WasapiCapture"/>), which hands us the device mix format; everything written to
-    /// disk is normalized to 48 kHz mono 16-bit PCM so the editor always imports the same shape of
-    /// file and FFmpeg can probe it without surprises. On macOS <see cref="IsSupported"/> is false
-    /// and <see cref="Open"/> is a no-op that reports no level: the CoreAudio shim behind
-    /// <see cref="AudioDeviceManager"/> only enumerates devices, it does not open them.</para>
+    /// <para>The device itself is a <see cref="MicCapture"/>: WASAPI shared mode on Windows,
+    /// which hands us the device mix format, and a CoreAudio input queue on macOS, which
+    /// delivers float at the record rate already. Whatever arrives, everything written to disk
+    /// is normalized to 48 kHz mono 16-bit PCM so the editor always imports the same shape of
+    /// file and FFmpeg can probe it without surprises. Elsewhere <see cref="IsSupported"/> is
+    /// false and <see cref="Open"/> is a no-op that reports no level.</para>
     /// <para>Threading: <see cref="Open"/>, <see cref="StartRecording"/>,
     /// <see cref="StopRecording"/> and <see cref="Close"/> are meant to be called from the UI
-    /// thread, and every field they share with the WASAPI capture thread is behind one lock,
-    /// which is only ever held for bookkeeping and sample conversion. The disk never sits under
-    /// it: the take's file lives in a <see cref="TakeWriter"/> with a gate of its own, so a
-    /// slow write on the capture thread cannot stall a UI thread that is merely reading
+    /// thread, and every field they share with the capture thread is behind one lock, which is
+    /// only ever held for bookkeeping and sample conversion. The disk never sits under it: the
+    /// take's file lives in a <see cref="TakeWriter"/> with a gate of its own, so a slow write
+    /// on the capture thread cannot stall a UI thread that is merely reading
     /// <see cref="DeviceName"/> or <see cref="IsDeviceOpen"/> (those read volatile fields and
     /// take no lock at all). <see cref="PeakDbfsChanged"/> is always raised on the Avalonia UI
     /// thread. Nothing here throws because of the device: an endpoint that will not open, or
@@ -51,24 +50,23 @@ namespace Clowd.UI.Services
         /// are drawn from.</summary>
         private const double LevelWindowSeconds = 0.1;
 
-        /// <summary>WASAPI buffer length. Half a metering window, so a window is never much late
-        /// and the meter stays responsive.</summary>
+        /// <summary>Capture buffer length. Half a metering window, so a window is never much
+        /// late and the meter stays responsive.</summary>
         private const int CaptureBufferMs = 50;
 
         private readonly object _sync = new object();
 
         // volatile: the capture thread sets these under _sync, the UI thread reads them
         // without it (see the class remarks)
-        private volatile WasapiCapture _capture;
+        private volatile MicCapture _capture;
         private volatile bool _isRecording;
         private volatile string _deviceName = NoDeviceName;
 
-        private MMDevice _device;
         private TakeWriter _writer;
         private WdlResampler _resampler;
 
-        // Shape of the device mix format, resolved once when the device opens.
-        private SourceSampleFormat _sourceFormat;
+        // Shape of the capture format, resolved once when the device opens.
+        private MicSampleFormat _sourceFormat;
         private int _sourceChannels;
         private int _sourceSampleRate;
         private int _sourceBytesPerSample;
@@ -84,11 +82,11 @@ namespace Clowd.UI.Services
         private bool _disposed;
 
         /// <summary>
-        /// Whether this machine can capture a microphone at all. False on macOS, where the
-        /// CoreAudio shim enumerates devices but does not open them, so the recorder tool should
-        /// stay unavailable rather than offer a record button that cannot work.
+        /// Whether this machine can capture a microphone at all: Windows and macOS. Elsewhere the
+        /// recorder tool should stay unavailable rather than offer a record button that cannot
+        /// work.
         /// </summary>
-        public static bool IsSupported => OperatingSystem.IsWindows();
+        public static bool IsSupported => MicCapture.IsSupported;
 
         /// <summary>The input devices to choose between, the "default" pseudo-device first.</summary>
         public static IReadOnlyList<AudioDeviceInfo> Devices() => AudioDeviceManager.GetMicrophones();
@@ -125,15 +123,14 @@ namespace Clowd.UI.Services
         /// doubles as "switch device". Null, empty or
         /// <see cref="AudioDeviceManager.DefaultDeviceId"/> opens the system default input.
         /// </summary>
-        /// <param name="deviceId">A WASAPI endpoint id from <see cref="Devices"/>, or null/"default".</param>
+        /// <param name="deviceId">A device id from <see cref="Devices"/>, or null/"default".</param>
         /// <remarks>Never throws: an endpoint that cannot be opened leaves the recorder closed and
         /// reports a null level.</remarks>
         public void Open(string deviceId)
         {
             Close();
 
-            WasapiCapture orphanedCapture = null;
-            MMDevice orphanedDevice = null;
+            MicCapture orphaned = null;
             var failed = false;
 
             lock (_sync)
@@ -146,11 +143,12 @@ namespace Clowd.UI.Services
 
                 try
                 {
-                    _device = ResolveDevice(deviceId);
-                    _capture = new WasapiCapture(_device, false, CaptureBufferMs);
+                    _capture = MicCapture.Open(deviceId, CaptureBufferMs);
 
-                    if (!TryResolveSourceFormat(_capture.WaveFormat))
-                        throw new NotSupportedException("Unsupported microphone format " + _capture.WaveFormat);
+                    _sourceFormat = _capture.SampleFormat;
+                    _sourceChannels = _capture.Channels;
+                    _sourceSampleRate = _capture.SampleRate;
+                    _sourceBytesPerSample = _capture.BytesPerSample;
 
                     _resampler = _sourceSampleRate == RecordSampleRate ? null : CreateResampler(_sourceSampleRate);
                     _windowFrameTarget = Math.Max(1, (int)(_sourceSampleRate * LevelWindowSeconds));
@@ -158,25 +156,25 @@ namespace Clowd.UI.Services
                     _windowFrames = 0;
 
                     _capture.DataAvailable += OnDataAvailable;
-                    _capture.RecordingStopped += OnRecordingStopped;
-                    _capture.StartRecording();
+                    _capture.Stopped += OnStopped;
+                    _capture.Start();
 
-                    _deviceName = _device.FriendlyName;
+                    _deviceName = _capture.FriendlyName;
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("Failed to open microphone '" + deviceId + "': " + ex.Message);
                     SentryConfig.CaptureHandled(ex, "voiceover.open-mic");
-                    (orphanedCapture, orphanedDevice) = DetachDevice();
+                    orphaned = DetachDevice();
                     failed = true;
                 }
             }
 
             if (failed)
             {
-                // Outside the lock: releasing a capture client joins its capture thread, which may
+                // Outside the lock: releasing a capture joins its capture thread, which may
                 // itself be waiting on the lock inside a callback.
-                ReleaseDevice(orphanedCapture, orphanedDevice);
+                ReleaseDevice(orphaned);
                 RaiseLevel(null);
             }
         }
@@ -257,21 +255,20 @@ namespace Clowd.UI.Services
         /// </summary>
         public void Close()
         {
-            WasapiCapture capture;
-            MMDevice device;
+            MicCapture capture;
             TakeWriter writer;
 
             lock (_sync)
             {
                 writer = DetachWriterLocked();
-                (capture, device) = DetachDevice();
+                capture = DetachDevice();
             }
 
             writer?.Close();
-            if (capture == null && device == null)
+            if (capture == null)
                 return;
 
-            ReleaseDevice(capture, device);
+            ReleaseDevice(capture);
             RaiseLevel(null);
         }
 
@@ -289,30 +286,6 @@ namespace Clowd.UI.Services
             Close();
         }
 
-        /// <summary>Opens the endpoint for an id from <see cref="Devices"/>. An id that no longer
-        /// exists falls back to the default input, the same forgiving rule as
-        /// <see cref="AudioDeviceManager.VerifyMicrophoneOrDefault"/>.</summary>
-        private static MMDevice ResolveDevice(string deviceId)
-        {
-            using var enumerator = new MMDeviceEnumerator();
-
-            if (!String.IsNullOrEmpty(deviceId) && deviceId != AudioDeviceManager.DefaultDeviceId)
-            {
-                try
-                {
-                    return enumerator.GetDevice(deviceId);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("Microphone '" + deviceId + "' is gone, using the default: " + ex.Message);
-                }
-            }
-
-            // Role.Multimedia to match the endpoint AudioDeviceManager names its "Default - ..."
-            // row after, so the picker's label and the device we actually open agree.
-            return enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
-        }
-
         /// <summary>The WDL resampler configured the way NAudio's own sample provider configures
         /// it, in input-driven feed mode: we push whatever the capture thread handed us instead of
         /// pulling a fixed number of output frames.</summary>
@@ -326,52 +299,13 @@ namespace Clowd.UI.Services
             return resampler;
         }
 
-        /// <summary>Reads the device mix format into the few numbers the conversion loop needs.
-        /// Returns false for a format we cannot decode, which is treated as a failure to
-        /// open.</summary>
-        private bool TryResolveSourceFormat(WaveFormat format)
-        {
-            // Shared-mode mix formats are usually WAVE_FORMAT_EXTENSIBLE, whose Encoding reads as
-            // "Extensible"; the encoding that matters is in the subformat GUID.
-            if (format is WaveFormatExtensible extensible)
-            {
-                try
-                {
-                    format = extensible.ToStandardWaveFormat();
-                }
-                catch (InvalidOperationException ex)
-                {
-                    Debug.WriteLine("Unrecognized microphone subformat: " + ex.Message);
-                    return false;
-                }
-            }
-
-            _sourceChannels = format.Channels;
-            _sourceSampleRate = format.SampleRate;
-            _sourceBytesPerSample = format.BitsPerSample / 8;
-
-            if (_sourceChannels < 1 || _sourceSampleRate < 1)
-                return false;
-
-            _sourceFormat = (format.Encoding, format.BitsPerSample) switch
-            {
-                (WaveFormatEncoding.IeeeFloat, 32) => SourceSampleFormat.Float32,
-                (WaveFormatEncoding.Pcm, 16) => SourceSampleFormat.Pcm16,
-                (WaveFormatEncoding.Pcm, 24) => SourceSampleFormat.Pcm24,
-                (WaveFormatEncoding.Pcm, 32) => SourceSampleFormat.Pcm32,
-                _ => SourceSampleFormat.Unsupported,
-            };
-
-            return _sourceFormat != SourceSampleFormat.Unsupported;
-        }
-
-        /// <summary>WASAPI capture thread. The conversion runs under the lock so a concurrent
+        /// <summary>The capture thread. The conversion runs under the lock so a concurrent
         /// <see cref="StartRecording"/> or <see cref="Close"/> cannot swap the writer or the
         /// buffers out from under it; the disk write itself happens after the lock is released
         /// (the writer has its own gate, and a stop that races it simply closes the file after
         /// or before this buffer). Nothing is allowed to escape as an exception on this
         /// thread.</summary>
-        private void OnDataAvailable(object sender, WaveInEventArgs e)
+        private void OnDataAvailable(MicCapture sender, byte[] buffer, int bytesRecorded)
         {
             double? level = null;
             var haveLevel = false;
@@ -388,14 +322,14 @@ namespace Clowd.UI.Services
                         return;
 
                     var frameBytes = _sourceBytesPerSample * _sourceChannels;
-                    var frames = frameBytes == 0 ? 0 : e.BytesRecorded / frameBytes;
+                    var frames = frameBytes == 0 ? 0 : bytesRecorded / frameBytes;
                     if (frames <= 0)
                         return;
 
                     if (_monoBuffer.Length < frames)
                         _monoBuffer = new float[frames];
 
-                    var bufferPeak = DownmixToMono(e.Buffer, frames);
+                    var bufferPeak = DownmixToMono(buffer, frames);
 
                     if (_isRecording && _writer != null)
                     {
@@ -425,10 +359,10 @@ namespace Clowd.UI.Services
             {
                 // A conversion or a disk write blowing up on the capture thread would otherwise
                 // take the process down. Abandon the take, keep the app alive, and ask the capture
-                // client to stop so OnRecordingStopped does the tidying.
+                // to stop so OnStopped does the tidying.
                 Debug.WriteLine("Microphone capture callback failed: " + ex.Message);
                 SentryConfig.CaptureHandled(ex, "voiceover.capture-callback");
-                RequestStopAfterFailure(sender as WasapiCapture);
+                RequestStopAfterFailure(sender);
                 return;
             }
 
@@ -469,20 +403,20 @@ namespace Clowd.UI.Services
             return peak;
         }
 
-        /// <summary>One sample of the device mix format as a float in -1..1 (give or take: float
-        /// mix formats are allowed to exceed it).</summary>
+        /// <summary>One sample of the capture format as a float in -1..1 (give or take: float
+        /// formats are allowed to exceed it).</summary>
         private float ReadSample(byte[] buffer, int offset)
         {
             switch (_sourceFormat)
             {
-                case SourceSampleFormat.Float32:
+                case MicSampleFormat.Float32:
                     return BitConverter.ToSingle(buffer, offset);
-                case SourceSampleFormat.Pcm16:
+                case MicSampleFormat.Pcm16:
                     return BitConverter.ToInt16(buffer, offset) / 32768f;
-                case SourceSampleFormat.Pcm24:
+                case MicSampleFormat.Pcm24:
                     var packed = buffer[offset] | (buffer[offset + 1] << 8) | ((sbyte)buffer[offset + 2] << 16);
                     return packed / 8388608f;
-                case SourceSampleFormat.Pcm32:
+                case MicSampleFormat.Pcm32:
                     return BitConverter.ToInt32(buffer, offset) / 2147483648f;
                 default:
                     return 0f;
@@ -528,7 +462,7 @@ namespace Clowd.UI.Services
 
             for (var i = 0; i < count; i++)
             {
-                // Clamped rather than wrapped: a float mix format can hand us samples past full
+                // Clamped rather than wrapped: a float format can hand us samples past full
                 // scale, and a wrapped sample is a loud click in the take.
                 var sample = Math.Clamp(source[i], -1f, 1f);
                 _writeBuffer[i] = (short)(sample * 32767f);
@@ -538,44 +472,43 @@ namespace Clowd.UI.Services
         }
 
         /// <summary>
-        /// The capture client stopped on its own, which we only ever see when something went
-        /// wrong: the device was unplugged or disabled, the audio service restarted, or a callback
-        /// of ours failed. Our own <see cref="Close"/> detaches the client first, so a stop it
-        /// caused arrives here for a client that is no longer the current one and is ignored.
+        /// The capture stopped on its own, which we only ever see when something went wrong: the
+        /// device was unplugged or disabled, the audio service restarted, or a callback of ours
+        /// failed. Our own <see cref="Close"/> detaches the capture first, so a stop it caused
+        /// arrives here for a capture that is no longer the current one and is ignored.
         /// </summary>
-        private void OnRecordingStopped(object sender, StoppedEventArgs e)
+        private void OnStopped(MicCapture sender, Exception error)
         {
-            WasapiCapture capture;
-            MMDevice device;
+            MicCapture capture;
 
             lock (_sync)
             {
                 if (!ReferenceEquals(sender, _capture))
                     return;
 
-                if (e.Exception != null)
+                if (error != null)
                 {
-                    Debug.WriteLine("Microphone capture stopped: " + e.Exception.Message);
-                    SentryConfig.CaptureHandled(e.Exception, "voiceover.capture-stopped");
+                    Debug.WriteLine("Microphone capture stopped: " + error.Message);
+                    SentryConfig.CaptureHandled(error, "voiceover.capture-stopped");
                 }
 
                 // The take keeps whatever reached the file, so StopRecording still reports a
                 // sensible length for a device lost mid-take: recording stops here, the file
                 // stays attached for StopRecording to close and measure.
                 _isRecording = false;
-                (capture, device) = DetachDevice();
+                capture = DetachDevice();
             }
 
             // On the thread pool because this event can be raised from the capture thread itself,
-            // and releasing the client waits for that thread to end.
-            Task.Run(() => ReleaseDevice(capture, device));
+            // and releasing the capture waits for that thread to end.
+            Task.Run(() => ReleaseDevice(capture));
             RaiseLevel(null);
         }
 
-        /// <summary>Asks a capture client to stop after one of our callbacks failed on it. Setting
-        /// the stop flag is all that is safe from the capture thread; the release happens in
-        /// <see cref="OnRecordingStopped"/> once that thread has ended.</summary>
-        private void RequestStopAfterFailure(WasapiCapture capture)
+        /// <summary>Asks a capture to stop after one of our callbacks failed on it. Flagging the
+        /// backend is all that is safe from the capture thread; the release happens in
+        /// <see cref="OnStopped"/> once that thread has ended.</summary>
+        private void RequestStopAfterFailure(MicCapture capture)
         {
             if (capture == null)
                 return;
@@ -584,7 +517,7 @@ namespace Clowd.UI.Services
 
             try
             {
-                capture.StopRecording();
+                capture.RequestStop();
             }
             catch (Exception ex)
             {
@@ -594,50 +527,35 @@ namespace Clowd.UI.Services
 
         /// <summary>Takes the current device out of the fields and returns it for release. The
         /// caller holds the lock; the release itself must happen without it.</summary>
-        private (WasapiCapture Capture, MMDevice Device) DetachDevice()
+        private MicCapture DetachDevice()
         {
             var capture = _capture;
-            var device = _device;
 
             _capture = null;
-            _device = null;
             _resampler = null;
             _deviceName = NoDeviceName;
 
-            return (capture, device);
+            return capture;
         }
 
-        /// <summary>Unsubscribes, stops and disposes a detached capture client and its endpoint.
-        /// Must be called without the lock: disposing the client waits for its capture thread,
-        /// which may be blocked on the lock inside <see cref="OnDataAvailable"/>.</summary>
-        private void ReleaseDevice(WasapiCapture capture, MMDevice device)
+        /// <summary>Unsubscribes and disposes a detached capture. Must be called without the
+        /// lock: disposing waits for the capture thread, which may be blocked on the lock inside
+        /// <see cref="OnDataAvailable"/>.</summary>
+        private void ReleaseDevice(MicCapture capture)
         {
-            if (capture != null)
-            {
-                try
-                {
-                    capture.DataAvailable -= OnDataAvailable;
-                    capture.RecordingStopped -= OnRecordingStopped;
-                    capture.StopRecording();
-                    capture.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("Failed to close the microphone: " + ex.Message);
-                    SentryConfig.CaptureHandled(ex, "voiceover.close-mic");
-                }
-            }
+            if (capture == null)
+                return;
 
-            if (device != null)
+            try
             {
-                try
-                {
-                    device.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("Failed to release the microphone endpoint: " + ex.Message);
-                }
+                capture.DataAvailable -= OnDataAvailable;
+                capture.Stopped -= OnStopped;
+                capture.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to close the microphone: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "voiceover.close-mic");
             }
         }
 
@@ -746,16 +664,6 @@ namespace Clowd.UI.Services
                 // dispatcher refusing the job is not worth dropping the device over.
                 Debug.WriteLine("Failed to post a microphone level: " + ex.Message);
             }
-        }
-
-        /// <summary>How one sample of the device mix format is laid out in the capture buffer.</summary>
-        private enum SourceSampleFormat
-        {
-            Unsupported,
-            Float32,
-            Pcm16,
-            Pcm24,
-            Pcm32,
         }
     }
 }
