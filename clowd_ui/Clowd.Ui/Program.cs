@@ -72,13 +72,17 @@ namespace Clowd
                     // turned these off (a corrupt file falls back to the same defaults install uses).
                     .OnAfterUpdateFastCallback(_ =>
                     {
-                        SettingsGeneral general;
-                        try { general = SettingsService.Load().General; }
-                        catch { general = new SettingsGeneral(); }
+                        SettingsRoot settings;
+                        try { settings = SettingsService.Load(); }
+                        catch { settings = new SettingsRoot(); }
 
-                        AutoStartManager.Sync(general.RegisterAutoStart);
-                        ExplorerContextMenuManager.Sync(general.RegisterExplorerContextMenu);
-                        SparsePackageManager.Sync(general.RegisterExplorerContextMenu);
+                        AutoStartManager.Sync(settings.General.RegisterAutoStart);
+
+                        // the shell entry also goes away when uploads are off, so the update has to
+                        // ask the same combined question the running app does.
+                        var contextMenu = settings.ShouldRegisterExplorerContextMenu;
+                        ExplorerContextMenuManager.Sync(contextMenu);
+                        SparsePackageManager.Sync(contextMenu);
                     })
                     // the settings file outlives an uninstall, so all registrations have to be torn
                     // down explicitly here or they linger pointing at a deleted executable.

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Clowd.Util;
@@ -8,7 +8,8 @@ namespace Clowd.UI
 {
     /// <summary>
     /// Backs "Add 'Upload with Clowd' to the Explorer context menu"
-    /// (<see cref="Clowd.Config.SettingsGeneral.RegisterExplorerContextMenu"/>).
+    /// (<see cref="Clowd.Config.SettingsGeneral.RegisterExplorerContextMenu"/>, gated on uploads
+    /// being on at all — see <see cref="Clowd.Config.SettingsRoot.ShouldRegisterExplorerContextMenu"/>).
     ///
     /// This is the legacy (Windows 7 style) shell verb the WPF build used: a pair of per-user keys
     /// under <c>HKCU\Software\Classes</c>, one for all files and one for directories. No elevation,

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 
 namespace Clowd.Config
 {
@@ -31,5 +32,17 @@ namespace Clowd.Config
         public SettingsVideoEditor VideoEditor { get; set; } = new SettingsVideoEditor();
 
         public SettingsUpload Uploads { get; set; } = new SettingsUpload();
+
+        /// <summary>
+        /// Whether the "Upload with Clowd" shell entries (the Explorer verb and the Win11 sparse
+        /// package) should be registered right now.
+        /// <see cref="SettingsGeneral.RegisterExplorerContextMenu"/> is the user's preference, but
+        /// the verb does nothing except start an upload, so with uploads off it would offer a
+        /// feature that is turned off — every other upload entry point disappears in that state,
+        /// and this one has to as well.
+        /// </summary>
+        [Browsable(false), JsonIgnore]
+        public bool ShouldRegisterExplorerContextMenu =>
+            General.RegisterExplorerContextMenu && Uploads.IsEnabled;
     }
 }

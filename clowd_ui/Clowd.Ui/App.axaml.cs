@@ -97,6 +97,22 @@ namespace Clowd
             base.OnFrameworkInitializationCompleted();
         }
 
+        /// <summary>
+        /// Reconciles both halves of the "Upload with Clowd" shell entry — the classic Explorer
+        /// verb and the Win11 sparse package — with the settings that decide whether it should
+        /// exist (<see cref="SettingsRoot.ShouldRegisterExplorerContextMenu"/>: the checkbox on the
+        /// Uploads page, and uploads being on at all).
+        /// </summary>
+        /// <remarks>Sync rather than TrySetEnabled on both, so a call that changes nothing (uploads
+        /// switched off while the entry was never registered) does no work; the sparse half shells
+        /// out to PowerShell (seconds, not milliseconds) and so always runs off the UI thread.</remarks>
+        private static void SyncExplorerContextMenu()
+        {
+            var enabled = SettingsRoot.Current.ShouldRegisterExplorerContextMenu;
+            ExplorerContextMenuManager.Sync(enabled);
+            _ = Task.Run(() => SparsePackageManager.Sync(enabled));
+        }
+
         private async void Startup(string[] args)
         {
             try
@@ -136,11 +152,7 @@ namespace Clowd
                 // the saved settings are the source of truth for the shell registrations; reconcile
                 // them with the OS once at startup, then follow whenever the user toggles a checkbox.
                 AutoStartManager.Sync(SettingsRoot.Current.General.RegisterAutoStart);
-                ExplorerContextMenuManager.Sync(SettingsRoot.Current.General.RegisterExplorerContextMenu);
-
-                // the sparse package sync shells out to PowerShell (seconds, not milliseconds), so
-                // unlike the registry-backed managers above it stays off the UI thread.
-                _ = Task.Run(() => SparsePackageManager.Sync(SettingsRoot.Current.General.RegisterExplorerContextMenu));
+                SyncExplorerContextMenu();
 
                 // warm the camera list so the first picker to open has one without waiting. Cheap
                 // now that enumeration is native (~60 ms), but it also covers the fallback path,
@@ -157,11 +169,17 @@ namespace Clowd
                     else if (e.PropertyName == nameof(SettingsGeneral.RegisterAutoStart))
                         AutoStartManager.TrySetEnabled(SettingsRoot.Current.General.RegisterAutoStart);
                     else if (e.PropertyName == nameof(SettingsGeneral.RegisterExplorerContextMenu))
-                    {
-                        var enabled = SettingsRoot.Current.General.RegisterExplorerContextMenu;
-                        ExplorerContextMenuManager.TrySetEnabled(enabled);
-                        _ = Task.Run(() => SparsePackageManager.TrySetEnabled(enabled));
-                    }
+                        SyncExplorerContextMenu();
+                };
+
+                // ...and turning uploads off has to take the shell entry out of Explorer with the
+                // rest of the upload surface, since the verb does nothing but start an upload
+                // (SettingsRoot.ShouldRegisterExplorerContextMenu). Turning them back on restores
+                // it if the checkbox was still ticked.
+                SettingsRoot.Current.Uploads.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(SettingsUpload.Mode))
+                        SyncExplorerContextMenu();
                 };
 
                 SetupTrayIcon();

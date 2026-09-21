@@ -11,8 +11,12 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!-- setting/caption rhythm copied from GeneralSettingsPage so the checkbox block above
-             the provider list matches the rest of the settings pages -->
+        <!-- setting/caption rhythm copied from GeneralSettingsPage so the options group above
+             the provider list matches the rest of the settings pages: 24px between one setting
+             and the next, 2px between a control and its own caption -->
+        <Style Selector="StackPanel.SettingsGroup">
+            <Setter Property="Spacing" Value="24" />
+        </Style>
         <Style Selector="StackPanel.Setting">
             <Setter Property="Spacing" Value="2" />
         </Style>
@@ -96,13 +100,36 @@
             <ContentControl x:Name="ModeHost" />
 
             <StackPanel x:Name="Body" Spacing="4">
-                <StackPanel Classes="Setting" Margin="8,0,8,12">
-                    <CheckBox IsChecked="{Binding WrapDangerousUploadsInZip}">
-                        <TextBlock Text="Zip risky file types before uploading" TextWrapping="Wrap" />
-                    </CheckBox>
-                    <TextBlock Classes="Caption"
-                               Text="Executables, scripts and similar files (.exe, .msi, .bat, …) are wrapped in a zip archive first, because browsers block direct downloads of these types." />
-                </StackPanel>
+                <!-- The page's own options, framed like the groups on the General page
+                     (HeaderedContentControl + Semi's keyed GroupBox theme); the provider list below
+                     is the page's real subject and stays unframed. -->
+                <HeaderedContentControl Header="Upload Options"
+                                        Margin="0,0,0,12"
+                                        Theme="{StaticResource GroupBox}">
+                    <StackPanel Classes="SettingsGroup">
+                        <StackPanel Classes="Setting">
+                            <CheckBox IsChecked="{Binding WrapDangerousUploadsInZip}">
+                                <TextBlock Text="Zip risky file types before uploading" TextWrapping="Wrap" />
+                            </CheckBox>
+                            <TextBlock Classes="Caption"
+                                       Text="Executables, scripts and similar files (.exe, .msi, .bat, …) are wrapped in a zip archive first, because browsers block direct downloads of these types." />
+                        </StackPanel>
+
+                        <!-- The shell entry only ever starts an upload, so it belongs to this page and is
+                             torn down with it: the whole Body is hidden while uploads are off, and App
+                             unregisters the verb at the same time (SettingsRoot.ShouldRegisterExplorerContextMenu).
+                             Bound in code-behind — the checkbox reads SettingsGeneral, not this page's
+                             DataContext. -->
+                        <StackPanel Classes="Setting">
+                            <CheckBox x:Name="ContextMenuCheck">
+                                <TextBlock Text="Add 'Upload with Clowd' to the Explorer context menu" TextWrapping="Wrap" />
+                            </CheckBox>
+                            <TextBlock x:Name="ContextMenuCaption" Classes="Caption" />
+                            <Button x:Name="ContextMenuSettingsButton" IsVisible="False" Content="Open System Settings"
+                                    Click="OnContextMenuSettingsClick" />
+                        </StackPanel>
+                    </StackPanel>
+                </HeaderedContentControl>
 
                 <TextBlock Classes="Body"
                            IsVisible="{Binding !Providers.Length}"

@@ -45,6 +45,100 @@ namespace Clowd.UI.Pages
             // settings window, and a binding to it is held weakly.
             Body.Bind(IsVisibleProperty, new Binding(nameof(SettingsUpload.IsEnabled)) { Source = SettingsRoot.Current.Uploads });
             _transferBar.Bind(IsVisibleProperty, new Binding(nameof(SettingsUpload.IsEnabled)) { Source = SettingsRoot.Current.Uploads });
+
+            InitializeContextMenu();
+        }
+
+        // ---- "Upload with Clowd" shell entry ----
+
+        /// <summary>
+        /// The Explorer/Finder context menu entry. It lives on this page rather than under General
+        /// because the verb does one thing — upload the selection — so it is meaningless while
+        /// uploads are off; sitting inside <c>Body</c> it disappears with the rest of the page, and
+        /// App drops the registration itself so the entry leaves Explorer too.
+        /// </summary>
+        /// <remarks>Same shape as the auto-start checkbox: the box writes the setting, App applies
+        /// it to the registry, and this reports back only when that failed.</remarks>
+        private void InitializeContextMenu()
+        {
+            // the setting still lives in SettingsGeneral (that is where it is persisted), so the
+            // box is bound explicitly rather than through this page's DataContext.
+            ContextMenuCheck.Bind(CheckBox.IsCheckedProperty,
+                                  new Binding(nameof(SettingsGeneral.RegisterExplorerContextMenu))
+                                  {
+                                      Source = SettingsRoot.Current.General,
+                                      Mode = BindingMode.TwoWay,
+                                  });
+
+            if (!ExplorerContextMenuManager.IsSupported)
+            {
+                // macOS: the Finder service is declared in Info.plist and enabled by the OS by
+                // default (NSRequiredContext); its on/off switch is system-managed, so there is
+                // nothing for a checkbox here to do — just say where the entry lives.
+                ContextMenuCheck.IsVisible = false;
+                ContextMenuCaption.Text = "'Upload with Clowd' appears when right-clicking files in Finder, under Services. "
+                    + "It can be turned off in System Settings → Keyboard → Keyboard Shortcuts → Services.";
+                ContextMenuSettingsButton.IsVisible = true;
+                return;
+            }
+
+            AttachedToVisualTree += (s, e) =>
+            {
+                ExplorerContextMenuManager.StateChanged += OnContextMenuStateChanged;
+                SparsePackageManager.StateChanged += OnContextMenuStateChanged;
+                ShowContextMenuCaption();
+            };
+
+            DetachedFromVisualTree += (s, e) =>
+            {
+                ExplorerContextMenuManager.StateChanged -= OnContextMenuStateChanged;
+                SparsePackageManager.StateChanged -= OnContextMenuStateChanged;
+            };
+        }
+
+        /// <summary>Opens System Settings → Keyboard, the pane hosting the Keyboard Shortcuts →
+        /// Services list where the Finder service can be toggled. The Shortcuts sheet itself is
+        /// not deep-linkable, so the caption spells out the remaining clicks.</summary>
+        private void OnContextMenuSettingsClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start("open", new[] { "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts" });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Failed to open System Settings: " + ex);
+                SentryConfig.CaptureHandled(ex, "settings.open-keyboard-pane");
+            }
+        }
+
+        private void OnContextMenuStateChanged(object sender, EventArgs e) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(ShowContextMenuCaption);
+
+        private void ShowContextMenuCaption()
+        {
+            // either half failing wins over any hint: a stale checkbox that silently does nothing
+            // is worse than no checkbox.
+            if ((ExplorerContextMenuManager.LastError ?? SparsePackageManager.LastError) is { } err)
+            {
+                ContextMenuCaption.Text = "Could not change the context menu setting: " + err;
+                return;
+            }
+
+            // on Win11 the sparse MSIX package puts the entry in the compact menu; LastKnownIsEnabled
+            // is the cached registration state (reading the real one shells out to PowerShell, which
+            // has no place on the UI thread) and StateChanged re-renders this when it settles.
+            if (SparsePackageManager.LastKnownIsEnabled)
+            {
+                ContextMenuCaption.Text = "Appears in the right-click menu. On older Windows versions it's under \"Show more options\".";
+                return;
+            }
+
+            // Windows 11 reserves its compact menu for packaged apps and pushes classic verbs like
+            // this one into the overflow, so say where to actually look for it.
+            ContextMenuCaption.Text = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)
+                ? "Right-click a file or folder and choose \"Show more options\" to find it."
+                : "Right-click a file or folder to find it.";
         }
 
         public Control HeaderContent => _transferBar;

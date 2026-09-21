@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.Versioning;
@@ -9,7 +9,8 @@ namespace Clowd.UI
 {
     /// <summary>
     /// Backs the Windows 11 half of "Add 'Upload with Clowd' to the Explorer context menu"
-    /// (<see cref="Clowd.Config.SettingsGeneral.RegisterExplorerContextMenu"/>).
+    /// (<see cref="Clowd.Config.SettingsGeneral.RegisterExplorerContextMenu"/>, gated on uploads
+    /// being on at all — see <see cref="Clowd.Config.SettingsRoot.ShouldRegisterExplorerContextMenu"/>).
     ///
     /// Windows 11 only shows packaged apps in its compact right-click menu, so alongside the
     /// legacy registry verb (<see cref="ExplorerContextMenuManager"/>, which Win11 files under
