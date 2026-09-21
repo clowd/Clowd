@@ -83,7 +83,7 @@ namespace Clowd.VideoSDK.Composition
             if (width <= 0 || height <= 0)
                 return default;
 
-            int rowBytes = checked(width * 4);
+            int rowBytes = FrameBufferPool.BgraRowBytes(width);
             int size = checked(rowBytes * height);
             FrameBuffer buffer;
             lock (_sync)

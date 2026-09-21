@@ -558,6 +558,7 @@ namespace Clowd.VideoSDK.Thumbs
             public byte[] Pixels;
             public int Width;
             public int Height;
+            public int Stride;
             public bool Refined;
             public long Stamp;
         }
@@ -588,7 +589,7 @@ namespace Clowd.VideoSDK.Thumbs
             for (int i = 0; i < thumbs.Length; i++)
             {
                 var e = values[i];
-                thumbs[i] = new FilmstripThumbnail(keys[i], e.Pixels, e.Width, e.Height, e.Width * 4);
+                thumbs[i] = new FilmstripThumbnail(keys[i], e.Pixels, e.Width, e.Height, e.Stride);
             }
 
             bool done = strip.PassDone || strip.Error != null;
@@ -711,7 +712,8 @@ namespace Clowd.VideoSDK.Thumbs
 
                 while (!ct.IsCancellationRequested && decoder.DecodeNext(out long pts))
                 {
-                    Publish(strip, pts, decoder.CopyThumb(), decoder.ThumbWidth, decoder.ThumbHeight, refined: false);
+                    Publish(strip, pts, decoder.CopyThumb(), decoder.ThumbWidth, decoder.ThumbHeight,
+                        decoder.ThumbStride, refined: false);
                     lock (_lock)
                     {
                         if (pts > strip.ProgressTicks)
@@ -801,7 +803,8 @@ namespace Clowd.VideoSDK.Thumbs
 
                     if (TryDecodeAt(decoder, slot, scratch, ct, out byte[] pixels))
                     {
-                        Publish(strip, slot, pixels, decoder.ThumbWidth, decoder.ThumbHeight, refined: true);
+                        Publish(strip, slot, pixels, decoder.ThumbWidth, decoder.ThumbHeight,
+                            decoder.ThumbStride, refined: true);
                     }
                     else if (!ct.IsCancellationRequested)
                     {
@@ -1000,7 +1003,7 @@ namespace Clowd.VideoSDK.Thumbs
 
         // ------------------------------------------------------------------------------ publish
 
-        private void Publish(Strip strip, long ticks, byte[] pixels, int width, int height, bool refined)
+        private void Publish(Strip strip, long ticks, byte[] pixels, int width, int height, int stride, bool refined)
         {
             lock (_lock)
             {
@@ -1022,6 +1025,7 @@ namespace Clowd.VideoSDK.Thumbs
                     Pixels = pixels,
                     Width = width,
                     Height = height,
+                    Stride = stride,
                     Refined = refined,
                     Stamp = ++_stamp,
                 };

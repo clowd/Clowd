@@ -38,11 +38,18 @@ namespace Clowd.VideoSDK.Composition
     /// </summary>
     public sealed class FrameBufferPool : IDisposable
     {
+        /// <summary>The block <c>sws_scale</c>'s unscaled yuv-to-BGRA converter writes in: 16
+        /// BGRA pixels. Strides are rounded up to it (<see cref="BgraRowBytes"/>) and it is the
+        /// unit the allocation's tail is measured in.</summary>
+        private const int BgraBlockBytes = 64;
+
         /// <summary>Slack allocated past the requested size, to absorb <c>sws_scale</c>'s
-        /// last-row overrun. A guard-byte run of the suite measured 56 bytes written past a
-        /// 2x2 frame's 16 — one 16-pixel BGRA block (64) minus the 8 bytes the row used — so 64
-        /// covers the block width seen here and 128 leaves room for a wider one.</summary>
-        private const nuint ScaleTailBytes = 128;
+        /// last-row overrun, and its over-READ of a buffer handed to it as a source (the matte
+        /// path does that). A guard-byte run of the suite measured 56 bytes written past a 2x2
+        /// frame's 16 — one block minus the 8 bytes the row used — so one block covers what is
+        /// seen on FFmpeg 7.1 and two leave room for a wider one. Re-measure on an FFmpeg
+        /// bump: the block width belongs to the kernel swscale picks, not to the format.</summary>
+        private const nuint ScaleTailBytes = 2 * BgraBlockBytes;
 
         private readonly object _sync = new object();
         private readonly List<FrameBuffer> _free = new List<FrameBuffer>();
@@ -60,6 +67,23 @@ namespace Clowd.VideoSDK.Composition
         {
             get { lock (_sync) return _totalAllocated; }
         }
+
+        /// <summary>
+        /// The stride to give <c>sws_scale</c> for a BGRA destination <paramref name="width"/>
+        /// pixels wide: the used width rounded up to a whole <see cref="BgraBlockBytes"/>.
+        ///
+        /// <para>
+        /// Not cosmetic. swscale's unscaled yuv420p-to-BGRA converter writes whole 16-pixel
+        /// blocks and has no scalar tail, so it decides per row how many blocks fit the stride
+        /// it was handed: <c>h_size = (width + 7) &amp; ~7; if (h_size * 4 &gt; stride) h_size -=
+        /// 8;</c>. At a tight <c>width * 4</c> stride that subtraction fires, and for a width
+        /// whose remainder mod 16 is 1..7 the last 1..7 columns of EVERY row are never written —
+        /// a 1366-wide frame keeps 6 columns of whatever the pooled buffer held before. Round the
+        /// stride up instead and every block fits, so the converter writes the full width.
+        /// </para>
+        /// </summary>
+        public static int BgraRowBytes(int width) =>
+            checked((width * 4 + BgraBlockBytes - 1) & ~(BgraBlockBytes - 1));
 
         /// <summary>Rents a buffer of at least <paramref name="sizeBytes"/> bytes.</summary>
         public unsafe FrameBuffer Rent(int sizeBytes)

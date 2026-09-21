@@ -1,4 +1,5 @@
 using System;
+using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Media;
 using FFmpeg.AutoGen.Abstractions;
 
@@ -163,7 +164,14 @@ namespace Clowd.VideoSDK.Thumbs
 
         public int ThumbWidth { get; }
         public int ThumbHeight { get; }
-        public int ThumbStride => ThumbWidth * 4;
+        /// <summary>Row stride of the thumb buffer. Rounded up off <c>ThumbWidth * 4</c> by
+        /// <see cref="FrameBufferPool.BgraRowBytes"/>: when the source is already the thumb's
+        /// height (a small clip at the default 48px row, square pixels) the scale is 1:1 and
+        /// swscale takes its unscaled yuv420p-to-BGRA converter, which writes whole 16-pixel
+        /// blocks against the stride it is handed — at a tight stride that both drops the last
+        /// 1..7 columns of every row and writes past the end of <c>_thumb</c>, which is a managed
+        /// array. Consumers read rows at this stride, never at width * 4.</summary>
+        public int ThumbStride => FrameBufferPool.BgraRowBytes(ThumbWidth);
         public int ThumbByteCount => ThumbStride * ThumbHeight;
 
         /// <summary>Stream duration in ticks, falling back to the container's; 0 when neither is

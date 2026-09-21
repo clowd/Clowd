@@ -238,8 +238,10 @@ namespace Clowd.VideoSDK.Composition
                 if (width <= 0 || height <= 0)
                     throw new InvalidOperationException($"Decoder produced a {width}x{height} frame.");
 
-                rowBytes = width * 4;
-                buffer = _pool.Rent(rowBytes * height);
+                rowBytes = FrameBufferPool.BgraRowBytes(width);
+                // checked: a wrapped size would rent a buffer smaller than the frame, which is
+                // the same heap smash the stride is here to prevent
+                buffer = _pool.Rent(checked(rowBytes * height));
                 try
                 {
                     _sws = ffmpeg.sws_getCachedContext(_sws, width, height, (AVPixelFormat)_frame->format,

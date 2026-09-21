@@ -161,7 +161,9 @@ namespace Clowd.VideoSDK.Tests
 
             var t1 = sink.BeginFrame(4, 4);
             Assert.NotEqual(IntPtr.Zero, t1.Address);
-            Assert.Equal(16, t1.RowBytes);
+            // the stride is the used width rounded up to a whole swscale block, not width * 4 —
+            // see FrameStrideTests for the columns a tight stride silently drops
+            Assert.Equal(FrameBufferPool.BgraRowBytes(4), t1.RowBytes);
             sink.CompleteFrame(in t1, TimeSpan.FromMilliseconds(10));
 
             var t2 = sink.BeginFrame(4, 4);
