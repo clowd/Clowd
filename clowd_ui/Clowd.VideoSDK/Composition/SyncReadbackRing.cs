@@ -79,8 +79,11 @@ namespace Clowd.VideoSDK.Composition
             }
         }
 
+        // The tail matches FrameBufferPool's and is there for the same reason from the other
+        // side: this staging buffer is handed to sws_scale as a SOURCE (Nv12Converter), and the
+        // scaler reads its last row in whole blocks, past the used width on a narrow surface.
         private static unsafe IntPtr AllocStaging(int bytes)
-            => (IntPtr)NativeMemory.AlignedAlloc((nuint)bytes, 64); // sws_scale-friendly alignment
+            => (IntPtr)NativeMemory.AlignedAlloc(checked((nuint)bytes + FrameBufferPool.ScaleTailBytes), 64);
 
         public int Width { get; }
 

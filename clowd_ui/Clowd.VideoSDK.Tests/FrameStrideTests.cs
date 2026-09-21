@@ -127,6 +127,39 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
+        /// <summary>A shape no real file has but a crafted or broken one can declare: 8194x2,
+        /// whose aspect asks for a thumb 2,097,664 pixels wide at the 512px row. Its byte count
+        /// is 4,296,015,872 — which wrapped a 32-bit int to 1,048,576, so the decoder allocated
+        /// 1 MiB for a destination it then told swscale was gigabytes wide. The width is capped
+        /// instead, and the count is checked so a wrap can never be silent again.</summary>
+        [Fact]
+        public void A_degenerate_shape_cannot_wrap_the_thumbnail_byte_count()
+        {
+            Assert.SkipUnless(TestFFmpeg.Available, TestFFmpeg.SkipReason);
+
+            string dir = Path.Combine(Path.GetTempPath(), "clowd-thumbwrap-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string path = TestY4m.Write(Path.Combine(dir, "wide.y4m"), frames: 2,
+                    aspectNum: 1, aspectDen: 1, width: 8194, height: 2);
+
+                using var decoder = new ThumbnailDecoder(path, 0, ThumbnailDecoder.MaxThumbHeightPx);
+
+                Assert.Equal(8194, decoder.SourceWidth);
+                Assert.InRange(decoder.ThumbWidth, 2, ThumbnailDecoder.MaxThumbWidthPx);
+                Assert.True(decoder.ThumbByteCount > 0, "the byte count wrapped");
+                // the count describes the whole buffer, and the buffer is big enough for it
+                Assert.Equal((long)decoder.ThumbStride * decoder.ThumbHeight, decoder.ThumbByteCount);
+                Assert.True(decoder.DecodeNext(out _));
+                Assert.Equal(decoder.ThumbByteCount, decoder.CopyThumb().Length);
+            }
+            finally
+            {
+                try { Directory.Delete(dir, recursive: true); }
+                catch { /* best effort */ }
+            }
+        }
+
         private static void WriteSolid(string path, int width, int height, byte green)
         {
             using var writer = new Mp4Writer(path, new Mp4WriterOptions

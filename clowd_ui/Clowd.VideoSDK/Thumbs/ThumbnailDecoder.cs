@@ -34,6 +34,12 @@ namespace Clowd.VideoSDK.Thumbs
         public const int MinThumbHeightPx = 8;
         public const int MaxThumbHeightPx = 512;
 
+        /// <summary>Ceiling on the width the source's shape asks for. A degenerate file — an
+        /// 8194x2 frame, say — wants a thumb two million pixels wide at the 512px row, whose
+        /// byte count wraps <see cref="int"/> and silently under-allocates the destination
+        /// swscale is then told is gigabytes wide. No thumbnail is legible past this anyway.</summary>
+        public const int MaxThumbWidthPx = 16384;
+
         private readonly int _streamIndex;
 
         private AVFormatContext* _fmt;
@@ -99,7 +105,12 @@ namespace Clowd.VideoSDK.Thumbs
                 var sar = ffmpeg.av_guess_sample_aspect_ratio(_fmt, st, null);
                 double pixelAspect = sar.num > 0 && sar.den > 0 ? sar.num / (double)sar.den : 1.0;
                 ThumbHeight = Math.Clamp(thumbHeightPx, MinThumbHeightPx, MaxThumbHeightPx);
-                ThumbWidth = Math.Max(2, (int)Math.Round(srcWidth * pixelAspect * ThumbHeight / srcHeight));
+                double thumbWidth = Math.Round(srcWidth * pixelAspect * ThumbHeight / (double)srcHeight);
+                // clamped as a double: the cast to int is undefined once the shape asks for more
+                // than int.MaxValue, and the clamp is what keeps ThumbByteCount inside an int
+                ThumbWidth = double.IsFinite(thumbWidth)
+                    ? (int)Math.Clamp(thumbWidth, 2, MaxThumbWidthPx)
+                    : 2;
                 _thumb = new byte[ThumbByteCount];
 
                 _timeBase = st->time_base;
@@ -172,7 +183,9 @@ namespace Clowd.VideoSDK.Thumbs
         /// 1..7 columns of every row and writes past the end of <c>_thumb</c>, which is a managed
         /// array. Consumers read rows at this stride, never at width * 4.</summary>
         public int ThumbStride => FrameBufferPool.BgraRowBytes(ThumbWidth);
-        public int ThumbByteCount => ThumbStride * ThumbHeight;
+        /// <summary>Size of the thumb buffer. Checked: a wrapped count would allocate less than
+        /// the frame swscale is told to fill, which is the whole failure this file guards.</summary>
+        public int ThumbByteCount => checked(ThumbStride * ThumbHeight);
 
         /// <summary>Stream duration in ticks, falling back to the container's; 0 when neither is
         /// known (fragmented/streamed input).</summary>

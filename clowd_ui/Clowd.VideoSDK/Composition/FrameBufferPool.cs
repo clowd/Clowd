@@ -49,7 +49,7 @@ namespace Clowd.VideoSDK.Composition
         /// frame's 16 — one block minus the 8 bytes the row used — so one block covers what is
         /// seen on FFmpeg 7.1 and two leave room for a wider one. Re-measure on an FFmpeg
         /// bump: the block width belongs to the kernel swscale picks, not to the format.</summary>
-        private const nuint ScaleTailBytes = 2 * BgraBlockBytes;
+        internal const nuint ScaleTailBytes = 2 * BgraBlockBytes;
 
         private readonly object _sync = new object();
         private readonly List<FrameBuffer> _free = new List<FrameBuffer>();

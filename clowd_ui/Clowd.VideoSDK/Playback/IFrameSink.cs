@@ -35,6 +35,18 @@ namespace Clowd.VideoSDK.Playback
     /// </summary>
     public interface IFrameSink
     {
+        /// <summary>
+        /// Hands back the buffer the present thread sws_scales into.
+        ///
+        /// <para>
+        /// The returned <see cref="FrameTarget.RowBytes"/> MUST be at least
+        /// <c>FrameBufferPool.BgraRowBytes(width)</c> — swscale's unscaled yuv-to-BGRA converter
+        /// writes whole 16-pixel blocks against the stride it is handed, and at a tighter one it
+        /// either drops the row's last columns or writes past its end. Sinks that wrap a
+        /// foreign buffer whose stride they do not control (a locked bitmap, say) must scale
+        /// through their own padded staging rather than hand that stride over.
+        /// </para>
+        /// </summary>
         FrameTarget BeginFrame(int width, int height);
         void CompleteFrame(in FrameTarget target, TimeSpan pts);
     }

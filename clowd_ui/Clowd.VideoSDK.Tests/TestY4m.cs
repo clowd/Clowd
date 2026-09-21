@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Text;
 
@@ -13,15 +14,21 @@ namespace Clowd.VideoSDK.Tests
     internal static class TestY4m
     {
         public static string Write(string path, int frames, int aspectNum, int aspectDen)
+            => Write(path, frames, aspectNum, aspectDen, width: 2, height: 2);
+
+        /// <summary>The same fixture at an arbitrary (even, for 4:2:0) size. Uncompressed, so a
+        /// shape no encoder would accept - a 8194x2 frame - costs only its bytes.</summary>
+        public static string Write(string path, int frames, int aspectNum, int aspectDen, int width, int height)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path));
 
             using var file = File.Create(path);
-            var header = Encoding.ASCII.GetBytes($"YUV4MPEG2 W2 H2 F30:1 Ip A{aspectNum}:{aspectDen} C420jpeg\n");
+            var header = Encoding.ASCII.GetBytes($"YUV4MPEG2 W{width} H{height} F30:1 Ip A{aspectNum}:{aspectDen} C420jpeg\n");
             file.Write(header, 0, header.Length);
 
             var frame = Encoding.ASCII.GetBytes("FRAME\n");
-            var pixels = new byte[] { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 }; // 4 luma + 1 Cb + 1 Cr
+            var pixels = new byte[width * height + 2 * (width / 2) * (height / 2)]; // Y + Cb + Cr
+            Array.Fill(pixels, (byte)0x80);
             for (var i = 0; i < frames; i++)
             {
                 file.Write(frame, 0, frame.Length);
