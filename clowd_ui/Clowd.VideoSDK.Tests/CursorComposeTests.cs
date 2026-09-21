@@ -421,8 +421,8 @@ namespace Clowd.VideoSDK.Tests
         {
             // playback presents frames under IVideoPlayer.MaxPresentHeight, so the screen image
             // can be a uniform downscale of the stream while the capture's positions stay in the
-            // stream's (physical) pixels. Mapping against the image would place the sprite off by
-            // that factor — here at (64,64), off the canvas entirely.
+            // recorder's canvas px (= the stream here: no recorder downscale). Mapping against the
+            // image would place the sprite off by that factor — here at (64,64), off the canvas.
             var p = NewProject();
             string capture = WriteCapture(Header,
                 CursorImage(1, 8, SpritePng(8, Red)),
@@ -434,6 +434,50 @@ namespace Clowd.VideoSDK.Tests
             var px = Render(p, 5 * Sec, frames);
             AssertColor(Px(px, 34, 34), 0, 0, 255);   // sprite at the captured position
             AssertColor(Px(px, 20, 20), 255, 0, 0);   // and nowhere near half of it
+        }
+
+        /// <summary>A header whose region is twice the stream: the recorder encoded a uniform
+        /// downscale of its canvas (a "max output width/height" setting) while the sidecar kept
+        /// writing canvas px — the issue #100 recording.</summary>
+        private const string DownscaledHeader =
+            "{\"type\":\"header\",\"version\":2,\"region\":[0,0,128,128],\"fps_num\":30,\"fps_den\":1," +
+            "\"platform\":\"windows\",\"monitors\":[{\"x\":0,\"y\":0,\"w\":128,\"h\":128,\"scale\":1.0}]}";
+
+        [Fact]
+        public void Default_overlay_maps_capture_positions_through_the_region_when_the_recorder_downscaled()
+        {
+            // region 128x128, stream 64x64: a pointer the recorder saw at canvas (64,64) sits on
+            // the encoded frame's centre (32,32), and its 8px sprite is 4px on that frame. Mapping
+            // the row as stream px (the old behaviour) drew it at (64,64) — off the canvas, and
+            // in the reported recording 1.33x away from the button the user was hovering.
+            var p = NewProject();
+            string capture = WriteCapture(DownscaledHeader,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 64, 64, ci: 1));
+            var source = AddCaptureSource(p, capture);
+            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+            AssertColor(Px(px, 33, 33), 0, 0, 255);   // sprite at the frame's centre
+            AssertColor(Px(px, 30, 30), 255, 0, 0);   // 4px, not 8: sprite px scale with the frame
+            AssertColor(Px(px, 37, 37), 255, 0, 0);
+            AssertColor(Px(px, 60, 60), 255, 0, 0);   // and nothing at the un-rescaled spot
+        }
+
+        [Fact]
+        public void Cursor_item_maps_capture_positions_through_the_region_when_the_recorder_downscaled()
+        {
+            string capture = WriteCapture(DownscaledHeader,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 64, 64, ci: 1));
+            var (p, _, _) = CursorProject(capture, "native");
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+            AssertColor(Px(px, 33, 33), 0, 0, 255);
+            AssertColor(Px(px, 37, 37), 255, 0, 0);
+            AssertColor(Px(px, 60, 60), 255, 0, 0);
         }
 
         [Fact]

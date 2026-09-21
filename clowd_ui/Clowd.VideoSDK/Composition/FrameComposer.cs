@@ -462,12 +462,9 @@ namespace Clowd.VideoSDK.Composition
 
             if (row.SpriteId < 0 || !capture.TryGetSprite(row.SpriteId, out var sprite))
                 return;
-            // the stream's own dimensions, never the presented frame's: a preview presents
-            // frames under IVideoPlayer.MaxPresentHeight, and a mapping resolved against a
-            // downscaled image would place captured (physical-pixel) positions off by that
-            // downscale factor. DrawCursorItem resolves the same way.
-            var (imgW, imgH) = ScreenDims(source, media.StreamIndex,
-                capture.Header.RegionWidth, capture.Header.RegionHeight);
+            // the capture's own space (the recorder's canvas px), never the stream's or the
+            // presented frame's — see CaptureDims. DrawCursorItem resolves the same way.
+            var (imgW, imgH) = CaptureDims(capture.Header, source, media.StreamIndex);
             if (!PictureMapping.TryMap(transform, fx, imgW, imgH,
                     canvasWidth, canvasHeight, out var map))
                 return;
@@ -494,8 +491,8 @@ namespace Clowd.VideoSDK.Composition
         /// recorded sprite (<see cref="InputFrame.SpriteId"/>) at its captured pixel size times
         /// <c>Size</c>; every other style draws a themed glyph (an animated one — the wait and
         /// appstarting spinners — showing the frame project time selects) sized by
-        /// <c>Size · 40 px · monitor scale</c> in source pixels, then through the same px→canvas
-        /// factor as the screen frame. The native style ignores the item's shadow surround: the OS
+        /// <c>Size · 40 px · monitor scale</c> in capture pixels (the recorder's canvas — see
+        /// <see cref="CaptureDims"/>), then through the same px→canvas factor as the screen frame. The native style ignores the item's shadow surround: the OS
         /// pointer shadow is DWM-composited, never part of the cursor shape the recorder
         /// rasterizes (routing the sprite through <see cref="CursorCompose.DrawGlyph"/>'s
         /// decoration layer is the easy follow-up if one is wanted). The click highlight draws
@@ -522,8 +519,7 @@ namespace Clowd.VideoSDK.Composition
             long sourceTicks = SourceTimeTicks(media, screen, timeTicks);
             double sourceMs = sourceTicks / (double)TimeSpan.TicksPerMillisecond;
 
-            var (imgW, imgH) = ScreenDims(source, media.StreamIndex,
-                capture.Header.RegionWidth, capture.Header.RegionHeight);
+            var (imgW, imgH) = CaptureDims(capture.Header, source, media.StreamIndex);
             var screenTransform = WindowCropMath.Effective(project, media,
                 screen.Transform ?? new Transform(), sourceTicks);
             var screenFx = TransitionMath.Evaluate(screen, timeTicks);
@@ -703,6 +699,26 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>The screen stream's pixel dimensions: the probe's numbers (what
         /// <see cref="DrawPicture"/>'s frames decode to), else the caller's fallback — a sidecar
         /// header's capture region — enough to map even when the probe is missing.</summary>
+        /// <summary>
+        /// The space an input-capture row's coordinates live in: the recorder's canvas, which is
+        /// the header's region (<c>w</c>/<c>h</c> = the region's physical pixel size). That is
+        /// NOT always the stream's size — a "max output width/height" setting makes the recorder
+        /// encode a uniform downscale of its canvas while the sidecar keeps writing canvas px.
+        /// Resolving the picture mapping against these dims (the crop insets are fractions, so
+        /// they read identically) turns a row into the same canvas point the recorded pixel lands
+        /// on, and the mapping's px→canvas scale carries sprite sizes (also canvas px) along.
+        /// Never the presented frame's size either: playback presents frames under
+        /// <c>IVideoPlayer.MaxPresentHeight</c>. Falls back to the stream's dims for a header
+        /// without a region (a capture written before the region was part of the contract).
+        /// </summary>
+        internal static (double Width, double Height) CaptureDims(InputCaptureHeader header,
+            Source source, int streamIndex)
+        {
+            if (header is { RegionWidth: > 0, RegionHeight: > 0 })
+                return (header.RegionWidth, header.RegionHeight);
+            return ScreenDims(source, streamIndex, 0, 0);
+        }
+
         internal static (double Width, double Height) ScreenDims(Source source, int streamIndex,
             double fallbackWidth, double fallbackHeight)
         {
