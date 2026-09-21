@@ -38,6 +38,12 @@ namespace Clowd.VideoSDK.Composition
     /// </summary>
     public sealed class FrameBufferPool : IDisposable
     {
+        /// <summary>Slack allocated past the requested size, to absorb <c>sws_scale</c>'s
+        /// last-row overrun. A guard-byte run of the suite measured 56 bytes written past a
+        /// 2x2 frame's 16 — one 16-pixel BGRA block (64) minus the 8 bytes the row used — so 64
+        /// covers the block width seen here and 128 leaves room for a wider one.</summary>
+        private const nuint ScaleTailBytes = 128;
+
         private readonly object _sync = new object();
         private readonly List<FrameBuffer> _free = new List<FrameBuffer>();
         private bool _disposed;
@@ -74,7 +80,14 @@ namespace Clowd.VideoSDK.Composition
                     }
                 }
 
-                var address = (IntPtr)NativeMemory.AlignedAlloc((nuint)sizeBytes, 64);
+                // sws_scale writes each output row in SIMD-wide blocks and runs past the row's
+                // used width when that width is not a whole number of blocks. Every row but the
+                // last spills into the row after it, which is written next anyway; the last row
+                // spills out of the allocation, so an exactly-sized buffer lets the scaler smear
+                // over the following heap block. A 2x2 frame is 8 used bytes in a 16-byte
+                // allocation and overran it by 56 — tiny frames are a real import (and the test
+                // suite's fixtures), and the corruption surfaces later as an unrelated crash.
+                var address = (IntPtr)NativeMemory.AlignedAlloc((nuint)sizeBytes + ScaleTailBytes, 64);
                 _totalAllocated++;
                 return new FrameBuffer(this, address, sizeBytes);
             }
