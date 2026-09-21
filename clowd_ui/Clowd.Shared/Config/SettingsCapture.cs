@@ -67,27 +67,6 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// Whether a scrolling capture winds the target back to the top before it starts
-        /// (<c>clowd_scroll_driver</c>, inverted onto its <c>--no-rewind</c> flag). On by default:
-        /// someone who selects a region halfway down a page almost always wants the whole page,
-        /// and capturing only the bottom half gives them no sign the top is missing. Turning it
-        /// off is the "capture from here" intent — a long thread from one particular message.
-        ///
-        /// Lives beside its parent switch and grays out with it: with scrolling capture off there
-        /// is no scrolling capture for it to describe.
-        /// </summary>
-        [Category("Optional features")]
-        [DisplayName("Scroll to top first")]
-        [Description("Before a scrolling capture starts, wind the page back to the top so the whole " +
-                     "document is captured. Turn this off to capture from wherever the page is sitting.")]
-        [DisabledWhen(nameof(ScrollingCaptureEnabled), false)]
-        public bool ScrollCaptureRewindToTop
-        {
-            get => _scrollCaptureRewindToTop;
-            set => Set(ref _scrollCaptureRewindToTop, value);
-        }
-
-        /// <summary>
         /// Whether the capture overlay offers OCR. Switching it off makes the whole OCR flow
         /// unreachable — the OCR button is the only way into the mode that raises the
         /// UPLOAD/SEARCH/COPY strip.
@@ -201,6 +180,29 @@ namespace Clowd.Config
         {
             get => _obscuredWindowDetectionThreshold;
             set => Set(ref _obscuredWindowDetectionThreshold, value);
+        }
+
+        /// <summary>
+        /// Whether a scrolling capture winds the target back to the top before it starts
+        /// (<c>clowd_scroll_driver</c>, inverted onto its <c>--no-rewind</c> flag). On by default:
+        /// someone who selects a region halfway down a page almost always wants the whole page,
+        /// and capturing only the bottom half gives them no sign the top is missing. Turning it
+        /// off is the "capture from here" intent — a long thread from one particular message.
+        ///
+        /// It describes how a capture behaves rather than which buttons the overlay offers, so it
+        /// sits under Behavior while its parent switch stays with the other optional features; the
+        /// [DisabledWhen] still grays it out across the two groups, since with scrolling capture
+        /// off there is no scrolling capture for it to describe.
+        /// </summary>
+        [Category("Behavior")]
+        [DisplayName("Scroll to top first")]
+        [Description("Before a scrolling capture starts, wind the page back to the top so the whole " +
+                     "document is captured. Turn this off to capture from wherever the page is sitting.")]
+        [DisabledWhen(nameof(ScrollingCaptureEnabled), false)]
+        public bool ScrollCaptureRewindToTop
+        {
+            get => _scrollCaptureRewindToTop;
+            set => Set(ref _scrollCaptureRewindToTop, value);
         }
 
         [Category("Saving")]
