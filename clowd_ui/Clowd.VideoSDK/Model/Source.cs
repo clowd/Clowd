@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Clowd.VideoSDK.Model;
 
@@ -44,9 +45,44 @@ public sealed class SourceStream
 
     public StreamKind Kind { get; set; }
 
+    /// <summary>Stored (coded) frame width in pixels — the size every decoded buffer has. Not
+    /// necessarily the shape the picture is meant to be shown at: see <see cref="PixelAspectNum"/>.</summary>
     public int Width { get; set; }
 
     public int Height { get; set; }
+
+    /// <summary>
+    /// The stream's pixel aspect ratio (FFmpeg's <c>sample_aspect_ratio</c>) as a rational,
+    /// width over height of one stored pixel. Anamorphic and legacy SD material stores its frame
+    /// at one size and declares that each pixel is wider or narrower than square, so the picture
+    /// must be shown at <see cref="DisplayWidth"/>×<see cref="DisplayHeight"/> rather than
+    /// <see cref="Width"/>×<see cref="Height"/>. 0/0 (a project written before the field existed,
+    /// or a stream that declares nothing) means square pixels, exactly like 1/1. Clowd's own
+    /// recordings are always square; only imported files carry anything else.
+    /// </summary>
+    public int PixelAspectNum { get; set; }
+
+    public int PixelAspectDen { get; set; }
+
+    /// <summary>The pixel aspect ratio as a factor: 1.0 for square pixels (and for an undeclared
+    /// ratio), 0.75 for the classic 720×720-stored / 540×720-shown case.</summary>
+    [JsonIgnore]
+    public double PixelAspect => PixelAspectNum > 0 && PixelAspectDen > 0
+        ? PixelAspectNum / (double)PixelAspectDen
+        : 1.0;
+
+    /// <summary>The width the picture is meant to be shown at, in square pixels:
+    /// <see cref="Width"/> × <see cref="PixelAspect"/>. Equal to <see cref="Width"/> for every
+    /// square-pixel stream. This, not <see cref="Width"/>, is what any aspect or placement math
+    /// must read.</summary>
+    [JsonIgnore]
+    public double DisplayWidth => Width * PixelAspect;
+
+    /// <summary>The height the picture is meant to be shown at — always <see cref="Height"/>,
+    /// since the pixel aspect is applied on the horizontal axis; here so callers read a matched
+    /// pair.</summary>
+    [JsonIgnore]
+    public double DisplayHeight => Height;
 
     public int AvgFrameRateNum { get; set; }
 

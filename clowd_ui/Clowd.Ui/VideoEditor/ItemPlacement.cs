@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Clowd.VideoSDK.Composition;
@@ -208,8 +208,10 @@ namespace Clowd.UI.VideoEditor
                     // a followed window's rect IS the shown region, so the box takes that region's
                     // ratio and changes shape when the window is resized: the gizmo has to ask at
                     // the composed time, not read the stored crop, or it boxes the whole recording
+                    // the displayed size, not the stored one — an anamorphic import's box is the
+                    // shape the composer draws it at (PictureMapping runs the same correction)
                     return AspectMath.DisplayAspect(Drawn(project, item, timeTicks),
-                        stream.Width, stream.Height);
+                        stream.DisplayWidth, stream.DisplayHeight);
                 }
 
                 case ImageContent image:

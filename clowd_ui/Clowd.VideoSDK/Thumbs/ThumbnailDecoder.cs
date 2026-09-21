@@ -92,8 +92,13 @@ namespace Clowd.VideoSDK.Thumbs
 
                 SourceWidth = srcWidth;
                 SourceHeight = srcHeight;
+                // the thumb has square pixels, so its width follows the DISPLAYED shape: a
+                // non-square-pixel source (anamorphic import) is squeezed/stretched here by
+                // sws_scale, the same correction the composer applies when it draws the frame.
+                var sar = ffmpeg.av_guess_sample_aspect_ratio(_fmt, st, null);
+                double pixelAspect = sar.num > 0 && sar.den > 0 ? sar.num / (double)sar.den : 1.0;
                 ThumbHeight = Math.Clamp(thumbHeightPx, MinThumbHeightPx, MaxThumbHeightPx);
-                ThumbWidth = Math.Max(2, (int)Math.Round(srcWidth * (double)ThumbHeight / srcHeight));
+                ThumbWidth = Math.Max(2, (int)Math.Round(srcWidth * pixelAspect * ThumbHeight / srcHeight));
                 _thumb = new byte[ThumbByteCount];
 
                 _timeBase = st->time_base;

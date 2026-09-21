@@ -445,8 +445,12 @@ namespace Clowd.VideoSDK.Editing
                     if (stream.Kind != StreamKind.Video || stream.Width <= 0 || stream.Height <= 0)
                         continue;
 
-                    if (best == null || (long)stream.Width * stream.Height > (long)best.Value.W * best.Value.H)
-                        best = (stream.Width, stream.Height);
+                    // the displayed size, not the stored one: a non-square-pixel stream's native
+                    // canvas is the shape it is meant to be seen at
+                    var w = (int)Math.Round(stream.DisplayWidth);
+                    var h = (int)Math.Round(stream.DisplayHeight);
+                    if (best == null || (long)w * h > (long)best.Value.W * best.Value.H)
+                        best = (w, h);
                 }
             }
 
@@ -2203,6 +2207,8 @@ namespace Clowd.VideoSDK.Editing
                     Kind = StreamKind.Video,
                     Width = v.Width,
                     Height = v.Height,
+                    PixelAspectNum = v.SampleAspectNum,
+                    PixelAspectDen = v.SampleAspectDen,
                     AvgFrameRateNum = v.AvgFrameRateNum,
                     AvgFrameRateDen = v.AvgFrameRateDen,
                     IsVariableFrameRate = v.IsVariableFrameRate,
@@ -2222,14 +2228,16 @@ namespace Clowd.VideoSDK.Editing
         /// <summary>Points the output canvas, frame rate and sample rate at the media that is
         /// defining the project (see <see cref="ImportMedia"/>). False — leaving the canvas alone —
         /// when the stream declares no usable size, which is the one case where the placeholder is
-        /// still the better answer.</summary>
+        /// still the better answer. The canvas takes the stream's <b>displayed</b> size: a file
+        /// stored at 720×720 with 3:4 pixels defines a 540×720 project, since the output has square
+        /// pixels and the picture must land on it undistorted.</summary>
         private static bool AdoptOutput(Project project, SourceStream video, MediaProbeResult probe)
         {
             if (video.Width <= 0 || video.Height <= 0)
                 return false;
 
-            project.Output.WidthPx = ClampOutputDimension(video.Width);
-            project.Output.HeightPx = ClampOutputDimension(video.Height);
+            project.Output.WidthPx = ClampOutputDimension((int)Math.Round(video.DisplayWidth));
+            project.Output.HeightPx = ClampOutputDimension((int)Math.Round(video.DisplayHeight));
 
             if (video.AvgFrameRateNum > 0 && video.AvgFrameRateDen > 0)
             {

@@ -298,6 +298,8 @@ public static class RecordingProject
         Kind = StreamKind.Video,
         Width = s.Width,
         Height = s.Height,
+        PixelAspectNum = s.SampleAspectNum,
+        PixelAspectDen = s.SampleAspectDen,
         AvgFrameRateNum = s.AvgFrameRateNum,
         AvgFrameRateDen = s.AvgFrameRateDen,
         IsVariableFrameRate = s.IsVariableFrameRate,

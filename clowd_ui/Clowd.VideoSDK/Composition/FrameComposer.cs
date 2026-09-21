@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using Clowd.VideoSDK.Model;
@@ -165,7 +165,8 @@ namespace Clowd.VideoSDK.Composition
                     // recorded over.
                     transform = WindowCropMath.Effective(project, media, transform, sourceTicks);
                     DrawPicture(target, frame.Image, frame.Mask, transform, item.Surround,
-                        item.Effect, fx, opacity, canvasWidth, canvasHeight);
+                        item.Effect, fx, opacity, canvasWidth, canvasHeight,
+                        PixelAspectOf(project, media));
                     DrawDefaultCursorOverlay(project, media, sourceTicks,
                         transform, fx, opacity, target, canvasWidth, canvasHeight);
                     break;
@@ -230,12 +231,14 @@ namespace Clowd.VideoSDK.Composition
         /// </summary>
         private static void DrawPicture(SKCanvas target, SKImage image, SKImage mask,
             Transform transform, Surround surround, VideoEffect effect, ItemEffects fx,
-            double opacity, int canvasWidth, int canvasHeight)
+            double opacity, int canvasWidth, int canvasHeight, double pixelAspect = 1.0)
         {
             // crop/aspect insets, dest rect and the px→canvas factors all live in the mapping —
             // shared with the cursor overlay, which maps captured positions through the same math.
+            // The pixel aspect rides along so an anamorphic import lands in a display-shaped box
+            // (the image itself is whatever stored size the decoder handed over).
             if (!PictureMapping.TryMap(transform, fx, image.Width, image.Height,
-                    canvasWidth, canvasHeight, out var map))
+                    canvasWidth, canvasHeight, out var map, pixelAspect))
                 return;
 
             var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
@@ -630,6 +633,22 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>Whether the stream is the source's screen recording: its lowest-index probed
         /// video stream (the webcam always probes after the screen). With no probed video streams,
         /// stream 0 — the container convention.</summary>
+        /// <summary>The pixel aspect ratio of the stream a media item plays
+        /// (<see cref="SourceStream.PixelAspect"/>); 1 when the source or stream is unknown, which
+        /// is also what every recording carries.</summary>
+        internal static double PixelAspectOf(Project project, MediaContent media)
+        {
+            var source = FindSource(project, media.SourceId);
+            if (source?.Streams == null)
+                return 1.0;
+            foreach (var stream in source.Streams)
+            {
+                if (stream.Index == media.StreamIndex)
+                    return stream.PixelAspect;
+            }
+            return 1.0;
+        }
+
         public static bool IsScreenStream(Source source, int streamIndex)
         {
             int best = -1;

@@ -1,3 +1,4 @@
+using System;
 using Clowd.VideoSDK.Model;
 using SkiaSharp;
 
@@ -40,21 +41,34 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>
         /// Resolves the mapping for a picture of <paramref name="imgW"/>×<paramref name="imgH"/>
-        /// placed by <paramref name="transform"/> on a <paramref name="canvasWidth"/>×<paramref
+        /// stored pixels placed by <paramref name="transform"/> on a <paramref name="canvasWidth"/>×<paramref
         /// name="canvasHeight"/> canvas. False when nothing would draw (no picture, cropped to
         /// nothing, or a degenerate dest rect) — the exact cases DrawPicture bails on.
+        ///
+        /// <para><paramref name="pixelAspect"/> is the picture's pixel aspect ratio
+        /// (<see cref="SourceStream.PixelAspect"/>): the shape math — crop insets, the box's own
+        /// ratio — runs on the <i>displayed</i> size <c>imgW·pixelAspect × imgH</c>, while
+        /// <see cref="Source"/> stays in stored pixels because that is what the image is sampled
+        /// in. Drawing the stored region into the display-shaped box is exactly the horizontal
+        /// stretch/squeeze that undoes the non-square pixels. 1 (square pixels) for everything
+        /// but an imported anamorphic file; a non-positive value is treated as 1.</para>
         /// </summary>
         public static bool TryMap(Transform transform, ItemEffects fx, double imgW, double imgH,
-            int canvasWidth, int canvasHeight, out PictureMapping mapping)
+            int canvasWidth, int canvasHeight, out PictureMapping mapping, double pixelAspect = 1.0)
         {
             mapping = default;
             transform ??= new Transform();
             if (imgW <= 0 || imgH <= 0)
                 return false;
+            if (!(pixelAspect > 0) || Double.IsInfinity(pixelAspect))
+                pixelAspect = 1.0;
+            double shownW = imgW * pixelAspect;
 
             // The displayed source region: the aspect ratio's own crop (fill) combined with the
             // user's crop on top of it — one resolver shared with the editor's placement math.
-            var (cl, ct, cr, cb) = AspectMath.SourceInsets(transform, imgW, imgH);
+            // Insets are fractions, so resolving them against the displayed shape and applying
+            // them to the stored pixels is the same crop.
+            var (cl, ct, cr, cb) = AspectMath.SourceInsets(transform, shownW, imgH);
             if (cl + cr >= 1 || ct + cb >= 1)
                 return false; // cropped to nothing
 
@@ -67,8 +81,8 @@ namespace Clowd.VideoSDK.Composition
             double destW = transform.Scale * canvasWidth;
             double destH = transform.ScaleY is { } scaleY
                 ? scaleY * canvasHeight
-                : destW * (AspectMath.DisplayAspect(transform, imgW, imgH)
-                           ?? (imgH * (1 - ct - cb)) / (imgW * (1 - cl - cr)));
+                : destW * (AspectMath.DisplayAspect(transform, shownW, imgH)
+                           ?? (imgH * (1 - ct - cb)) / (shownW * (1 - cl - cr)));
 
             var rect = FrameComposer.PlaceRect(transform, fx, destW, destH, canvasWidth, canvasHeight);
             if (rect.Width <= 0 || rect.Height <= 0)

@@ -17,6 +17,13 @@ namespace Clowd.VideoSDK.Playback
         public int Height { get; init; }
         public string CodecName { get; init; }
 
+        /// <summary>The pixel (sample) aspect ratio the container and codec agree on
+        /// (<c>av_guess_sample_aspect_ratio</c>), width over height of one stored pixel. 1/1 when
+        /// the stream declares none — undeclared means square. See
+        /// <see cref="Model.SourceStream.PixelAspectNum"/>.</summary>
+        public int SampleAspectNum { get; init; } = 1;
+        public int SampleAspectDen { get; init; } = 1;
+
         /// <summary>avg_frame_rate — total frames / duration. 0/0 when the container gives no hint.</summary>
         public int AvgFrameRateNum { get; init; }
         public int AvgFrameRateDen { get; init; }
@@ -254,12 +261,20 @@ namespace Clowd.VideoSDK.Playback
                         ? TimeBase.StreamTimeToTicks(st->duration, tb.num, tb.den)
                         : containerDurationTicks;
 
+                    // the container's and the codec's declarations can disagree; FFmpeg's guess
+                    // resolves them the way ffplay/ffprobe report it. 0/x and x/0 both mean
+                    // "undeclared", which is square.
+                    var sar = ffmpeg.av_guess_sample_aspect_ratio(fmt, st, null);
+                    bool sarValid = sar.num > 0 && sar.den > 0;
+
                     var codec = ffmpeg.avcodec_find_decoder(par->codec_id);
                     videoStreams.Add(new VideoStreamProbe
                     {
                         StreamIndex = i,
                         Width = par->width,
                         Height = par->height,
+                        SampleAspectNum = sarValid ? sar.num : 1,
+                        SampleAspectDen = sarValid ? sar.den : 1,
                         CodecName = codec != null
                             ? System.Runtime.InteropServices.Marshal.PtrToStringAnsi((IntPtr)codec->name)
                             : par->codec_id.ToString(),

@@ -1384,8 +1384,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                 return;
 
             var stream = source.Streams?.FirstOrDefault(s => s.Index == media.StreamIndex);
+            // displayed shape: the thumbnails come back at it too (ThumbnailDecoder)
             var aspect = stream is { Width: > 0, Height: > 0 }
-                ? (double)stream.Width / stream.Height
+                ? stream.DisplayWidth / stream.DisplayHeight
                 : 16.0 / 9;
 
             // a re-timed item (speed ≠ 1) covers DurationTicks * speed of SOURCE, and one screen
