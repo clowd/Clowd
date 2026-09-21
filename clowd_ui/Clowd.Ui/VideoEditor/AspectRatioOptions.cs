@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 
@@ -147,6 +148,111 @@ namespace Clowd.UI.VideoEditor
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// The canvas size the "Fit to content" button resizes to: the picture of
+        /// <paramref name="preferred"/> (the selection) when it is one, otherwise the largest
+        /// picture on the canvas — by drawn area under the playhead, or failing that anywhere on
+        /// the timeline — which is the recording in every ordinary edit, however many tracks sit
+        /// over it. The size is the shown region in source pixels (after the crop and any aspect
+        /// preset, a followed window resolved at <paramref name="timeTicks"/>), so a centered
+        /// full-width item then fills the frame at 1:1 with no bars. A quarter turn swaps the two
+        /// edges. Null when nothing qualifies or the crop leaves nothing.
+        /// </summary>
+        public static (int WidthPx, int HeightPx)? FitToContentSize(Project project, Item preferred, long timeTicks)
+        {
+            if (project?.Items == null || project.Output is not { WidthPx: > 0, HeightPx: > 0 } output)
+                return null;
+
+            if (preferred != null && ContentPixelSize(project, preferred, timeTicks) is { } selected)
+                return selected;
+
+            var visible = new HashSet<Guid>();
+            if (project.Tracks != null)
+            {
+                foreach (var track in project.Tracks)
+                {
+                    if (track.Kind == TrackKind.Video && !track.Hidden)
+                        visible.Add(track.Id);
+                }
+            }
+
+            foreach (var atPlayhead in new[] { true, false })
+            {
+                (int WidthPx, int HeightPx)? best = null;
+                double bestArea = 0;
+                foreach (var item in project.Items)
+                {
+                    if (!visible.Contains(item.TrackId) || item.Content is not (MediaContent or ImageContent))
+                        continue;
+                    if (atPlayhead && (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks))
+                        continue;
+                    if (ContentPixelSize(project, item, timeTicks) is not { } size ||
+                        !ItemPlacement.TryResolve(project, item, output.WidthPx, output.HeightPx, out var placed, timeTicks))
+                        continue;
+
+                    double area = placed.W * placed.H;
+                    if (area > bestArea)
+                        (best, bestArea) = (size, area);
+                }
+
+                if (best != null)
+                    return best;
+            }
+
+            return null;
+        }
+
+        /// <summary>The shown region of a media or image item in source pixels, clamped and
+        /// evened for the encoder; null for any other content, an unknown size, or a crop that
+        /// leaves nothing.</summary>
+        private static (int WidthPx, int HeightPx)? ContentPixelSize(Project project, Item item, long timeTicks)
+        {
+            double sourceW, sourceH;
+            switch (item.Content)
+            {
+                case MediaContent media:
+                {
+                    var source = project.Sources?.Find(s => s.Id == media.SourceId);
+                    var stream = source?.Streams?.Find(s => s.Index == media.StreamIndex);
+                    if (stream is not { Kind: StreamKind.Video, Width: > 0, Height: > 0 })
+                        return null;
+                    (sourceW, sourceH) = (stream.DisplayWidth, stream.DisplayHeight);
+                    break;
+                }
+
+                case ImageContent image:
+                {
+                    if (ItemPlacement.ImageSizeCache.Get(image.Path) is not { } size)
+                        return null;
+                    (sourceW, sourceH) = (size.Width, size.Height);
+                    break;
+                }
+
+                default:
+                    return null;
+            }
+
+            var transform = ItemPlacement.Drawn(project, item, timeTicks);
+            var (l, t, r, b) = AspectMath.SourceInsets(transform, sourceW, sourceH);
+            var aspect = AspectMath.DisplayAspect(transform, sourceW, sourceH);
+            double w = sourceW * (1 - l - r);
+            if (!(w > 0) || aspect is not > 0)
+                return null;
+
+            // DisplayAspect already carries an aspect preset (a stretch keeps the region's width
+            // and distorts the height, exactly as the composer draws it at full width)
+            double h = w * aspect.Value;
+
+            // an item turned on its side is drawn portrait for landscape; any other angle keeps
+            // its own shape (the canvas cannot be fitted to a tilted box)
+            var quarterTurns = Math.Round(transform.Rotation / 90);
+            if (Math.Abs(transform.Rotation - quarterTurns * 90) < 1 && Math.Abs(quarterTurns % 2) == 1)
+                (w, h) = (h, w);
+
+            return (EditorSession.ClampOutputDimension((int)Math.Round(w)),
+                EditorSession.ClampOutputDimension((int)Math.Round(h)));
         }
 
         /// <summary>The canvas for <paramref name="ratioW"/>:<paramref name="ratioH"/> whose short

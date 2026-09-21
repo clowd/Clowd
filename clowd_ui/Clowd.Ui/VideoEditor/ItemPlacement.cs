@@ -174,7 +174,7 @@ namespace Clowd.UI.VideoEditor
         /// window's rect as its crop (and, because the window then owns the picture's shape, no
         /// aspect preset, stretch or explicit height). Never null, and never the model's own
         /// instance modified.</summary>
-        private static ModelTransform Drawn(Project project, Item item, long timeTicks)
+        internal static ModelTransform Drawn(Project project, Item item, long timeTicks)
         {
             var stored = item?.Transform ?? new ModelTransform();
             if (item?.Content is not MediaContent media || stored.CropWindow is not { WindowId: > 0 })
@@ -341,7 +341,7 @@ namespace Clowd.UI.VideoEditor
         /// decode) and cached by path — the gizmo asks on every layout pass. Failures cache as null
         /// so a bad path costs one probe, exactly like the composer's own image cache.
         /// </summary>
-        private static class ImageSizeCache
+        internal static class ImageSizeCache
         {
             private static readonly object Sync = new object();
 

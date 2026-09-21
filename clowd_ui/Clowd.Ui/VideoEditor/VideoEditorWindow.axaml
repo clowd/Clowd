@@ -326,6 +326,15 @@
                     Click="rotateAspect_Click"
                     IconPath="{StaticResource IconRotateOrientation}"
                     ToolTip.Tip="Rotate aspect ratio (swap width and height)" />
+                <!--  sizes the canvas to the cropped picture (FitCanvasToContent), remembered as the Custom size  -->
+                <controls:ToolButton
+                    x:Name="btnFitToContent"
+                    Margin="2,0,0,0"
+                    Padding="6"
+                    VerticalAlignment="Center"
+                    Click="fitToContent_Click"
+                    IconPath="{StaticResource IconFitToContent}"
+                    ToolTip.Tip="Resize video canvas to selected clip" />
             </StackPanel>
 
             <StackPanel>

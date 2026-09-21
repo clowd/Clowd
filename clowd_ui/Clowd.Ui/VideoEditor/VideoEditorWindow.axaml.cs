@@ -2583,6 +2583,7 @@ namespace Clowd.UI.VideoEditor
 
                 // a square has no other orientation
                 btnRotateAspect.IsEnabled = output != null && output.WidthPx != output.HeightPx;
+                btnFitToContent.IsEnabled = AspectRatioOptions.FitToContentSize(_editor.Project, null, PlayheadTicks) != null;
             }
             finally
             {
@@ -2632,16 +2633,7 @@ namespace Clowd.UI.VideoEditor
                 var size = await CustomResolutionDialog.ShowAsync(this, output.WidthPx, output.HeightPx);
                 if (size != null && !_closing && _editor != null)
                 {
-                    var w = EditorSession.ClampOutputDimension(size.Value.WidthPx);
-                    var h = EditorSession.ClampOutputDimension(size.Value.HeightPx);
-                    if (Settings != null)
-                    {
-                        Settings.CustomOutputWidthPx = w;
-                        Settings.CustomOutputHeightPx = h;
-                        TrySaveSettings();
-                    }
-
-                    _editor.SetOutputSize(w, h, this);
+                    ApplyCustomResolution(size.Value.WidthPx, size.Value.HeightPx);
                 }
             }
             catch (Exception ex)
@@ -2652,6 +2644,39 @@ namespace Clowd.UI.VideoEditor
 
             if (!_closing)
                 RefreshAspectRatioPicker();
+        }
+
+        /// <summary>Resizes the canvas to a size the user chose (the Custom… dialog or Fit to
+        /// content) and remembers it as the picker's custom row.</summary>
+        private void ApplyCustomResolution(int widthPx, int heightPx)
+        {
+            var w = EditorSession.ClampOutputDimension(widthPx);
+            var h = EditorSession.ClampOutputDimension(heightPx);
+            if (Settings != null)
+            {
+                Settings.CustomOutputWidthPx = w;
+                Settings.CustomOutputHeightPx = h;
+                TrySaveSettings();
+            }
+
+            _editor.SetOutputSize(w, h, this);
+        }
+
+        /// <summary>Sizes the canvas to the cropped picture — the selected one, or the main
+        /// recording — exactly as if that size had been typed into Custom…. One undoable resize;
+        /// the picker follows through ProjectChanged, but is refreshed here too because a fit to
+        /// the size already set changes nothing yet still updates the remembered custom row.</summary>
+        private void fitToContent_Click(object sender, RoutedEventArgs e)
+        {
+            if (_editor == null || _closing)
+                return;
+
+            var size = AspectRatioOptions.FitToContentSize(_editor.Project, _editor.PrimarySelectedItem, PlayheadTicks);
+            if (size == null)
+                return;
+
+            ApplyCustomResolution(size.Value.WidthPx, size.Value.HeightPx);
+            RefreshAspectRatioPicker();
         }
 
         /// <summary>Swaps the canvas's width and height — whatever shape it is, a standard ratio or
