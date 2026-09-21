@@ -136,6 +136,17 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
+        /// <summary>Budget for the work a pass kicks off but does not itself finish: the cache
+        /// file a scheduler thread writes after the snapshot is published, and the throttled
+        /// <c>Changed</c> raise, which rides a <see cref="System.Threading.Timer"/> callback on
+        /// the thread pool. Both normally land within ~100 ms. The budget is the same 30 s
+        /// <see cref="WaitForComplete"/> allows rather than a tight few seconds, because a
+        /// passing run never spends it and nothing here is a latency assertion — a 5 s bound on
+        /// the <c>Changed</c> raise is what failed CI once (run 35538848056, "the provider never
+        /// announced its progress") on an otherwise green suite, and a bound that only holds on
+        /// an unloaded runner tests the runner.</summary>
+        private const int FollowUpTimeoutMs = 30_000;
+
         private static bool WaitFor(Func<bool> condition, int timeoutMs)
         {
             long deadline = Environment.TickCount64 + timeoutMs;
@@ -155,7 +166,7 @@ namespace Clowd.VideoSDK.Tests
         private static void AssertCached(string dir, string path)
         {
             string file = Path.Combine(dir, WaveformCache.FileNameFor(path, AudioStream));
-            Assert.True(WaitFor(() => File.Exists(file), 5000), $"the provider never wrote {file}");
+            Assert.True(WaitFor(() => File.Exists(file), FollowUpTimeoutMs), $"the provider never wrote {file}");
         }
 
         private static void AssertToneAmplitude(WaveformSnapshot snapshot)
@@ -333,7 +344,7 @@ namespace Clowd.VideoSDK.Tests
                 Assert.Equal(0, provider.CacheHitCount);
                 AssertCached(dir, path);
                 // the event is throttled and raised on a thread-pool thread — give it its window
-                Assert.True(WaitFor(() => Volatile.Read(ref changed) > 0, 5000),
+                Assert.True(WaitFor(() => Volatile.Read(ref changed) > 0, FollowUpTimeoutMs),
                     "the provider never announced its progress");
             }
 
@@ -426,7 +437,7 @@ namespace Clowd.VideoSDK.Tests
             // the bad file was replaced, not left to fail on every open (the replacement lands
             // just after the snapshot the wait above returned, so poll for it)
             Assert.True(WaitFor(() => WaveformCache.TryLoad(dir, path, AudioStream,
-                                                           WaveformProvider.BucketsPerSecond) != null, 5000),
+                                                           WaveformProvider.BucketsPerSecond) != null, FollowUpTimeoutMs),
                         "the corrupt cache file was never replaced");
         }
 
