@@ -1,7 +1,8 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Input;
+using Avalonia.Styling;
 
 namespace Clowd.UI.Controls
 {
@@ -33,6 +34,20 @@ namespace Clowd.UI.Controls
         {
             get => GetValue(CaptionProperty);
             set => SetValue(CaptionProperty, value);
+        }
+
+        public static readonly StyledProperty<ThemeVariant> BoxVariantProperty =
+            AvaloniaProperty.Register<CaptionedCheckBox, ThemeVariant>(nameof(BoxVariant), ThemeVariant.Dark);
+
+        /// <summary>Which variant the templated box inside draws itself in. It is a stock Semi
+        /// CheckBox, so in the light theme it paints a dark outline — right on a light bar, and
+        /// invisible on the Compact chrome's dark slab, which is hand-painted dark whatever the
+        /// app theme is. Dark by default, therefore: that is the Compact case. A host whose bar
+        /// follows the theme (the Modern chrome) sets this to null and the box follows too.</summary>
+        public ThemeVariant BoxVariant
+        {
+            get => GetValue(BoxVariantProperty);
+            set => SetValue(BoxVariantProperty, value);
         }
 
         static CaptionedCheckBox()

@@ -1,0 +1,92 @@
+﻿<UserControl
+    x:Class="Clowd.UI.Controls.CustomizeToolbarPopup"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--  The editors' "Customize toolbar" flyout, shared by both of them: the tool rows with
+          their show/hide checkboxes and reorder grips, the chrome picker, and the reset buttons.
+          Everything about WHICH tools there are, and what a change means, belongs to the host —
+          this control asks for a list and reports what the user did to it (see the events in
+          CustomizeToolbarPopup.axaml.cs).
+
+          Colours are theme tokens, not either chrome's fixed palette: this flyout is not one of
+          the two chromes, it is the thing that switches between them, so it follows the app's
+          light/dark setting instead — as the video editor's render flyout does. It also has to:
+          the combo box and the reset buttons inside it are stock Semi controls, and a light-theme
+          combo on a hand-painted dark slab is a dark label on a dark ground.
+
+          The ink is stated on the root for the same reason: a popup inherits from the window that
+          owns it, and in the Compact chrome that window's Foreground is white — which is how a
+          light-theme flyout ends up with white labels on its own light surface. Everything in here
+          that does not state a colour of its own (the combo box's text, the reset buttons') takes
+          it from this one.  -->
+    <Popup
+        x:Name="popup"
+        HorizontalOffset="-6"
+        IsLightDismissEnabled="True"
+        Placement="Right">
+        <Border
+            x:Name="popupRoot"
+            Width="220"
+            Margin="10"
+            Padding="8"
+            Background="{DynamicResource ApplicationBackgroundBrush}"
+            BorderBrush="{DynamicResource SemiColorBorder}"
+            BorderThickness="1"
+            BoxShadow="0 2 8 0 #80000000"
+            CornerRadius="8"
+            TextElement.Foreground="{DynamicResource SemiColorText0}">
+            <StackPanel>
+                <TextBlock
+                    x:Name="titleText"
+                    Margin="4,2,4,8"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource SemiColorText0}"
+                    Text="Customize toolbar" />
+
+                <!--  The chrome setting, repeated here because this popup is where someone already
+                      fiddling with the toolbar would look for it. The stock combo box, not a
+                      ThemedDropDown: this popup wears neither chrome.  -->
+                <TextBlock
+                    Margin="4,0,4,4"
+                    FontSize="11"
+                    Foreground="{DynamicResource SemiColorText2}"
+                    Text="Layout" />
+                <ComboBox
+                    x:Name="layoutCombo"
+                    Margin="4,0,4,10"
+                    HorizontalAlignment="Stretch" />
+
+                <!--  Rows are generated in the code-behind; the drop indicator is a sibling laid
+                      over them, as in the layers panel.  -->
+                <Panel>
+                    <StackPanel x:Name="rowsHost" />
+                    <Border
+                        x:Name="dropIndicator"
+                        Height="2"
+                        VerticalAlignment="Top"
+                        IsHitTestVisible="False"
+                        IsVisible="False" />
+                </Panel>
+
+                <Button
+                    x:Name="btnResetOrder"
+                    Margin="4,8,4,0"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    Content="Reset Tool Order" />
+
+                <!--  Hidden unless the host asks for it: the video editor's tools carry no saved
+                      settings to reset.  -->
+                <Button
+                    x:Name="btnResetSettings"
+                    Margin="4,4,4,2"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    Classes="Danger"
+                    Content="Reset Tool Settings" />
+            </StackPanel>
+        </Border>
+    </Popup>
+</UserControl>

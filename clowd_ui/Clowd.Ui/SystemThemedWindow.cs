@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -173,7 +173,7 @@ namespace Clowd.UI
         /// light backdrop is far busier than the dark one — it picks up the wallpaper rather than
         /// merely darkening it — so the windows that opt in take it as a tint rather than neat.
         /// The dark theme keeps Mica unveiled, which is what it has always looked like.</summary>
-        private const double LightMicaVeilOpacity = 0.5;
+        private const double LightMicaVeilOpacity = 0.65;
 
         private void UpdateBackground()
         {

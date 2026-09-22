@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="https://github.com/avaloniaui"
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="using:Clowd.UI.Controls">
 
@@ -36,15 +36,20 @@
                                  Width="10"
                                  Height="10"
                                  Margin="0,0,0,1">
-                            <CheckBox Name="PART_CheckBox"
-                                      Margin="0"
-                                      Padding="0"
-                                      MinWidth="0"
-                                      MinHeight="0"
-                                      CornerRadius="{TemplateBinding CornerRadius}"
-                                      HorizontalAlignment="Center"
-                                      IsHitTestVisible="False"
-                                      IsChecked="{TemplateBinding IsChecked, Mode=TwoWay}" />
+                            <!-- The box is a stock Semi CheckBox and draws itself from the theme
+                                 tokens, so on a bar that is dark whatever the app theme says, it
+                                 has to be told (see CaptionedCheckBox.BoxVariant). -->
+                            <ThemeVariantScope RequestedThemeVariant="{TemplateBinding BoxVariant}">
+                                <CheckBox Name="PART_CheckBox"
+                                          Margin="0"
+                                          Padding="0"
+                                          MinWidth="0"
+                                          MinHeight="0"
+                                          CornerRadius="{TemplateBinding CornerRadius}"
+                                          HorizontalAlignment="Center"
+                                          IsHitTestVisible="False"
+                                          IsChecked="{TemplateBinding IsChecked, Mode=TwoWay}" />
+                            </ThemeVariantScope>
                         </Viewbox>
                         <TextBlock Name="PART_Caption"
                                    Grid.Row="1"

@@ -1,4 +1,4 @@
-<local:SystemThemedWindow
+﻿<local:SystemThemedWindow
     x:Class="Clowd.UI.VideoEditor.VideoEditorWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -6,7 +6,6 @@
     xmlns:insp="clr-namespace:Clowd.UI.VideoEditor.Inspector"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:tl="clr-namespace:Clowd.UI.VideoEditor.Timeline"
-    xmlns:util="clr-namespace:Clowd.Util"
     xmlns:ve="clr-namespace:Clowd.UI.VideoEditor"
     DragDrop.AllowDrop="True"
     Title="Edit Video - Clowd"
@@ -15,7 +14,6 @@
     MinWidth="640"
     MinHeight="480"
     FontSize="13"
-    Foreground="White"
     UseLayoutRounding="True"
     WindowStartupLocation="CenterScreen">
     <Window.Resources>
@@ -46,7 +44,10 @@
             <Setter Property="Template">
                 <ControlTemplate>
                     <Grid>
-                        <Rectangle Name="_bg" Fill="{TemplateBinding Background}" />
+                        <Border
+                            Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
                         <StackPanel
                             Margin="{TemplateBinding Padding}"
                             HorizontalAlignment="Center"
@@ -62,24 +63,27 @@
                                 Fill="{TemplateBinding Foreground}"
                                 Stretch="None" />
                         </StackPanel>
-                        <Rectangle Name="_hover" Fill="#33FFFFFF">
-                            <Rectangle.Transitions>
+                        <Border
+                            Name="_hover"
+                            Background="#33FFFFFF"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                            <Border.Transitions>
                                 <Transitions>
                                     <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
                                 </Transitions>
-                            </Rectangle.Transitions>
-                        </Rectangle>
+                            </Border.Transitions>
+                        </Border>
                     </Grid>
                 </ControlTemplate>
             </Setter>
 
-            <Style Selector="^ /template/ Rectangle#_hover">
+            <Style Selector="^ /template/ Border#_hover">
                 <Setter Property="Opacity" Value="0" />
             </Style>
-            <Style Selector="^:pointerover /template/ Rectangle#_hover">
+            <Style Selector="^:pointerover /template/ Border#_hover">
                 <Setter Property="Opacity" Value="1" />
             </Style>
-            <Style Selector="^:pressed /template/ Rectangle#_hover">
+            <Style Selector="^:pressed /template/ Border#_hover">
                 <Setter Property="Opacity" Value="0" />
             </Style>
             <Style Selector="^:disabled">
@@ -102,7 +106,8 @@
                     <Border
                         Name="_bg"
                         Background="{DynamicResource SemiColorPrimary}"
-                        ClipToBounds="True">
+                        ClipToBounds="True"
+                        CornerRadius="{TemplateBinding CornerRadius}">
                         <Panel>
                             <!--  hover/press read as a white veil over the accent fill, like the
                                   30x30 ToolButtons, rather than a second accent token  -->
@@ -271,7 +276,225 @@
         </ControlTheme>
     </Window.Resources>
 
-    <Grid x:Name="rootGrid" Background="#535353">
+    <!--  Classes selects the editor chrome and ApplyChrome sets it from General.EditorLayout,
+          exactly as the image editor does (live — a window already open follows the setting).
+          "compact" is the legacy look this window has always had (30px square buttons on opaque
+          #535353 chrome); "modern" floats the two tool bars on the window's own background (Mica
+          on Win11) with 36px rounded buttons, and lifts the preview off it on a rounded, shadowed
+          surface. The transport bar, the timeline and the properties panel are still the legacy
+          dark slabs in both chromes — they pin their own white ink below, since the window's ink
+          follows the theme once the bars stop being dark.  -->
+    <Grid x:Name="rootGrid">
+        <Grid.Styles>
+            <!--  ===== Modern chrome =====  -->
+
+            <!--  The buttons of the two tool bars, reached through the class the bars carry: the
+                  transport bar's sit on a slab neither chrome has moved yet, where theme ink and
+                  an accent fill would both be wrong.  -->
+            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton">
+                <Setter Property="Width" Value="36" />
+                <Setter Property="Height" Value="36" />
+                <Setter Property="Padding" Value="10" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Foreground" Value="{DynamicResource ClowdEditorIconBrush}" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.wide">
+                <Setter Property="Padding" Value="9" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.tight">
+                <Setter Property="Padding" Value="11" />
+            </Style>
+            <!--  The toggles (properties panel, always-on-top, voice-over) wear the accent when
+                  they are on, as the image editor's active tool does, and white on top of it.  -->
+            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton:checked /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton:checked">
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+            <!--  The theme's own hover fill, not the template's white veil: a white veil over
+                  #FAFAFA is no hover at all.  -->
+            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton /template/ Border#_hover">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            </Style>
+
+            <!--  Render is a labeled accent button, so it takes the bar's height and radius but
+                  not its square footprint. After the rule above on purpose — in Avalonia the last
+                  matching style wins, and this one is restating what that rule just set.  -->
+            <Style Selector="Grid.modern controls|ToolButton#btnRender">
+                <Setter Property="Width" Value="NaN" />
+                <Setter Property="Height" Value="36" />
+                <Setter Property="Padding" Value="14,0" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+
+            <!--  The strips: a 36px item lane plus a gutter, and 6px on the edge that faces the
+                  preview — 4 of gutter and 2 the preview's shadow falls across and eats. The
+                  buttons carry 2px of their own on the flow axis, which is the gap between one
+                  item and the next; the lane itself stays 36 so the strip does not move.  -->
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar">
+                <Setter Property="ItemHeight" Value="36" />
+                <Setter Property="Margin" Value="4,4,4,6" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar &gt; controls|ToolButton">
+                <Setter Property="Margin" Value="1,0" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar &gt; StackPanel">
+                <Setter Property="Height" Value="36" />
+                <Setter Property="Margin" Value="6,0,6,0" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar">
+                <Setter Property="ItemWidth" Value="36" />
+                <Setter Property="Margin" Value="4,0,6,4" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar &gt; controls|ToolButton">
+                <Setter Property="Margin" Value="0,1" />
+            </Style>
+
+            <!--  Semi's ComboBox carries its own chevron and padding, so it needs more room than
+                  the compact picker for the same words.  -->
+            <Style Selector="Grid.modern controls|ThemedDropDown#ddAspectRatio">
+                <Setter Property="IsModern" Value="True" />
+                <Setter Property="MinWidth" Value="96" />
+            </Style>
+
+            <!--  The readout's dim white has no contrast left once the bar is the window's own
+                  background. One step under the label beside it, not two: it is a value, so it
+                  should read as quietly subordinate rather than as a caption.  -->
+            <Style Selector="Grid.modern TextBlock#txtZoom">
+                <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+            </Style>
+
+            <!--  Grows with the rest of the bar, and takes the same radius family as the buttons.
+                  Both values are in the box's own units — the template scales it into a Viewbox,
+                  so the radius shrinks along with it.  -->
+            <Style Selector="Grid.modern controls|CaptionedCheckBox">
+                <Setter Property="CornerRadius" Value="4" />
+                <!--  the bar is the window's own background here, so the box follows the app's
+                      variant instead of the Compact chrome's fixed dark  -->
+                <Setter Property="BoxVariant" Value="{x:Null}" />
+            </Style>
+            <Style Selector="Grid.modern controls|CaptionedCheckBox /template/ Viewbox#PART_Box">
+                <Setter Property="Width" Value="14" />
+                <Setter Property="Height" Value="14" />
+            </Style>
+            <Style Selector="Grid.modern controls|CaptionedCheckBox /template/ TextBlock#PART_Caption">
+                <Setter Property="FontSize" Value="11" />
+            </Style>
+
+            <!--  The hairline divided one flat surface from another; on the backdrop there are no
+                  surfaces left to divide, and the gap does the work instead.  -->
+            <Style Selector="Grid.modern Rectangle.chromeRule">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+
+            <!--  The preview block is the one thing that is still a surface: it sits on top of the
+                  backdrop, rounded on the corner where the two bars meet it and lifted off it by a
+                  shadow alone. The shadow is cast by the whole block (preview plus properties
+                  panel) so that opening the panel does not cut it short halfway along the top
+                  edge.  -->
+            <Style Selector="Grid.modern Border#contentSurface">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+                <Setter Property="BoxShadow" Value="{DynamicResource ClowdEditorSurfaceShadow}" />
+            </Style>
+            <Style Selector="Grid.modern Border#previewSurface">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+            </Style>
+            <Style Selector="Grid.modern Border#previewClip">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+            </Style>
+
+            <!--  The surface's edge. A border on contentSurface itself would never be seen: the
+                  canvas and the sidebar cover it exactly, so the line is a sibling laid over them
+                  instead, and hit-test invisible so the canvas underneath still takes every
+                  pointer event. Top and left only — those are the two edges the bars face, and
+                  the other two run into the window frame.  -->
+            <Style Selector="Grid.modern Border#contentOutline">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+                <Setter Property="BorderThickness" Value="1,1,0,0" />
+            </Style>
+
+            <!--  The properties sidebar joins the bars on the backdrop: no dark slab of its own,
+                  a themed header, and rows the panel styles itself (see InspectorPanel.axaml).  -->
+            <Style Selector="Grid.modern insp|InspectorPanel">
+                <Setter Property="IsModern" Value="True" />
+            </Style>
+            <Style Selector="Grid.modern Border#sidebarBorder">
+                <Setter Property="Background" Value="{DynamicResource ClowdEditorSidebarBrush}" />
+            </Style>
+            <Style Selector="Grid.modern Border#sidebarHeader">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+                <Setter Property="Padding" Value="14,8" />
+            </Style>
+            <Style Selector="Grid.modern Border#sidebarHeader TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+            </Style>
+
+            <!--  Render sits a little further off than one button does from the next.  -->
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar &gt; controls|ToolButton.gapAfter">
+                <Setter Property="Margin" Value="1,0,7,0" />
+            </Style>
+
+            <!--  The transport and the timeline keep their dark slabs and their 30px/20px
+                  footprints for now; rounding their buttons is what carries the modern chrome
+                  through the bottom half of the window. Two radii, not one: 6 on the 30px
+                  transport buttons is the same proportion 8 is on a 36px tool button, and the
+                  timeline's 20px buttons take 4 for the same reason. Compact keeps the square
+                  originals — every rule here is on the class.  -->
+            <Style Selector="Grid.modern DockPanel.transportBar controls|ToolButton">
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style Selector="Grid.modern DockPanel.transportBar Button#btnSpeed">
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <!--  The corner cell's cluster (snap, split at the playhead, the two zoom escapes),
+                  which are ToolButtons, and the track headers' row buttons, which are plain
+                  Buttons wearing RowIconButtonTheme — both built in code, so they are reached by
+                  type rather than by name.  -->
+            <Style Selector="Grid.modern tl|TimelineControl controls|ToolButton">
+                <Setter Property="CornerRadius" Value="4" />
+            </Style>
+            <Style Selector="Grid.modern tl|TimelineControl Button">
+                <Setter Property="CornerRadius" Value="4" />
+            </Style>
+
+            <!--  ===== Compact chrome ===== (the legacy look; every value is the original)  -->
+
+            <Style Selector="Grid.compact controls|DockAndWrapPanel#TopBar">
+                <Setter Property="ItemHeight" Value="30" />
+            </Style>
+            <Style Selector="Grid.compact controls|DockAndWrapPanel#TopBar &gt; StackPanel">
+                <Setter Property="Height" Value="30" />
+                <Setter Property="Margin" Value="4,0,4,0" />
+            </Style>
+            <Style Selector="Grid.compact controls|DockAndWrapPanel#ToolBar">
+                <Setter Property="ItemWidth" Value="30" />
+                <Setter Property="Margin" Value="0,4,0,0" />
+            </Style>
+            <!--  The sidebar's own fills, and the white ink its hand-painted chrome needs. On
+                  the elements they would be local values, which no chrome style could override.  -->
+            <Style Selector="Grid.compact Border#sidebarBorder">
+                <Setter Property="Background" Value="#454545" />
+                <Setter Property="TextElement.Foreground" Value="White" />
+            </Style>
+            <Style Selector="Grid.compact Border#sidebarHeader">
+                <Setter Property="Background" Value="#3d3d3d" />
+            </Style>
+            <Style Selector="Grid.compact Border#sidebarHeader TextBlock">
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+            <Style Selector="Grid.compact controls|DockAndWrapPanel#TopBar &gt; controls|ToolButton.gapAfter">
+                <Setter Property="Margin" Value="0,0,6,0" />
+            </Style>
+            <Style Selector="Grid.compact controls|ThemedDropDown#ddAspectRatio">
+                <Setter Property="MinWidth" Value="76" />
+            </Style>
+            <Style Selector="Grid.compact TextBlock#txtZoom">
+                <Setter Property="Foreground" Value="#CCCCCC" />
+            </Style>
+        </Grid.Styles>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -283,12 +506,13 @@
             x:Name="TopBar"
             HorizontalAlignment="Stretch"
             Background="Transparent"
-            ItemHeight="30"
+            Classes="chromeBar"
             Orientation="Horizontal">
             <controls:DockAndWrapPanel.Styles>
+                <!--  Height and margin are the chrome's to say (see the root grid's styles); what
+                      is left here holds for both, and reaches nested panels the chrome's
+                      direct-child rules deliberately do not.  -->
                 <Style Selector="StackPanel">
-                    <Setter Property="Margin" Value="4,0,4,0" />
-                    <Setter Property="Height" Value="30" />
                     <Setter Property="Orientation" Value="Horizontal" />
                 </Style>
 
@@ -313,16 +537,13 @@
             </StackPanel>
 
             <StackPanel>
-                <controls:CompactDropDown
-                    x:Name="ddAspectRatio"
-                    MinWidth="76"
-                    VerticalAlignment="Center" />
+                <controls:ThemedDropDown x:Name="ddAspectRatio" />
                 <!--  swaps the canvas's width and height: 16:9 <-> 9:16, and the native shape too  -->
                 <controls:ToolButton
                     x:Name="btnRotateAspect"
                     Margin="2,0,0,0"
-                    Padding="6"
                     VerticalAlignment="Center"
+                    Classes="wide"
                     Click="rotateAspect_Click"
                     IconPath="{StaticResource IconRotateOrientation}"
                     ToolTip.Tip="Rotate aspect ratio (swap width and height)" />
@@ -330,21 +551,22 @@
                 <controls:ToolButton
                     x:Name="btnFitToContent"
                     Margin="2,0,0,0"
-                    Padding="6"
                     VerticalAlignment="Center"
+                    Classes="wide"
                     Click="fitToContent_Click"
                     IconPath="{StaticResource IconFitToContent}"
                     ToolTip.Tip="Resize video canvas to selected clip" />
             </StackPanel>
 
             <StackPanel>
-                <TextBlock VerticalAlignment="Center" Text="Zoom:" />
+                <TextBlock VerticalAlignment="Center" Text="Zoom" />
+                <!--  the ink is the chrome's (see the root grid's styles): written here it would
+                      be a local value, which no chrome style can restate  -->
                 <TextBlock
                     x:Name="txtZoom"
                     Margin="4,0,0,0"
                     MinWidth="34"
-                    VerticalAlignment="Center"
-                    Foreground="#CCCCCC" />
+                    VerticalAlignment="Center" />
                 <controls:CaptionedCheckBox
                     x:Name="chkFit"
                     Margin="2,0,8,0"
@@ -359,13 +581,13 @@
                   window is its own DataContext and does not raise PropertyChanged.  -->
             <controls:ToolButton
                 x:Name="btnStar"
-                Padding="6"
+                Classes="wide"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Click="star_Click" />
 
             <controls:ToolButton
                 x:Name="btnInspector"
-                Padding="6"
+                Classes="wide"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 CanToggle="True"
                 IconPath="{StaticResource IconProperties}"
@@ -373,8 +595,7 @@
                 ToolTip.Tip="Properties panel" />
 
             <controls:ToolButton
-                Margin="0,0,6,0"
-                Padding="6"
+                Classes="wide gapAfter"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 CanToggle="True"
                 IconPath="{StaticResource IconPinned}"
@@ -416,8 +637,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition
-                    Width="250"
-                    MinWidth="250"
+                    Width="300"
+                    MinWidth="300"
                     MaxWidth="600" />
             </Grid.ColumnDefinitions>
 
@@ -427,16 +648,16 @@
                 Margin="4,0,4,0"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Top"
+                Classes="chromeRule"
                 Fill="#666666" />
 
             <!--  the same left tool strip as the image editor: ItemWidth is required for DockToEnd
-                  to work in a vertical panel (see DockAndWrapPanel.canDock), and ToolButton is a
-                  fixed 30x30.  -->
+                  to work in a vertical panel (see DockAndWrapPanel.canDock), and it — like the
+                  strip's margin and the buttons' size — is the chrome's to set.  -->
             <controls:DockAndWrapPanel
                 x:Name="ToolBar"
                 Grid.Column="0"
-                Margin="0,4,0,0"
-                ItemWidth="30"
+                Classes="chromeBar"
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 
@@ -449,7 +670,7 @@
                       RefreshInputOverlayButtons) to say why.  -->
                 <controls:ToolButton
                     x:Name="btnImportMedia"
-                    Padding="6"
+                    Classes="wide"
                     Command="{Binding CommandImportMedia}"
                     IconPath="{StaticResource IconVideoClip}"
                     ToolTip.HorizontalOffset="6"
@@ -468,7 +689,7 @@
 
                 <controls:ToolButton
                     x:Name="btnImportAudio"
-                    Padding="6"
+                    Classes="wide"
                     Command="{Binding CommandImportAudio}"
                     IconPath="{StaticResource IconMusicNote}"
                     ToolTip.HorizontalOffset="6"
@@ -487,7 +708,7 @@
 
                 <controls:ToolButton
                     x:Name="btnAddImage"
-                    Padding="6"
+                    Classes="wide"
                     Command="{Binding CommandAddImage}"
                     IconPath="{StaticResource IconImage}"
                     ToolTip.HorizontalOffset="6"
@@ -506,7 +727,6 @@
 
                 <controls:ToolButton
                     x:Name="btnAddText"
-                    Padding="7"
                     Command="{Binding CommandAddText}"
                     IconPath="{StaticResource IconToolText}"
                     ToolTip.HorizontalOffset="6"
@@ -525,7 +745,7 @@
 
                 <controls:ToolButton
                     x:Name="btnAddZoom"
-                    Padding="6"
+                    Classes="wide"
                     Command="{Binding CommandAddZoomEffect}"
                     IconPath="{StaticResource IconZoomEffect}"
                     ToolTip.HorizontalOffset="6"
@@ -544,7 +764,7 @@
 
                 <controls:ToolButton
                     x:Name="btnAddSpeed"
-                    Padding="6"
+                    Classes="wide"
                     Command="{Binding CommandAddSpeedEffect}"
                     IconPath="{StaticResource IconSpeedEffect}"
                     ToolTip.HorizontalOffset="6"
@@ -563,7 +783,7 @@
 
                 <controls:ToolButton
                     x:Name="btnAddCursor"
-                    Padding="6"
+                    Classes="wide"
                     Command="{Binding CommandAddCursorTrack}"
                     IconPath="{StaticResource IconCursorArrow}"
                     ToolTip.HorizontalOffset="6"
@@ -582,7 +802,7 @@
 
                 <controls:ToolButton
                     x:Name="btnAddKeyboard"
-                    Padding="6"
+                    Classes="wide"
                     Command="{Binding CommandAddKeyboardTrack}"
                     IconPath="{StaticResource IconKeyboard}"
                     ToolTip.HorizontalOffset="6"
@@ -606,7 +826,7 @@
                       record from (RefreshVoiceRecorderButton).  -->
                 <controls:ToolButton
                     x:Name="btnVoice"
-                    Padding="6"
+                    Classes="wide"
                     CanToggle="True"
                     IconPath="{StaticResource IconMic}"
                     ToolTip.HorizontalOffset="6"
@@ -625,7 +845,7 @@
 
                 <controls:ToolButton
                     x:Name="btnAddBackground"
-                    Padding="6"
+                    Classes="wide"
                     Command="{Binding CommandAddBackground}"
                     IconPath="{StaticResource IconBackground}"
                     ToolTip.HorizontalOffset="6"
@@ -644,48 +864,79 @@
 
                 <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
                 <controls:ToolButton
-                    Padding="6"
+                    Classes="wide"
                     controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding CommandUndo}"
                     IconPath="{StaticResource IconUndo}"
                     ToolTip.Tip="Undo (Ctrl+Z)" />
 
                 <controls:ToolButton
-                    Padding="6"
+                    Classes="wide"
                     controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding CommandRedo}"
                     IconPath="{StaticResource IconRedo}"
                     ToolTip.Tip="Redo (Ctrl+Y)" />
 
+                <controls:ToolButton
+                    x:Name="btnCustomize"
+                    Classes="wide"
+                    controls:DockAndWrapPanel.DockToEnd="True"
+                    Click="customize_Click"
+                    IconPath="{StaticResource IconCustomize}"
+                    ToolTip.Tip="Customize toolbar…" />
+
             </controls:DockAndWrapPanel>
 
+            <!--  The surface the editor's content sits on: the preview and, when it is open,
+                  the properties panel. It is what casts the modern chrome's shadow, so the panel
+                  does not punch a hole in it by being a separate slab beside the preview, and it
+                  fills the 2px the splitter column takes between the two.  -->
             <Border
+                x:Name="contentSurface"
                 Grid.Column="1"
-                Background="#1e1e1e"
-                ClipToBounds="True">
-                <Panel>
-                    <!--  the same checker the image editor draws behind the artwork; the preview
-                          sits on top of it and the letterbox shows it through  -->
-                    <Panel Background="{x:Static util:CheckerBrushes.Canvas}" IsHitTestVisible="False" />
-                    <ve:VideoPreviewControl x:Name="preview" />
-                    <!--  the voice-over recorder's pill and countdown: over the preview and its
-                          gizmo, under the status notice, shown while btnVoice is checked  -->
-                    <ve:VoiceRecorderOverlay x:Name="voiceRecorder" IsVisible="False" />
-                    <Border
-                        x:Name="statusOverlay"
-                        Padding="14,10"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Background="#B0000000"
-                        CornerRadius="6"
-                        IsVisible="False">
-                        <TextBlock
-                            x:Name="txtStatus"
-                            MaxWidth="420"
-                            Foreground="#E0FFFFFF"
-                            TextWrapping="Wrap" />
-                    </Border>
-                </Panel>
+                Grid.ColumnSpan="3"
+                Background="{DynamicResource ClowdEditorCanvasBrush}" />
+
+            <!--  Two borders, not one: ClipToBounds is what rounds the preview off at the corner,
+                  and it clips the control's own drawing too — so this pair cannot be collapsed
+                  into contentSurface above, which has to draw a shadow outside its own bounds.
+                  The outer also carries the fill, so the 1px seam between the two rounded curves
+                  has the surround's colour behind it rather than the backdrop.  -->
+            <Border
+                x:Name="previewSurface"
+                Grid.Column="1"
+                Background="{DynamicResource ClowdEditorCanvasBrush}">
+                <Border
+                    x:Name="previewClip"
+                    Background="{DynamicResource ClowdEditorCanvasBrush}"
+                    ClipToBounds="True">
+                    <Panel>
+                        <!--  the same checker the image editor draws behind the artwork; the preview
+                              sits on top of it and the letterbox shows it through. The brush is
+                              set from code (ApplyPreviewChecker): it is tinted white over the dark
+                              surround and black over the light one, which a static reference
+                              cannot say.  -->
+                        <Panel x:Name="previewChecker" IsHitTestVisible="False" />
+                        <ve:VideoPreviewControl x:Name="preview" />
+                        <!--  the voice-over recorder's pill and countdown: over the preview and its
+                              gizmo, under the status notice, shown while btnVoice is checked  -->
+                        <ve:VoiceRecorderOverlay x:Name="voiceRecorder" IsVisible="False" />
+                        <Border
+                            x:Name="statusOverlay"
+                            Padding="14,10"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="#B0000000"
+                            CornerRadius="6"
+                            IsVisible="False">
+                            <TextBlock
+                                x:Name="txtStatus"
+                                MaxWidth="420"
+                                Foreground="#E0FFFFFF"
+                                TextWrapping="Wrap" />
+                        </Border>
+                    </Panel>
+                </Border>
             </Border>
 
             <GridSplitter
@@ -714,7 +965,6 @@
             <Border
                 x:Name="sidebarBorder"
                 Grid.Column="3"
-                Background="#454545"
                 IsVisible="False">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -723,13 +973,12 @@
                     </Grid.RowDefinitions>
 
                     <Border
+                        x:Name="sidebarHeader"
                         Grid.Row="0"
-                        Padding="10,6"
-                        Background="#3d3d3d">
+                        Padding="10,6">
                         <TextBlock
                             FontSize="11"
                             FontWeight="Bold"
-                            Foreground="White"
                             Text="PROPERTIES" />
                     </Border>
 
@@ -740,17 +989,31 @@
                 </Grid>
             </Border>
 
+            <!--  The line along the content surface's lip, over the preview and the properties
+                  panel rather than under them (see the chrome style). Above the splitter too, so
+                  the top edge runs unbroken across the gap between the two.  -->
+            <Border
+                x:Name="contentOutline"
+                Grid.Column="1"
+                Grid.ColumnSpan="3"
+                ZIndex="2"
+                BorderBrush="{DynamicResource ClowdEditorSurfaceEdgeBrush}"
+                IsHitTestVisible="False" />
+
         </Grid>
 
-        <!--  transport bar  -->
+        <!--  transport bar. Dark in both chromes for now (the modern chrome has only reached
+              the two tool bars and the preview), so it pins the white ink it used to inherit.  -->
         <Border
             Grid.Row="2"
             Background="#454545"
             BorderBrush="#666666"
-            BorderThickness="0,1,0,0">
+            BorderThickness="0,1,0,0"
+            TextElement.Foreground="White">
             <DockPanel
                 Height="30"
                 Margin="8,4"
+                Classes="transportBar"
                 LastChildFill="True">
 
                 <StackPanel
@@ -881,7 +1144,8 @@
             Grid.Row="3"
             Background="#3a3a3a"
             BorderBrush="#666666"
-            BorderThickness="0,1,0,0">
+            BorderThickness="0,1,0,0"
+            TextElement.Foreground="White">
             <!--  The editor's chrome is hard-coded dark whatever the app theme, and the timeline
                   reads its palette (and themes its buttons and menus) off the variant it sits in —
                   so pin it to Dark, or the light theme paints pale rows into the dark chrome.  -->
@@ -892,6 +1156,11 @@
                     Margin="0,2,0,0" />
             </ThemeVariantScope>
         </Border>
+
+        <!--  The shared customize flyout (Controls/CustomizeToolbarPopup), the same one the
+              image editor hangs off its strip — minus the reset-settings button, since these
+              tools carry no saved settings of their own.  -->
+        <controls:CustomizeToolbarPopup x:Name="customizePopup" ShowResetSettings="False" />
 
         <!--  The Render button's presets. Same chrome as the image editor's two popups (commit
               a4b42d07): the 10px margin is room for the shadow and the offsets cancel it, so the

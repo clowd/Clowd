@@ -261,8 +261,12 @@
         </ControlTheme>
     </UserControl.Resources>
 
-    <!--  The editor window's chrome is a fixed dark palette (NOT Semi tokens), so this panel is
-          hand-colored to match the sidebar it lives in — the same trade LayersPanel makes.  -->
+    <!--  Two chromes, as everywhere else in the editor, keyed off IsModern (the host sets it;
+          see VideoEditorWindow's chrome styles). Compact is the original: the editor window's
+          chrome was a fixed dark palette (NOT Semi tokens), so the panel is hand-colored to match
+          the sidebar it lives in. Modern restates every one of those values from the theme — see
+          the block at the end of this section — which is why so few of them are written on the
+          elements themselves: a local value in the markup outranks every style.  -->
     <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="FontSize" Value="11" />
@@ -304,7 +308,7 @@
         </Style>
         <!--  the editor's own dropdown (the top bar's picker) rather than the Semi ComboBox, so
               every closed control in the panel wears the same chrome as the spinners  -->
-        <Style Selector="controls|CompactDropDown">
+        <Style Selector="controls|ThemedDropDown">
             <Setter Property="MinWidth" Value="120" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Margin" Value="6,0,0,0" />
@@ -313,10 +317,53 @@
               nearly every row, and 70px truncates the longer values (e.g. "-360 °"). Right-aligned
               inside the row's fill column so it lines up with the text boxes below it; the theme's
               4px left margin would otherwise push it off that edge.  -->
-        <Style Selector="controls|CompactSpinner">
+        <Style Selector="controls|ThemedSpinner">
             <Setter Property="MinWidth" Value="120" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Margin" Value="6,0,0,0" />
+        </Style>
+        <!--  The inks that used to be written on the elements themselves. They read as Compact
+              values because they are the originals, verbatim; the Modern block at the end of this
+              section restates each one from the theme. On the elements they would be local
+              values, which no chrome could override.  -->
+        <Style Selector="TextBlock.strong">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="TextBlock.dim">
+            <Setter Property="Foreground" Value="#CCCCCC" />
+        </Style>
+        <Style Selector="TextBlock.caption">
+            <Setter Property="Foreground" Value="#999999" />
+        </Style>
+        <Style Selector="TextBlock.bannerText">
+            <Setter Property="Foreground" Value="#BBBBBB" />
+        </Style>
+        <Style Selector="TextBlock.emptyText">
+            <Setter Property="Foreground" Value="#88FFFFFF" />
+        </Style>
+        <Style Selector="Border.banner">
+            <Setter Property="Background" Value="#3d3d3d" />
+        </Style>
+        <!--  the colour wells, which are borders wrapping a swatch and its hex readout. Sized
+              here rather than on each of the six: the height is the chrome's, since the field it
+              lines up with is 22px dense and 32px themed.  -->
+        <Style Selector="Border.well">
+            <Setter Property="Width" Value="120" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Background" Value="#454545" />
+            <Setter Property="BorderBrush" Value="#666666" />
+        </Style>
+        <!--  the font button, which previews the face it names. Compact wears the bar's flat
+              chrome; Modern leaves the Theme unset, which IS Semi's own button.  -->
+        <Style Selector="insp|InspectorPanel[IsModern=False] Button.fieldButton">
+            <Setter Property="Theme" Value="{DynamicResource InnerToolButtonTheme}" />
+        </Style>
+        <!--  the analysis rows' progress ring: a faint track with the arc riding over it  -->
+        <Style Selector="Ellipse.ringTrack">
+            <Setter Property="Stroke" Value="#44FFFFFF" />
+        </Style>
+        <Style Selector="Path.ringArc">
+            <Setter Property="Stroke" Value="#CCCCCC" />
         </Style>
         <Style Selector="TextBox.field">
             <Setter Property="Foreground" Value="White" />
@@ -380,6 +427,125 @@
         <Style Selector="ListBoxItem:selected insp|CursorStylePreview">
             <Setter Property="OutlineBrush" Value="White" />
         </Style>
+
+        <!--  ===== Modern ===== the panel stops being a hand-painted dark island: every ink and
+              fill above is restated from the theme, so it reads on the light backdrop too, and
+              the closed controls hand over to their themed halves. IsModern is set by the window's
+              chrome style (see VideoEditorWindow.axaml), exactly as LayersPanel's is. The Compact
+              rules above are the originals, untouched.  -->
+        <Style Selector="insp|InspectorPanel[IsModern=True] controls|ThemedSpinner">
+            <Setter Property="IsModern" Value="True" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] controls|ThemedDropDown">
+            <Setter Property="IsModern" Value="True" />
+        </Style>
+
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBlock.section">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] Rectangle.sectionRule">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorBorder}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBlock.label">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBlock.dim">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBlock.caption">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBlock.bannerText">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBlock.strong">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBlock.emptyText">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] Border.banner">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <!--  the colour wells and the text fields: the same surface the themed spinners beside
+              them are drawn on, so a row does not mix two families of box  -->
+        <Style Selector="insp|InspectorPanel[IsModern=True] Border.well">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <!--  no Theme setter at all: leaving it unset is what puts Semi's button there, and the
+              height is the one every themed field in the panel stands at.  -->
+        <Style Selector="insp|InspectorPanel[IsModern=True] Button.fieldButton">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="10,0" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBox.field">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+        </Style>
+        <!--  the analysis rows' progress ring  -->
+        <Style Selector="insp|InspectorPanel[IsModern=True] Ellipse.ringTrack">
+            <Setter Property="Stroke" Value="{DynamicResource SemiColorFill2}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] Path.ringArc">
+            <Setter Property="Stroke" Value="{DynamicResource SemiColorPrimary}" />
+        </Style>
+
+        <!--  the tiles. The ratio block keeps its knockout trick — the label is the panel's own
+              ground punched out of a filled block — so its text follows the window background
+              rather than any text token.  -->
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton.ratioTile Rectangle.ratio">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton.ratioTile TextBlock.ratioText">
+            <Setter Property="Foreground" Value="{DynamicResource ApplicationBackgroundBrush}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton.ratioTile TextBlock.plainText">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton.ratioTile:checked TextBlock.plainText">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton.ratioTile Path.ratioGlyph">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton.ratioTile:checked Path.ratioGlyph">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText0}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] TextBlock.tileText">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] ListBoxItem:selected TextBlock.tileText">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton:checked TextBlock.tileText">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] ListBoxItem:selected insp|CursorStylePreview">
+            <Setter Property="OutlineBrush" Value="{DynamicResource SemiColorText0}" />
+        </Style>
+
+        <!--  the two hand-built templates in the resources above: the shape tiles' icon and label,
+              and the panel's own checkbox. Template parts, so they are reached with /template/ —
+              a chrome cannot restate what a ControlTheme writes any other way.  -->
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton /template/ Path#_icon">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton /template/ TextBlock#_label">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] RadioButton:checked /template/ TextBlock#_label">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+        </Style>
+        <Style Selector="insp|InspectorPanel[IsModern=True] CheckBox /template/ Border#_box">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+            <Setter Property="CornerRadius" Value="3" />
+        </Style>
     </UserControl.Styles>
 
     <Panel>
@@ -387,7 +553,7 @@
             Margin="10"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            Foreground="#88FFFFFF"
+            Classes="emptyText"
             IsVisible="{Binding ShowNothingSelected}"
             Text="Nothing selected"
             TextAlignment="Center"
@@ -435,12 +601,12 @@
                     <StackPanel Spacing="2">
                         <TextBlock
                             FontWeight="Bold"
-                            Foreground="White"
+                            Classes="strong"
                             Text="{Binding SubjectName}"
                             TextTrimming="CharacterEllipsis" />
                         <TextBlock
                             FontSize="11"
-                            Foreground="#999999"
+                            Classes="caption"
                             Text="{Binding SubjectKind}" />
                     </StackPanel>
                 </DockPanel>
@@ -456,14 +622,14 @@
                         <controls:ResetDefaultButton x:Name="dotSpeed" CurrentValue="{Binding SpeedChoice, Mode=TwoWay}" />
                     </Panel>
                     <TextBlock Classes="label" Text="Speed" />
-                    <controls:CompactDropDown x:Name="ddSpeed" SelectedItem="{Binding SpeedChoice, Mode=TwoWay}" />
+                    <controls:ThemedDropDown x:Name="ddSpeed" SelectedItem="{Binding SpeedChoice, Mode=TwoWay}" />
                 </DockPanel>
 
                 <!--  grouped-object banner: shown only while the row still moves with its recording.
                       An ungrouped row shows nothing at all — "not grouped" is the unremarkable state.  -->
                 <Border
                     Padding="8"
-                    Background="#3d3d3d"
+                    Classes="banner"
                     CornerRadius="4"
                     IsVisible="{Binding IsGrouped}">
                     <StackPanel Spacing="6">
@@ -482,12 +648,12 @@
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
                                 FontWeight="Bold"
-                                Foreground="White"
+                                Classes="strong"
                                 Text="Grouped object" />
                         </Grid>
                         <TextBlock
                             FontSize="11"
-                            Foreground="#BBBBBB"
+                            Classes="bannerText"
                             Text="This object moves, splits and cuts together with the other tracks from its recording."
                             TextWrapping="Wrap" />
                         <Button
@@ -510,7 +676,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding PositionX, Mode=TwoWay}" DefaultValue="0.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Center X" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -524,7 +690,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding PositionY, Mode=TwoWay}" DefaultValue="0.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Center Y" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -540,7 +706,7 @@
                         <!--  "Size" while the height follows the content; "Width" once the item
                               carries a height of its own (the row below appears).  -->
                         <TextBlock Classes="label" Text="{Binding ScaleLabel}" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="4"
                             Min="0.01"
@@ -558,7 +724,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ScaleHeight, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Height" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="4"
                             Min="0.01"
@@ -575,7 +741,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding Rotation, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Rotation" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="360"
                             Min="-360"
                             SnapToWholeNumber="True"
@@ -589,7 +755,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding Opacity, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Opacity" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -751,7 +917,7 @@
                             Spacing="4">
                             <!--  MinWidth 0: the panel's 120px minimum is for lone editors — two
                                   spinners sharing one row at 120 each would overflow the sidebar  -->
-                            <controls:CompactSpinner
+                            <controls:ThemedSpinner
                                 Width="56"
                                 MinWidth="0"
                                 Margin="0"
@@ -759,8 +925,8 @@
                                 Min="0.1"
                                 SpinAmount="1"
                                 Value="{Binding CustomAspectW, Mode=TwoWay}" />
-                            <TextBlock VerticalAlignment="Center" Foreground="#CCCCCC" Text=":" />
-                            <controls:CompactSpinner
+                            <TextBlock VerticalAlignment="Center" Classes="dim" Text=":" />
+                            <controls:ThemedSpinner
                                 Width="56"
                                 MinWidth="0"
                                 Margin="0"
@@ -832,7 +998,7 @@
                     <DockPanel Classes="row" IsVisible="{Binding ShowCropWindow}">
                         <Panel Classes="dot" DockPanel.Dock="Left" />
                         <TextBlock Classes="label" Text="Window" />
-                        <controls:CompactDropDown
+                        <controls:ThemedDropDown
                             x:Name="ddCropWindow"
                             SelectedItem="{Binding CropWindow, Mode=TwoWay}"
                             ToolTip.Tip="{Binding CropWindowTip}" />
@@ -846,7 +1012,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CropLeft, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Left" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="0.95"
                             Min="0"
@@ -860,7 +1026,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CropTop, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Top" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="0.95"
                             Min="0"
@@ -874,7 +1040,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CropRight, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Right" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="0.95"
                             Min="0"
@@ -888,7 +1054,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CropBottom, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Bottom" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="0.95"
                             Min="0"
@@ -951,7 +1117,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CornerRadius, Mode=TwoWay}" DefaultValue="0.25" />
                         </Panel>
                         <TextBlock Classes="label" Text="Corners" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="0.5"
                             Min="0"
@@ -1038,12 +1204,9 @@
                         <TextBlock Classes="label" Text="Color" />
                         <Border
                             x:Name="backgroundColorWell"
-                            Width="120"
-                            Height="22"
                             Margin="6,0,0,0"
                             HorizontalAlignment="Right"
-                            Background="#454545"
-                            BorderBrush="#666666"
+                            Classes="well"
                             BorderThickness="1"
                             Cursor="Hand">
                             <StackPanel
@@ -1062,7 +1225,7 @@
                                 <TextBlock
                                     x:Name="txtBackgroundColorHex"
                                     VerticalAlignment="Center"
-                                    Foreground="#CCCCCC"
+                                    Classes="dim"
                                     Text="#FF00AFF0" />
                             </StackPanel>
                         </Border>
@@ -1146,8 +1309,9 @@
                     <!--  the button previews the face itself; clicking opens the font picker.
                           Content is kept in step by the code-behind (this project binds at
                           runtime, and a FontFamily needs converting anyway). Same chrome as the
-                          image editor's font button (InnerToolButtonTheme, AppResources), in a
-                          labelled row like the properties around it.  -->
+                          image editor's font button — the bar's flat one in Compact, Semi's in
+                          Modern (see Button.fieldButton in the styles) — in a labelled row like
+                          the properties around it.  -->
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <!--  empty is the renderer's default face  -->
@@ -1161,7 +1325,7 @@
                             Margin="6,0,0,0"
                             HorizontalAlignment="Right"
                             HorizontalContentAlignment="Left"
-                            Theme="{StaticResource InnerToolButtonTheme}"
+                            Classes="fieldButton"
                             ToolTip.Tip="Choose a font">
                             <TextBlock x:Name="txtFontName" Text="Default font" TextTrimming="CharacterEllipsis" />
                         </Button>
@@ -1172,7 +1336,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding FontSize, Mode=TwoWay}" DefaultValue="48" />
                         </Panel>
                         <TextBlock Classes="label" Text="Size" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="2000"
                             Min="1"
                             SnapToWholeNumber="True"
@@ -1187,12 +1351,9 @@
                         <TextBlock Classes="label" Text="Color" />
                         <Border
                             x:Name="colorWell"
-                            Width="120"
-                            Height="22"
                             Margin="6,0,0,0"
                             HorizontalAlignment="Right"
-                            Background="#454545"
-                            BorderBrush="#666666"
+                            Classes="well"
                             BorderThickness="1"
                             Cursor="Hand">
                             <StackPanel
@@ -1211,7 +1372,7 @@
                                 <TextBlock
                                     x:Name="txtColorHex"
                                     VerticalAlignment="Center"
-                                    Foreground="#CCCCCC"
+                                    Classes="dim"
                                     Text="#FFFFFFFF" />
                             </StackPanel>
                         </Border>
@@ -1220,7 +1381,7 @@
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left" />
                         <TextBlock Classes="label" Text="Align" />
-                        <controls:CompactDropDown x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 
@@ -1236,7 +1397,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding Volume, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Volume" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="2"
                             Min="0"
@@ -1293,7 +1454,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding DenoiseStrength, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Strength" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1319,12 +1480,12 @@
                                 Height="14"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Stroke="#44FFFFFF"
+                                Classes="ringTrack"
                                 StrokeThickness="2" />
                             <Path
                                 Data="{Binding DenoiseProgress, Converter={StaticResource progressToArc}}"
                                 Stretch="None"
-                                Stroke="#CCCCCC"
+                                Classes="ringArc"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2" />
                         </Grid>
@@ -1332,7 +1493,7 @@
                             Margin="0,0,8,0"
                             DockPanel.Dock="Right"
                             VerticalAlignment="Center"
-                            Foreground="#CCCCCC"
+                            Classes="dim"
                             IsVisible="{Binding DenoiseAnalyzing}"
                             Text="{Binding DenoisePercentText}" />
                         <TextBlock Classes="label" Text="{Binding DenoiseStatusText}" ToolTip.Tip="{Binding DenoiseStatusDetail}" />
@@ -1354,7 +1515,7 @@
                             <controls:ResetDefaultButton x:Name="dotSpeedTarget" CurrentValue="{Binding SpeedTarget, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Target" />
-                        <controls:CompactDropDown x:Name="ddSpeedTarget" SelectedItem="{Binding SpeedTarget, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="ddSpeedTarget" SelectedItem="{Binding SpeedTarget, Mode=TwoWay}" />
                     </DockPanel>
 
                     <!--  time-stretch the audio under the item so pitch stays put; off resamples
@@ -1381,7 +1542,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ZoomFactor, Mode=TwoWay}" DefaultValue="1.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Zoom" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="5"
                             Min="1"
@@ -1395,7 +1556,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ZoomFocusX, Mode=TwoWay}" DefaultValue="0.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Focus X" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1409,7 +1570,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ZoomFocusY, Mode=TwoWay}" DefaultValue="0.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Focus Y" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1438,7 +1599,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Size" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="5"
                             Min="0.5"
@@ -1631,12 +1792,9 @@
                         <TextBlock Classes="label" Text="Color" />
                         <Border
                             x:Name="cursorClickColorWell"
-                            Width="120"
-                            Height="22"
                             Margin="6,0,0,0"
                             HorizontalAlignment="Right"
-                            Background="#454545"
-                            BorderBrush="#666666"
+                            Classes="well"
                             BorderThickness="1"
                             Cursor="Hand">
                             <StackPanel
@@ -1655,7 +1813,7 @@
                                 <TextBlock
                                     x:Name="txtCursorClickColorHex"
                                     VerticalAlignment="Center"
-                                    Foreground="#CCCCCC"
+                                    Classes="dim"
                                     Text="#FFFF0000" />
                             </StackPanel>
                         </Border>
@@ -1666,7 +1824,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorFillOpacity, Mode=TwoWay}" DefaultValue="0.15" />
                         </Panel>
                         <TextBlock Classes="label" Text="Fill opacity" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1680,7 +1838,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorHoldSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Hold size" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="4"
                             Min="0.25"
@@ -1694,7 +1852,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorClickSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Effect size" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="4"
                             Min="0.25"
@@ -1708,7 +1866,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorAnimationSpeed, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Speed" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="4"
                             Min="0.25"
                             SpinAmount="0.05"
@@ -1737,7 +1895,7 @@
                             <controls:ResetDefaultButton x:Name="dotKeyFilter" CurrentValue="{Binding KeyboardFilter, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Filter" />
-                        <controls:CompactDropDown x:Name="ddKeyFilter" SelectedItem="{Binding KeyboardFilter, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="ddKeyFilter" SelectedItem="{Binding KeyboardFilter, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row">
@@ -1745,7 +1903,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFontSize, Mode=TwoWay}" DefaultValue="40" />
                         </Panel>
                         <TextBlock Classes="label" Text="Size" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="200"
                             Min="8"
                             SnapToWholeNumber="True"
@@ -1759,7 +1917,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding KeyboardLingerMs, Mode=TwoWay}" DefaultValue="1000" />
                         </Panel>
                         <TextBlock Classes="label" Text="Linger" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="10000"
                             Min="0"
                             SnapToWholeNumber="True"
@@ -1773,7 +1931,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding KeyboardPauseBreakMs, Mode=TwoWay}" DefaultValue="1000" />
                         </Panel>
                         <TextBlock Classes="label" Text="New row" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="10000"
                             Min="0"
                             SnapToWholeNumber="True"
@@ -1790,12 +1948,9 @@
                         <TextBlock Classes="label" Text="Text" />
                         <Border
                             x:Name="keyTextColorWell"
-                            Width="120"
-                            Height="22"
                             Margin="6,0,0,0"
                             HorizontalAlignment="Right"
-                            Background="#454545"
-                            BorderBrush="#666666"
+                            Classes="well"
                             BorderThickness="1"
                             Cursor="Hand">
                             <StackPanel
@@ -1814,7 +1969,7 @@
                                 <TextBlock
                                     x:Name="txtKeyTextColorHex"
                                     VerticalAlignment="Center"
-                                    Foreground="#CCCCCC"
+                                    Classes="dim"
                                     Text="#FFFFFFFF" />
                             </StackPanel>
                         </Border>
@@ -1827,12 +1982,9 @@
                         <TextBlock Classes="label" Text="Fill" />
                         <Border
                             x:Name="keyBackColorWell"
-                            Width="120"
-                            Height="22"
                             Margin="6,0,0,0"
                             HorizontalAlignment="Right"
-                            Background="#454545"
-                            BorderBrush="#666666"
+                            Classes="well"
                             BorderThickness="1"
                             Cursor="Hand">
                             <StackPanel
@@ -1851,7 +2003,7 @@
                                 <TextBlock
                                     x:Name="txtKeyBackColorHex"
                                     VerticalAlignment="Center"
-                                    Foreground="#CCCCCC"
+                                    Classes="dim"
                                     Text="#8C000000" />
                             </StackPanel>
                         </Border>
@@ -1933,7 +2085,7 @@
                             <controls:ResetDefaultButton x:Name="dotEffectAmount" CurrentValue="{Binding EffectAmount, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Amount" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1957,12 +2109,12 @@
                                 Height="14"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Stroke="#44FFFFFF"
+                                Classes="ringTrack"
                                 StrokeThickness="2" />
                             <Path
                                 Data="{Binding EffectProgress, Converter={StaticResource progressToArc}}"
                                 Stretch="None"
-                                Stroke="#CCCCCC"
+                                Classes="ringArc"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2" />
                         </Grid>
@@ -1970,7 +2122,7 @@
                             Margin="0,0,8,0"
                             DockPanel.Dock="Right"
                             VerticalAlignment="Center"
-                            Foreground="#CCCCCC"
+                            Classes="dim"
                             IsVisible="{Binding EffectAnalyzing}"
                             Text="{Binding EffectPercentText}" />
                         <TextBlock Classes="label" Text="{Binding EffectStatusText}" ToolTip.Tip="{Binding EffectStatusDetail}" />
@@ -2103,12 +2255,9 @@
                         <TextBlock Classes="label" Text="Color" />
                         <Border
                             x:Name="surroundColorWell"
-                            Width="120"
-                            Height="22"
                             Margin="6,0,0,0"
                             HorizontalAlignment="Right"
-                            Background="#454545"
-                            BorderBrush="#666666"
+                            Classes="well"
                             BorderThickness="1"
                             Cursor="Hand">
                             <StackPanel
@@ -2127,7 +2276,7 @@
                                 <TextBlock
                                     x:Name="txtSurroundColorHex"
                                     VerticalAlignment="Center"
-                                    Foreground="#CCCCCC"
+                                    Classes="dim"
                                     Text="#80000000" />
                             </StackPanel>
                         </Border>
@@ -2140,7 +2289,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding SurroundDistance, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundDistance}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Distance" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="0.5"
                             Min="0"
@@ -2156,7 +2305,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding SurroundSize, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundSize}" />
                         </Panel>
                         <TextBlock Classes="label" Text="{Binding SurroundSizeLabel}" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             DisplayScale="100"
                             Max="0.5"
                             Min="0"
@@ -2183,7 +2332,7 @@
                             <controls:ResetDefaultButton x:Name="dotEntryKind" CurrentValue="{Binding EntryKind, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Entry" />
-                        <controls:CompactDropDown x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
@@ -2191,7 +2340,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding EntryDurationMs, Mode=TwoWay}" DefaultValue="300" />
                         </Panel>
                         <TextBlock Classes="label" Text="Length" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="10000"
                             Min="0"
                             SnapToWholeNumber="True"
@@ -2205,7 +2354,7 @@
                             <controls:ResetDefaultButton x:Name="dotEntryEasing" CurrentValue="{Binding EntryEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <controls:CompactDropDown x:Name="comboEntryEasing" SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="comboEntryEasing" SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" Margin="0,6,0,0">
@@ -2213,7 +2362,7 @@
                             <controls:ResetDefaultButton x:Name="dotExitKind" CurrentValue="{Binding ExitKind, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Exit" />
-                        <controls:CompactDropDown x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
@@ -2221,7 +2370,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ExitDurationMs, Mode=TwoWay}" DefaultValue="300" />
                         </Panel>
                         <TextBlock Classes="label" Text="Length" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="10000"
                             Min="0"
                             SnapToWholeNumber="True"
@@ -2235,7 +2384,7 @@
                             <controls:ResetDefaultButton x:Name="dotExitEasing" CurrentValue="{Binding ExitEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <controls:CompactDropDown x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 
@@ -2265,7 +2414,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding RampEntryMs, Mode=TwoWay}" DefaultValue="300" />
                         </Panel>
                         <TextBlock Classes="label" Text="Length" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="10000"
                             Min="10"
                             SnapToWholeNumber="True"
@@ -2279,7 +2428,7 @@
                             <controls:ResetDefaultButton x:Name="dotRampEntryEasing" CurrentValue="{Binding RampEntryEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <controls:CompactDropDown x:Name="comboRampEntryEasing" SelectedItem="{Binding RampEntryEasing, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="comboRampEntryEasing" SelectedItem="{Binding RampEntryEasing, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" Margin="0,6,0,0">
@@ -2295,7 +2444,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding RampExitMs, Mode=TwoWay}" DefaultValue="300" />
                         </Panel>
                         <TextBlock Classes="label" Text="Length" />
-                        <controls:CompactSpinner
+                        <controls:ThemedSpinner
                             Max="10000"
                             Min="10"
                             SnapToWholeNumber="True"
@@ -2309,7 +2458,7 @@
                             <controls:ResetDefaultButton x:Name="dotRampExitEasing" CurrentValue="{Binding RampExitEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <controls:CompactDropDown x:Name="comboRampExitEasing" SelectedItem="{Binding RampExitEasing, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="comboRampExitEasing" SelectedItem="{Binding RampExitEasing, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 
@@ -2335,14 +2484,14 @@
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left" />
                         <TextBlock Classes="label" Text="Device" />
-                        <controls:CompactDropDown x:Name="ddVoiceMic" SelectedItem="{Binding VoiceRecorderDevice, Mode=TwoWay}" />
+                        <controls:ThemedDropDown x:Name="ddVoiceMic" SelectedItem="{Binding VoiceRecorderDevice, Mode=TwoWay}" />
                     </DockPanel>
 
                     <!--  indented to the label column, like the analysis note in AUDIO  -->
                     <TextBlock
                         Margin="14,2,0,0"
                         FontSize="11"
-                        Foreground="#999999"
+                        Classes="caption"
                         Text="Playback starts from the playhead after a 3 second countdown. Takes land on the Voice track as ordinary audio clips."
                         TextWrapping="Wrap" />
                 </StackPanel>

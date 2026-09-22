@@ -388,7 +388,7 @@ namespace Clowd.Shared.Tests
         {
             var loaded = SettingsService.Load(_path);
 
-            Assert.Equal(230d, loaded.VideoEditor.SidebarWidth);
+            Assert.Equal(300d, loaded.VideoEditor.SidebarWidth);
             Assert.Null(loaded.VideoEditor.WindowBounds);
             Assert.False(loaded.VideoEditor.WindowMaximized);
         }

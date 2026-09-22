@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -142,6 +142,16 @@ namespace Clowd.UI.Controls
         {
             if (_syncing || !IsModern)
                 return;
+
+            // A ComboBox drops its selection when its items are replaced, which the inspector does
+            // whenever the list depends on the project (the crop-window and microphone pickers).
+            // The user can never choose "nothing", so a null from the box is that settling, not a
+            // pick: keep the value and put it back on the box once the new items have landed.
+            if (_modern.SelectedItem == null && SelectedItem != null)
+            {
+                SyncSelection();
+                return;
+            }
 
             SetCurrentValue(SelectedItemProperty, _modern.SelectedItem);
         }

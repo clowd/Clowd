@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -21,8 +21,15 @@ namespace Clowd.Util
     {
         private static readonly Color CheckerColor = Color.FromArgb(0x96, 0x96, 0x96, 0x96);
         private static readonly Color CanvasCheckerColor = Color.FromArgb(0x11, 0xFF, 0xFF, 0xFF);
+
+        // Slightly stronger than the dark variant's alpha: the same nominal contrast reads fainter
+        // as black-on-light than as white-on-dark. Matches Clowd.Drawing.CheckeredBackground's
+        // light variant exactly — the two draw the same pattern for the two editors.
+        private static readonly Color CanvasCheckerLightColor = Color.FromArgb(0x14, 0x00, 0x00, 0x00);
+
         private static readonly Dictionary<int, IBrush> _cache = new();
         private static IBrush _canvas;
+        private static IBrush _canvasLight;
 
         public static IBrush Light => GetChecker(10);
         public static IBrush Medium => GetChecker(16);
@@ -37,6 +44,19 @@ namespace Clowd.Util
                 lock (_cache)
                 {
                     return _canvas ??= CreateCheckerBrush(50, CanvasCheckerColor);
+                }
+            }
+        }
+
+        /// <summary>The light theme's canvas backdrop: the same 50px checker tinted black, for
+        /// the light surround the editors switch to (<c>ClowdEditorCanvasBrush</c>).</summary>
+        public static IBrush CanvasLight
+        {
+            get
+            {
+                lock (_cache)
+                {
+                    return _canvasLight ??= CreateCheckerBrush(50, CanvasCheckerLightColor);
                 }
             }
         }

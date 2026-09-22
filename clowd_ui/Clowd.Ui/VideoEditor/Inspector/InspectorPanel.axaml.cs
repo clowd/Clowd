@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
@@ -27,6 +28,19 @@ namespace Clowd.UI.VideoEditor.Inspector
     /// </summary>
     public partial class InspectorPanel : UserControl
     {
+        /// <summary>Which chrome the panel wears — set by the host from its chrome styles, exactly
+        /// as <see cref="Clowd.UI.Controls.ThemedSpinner.IsModern"/> is. Everything it changes
+        /// lives in InspectorPanel.axaml, including the IsModern it passes on to the spinners and
+        /// drop-downs; nothing here reads it.</summary>
+        public static readonly StyledProperty<bool> IsModernProperty =
+            AvaloniaProperty.Register<InspectorPanel, bool>(nameof(IsModern));
+
+        public bool IsModern
+        {
+            get => GetValue(IsModernProperty);
+            set => SetValue(IsModernProperty, value);
+        }
+
         private SelectedItemViewModel _vm;
 
         public InspectorPanel()
@@ -267,7 +281,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// the enum pickers in the constructor.
         ///
         /// Only the list is pushed. Unlike the wallpaper theme tiles (see
-        /// <see cref="RefreshBackgroundThemes"/>), a CompactDropDown's SelectedItem is an ordinary
+        /// <see cref="RefreshBackgroundThemes"/>), a ThemedDropDown's SelectedItem is an ordinary
         /// two-way styled property that the list does not own — its popup ListBox is synced only
         /// when it opens — so swapping ItemsSource cannot drop the selection and the binding keeps
         /// working. The view model raises CropWindowOptions before CropWindow so the binding

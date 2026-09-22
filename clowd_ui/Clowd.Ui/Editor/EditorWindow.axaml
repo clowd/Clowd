@@ -1,4 +1,4 @@
-<local:SystemThemedWindow
+﻿<local:SystemThemedWindow
     x:Class="Clowd.UI.EditorWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -17,28 +17,9 @@
     WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <ResourceDictionary>
-            <!--  Tool-bar icon ink for the modern chrome. Not SemiColorText0: the icons are
-                  solid-filled glyphs, and full text weight makes a strip of them read heavier
-                  than the labels beside them. Split by variant rather than picked once, since
-                  the modern bars sit on the window background (#FAFAFA light / Mica dark).  -->
-            <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="ClowdEditorIconBrush" Color="#3C3F42" />
-                    <SolidColorBrush x:Key="ClowdEditorCanvasBrush" Color="#E9E9E9" />
-                    <!-- Lighter than the window, not darker: SemiColorFill0 is a dark veil, which
-                         on the light theme sinks the panel into the page instead of raising it.
-                         Not quite opaque, so the backdrop reads through where there is one —
-                         harmless where there is not, since what shows through is then the window's
-                         own flat background. -->
-                    <SolidColorBrush x:Key="ClowdEditorSidebarBrush" Color="#A6FFFFFF" />
-                </ResourceDictionary>
-                <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="ClowdEditorIconBrush" Color="White" />
-                    <SolidColorBrush x:Key="ClowdEditorCanvasBrush" Color="#1E1E1E" />
-                    <!-- an alpha-white overlay already, so the backdrop reads through it as it stands -->
-                    <StaticResource x:Key="ClowdEditorSidebarBrush" ResourceKey="SemiColorFill0" />
-                </ResourceDictionary>
-            </ResourceDictionary.ThemeDictionaries>
+            <!--  The chrome brushes this window used to declare (the icon ink, the side panel's
+                  slab, the canvas surround and its edge line) are all app-wide in AppResources
+                  now, since the video editor wears every one of them too.  -->
 
             <draw:ToolTypeConverter x:Key="convToolType" />
             <conv:ColorToBrushConverter x:Key="convColorToBrush" />
@@ -146,6 +127,9 @@
                   a Viewbox, so the radius shrinks along with it.  -->
             <Style Selector="Grid.modern controls|CaptionedCheckBox">
                 <Setter Property="CornerRadius" Value="4" />
+                <!--  the bar is the window's own background here, so the box follows the app's
+                      variant instead of the Compact chrome's fixed dark  -->
+                <Setter Property="BoxVariant" Value="{x:Null}" />
             </Style>
             <Style Selector="Grid.modern controls|CaptionedCheckBox /template/ Viewbox#PART_Box">
                 <Setter Property="Width" Value="14" />
@@ -207,13 +191,23 @@
                   short halfway along the top edge.  -->
             <Style Selector="Grid.modern Border#contentSurface">
                 <Setter Property="CornerRadius" Value="12,0,0,0" />
-                <Setter Property="BoxShadow" Value="0 0 9 0 #A6000000" />
+                <Setter Property="BoxShadow" Value="{DynamicResource ClowdEditorSurfaceShadow}" />
             </Style>
             <Style Selector="Grid.modern Border#canvasSurface">
                 <Setter Property="CornerRadius" Value="12,0,0,0" />
             </Style>
             <Style Selector="Grid.modern Border#canvasClip">
                 <Setter Property="CornerRadius" Value="12,0,0,0" />
+            </Style>
+
+            <!--  The surface's edge. A border on contentSurface itself would never be seen: the
+                  canvas and the sidebar cover it exactly, so the line is a sibling laid over them
+                  instead, and hit-test invisible so the canvas underneath still takes every
+                  pointer event. Top and left only — those are the two edges the bars face, and
+                  the other two run into the window frame.  -->
+            <Style Selector="Grid.modern Border#contentOutline">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+                <Setter Property="BorderThickness" Value="1,1,0,0" />
             </Style>
 
             <!--  ===== Compact chrome ===== (the legacy look; every value is the original)  -->
@@ -665,6 +659,17 @@
                 </Grid>
             </Border>
 
+            <!--  The line along the content surface's lip, over the canvas and the sidebar rather
+                  than under them (see the chrome style). Above the splitter too, so the top edge
+                  runs unbroken across the gap between the two.  -->
+            <Border
+                x:Name="contentOutline"
+                Grid.Column="1"
+                Grid.ColumnSpan="3"
+                ZIndex="2"
+                BorderBrush="{DynamicResource ClowdEditorSurfaceEdgeBrush}"
+                IsHitTestVisible="False" />
+
         </Grid>
 
         <!--  Anchored to the swatch that opened it (PlacementTarget is set in code), never to the
@@ -684,73 +689,10 @@
                 Realtime="True" />
         </Popup>
 
-        <!--  Same chrome as the mini color picker above: the 10px margin is room for the shadow,
-              and the horizontal offset cancels it so the visible edge sits 4px off the button.
-              Rows are generated in code-behind (RebuildCustomizePopup); the drop indicator is a
-              sibling laid over them, as in the layers panel. Keyboard: the popup takes focus on
-              open, only the checkboxes are tab stops, and Escape closes it (see the code-behind).  -->
-        <Popup
-            x:Name="customizePopup"
-            HorizontalOffset="-6"
-            IsLightDismissEnabled="True"
-            Placement="Right">
-            <Border
-                x:Name="customizeRoot"
-                Width="220"
-                Margin="10"
-                Padding="8"
-                Background="#202124"
-                BorderBrush="#464648"
-                BorderThickness="1"
-                BoxShadow="0 2 8 0 #80000000"
-                CornerRadius="8">
-                <StackPanel>
-                    <TextBlock
-                        Margin="4,2,4,8"
-                        FontSize="12"
-                        FontWeight="SemiBold"
-                        Foreground="#F0F0F0"
-                        Text="Customize toolbar" />
-
-                    <!--  The chrome setting, repeated here because this popup is where someone
-                          already fiddling with the toolbar would look for it. The stock combo
-                          box, not a ThemedDropDown: this popup is not one of the two chromes, it
-                          is the thing that switches between them.  -->
-                    <TextBlock
-                        Margin="4,0,4,4"
-                        FontSize="11"
-                        Foreground="#B8BCC0"
-                        Text="Layout" />
-                    <ComboBox
-                        x:Name="layoutCombo"
-                        Margin="4,0,4,10"
-                        HorizontalAlignment="Stretch" />
-
-                    <Panel>
-                        <StackPanel x:Name="customizeRows" />
-                        <Border
-                            x:Name="customizeDropIndicator"
-                            Height="2"
-                            VerticalAlignment="Top"
-                            IsHitTestVisible="False"
-                            IsVisible="False" />
-                    </Panel>
-                    <Button
-                        Margin="4,8,4,0"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Click="customizeResetOrder_Click"
-                        Content="Reset Tool Order" />
-                    <Button
-                        Margin="4,4,4,2"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Classes="Danger"
-                        Click="customizeResetSettings_Click"
-                        Content="Reset Tool Settings" />
-                </StackPanel>
-            </Border>
-        </Popup>
+        <!--  The shared customize flyout (Controls/CustomizeToolbarPopup): rows, chrome picker
+              and reset buttons all live in there; this window supplies the tools and acts on what
+              the user does to them (see InitCustomizePopup).  -->
+        <controls:CustomizeToolbarPopup x:Name="customizePopup" />
 
     </Grid>
 </local:SystemThemedWindow>

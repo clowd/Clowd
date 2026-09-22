@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -23,6 +23,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Clowd.Config;
 using Clowd.Drawing;
+using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.UI.Services;
 using Clowd.UI.VideoEditor.Inspector;
@@ -32,6 +33,7 @@ using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Playback;
+using Clowd.Util;
 using Path = System.IO.Path;
 using Project = Clowd.VideoSDK.Model.Project;
 
@@ -60,7 +62,9 @@ namespace Clowd.UI.VideoEditor
     {
         public const string ArgName = "--video-edit";
 
-        private const double SidebarMinWidth = 250;
+        // Also the width a panel that has never been dragged opens at, so raising it widens
+        // the panel for everyone rather than only for new configurations.
+        private const double SidebarMinWidth = 300;
         private const double SidebarMaxWidth = 600;
 
         /// <summary>How long a text card or image lands on the timeline — long enough to see and
@@ -141,6 +145,8 @@ namespace Clowd.UI.VideoEditor
         private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[3];
 
         private static SettingsVideoEditor Settings => SettingsRoot.Current?.VideoEditor;
+
+        private static SettingsGeneral General => SettingsRoot.Current?.General;
 
         public RelayCommand CommandPlayPause { get; }
         public RelayCommand CommandStepBack { get; }
@@ -240,6 +246,12 @@ namespace Clowd.UI.VideoEditor
 
             InitializeComponent();
 
+            ApplyChrome();
+            ApplyPreviewChecker();
+            ActualThemeVariantChanged += (_, _) => ApplyPreviewChecker();
+            General.PropertyChanged += OnGeneralSettingChanged;
+            Closed += (_, _) => General.PropertyChanged -= OnGeneralSettingChanged;
+
             // Under the extended client area (macOS) this bar IS the title bar.
             EnableTitleBarDrag(TopBar);
 
@@ -321,6 +333,9 @@ namespace Clowd.UI.VideoEditor
             BuildSpeedMenu();
             InitRenderPopup();
             InitVoiceRecorder();
+
+            InitCustomizePopup();
+            RebuildToolStrip();
 
             ddAspectRatio.PropertyChanged += AspectRatio_PropertyChanged;
 
@@ -1575,6 +1590,216 @@ namespace Clowd.UI.VideoEditor
             ApplySidebarVisible(true);
         }
 
+        /// <summary>The editor is chrome around a picture, not a page of prose, so it takes the
+        /// backdrop in the light theme too — the bars and the preview are the whole window, and
+        /// neither is text the way a settings page is. Same call as the image editor's.</summary>
+        protected override bool AllowMicaInLightTheme => true;
+
+        // The legacy flat fill the compact chrome has always been painted with.
+        private static readonly IBrush CompactChromeBrush = new SolidColorBrush(Color.FromRgb(0x53, 0x53, 0x53));
+
+        // Holds the modern chrome's Foreground binding so switching back to Compact can drop it —
+        // a plain assignment would sit underneath a live binding and never show.
+        private IDisposable _foregroundBinding;
+
+        /// <summary>The letterbox checker behind the preview, tinted for the surround it shows
+        /// through — white over the dark one, black over the light. The image editor's canvas does
+        /// the same thing in Clowd.Drawing.CheckeredBackground, for the same reason: the brush
+        /// cannot be stated once in the markup because it depends on the variant.</summary>
+        private void ApplyPreviewChecker()
+        {
+            previewChecker.Background = ActualThemeVariant == ThemeVariant.Light
+                ? CheckerBrushes.CanvasLight
+                : CheckerBrushes.Canvas;
+        }
+
+        private void OnGeneralSettingChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is null or nameof(SettingsGeneral.EditorLayout))
+                ApplyChrome();
+        }
+
+        /// <summary>
+        /// Puts the chosen chrome's class on the root, which is what the sizes, radii and fills in
+        /// VideoEditorWindow.axaml key off, and settles the one thing a style cannot say: whether
+        /// the surface the two tool bars sit on paints at all. The modern bars ARE the window's own
+        /// background showing through, so they paint nothing and the window supplies it — Mica
+        /// where the compositor grants it, otherwise the theme's ApplicationBackgroundBrush, which
+        /// SystemThemedWindow already keeps in step with the variant. The compact chrome is the
+        /// legacy opaque grey, whatever the theme. See EditorWindow.ApplyChrome, which is the same
+        /// method on the image editor.
+        /// </summary>
+        private void ApplyChrome()
+        {
+            if (rootGrid == null)
+                return;
+
+            var modern = General is not { EditorLayout: EditorLayout.Compact };
+
+            rootGrid.Classes.Set("modern", modern);
+            rootGrid.Classes.Set("compact", !modern);
+            rootGrid.Background = modern ? Brushes.Transparent : CompactChromeBrush;
+
+            // Everything in the window inherits this. The compact chrome is hand-painted dark and
+            // needs white on it; the modern bars are the window's own background and want the
+            // theme's text colour — and so does every Semi and Ursa control in them, none of which
+            // states a foreground of its own. The parts that are still dark slabs in both chromes
+            // (transport bar, timeline, properties panel) pin white on themselves in the markup.
+            // Set here rather than in the markup because a local value in the markup cannot be
+            // restated by a chrome.
+            _foregroundBinding?.Dispose();
+            _foregroundBinding = null;
+
+            if (modern)
+                _foregroundBinding = this.Bind(ForegroundProperty, new DynamicResourceExtension("SemiColorText0"));
+            else
+                SetValue(ForegroundProperty, Brushes.White);
+        }
+
+        // ---- customizable tool strip ----------------------------------------------------
+
+        /// <summary>One entry per button of the left strip that the user may hide or reorder. The
+        /// buttons themselves stay in the XAML — they carry rich tips, commands and names the rest
+        /// of the window reaches for — so customizing means re-ordering and detaching the controls
+        /// that are already there, not generating new ones. Array order is the default order, and
+        /// the key is what the settings file remembers.</summary>
+        private (string Key, string Label, ToolButton Button)[] StripTools => new[]
+        {
+            ("ImportMedia", "Video", btnImportMedia),
+            ("ImportAudio", "Audio", btnImportAudio),
+            ("AddImage", "Image", btnAddImage),
+            ("AddText", "Text", btnAddText),
+            ("AddZoom", "Zoom", btnAddZoom),
+            ("AddSpeed", "Speed", btnAddSpeed),
+            ("AddCursor", "Cursor", btnAddCursor),
+            ("AddKeyboard", "Keyboard", btnAddKeyboard),
+            ("Voice", "Voice-over", btnVoice),
+            ("AddBackground", "Background", btnAddBackground),
+        };
+
+        private static readonly string[] StripToolKeys =
+        {
+            "ImportMedia", "ImportAudio", "AddImage", "AddText", "AddZoom",
+            "AddSpeed", "AddCursor", "AddKeyboard", "Voice", "AddBackground",
+        };
+
+        /// <summary>Puts the strip's buttons in the resolved order and leaves the hidden ones out
+        /// of the panel entirely — a collapsed child would still be a row of the wrap panel's
+        /// bookkeeping. Undo, redo and the customize button dock to the end and are never
+        /// touched.</summary>
+        private void RebuildToolStrip()
+        {
+            var order = ToolbarConfig.ResolveOrder(Settings?.ToolbarOrder, StripToolKeys);
+            var hidden = ToolbarConfig.ResolveHidden(Settings?.HiddenTools, StripToolKeys);
+            var tools = StripTools;
+
+            foreach (var tool in tools)
+                ToolBar.Children.Remove(tool.Button);
+
+            var index = 0;
+            foreach (var key in order)
+            {
+                if (hidden.Contains(key))
+                    continue;
+
+                var button = tools.FirstOrDefault(t => t.Key == key).Button;
+                if (button != null)
+                    ToolBar.Children.Insert(index++, button);
+            }
+
+            // the voice recorder's overlay outlives its button: hiding the button while a take is
+            // set up would otherwise leave the overlay on the preview with nothing to close it
+            if (btnVoice.Parent == null && btnVoice.IsChecked == true)
+                btnVoice.IsChecked = false;
+        }
+
+        /// <summary>Wires the shared customize flyout to this window: what the rows are, and what
+        /// each change means here. The interaction itself is the control's.</summary>
+        private void InitCustomizePopup()
+        {
+            customizePopup.FallbackFocus = preview;
+            customizePopup.ItemsProvider = BuildCustomizeItems;
+
+            customizePopup.VisibilityChanged += (_, e) => SetToolHidden(e.Key, !e.IsVisible);
+            customizePopup.Moved += (_, e) => MoveTool(e.Keys, e.FromRow, e.ToRow);
+            customizePopup.ResetOrderRequested += (_, _) => ResetToolOrder();
+        }
+
+        private IReadOnlyList<CustomizeToolbarItem> BuildCustomizeItems()
+        {
+            var order = ToolbarConfig.ResolveOrder(Settings?.ToolbarOrder, StripToolKeys);
+            var hidden = ToolbarConfig.ResolveHidden(Settings?.HiddenTools, StripToolKeys);
+            var tools = StripTools;
+
+            return order
+                .Select(key => tools.FirstOrDefault(t => t.Key == key))
+                .Where(t => t.Button != null)
+                .Select(t => new CustomizeToolbarItem(t.Key, t.Label, isVisible: !hidden.Contains(t.Key)))
+                .ToList();
+        }
+
+        private void SetToolHidden(string key, bool hide)
+        {
+            if (Settings == null)
+                return;
+
+            var hidden = ToolbarConfig.ResolveHidden(Settings.HiddenTools, StripToolKeys);
+            if (hide)
+                hidden.Add(key);
+            else
+                hidden.Remove(key);
+
+            Settings.HiddenTools = hidden.ToList();
+            RebuildToolStrip();
+            TrySaveSettings();
+            // no flyout rebuild: the row order is unchanged, and the checkbox already shows the
+            // new state — rebuilding would drop the keyboard focus that just toggled it
+        }
+
+        /// <summary>Moves the tool on flyout row <paramref name="fromRow"/> so that it ends up on
+        /// row <paramref name="toRow"/> (both display indexes), and persists the new order.</summary>
+        private void MoveTool(IReadOnlyList<string> keys, int fromRow, int toRow)
+        {
+            if (Settings == null || fromRow == toRow ||
+                fromRow < 0 || toRow < 0 || fromRow >= keys.Count || toRow >= keys.Count)
+                return;
+
+            var shown = keys.ToList();
+            var key = shown[fromRow];
+            shown.RemoveAt(fromRow);
+            shown.Insert(toRow, key);
+
+            // The persisted order may carry keys this strip does not show; they keep their place.
+            // The moved tool goes just ahead of whichever shown tool now follows it (or to the
+            // end, when none does).
+            var order = ToolbarConfig.ResolveOrder(Settings.ToolbarOrder, StripToolKeys).ToList();
+            order.Remove(key);
+            var insertAt = toRow + 1 < shown.Count ? order.IndexOf(shown[toRow + 1]) : order.Count;
+            order.Insert(insertAt, key);
+
+            Settings.ToolbarOrder = order.ToList();
+            RebuildToolStrip();
+            TrySaveSettings();
+            customizePopup.Rebuild(focusKey: key);
+        }
+
+        private void ResetToolOrder()
+        {
+            if (Settings == null)
+                return;
+
+            Settings.ToolbarOrder = null;
+            Settings.HiddenTools = null;
+            RebuildToolStrip();
+            TrySaveSettings();
+            customizePopup.Rebuild();
+        }
+
+        private void customize_Click(object sender, RoutedEventArgs e)
+        {
+            customizePopup.Open(btnCustomize);
+        }
+
         private void ApplySidebarVisible(bool value)
         {
             sidebarBorder.IsVisible = value;
@@ -1590,7 +1815,7 @@ namespace Clowd.UI.VideoEditor
             {
                 SidebarColumn.MinWidth = SidebarMinWidth;
                 SidebarColumn.Width = new GridLength(
-                    Math.Clamp(Settings?.SidebarWidth ?? 250, SidebarMinWidth, SidebarMaxWidth), GridUnitType.Pixel);
+                    Math.Clamp(Settings?.SidebarWidth ?? SidebarMinWidth, SidebarMinWidth, SidebarMaxWidth), GridUnitType.Pixel);
             }
             else
             {
@@ -2606,9 +2831,8 @@ namespace Clowd.UI.VideoEditor
 
         private void AspectRatio_PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
         {
-            // qualified: Avalonia has a DropDownButton of its own, and this is not that or its replacement
             if (_syncingAspectRatio || _editor == null ||
-                e.Property != Clowd.UI.Controls.CompactDropDown.SelectedItemProperty)
+                e.Property != Clowd.UI.Controls.ThemedDropDown.SelectedItemProperty)
                 return;
 
             if (e.GetNewValue<object>() is not AspectRatioOption option)

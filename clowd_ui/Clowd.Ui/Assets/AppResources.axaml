@@ -1,4 +1,4 @@
-<Styles xmlns="https://github.com/avaloniaui"
+﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Clowd.UI.Controls">
 
@@ -88,10 +88,44 @@
                          whole shell shares one ink. Only the primary step moves — the secondary
                          ones stay where Semi put them, which is what keeps the hierarchy. -->
                     <SolidColorBrush x:Key="SemiColorText0" Color="#0D0D0F" />
+
+                    <!-- Tool-bar icon ink for the editors' Modern chrome. Not SemiColorText0: the
+                         icons are solid-filled glyphs, and full text weight makes a strip of them
+                         read heavier than the labels beside them. Split by variant rather than
+                         picked once, since the modern bars sit on the window background
+                         (#FAFAFA light / Mica dark). App-wide because both editors wear it. -->
+                    <SolidColorBrush x:Key="ClowdEditorIconBrush" Color="#3C3F42" />
+
+                    <!-- The slab the editors' side panels sit on in the Modern chrome. Lighter
+                         than the window, not darker: SemiColorFill0 is a dark veil, which on the
+                         light theme sinks the panel into the page instead of raising it. Not
+                         quite opaque, so the backdrop reads through where there is one — harmless
+                         where there is not, since what shows through is then the window's own
+                         flat background. -->
+                    <SolidColorBrush x:Key="ClowdEditorSidebarBrush" Color="#A6FFFFFF" />
+
+                    <!-- The surround the artwork or the video sits on, and the line along the lip
+                         of it where the tool bars meet it. Both are the editors', shared so the
+                         two windows cannot drift apart. The light edge is a soft black rather than
+                         the dark theme's grey: the same nominal line reads far heavier over a
+                         light ground, and the shadow under it is doing most of the separating
+                         anyway. -->
+                    <SolidColorBrush x:Key="ClowdEditorCanvasBrush" Color="#E9E9E9" />
+                    <SolidColorBrush x:Key="ClowdEditorSurfaceEdgeBrush" Color="#26000000" />
+                    <!-- The lift under that surface. Far softer than the dark theme's: a shadow
+                         over a light ground is read as a grey halo rather than as depth, and over
+                         a dark one it barely registers until it is this strong. -->
+                    <BoxShadows x:Key="ClowdEditorSurfaceShadow">0 0 9 0 #66000000</BoxShadows>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="ApplicationBackgroundColor">#202020</Color>
                     <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="ClowdEditorIconBrush" Color="White" />
+                    <!-- an alpha-white overlay already, so the backdrop reads through it as it stands -->
+                    <StaticResource x:Key="ClowdEditorSidebarBrush" ResourceKey="SemiColorFill0" />
+                    <SolidColorBrush x:Key="ClowdEditorCanvasBrush" Color="#1E1E1E" />
+                    <SolidColorBrush x:Key="ClowdEditorSurfaceEdgeBrush" Color="#CC515255" />
+                    <BoxShadows x:Key="ClowdEditorSurfaceShadow">0 0 9 0 #A6000000</BoxShadows>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

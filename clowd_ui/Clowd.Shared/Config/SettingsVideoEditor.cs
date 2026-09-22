@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 
@@ -76,7 +76,9 @@ namespace Clowd.Config
     /// </summary>
     public class SettingsVideoEditor : SimpleNotifyObject
     {
-        /// <summary>Width of the properties sidebar; matches the image editor's default.</summary>
+        /// <summary>Width of the properties sidebar. Wider than the image editor's layer list:
+        /// every row here is a label and a 120px field, and the Modern chrome's fields are taller
+        /// and roomier than the dense ones this width was first picked for.</summary>
         [Browsable(false)]
         public double SidebarWidth
         {
@@ -209,7 +211,29 @@ namespace Clowd.Config
             set => Set(ref _customOutputHeightPx, value);
         }
 
-        private double _sidebarWidth = 230;
+        /// <summary>The tool strip's order, by key, as the customize flyout last left it. Null
+        /// means the default order. Same deal as <see cref="SettingsEditor.ToolbarOrder"/>, and
+        /// resolved just as leniently (see <see cref="ToolbarConfig"/>) — a key from a tool this
+        /// build no longer has is simply dropped.</summary>
+        [Browsable(false)]
+        public List<string> ToolbarOrder
+        {
+            get => _toolbarOrder;
+            set => Set(ref _toolbarOrder, value);
+        }
+
+        /// <summary>The tools taken off the strip, by key. Unlike the image editor's, every tool
+        /// here may be hidden — none of them is the pointer.</summary>
+        [Browsable(false)]
+        public List<string> HiddenTools
+        {
+            get => _hiddenTools;
+            set => Set(ref _hiddenTools, value);
+        }
+
+        private List<string> _toolbarOrder;
+        private List<string> _hiddenTools;
+        private double _sidebarWidth = 300;
         private string _windowBounds;
         private bool _windowMaximized;
         private RenderPreset _lastRenderPreset = RenderPreset.Share;
