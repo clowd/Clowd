@@ -1904,6 +1904,57 @@ namespace Clowd.Drawing
             ContentOffset = new Point(x, y);
         }
 
+        /// <summary>
+        /// Pans (never zooms) so <paramref name="g"/> is fully on screen. The shift is the smallest
+        /// one that brings the graphic inside the viewport with a small margin; a graphic too big to
+        /// fit is centered instead, unless it already covers the whole viewport, in which case
+        /// nothing moves. Used by the layers panel so selecting an off-screen row reveals it.
+        /// </summary>
+        public void EnsureVisible(GraphicBase g, double padding = 16)
+        {
+            if (g == null || Bounds.Width <= 0 || Bounds.Height <= 0)
+                return;
+
+            // canvas space -> viewport space is v = c * scale + ContentOffset, with the same
+            // s = ContentScale/DpiZoom the rest of the zoom/pan code uses
+            var scale = ContentScale / DpiZoom;
+            var b = g.Bounds;
+            var offset = ContentOffset;
+
+            var dx = PanShift(b.Left * scale + offset.X, b.Width * scale, Bounds.Width, padding);
+            var dy = PanShift(b.Top * scale + offset.Y, b.Height * scale, Bounds.Height, padding);
+            if (dx == 0 && dy == 0)
+                return;
+
+            ContentOffset = new Point(offset.X + dx, offset.Y + dy);
+        }
+
+        /// <summary>One axis of <see cref="EnsureVisible"/>: how far the viewport-space span
+        /// [start, start+size] must move to sit inside [0, viewport].</summary>
+        private static double PanShift(double start, double size, double viewport, double padding)
+        {
+            double end = start + size;
+
+            if (size > viewport)
+            {
+                // cannot fit: leave it alone while it spans the whole viewport, otherwise center it
+                if (start <= 0 && end >= viewport)
+                    return 0;
+
+                return (viewport - size) / 2 - start;
+            }
+
+            // never let the margin push the graphic back out of the viewport it just fit into
+            padding = Math.Min(padding, (viewport - size) / 2);
+
+            if (start < padding)
+                return padding - start;
+            if (end > viewport - padding)
+                return viewport - padding - end;
+
+            return 0;
+        }
+
         public void ZoomPanAuto()
         {
             var artBounds = GraphicsList.ContentBounds;

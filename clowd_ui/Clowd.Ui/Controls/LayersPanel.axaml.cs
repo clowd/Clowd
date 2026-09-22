@@ -320,8 +320,12 @@ namespace Clowd.UI.Controls
             row.PointerPressed += (s, e) =>
             {
                 // row buttons mark their presses handled, so this only fires on the row itself
-                if (e.GetCurrentPoint(row).Properties.IsLeftButtonPressed)
-                    canvas.SetPanelSelection(g, additive: e.KeyModifiers.HasFlag(KeyModifiers.Control));
+                if (!e.GetCurrentPoint(row).Properties.IsLeftButtonPressed)
+                    return;
+
+                canvas.SetPanelSelection(g, additive: e.KeyModifiers.HasFlag(KeyModifiers.Control));
+                // reveal the row's graphic if the click just selected something off screen
+                canvas.EnsureVisible(g);
             };
             row.ContextMenu = BuildContextMenu(g);
             return row;
