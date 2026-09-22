@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
@@ -246,7 +246,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Frame rate presets")]
-        [Description("The frame rates the FPS tile on the recording toolbar cycles through. A preset higher than the monitor refresh rate is skipped.")]
+        [Description("The frame rates the FPS tile on the recording toolbar cycles through. A preset above the monitor refresh rate (or above 360) is skipped. Set a box to 0 to drop that preset and cycle between fewer rates.")]
         public FpsPresets FpsPresets
         {
             get => _fpsPresets;

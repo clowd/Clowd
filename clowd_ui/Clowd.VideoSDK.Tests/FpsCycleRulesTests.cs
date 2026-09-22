@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using Clowd.UI;
 using Xunit;
@@ -101,11 +101,40 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Presets_setting_clamps_and_orders_what_the_cycle_reads()
         {
-            var presets = new Clowd.Config.FpsPresets { First = 60, Second = 0, Third = 9999 };
+            var presets = new Clowd.Config.FpsPresets { First = 60, Second = -5, Third = 9999 };
 
-            Assert.Equal(1, presets.Second);
-            Assert.Equal(240, presets.Third);
-            Assert.Equal(new[] { 1, 60, 240 }, presets.Values.ToArray());
+            Assert.Equal(0, presets.Second);
+            Assert.Equal(999, presets.Third);
+            Assert.Equal(new[] { 0, 60, 999 }, presets.Values.ToArray());
+        }
+
+        [Fact]
+        public void Presets_above_the_cycle_ceiling_are_dropped()
+        {
+            var presets = new Clowd.Config.FpsPresets { First = 60, Second = 360, Third = 500 };
+
+            Assert.Equal(500, presets.Third);
+            Assert.Equal(new[] { 60, 360 }, FpsCycleRules.Options(0, presets.Values).ToArray());
+            Assert.Equal(new[] { 60, 360 }, FpsCycleRules.Options(360, presets.Values).ToArray());
+        }
+
+        [Fact]
+        public void A_cleared_preset_box_shortens_the_cycle()
+        {
+            var presets = new Clowd.Config.FpsPresets { First = 30, Second = 60, Third = 0 };
+
+            Assert.Equal(new[] { 30, 60, 144 }, FpsCycleRules.Options(144, presets.Values).ToArray());
+        }
+
+        [Fact]
+        public void Clearing_every_preset_leaves_the_native_rate_as_the_only_stop()
+        {
+            var presets = new Clowd.Config.FpsPresets { First = 0, Second = 0, Third = 0 };
+
+            Assert.Equal(new[] { 144 }, FpsCycleRules.Options(144, presets.Values).ToArray());
+
+            // ...but a tile with no native rate either still needs somewhere to cycle to.
+            Assert.Equal(FpsCycleRules.Presets, FpsCycleRules.Options(0, presets.Values));
         }
 
         [Fact]

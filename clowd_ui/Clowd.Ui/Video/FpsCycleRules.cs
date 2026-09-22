@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -13,7 +13,8 @@ namespace Clowd.UI
     /// <para>
     /// The cycle is the user's three configured presets (30, 60, 120 out of the box) capped and
     /// completed by the monitor's own refresh rate: a preset above what the panel can show is dropped (an 80 Hz screen offers 30,
-    /// 60, 80 — never 120), the native rate itself is always the last stop, and a preset within
+    /// 60, 80 — never 120), a preset outside <see cref="MinCycleFps"/>..<see cref="MaxCycleFps"/>
+    /// is dropped whatever the monitor reports, the native rate itself is always the last stop, and a preset within
     /// <see cref="NativeTolerance"/> of the native rate is folded into it so the list never carries
     /// two entries that mean the same thing (a 59 Hz panel offers 30 and 59, not 30, 59, 60).
     /// </para>
@@ -30,6 +31,17 @@ namespace Clowd.UI
         /// 72 and 75 Hz screens their distinct 60 stop.</summary>
         public const double NativeTolerance = 2.0;
 
+        /// <summary>The highest preset the cycle will offer, whatever the settings page holds. A
+        /// preset box accepts up to <c>FpsPresets.MaxFps</c> so it can carry a rate meant for
+        /// another monitor, but a stop beyond this is not a rate worth recording at on any panel
+        /// that exists. The native rate still gets its own stop regardless.</summary>
+        public const int MaxCycleFps = 360;
+
+        /// <summary>The lowest preset the cycle will offer. A zero is not a frame rate: it is how
+        /// an emptied preset box is stored, so dropping it is what lets a user run a two-stop cycle
+        /// by clearing the third box.</summary>
+        public const int MinCycleFps = 1;
+
         /// <summary>
         /// The frame rates a click walks through, ascending, for a monitor refreshing at
         /// <paramref name="nativeHz"/>. Never empty. An unknown native rate (zero, negative or not
@@ -42,17 +54,28 @@ namespace Clowd.UI
         /// <summary>
         /// <see cref="Options(double)"/> over a caller's own presets — the user's configured three
         /// (issue #101). An empty or null list falls back to the built-in <see cref="Presets"/>, so
-        /// the tile always has somewhere to cycle to; the list need not be sorted or distinct.
+        /// the tile always has somewhere to cycle to; the list need not be sorted or distinct, and
+        /// may hold zeros (cleared boxes) and out-of-range values, which are dropped. Presets that
+        /// all drop out leave the native rate as the only stop — the tile then reports the rate
+        /// rather than cycling, which is what clearing every box asks for.
         /// </summary>
         public static IReadOnlyList<int> Options(double nativeHz, IReadOnlyList<int> presets)
         {
             if (presets == null || presets.Count == 0)
                 presets = Presets;
 
-            var sorted = presets.Distinct().OrderBy(p => p).ToList();
+            var sorted = presets
+                .Where(p => p >= MinCycleFps && p <= MaxCycleFps)
+                .Distinct()
+                .OrderBy(p => p)
+                .ToList();
 
             if (!(nativeHz > 0) || Double.IsInfinity(nativeHz))
-                return sorted;
+            {
+                // with no native rate to add, an all-cleared set of presets would leave the tile
+                // nothing to cycle to at all; the built-in stops beat a dead tile.
+                return sorted.Count > 0 ? sorted : Presets;
+            }
 
             var native = (int)Math.Round(nativeHz);
             var options = new List<int>(sorted.Count + 1);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -669,9 +669,10 @@ namespace Clowd.UI.Config
         }
 
         /// <summary>One of the three frame-rate preset boxes: narrow (the value is at most three
-        /// digits) and bounded by the same range the Fps setting itself accepts, so a preset can
-        /// never be a rate the recorder would refuse. The property clamps too — typing past the
-        /// bound in the box is corrected on commit rather than stored.</summary>
+        /// digits) and bounded by <see cref="FpsPresets.MinFps"/>..<see cref="FpsPresets.MaxFps"/>.
+        /// The property clamps too — typing past the bound in the box is corrected on commit rather
+        /// than stored. An empty box is a real state, not a mistake: it stores 0, and the cycle
+        /// drops it (<c>FpsCycleRules</c>), which is how a user asks for fewer than three stops.</summary>
         Control FpsPresetBox(PropertyDescriptor pd, int ordinal)
         {
             var box = new NumericUpDown
@@ -682,9 +683,10 @@ namespace Clowd.UI.Config
                 Increment = 1,
                 FormatString = "0",
                 ShowButtonSpinner = false,
+                PlaceholderText = "—",
             };
             Avalonia.Automation.AutomationProperties.SetName(box, $"Frame rate preset {ordinal}");
-            return SimpleControlBinding(box, pd, NumericUpDown.ValueProperty, new NumericTypeConverter());
+            return SimpleControlBinding(box, pd, NumericUpDown.ValueProperty, new FpsPresetConverter());
         }
 
         Panel StackCtrl(params Control[] children)

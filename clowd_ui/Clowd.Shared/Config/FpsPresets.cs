@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -14,17 +14,25 @@ namespace Clowd.Config
     /// <para>
     /// The values are a user's preference, not a promise about any monitor: the cycle the tile
     /// really offers is these capped and completed by the screen's refresh rate
-    /// (<c>FpsCycleRules.Options</c>). Duplicates and ordering are tolerated here and resolved by
-    /// <see cref="Values"/>, so typing 60 into two boxes shortens the cycle rather than breaking it.
+    /// (<c>FpsCycleRules.Options</c>). Duplicates, zeros (an emptied box) and ordering are all
+    /// tolerated here and resolved downstream, so typing 60 into two boxes shortens the cycle
+    /// rather than breaking it.
     /// </para>
     /// </summary>
     public class FpsPresets : SimpleNotifyObject
     {
-        /// <summary>The bounds a preset box accepts, matching <c>SettingsRecording.Fps</c>'s own
-        /// [Range]: a preset the recorder could not be configured with is not a preset.</summary>
-        public const int MinFps = 1;
+        /// <summary>The bounds a preset box accepts. Deliberately wider than the rates any panel
+        /// can show, so a box can hold a rate for a monitor the user does not have plugged in right
+        /// now; the cycle itself drops what the current screen cannot reach
+        /// (<c>FpsCycleRules.MaxCycleFps</c>).
+        /// <para>
+        /// The floor is 0, not 1: 0 is how an emptied box is stored, and it means "no preset here"
+        /// — the cycle drops it, so a user who wants two stops instead of three clears one box
+        /// rather than being forced to invent a third rate.
+        /// </para></summary>
+        public const int MinFps = 0;
 
-        public const int MaxFps = 240;
+        public const int MaxFps = 999;
 
         public int First
         {
@@ -44,8 +52,9 @@ namespace Clowd.Config
             set => Set(ref _third, Clamp(value), nameof(Third), nameof(Values));
         }
 
-        /// <summary>The presets as the cycle consumes them: ascending and without duplicates, and
-        /// never empty (the three fields are always in range, so at least one survives).</summary>
+        /// <summary>The presets as the cycle consumes them: ascending and without duplicates. Can
+        /// be empty of usable stops (all three boxes cleared); <c>FpsCycleRules.Options</c> decides
+        /// what a tile with no presets offers.</summary>
         [Browsable(false), JsonIgnore]
         public IReadOnlyList<int> Values =>
             new[] { _first, _second, _third }.Distinct().OrderBy(f => f).ToList();
