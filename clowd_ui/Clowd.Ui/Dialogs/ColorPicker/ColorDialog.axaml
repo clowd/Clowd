@@ -244,11 +244,11 @@
                         Spacing="10">
                 <!-- Foreground follows the window (the ToolButton theme defaults to white, which
                      disappears against the light theme) -->
+                <!-- tooltip text lives in EyedropperButton (see MiniColorDialog) -->
                 <cp:EyedropperButton x:Name="btnEyedropper"
                                      VerticalAlignment="Center"
                                      Foreground="{Binding Foreground}"
-                                     IconPath="{StaticResource IconEyedropper}"
-                                     ToolTip.Tip="Drag onto any pixel on screen to pick its color" />
+                                     IconPath="{StaticResource IconEyedropper}" />
                 <Border Width="108"
                         Height="30"
                         VerticalAlignment="Center"

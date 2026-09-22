@@ -191,10 +191,11 @@
                                      DockPanel.Dock="Left"
                                      IconPath="{StaticResource IconPopout}"
                                      ToolTip.Tip="Open in full color picker" />
+                <!-- tooltip text lives in EyedropperButton: it swaps to the permission hint,
+                     and is suppressed for the duration of a drag -->
                 <local:EyedropperButton x:Name="btnEyedropper"
                                         DockPanel.Dock="Left"
-                                        IconPath="{StaticResource IconEyedropper}"
-                                        ToolTip.Tip="Drag onto any pixel on screen to pick its color" />
+                                        IconPath="{StaticResource IconEyedropper}" />
                 <!-- notation cycler; fixed width so cycling HEX/RGB/HSL never reflows the row -->
                 <Button x:Name="btnTextFormat"
                         Width="40"

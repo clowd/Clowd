@@ -47,6 +47,14 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private Color? _lastSampled;
 
+        /// <summary>What the button is for. Explains the press-and-drag gesture, which is not
+        /// discoverable from the icon — a plain click does nothing.</summary>
+        private const string GestureTip = "Click and drag to a point on your screen";
+
+        private const string PermissionTip =
+            "Clowd needs Screen Recording permission to pick a color from the screen. "
+            + "Grant it under Settings → General → Permissions.";
+
         public EyedropperButton()
         {
             Cursor = new Cursor(StandardCursorType.Cross);
@@ -80,17 +88,29 @@ namespace Clowd.UI.Dialogs.ColorPicker
             // ShowOnDisabled is off by default, and the tooltip is the only thing explaining why the
             // button is grayed out — without this the disabled state has no explanation at all.
             ToolTip.SetShowOnDisabled(this, true);
-            ToolTip.SetTip(this, permitted
-                ? null
-                : "Clowd needs Screen Recording permission to pick a color from the screen. "
-                  + "Grant it under Settings → General → Permissions.");
+            ToolTip.SetTip(this, permitted ? GestureTip : PermissionTip);
         }
 
         protected override Type StyleKeyOverride => typeof(ToolButton);
 
+        /// <summary>Re-arms the tooltip once the pointer has left and come back, so the hint is
+        /// available again on a later hover without ever reappearing mid-gesture.</summary>
+        protected override void OnPointerEntered(PointerEventArgs e)
+        {
+            base.OnPointerEntered(e);
+            ToolTip.SetServiceEnabled(this, true);
+        }
+
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {
             base.OnPointerPressed(e);
+
+            // The hint has been read by the time the gesture starts, and the drag samples pixels
+            // under the pointer — a tooltip following it would cover the very pixels being picked.
+            // Disabling the service keeps it from reopening on release, when the pointer is often
+            // back over the button; the next hover re-arms it (OnPointerEntered).
+            ToolTip.SetIsOpen(this, false);
+            ToolTip.SetServiceEnabled(this, false);
 
             if (!ScreenColorReader.IsAvailable)
                 return;
