@@ -278,25 +278,73 @@ fn order_window_front_early(window: &Window) {
     }
 }
 
+/// Whether the scroll-picker's reticle is standing in for the OS pointer
+/// at this instant. When it is, the pointer is hidden and the reticle
+/// drawn; when it is not, the ordinary pointer is back and no reticle is
+/// drawn. The two halves must agree — hiding one without showing the other
+/// leaves the user aiming at nothing — so `update_cursor_visibility` and
+/// `ui::components::compose` both answer from this one rule.
+///
+/// The reticle is the pointer's stand-in over the selection's INTERIOR
+/// only, because that is the only place a pick can land. Everywhere else
+/// the mode keeps the ordinary pointer: the resize handles are still live
+/// and their arrows have to be visible, and so does the arrow over the
+/// tray.
+///
+/// The tray is the case that is easy to miss. The scroll-picker is locked
+/// to a row ([`crate::ui::components::panel::model::PanelButtonSet::axis_lock`]),
+/// so a selection with no room beneath it gets the strip placed INSIDE it
+/// (`place::Side::Inside`) — where the hittest is `Inside` like anywhere
+/// else in the region, but the pointer is over live buttons and has to be
+/// visible.
+///
+/// Gated on `overlays_visible` for the same agreement reason. Unreachable
+/// today — Q is swallowed in pick mode — and this keeps it that way if a
+/// path is ever added.
+pub fn reticle_stands_in(scroll_pick_mode: bool, overlays_visible: bool, hittest: Hittest, over_tray: bool) -> bool {
+    scroll_pick_mode && overlays_visible && hittest == Hittest::Inside && !over_tray
+}
+
+/// The pointer's icon for the state as it is, given what the tray found
+/// under the pointer in the broadcast that just ran.
+///
+/// Pick mode claims the selection's interior — the reticle stands in for
+/// the pointer there — but only the interior: the tray and the resize
+/// handles are live, and they keep their own cursors.
+fn cursor_for(input: &InteractionState, over_button: bool, over_tray: bool) -> CursorIcon {
+    if reticle_stands_in(
+        input.scroll_pick_mode,
+        input.overlays_visible,
+        input.hittest,
+        over_button || over_tray,
+    ) {
+        // The crosshair is only the fallback for a failed hardware hide;
+        // the reticle is the real pointer wherever this branch is taken.
+        CursorIcon::Crosshair
+    } else if over_button {
+        CursorIcon::Pointer
+    } else if over_tray {
+        // Dead tray (chassis, emblem, readout, padding): its clicks are
+        // swallowed on press, so the arrow, never a resize handle that
+        // would promise a drag the press cannot start.
+        CursorIcon::Default
+    } else if input.ocr.active() {
+        // The selection is frozen for the whole of OCR mode: resize
+        // arrows would promise an interaction it no longer offers.
+        CursorIcon::Default
+    } else {
+        input.hittest.cursor()
+    }
+}
+
 fn update_cursor_visibility(windows: &WindowSet, input: &InteractionState) {
-    // Picking a scroll point draws its own scope reticle at the cursor, so
-    // the OS pointer has to go — it would sit on top of the reticle it is
-    // standing in for. Checked ahead of `captured`, which is always set
-    // while picking.
-    //
-    // Only where the reticle actually is, though: it is drawn over the
-    // selection's interior alone (`ui::components::scope::show::inputs`),
-    // because that is the only place a pick can land. Everywhere else the
-    // mode keeps the ordinary pointer — the resize handles are still live
-    // and their arrows have to be visible, and so does the arrow over the
-    // strip.
-    //
-    // Gated on `overlays_visible` for the same reason the reticle is: the
-    // two must agree, or a state that suppresses the reticle while the
-    // pointer stays hidden would leave the user with no pointer at all.
-    // Unreachable today — Q is swallowed in pick mode — and this keeps it
-    // that way if a path is ever added.
-    if input.scroll_pick_mode && input.overlays_visible && input.hittest == Hittest::Inside {
+    // Checked ahead of `captured`, which is always set while picking.
+    if reticle_stands_in(
+        input.scroll_pick_mode,
+        input.overlays_visible,
+        input.hittest,
+        input.pointer_over_tray,
+    ) {
         windows.hide_cursors();
     } else if input.captured || input.debug_visible {
         windows.show_cursors();
@@ -531,6 +579,11 @@ fn broadcast_ui_state(
         cursor_image_rect: raw_cursor_image.filter(|_| !peek_covers),
         cursor_overlay_visible,
     });
+    // What the tray found under the pointer in the pass that just ran, so
+    // every decision taken after this broadcast — the cursor ladder below,
+    // `update_cursor_visibility` at its ten call sites — answers from this
+    // layout rather than a stale or re-derived one.
+    cycle.input.pointer_over_tray = panel.over_tray;
     let egui_frames = cycle.egui.frames();
 
     // What a worker still decides for itself, and the egui primitives it
@@ -676,6 +729,7 @@ impl App {
                 scroll_momentum: false,
                 overlays_visible: true,
                 cursor_overlay_visible,
+                pointer_over_tray: false,
                 peek_suspended: false,
                 has_ever_scrolled: false,
                 show_scroll_hint: false,
@@ -1045,10 +1099,7 @@ impl App {
             return;
         }
         cycle.input.scroll_pick_mode = false;
-        let cursor = cycle.input.hittest.cursor();
-        set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, cursor);
-        update_cursor_visibility(&self.windows, &cycle.input);
-        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+        self.broadcast_and_settle_pointer(window_id);
     }
 
     fn exit_ocr_mode(&mut self, window_id: WindowId) {
@@ -1091,10 +1142,8 @@ impl App {
         // is the only stale-result guard there is.
         cycle.ocr_req += 1;
         // The mode forced a Default cursor over the frozen selection;
-        // restore whatever the current hit-test says.
-        let cursor = cycle.input.hittest.cursor();
-        set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, cursor);
-        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+        // whatever the pointer is on now decides what replaces it.
+        self.broadcast_and_settle_pointer(window_id);
     }
 
     /// Capture a plain rect — a monitor, the whole desktop: square corners.
@@ -1254,6 +1303,32 @@ impl App {
         broadcast_mouse_state(&self.windows, &cycle.input);
 
         log::info!("selection reset");
+    }
+
+    /// Push the state to the renderers and settle the pointer from the
+    /// very pass that push ran: its icon, and whether the OS pointer is
+    /// shown at all.
+    ///
+    /// The cursor ladder otherwise only runs on `CursorMoved`, so a
+    /// command that changes the mode without moving the mouse — OCR,
+    /// SCROLL, and the two ways back out of them — left the pointer
+    /// wearing whatever it had when the button went down (the hand over a
+    /// button, or the picker's crosshair) until the user happened to move.
+    ///
+    /// Both halves have to come from the same broadcast. The mode change
+    /// re-centres the strip under the cursor and may swap the set
+    /// altogether, so what the pointer is over afterwards is not something
+    /// the caller can know before laying the new strip out — and
+    /// `update_cursor_visibility` reads `pointer_over_tray`, which this
+    /// broadcast is what sets.
+    fn broadcast_and_settle_pointer(&mut self, window_id: WindowId) {
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        let panel = broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+        let cursor = cursor_for(&cycle.input, panel.over_button, panel.over_tray);
+        set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, cursor);
+        update_cursor_visibility(&self.windows, &cycle.input);
     }
 
     fn apply_interaction_effects(&mut self, effects: InteractionEffects, window_id: Option<WindowId>) {
@@ -1635,11 +1710,10 @@ impl App {
                     return;
                 }
                 cycle.input.scroll_pick_mode = true;
-                // Crosshair is the fallback if the hardware hide below
-                // fails; the reticle is the real pointer from here on.
-                set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, CursorIcon::Crosshair);
-                update_cursor_visibility(&self.windows, &cycle.input);
-                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                // Not unconditionally the crosshair: the picker's strip is
+                // laid out by this call and may land under the pointer that
+                // just pressed SCROLL, and there the ordinary pointer stays.
+                self.broadcast_and_settle_pointer(window_id);
             }
             Command::Ocr => {
                 // OCR reads a frozen region; without a captured selection
@@ -1767,7 +1841,9 @@ impl App {
                     req,
                     region: covered,
                 };
-                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                // The strip goes away for the scan, so the hand the press
+                // left behind has nothing under it any more.
+                self.broadcast_and_settle_pointer(window_id);
             }
             Command::OcrBack => self.exit_ocr_mode(window_id),
             Command::ScrollBack => self.exit_scroll_pick_mode(window_id),
@@ -2430,30 +2506,7 @@ impl ApplicationHandler for App {
                     // laid the strip out with this move's pointer, so what
                     // it found under that pointer is what the cursor
                     // follows.
-                    let over_button = panel.over_button;
-                    let over_tray = panel.over_tray;
-                    // Pick mode claims the selection's interior — the
-                    // reticle stands in for the pointer there — but only
-                    // the interior: the strip and the resize handles are
-                    // live, and they keep their own cursors.
-                    let cursor = if cycle.input.scroll_pick_mode && !over_button && !over_tray && cycle.input.hittest == Hittest::Inside {
-                        CursorIcon::Crosshair
-                    } else if over_button {
-                        CursorIcon::Pointer
-                    } else if over_tray {
-                        // Dead tray (chassis, emblem, readout, padding):
-                        // its clicks are swallowed on press, so the
-                        // arrow, never a resize handle that would
-                        // promise a drag the press cannot start.
-                        CursorIcon::Default
-                    } else if cycle.input.ocr.active() {
-                        // The selection is frozen for the whole of OCR
-                        // mode: resize arrows would promise an
-                        // interaction it no longer offers.
-                        CursorIcon::Default
-                    } else {
-                        cycle.input.hittest.cursor()
-                    };
+                    let cursor = cursor_for(&cycle.input, panel.over_button, panel.over_tray);
                     set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, cursor);
                 }
                 broadcast_mouse_state(&self.windows, &cycle.input);
@@ -2754,6 +2807,7 @@ mod tests {
             last_scroll_end: None,
             scroll_momentum: false,
             overlays_visible: true,
+            pointer_over_tray: false,
             cursor_overlay_visible: false,
             peek_suspended: false,
             has_ever_scrolled: false,
@@ -2764,6 +2818,101 @@ mod tests {
             ocr: OcrState::Idle,
             ocr_notice: None,
         }
+    }
+
+    /// The reticle stands in for the OS pointer over the selection's
+    /// interior while a scroll point is being picked — and nowhere else.
+    /// The tray is the case worth pinning: the scroll-picker is locked to
+    /// a row, so a selection with no room beneath it gets the strip placed
+    /// INSIDE the region, where the hittest is `Inside` but the pointer is
+    /// over live buttons and has to stay visible.
+    #[test]
+    fn the_reticle_stands_in_over_the_interior_but_never_over_the_tray() {
+        // Picking, over the interior: the reticle is the pointer.
+        assert!(reticle_stands_in(true, true, Hittest::Inside, false));
+        // Same place, but the strip is under the pointer there.
+        assert!(!reticle_stands_in(true, true, Hittest::Inside, true));
+        // The handles and the desktop keep their own pointers.
+        for hittest in [Hittest::Outside, Hittest::TopLeft, Hittest::Right] {
+            assert!(!reticle_stands_in(true, true, hittest, false), "{hittest:?}");
+        }
+        // Not picking at all.
+        assert!(!reticle_stands_in(false, true, Hittest::Inside, false));
+        // Overlays hidden: the reticle is suppressed, so the pointer must
+        // come back or there would be nothing to aim with.
+        assert!(!reticle_stands_in(true, false, Hittest::Inside, false));
+    }
+
+    /// The pointer's look is a function of the state and what the tray
+    /// found under it, so a mode change can settle it without waiting for
+    /// the user to move the mouse. Clicking OCR or SCROLL used to leave
+    /// the hand (or the picker's crosshair) behind until the next
+    /// `CursorMoved`.
+    #[test]
+    fn the_cursor_follows_the_state_and_what_the_tray_found_under_it() {
+        let captured = || InteractionState {
+            captured: true,
+            hittest: Hittest::Inside,
+            ..input()
+        };
+
+        // On a button, in every mode: the hand.
+        assert_eq!(cursor_for(&captured(), true, true), CursorIcon::Pointer);
+        assert_eq!(
+            cursor_for(
+                &InteractionState {
+                    scroll_pick_mode: true,
+                    ..captured()
+                },
+                true,
+                true
+            ),
+            CursorIcon::Pointer
+        );
+
+        // On the dead chassis: the arrow, never a resize handle — the
+        // press is swallowed, so no drag can start.
+        assert_eq!(cursor_for(&captured(), false, true), CursorIcon::Default);
+
+        // Picking, off the strip, inside the selection: the reticle is the
+        // pointer and the crosshair is only the fallback for a failed
+        // hardware hide.
+        assert_eq!(
+            cursor_for(
+                &InteractionState {
+                    scroll_pick_mode: true,
+                    ..captured()
+                },
+                false,
+                false
+            ),
+            CursorIcon::Crosshair
+        );
+
+        // OCR freezes the selection, so no resize arrows over it.
+        assert_eq!(
+            cursor_for(
+                &InteractionState {
+                    ocr: OcrState::Scanning {
+                        anchor: Instant::now(),
+                        req: 1,
+                        region: ScreenRect::from_xy_size(0, 0, 10, 10),
+                    },
+                    ..captured()
+                },
+                false,
+                false
+            ),
+            CursorIcon::Default
+        );
+
+        // Otherwise the hit-test decides.
+        assert_eq!(cursor_for(&captured(), false, false), Hittest::Inside.cursor());
+        let outside = InteractionState {
+            hittest: Hittest::Outside,
+            ..captured()
+        };
+        assert_eq!(cursor_for(&outside, false, false), Hittest::Outside.cursor());
     }
 
     /// A result-shaped payload for gating assertions; recognition itself is

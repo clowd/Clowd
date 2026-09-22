@@ -304,6 +304,15 @@ pub(crate) struct InteractionState {
     /// routed to the picker instead of the panel/drag machinery. Escape
     /// leaves the mode without canceling the cycle.
     pub scroll_pick_mode: bool,
+    /// Whether the pointer was on the button tray when the last broadcast
+    /// laid it out (`PanelOutcome::over_tray`, chassis and padding
+    /// included). Carried here so the decisions taken outside that pass —
+    /// `app::update_cursor_visibility` above all — answer from the same
+    /// layout the tray itself did, rather than hit-testing it a second
+    /// time against a rect that may have moved.
+    ///
+    /// False whenever there is no tray.
+    pub pointer_over_tray: bool,
     /// Where the OCR lift-and-act mode is in its lifecycle — see
     /// [`OcrState`]. Mirrored verbatim onto `UiSharedState` so the lifted
     /// lines, the modal input gates and the panel set all swap in one
@@ -355,6 +364,7 @@ impl InteractionState {
             last_scroll_end: None,
             scroll_momentum: false,
             overlays_visible: true,
+            pointer_over_tray: false,
             cursor_overlay_visible: true,
             peek_suspended: false,
             has_ever_scrolled: false,
@@ -529,6 +539,7 @@ mod tests {
             last_scroll_end: None,
             scroll_momentum: false,
             overlays_visible: true,
+            pointer_over_tray: false,
             cursor_overlay_visible: true,
             peek_suspended: false,
             has_ever_scrolled: false,

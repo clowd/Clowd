@@ -44,15 +44,21 @@ pub struct ScopeInputs {
 /// `cursor ± SCOPE_EXTENT * cursor_monitor.dpi` draws the whole reticle.
 ///
 /// The reticle is the pointer's stand-in over the selection's INTERIOR
-/// only — the one place a pick can land. On the resize handles, outside
-/// the selection and over the strip the ordinary pointer stays, because
-/// those are still ordinary interactions: the region can be trimmed to
-/// the scrolling area while the picker waits.
+/// only — the one place a pick can land. On the resize handles and
+/// outside the selection the ordinary pointer stays, because those are
+/// still ordinary interactions: the region can be trimmed to the
+/// scrolling area while the picker waits.
+///
+/// Over the STRIP the pointer stays too, and that case is not decided
+/// here: the strip can be placed inside the selection, where the hittest
+/// is `Inside` like anywhere else in the region, so it takes the tray's
+/// own answer about what the pointer is on. `components::compose` holds
+/// that half, from the pass that laid the tray out.
 ///
 /// The `overlays_visible` and `hittest` gates must keep agreeing with
-/// `app::update_cursor_visibility`, which hides the OS pointer under
-/// exactly the same conditions: if this said `None` while the pointer
-/// stayed hidden there would be no pointer at all.
+/// `app::reticle_stands_in`, which hides the OS pointer under exactly the
+/// same conditions: if this said `None` while the pointer stayed hidden
+/// there would be no pointer at all.
 ///
 /// The host's index is unused — the reach test is geometric — but the
 /// signature matches every other overlay's builder.

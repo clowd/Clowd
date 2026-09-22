@@ -122,6 +122,11 @@ pub struct OverlayInputs {
 /// below both, through one background layer whose emission order is their
 /// draw order — egui drains the bare layers of one order in hash order, so
 /// a single layer id is what makes that order deterministic.
+///
+/// The tray is laid out FIRST so the overlays can ask what the pointer
+/// found on it in this same pass. That is not a z-order decision and
+/// cannot become one: the tray is its own `Order::Foreground` layer, so it
+/// covers the background layer however these calls are sequenced.
 pub fn compose(ctx: &egui::Context, inputs: &HostInputs, monitor: UiMonitor) -> PanelOutcome {
     let o = &inputs.overlays;
     let painter = ctx.layer_painter(LayerId::new(Order::Background, Id::new("clowd-overlays")));
@@ -129,11 +134,23 @@ pub fn compose(ctx: &egui::Context, inputs: &HostInputs, monitor: UiMonitor) -> 
     // safe-area insets on Windows it is the whole monitor, in points.
     let screen = ctx.viewport_rect();
     let ppp = monitor.dpi_scale.max(0.1);
+    let mut out = PanelOutcome::default();
+    if let Some(p) = &inputs.panel {
+        out = panel::show::show(ctx, p, monitor, o.overlays_visible);
+    }
     if let Some(x) = &o.ocr {
         ocr::show::show(ctx, &painter, x, &monitor);
     }
     if let Some(x) = &o.scope {
-        scope::show::show(&painter, x, &monitor);
+        // The reticle stands in for the hidden OS pointer — but not over
+        // the tray, which keeps its own live pointer. The scroll-picker is
+        // locked to a row, so a selection with no room beneath it puts the
+        // strip INSIDE the region, and the reticle would otherwise be
+        // drawn around a pointer that is really on a button. Same rule as
+        // `app::reticle_stands_in`, answered from the same pass.
+        if !out.over_tray {
+            scope::show::show(&painter, x, &monitor);
+        }
     }
     if let Some(x) = &o.area {
         area::show::show(&painter, x, screen);
@@ -141,10 +158,6 @@ pub fn compose(ctx: &egui::Context, inputs: &HostInputs, monitor: UiMonitor) -> 
     hints::show::show(ctx, &painter, &o.hints, o.notice.as_ref(), screen, o.accent, ppp);
     if let Some(x) = &o.tips {
         tips::show::show(&painter, x, screen);
-    }
-    let mut out = PanelOutcome::default();
-    if let Some(p) = &inputs.panel {
-        out = panel::show::show(ctx, p, monitor, o.overlays_visible);
     }
     if let Some(d) = &inputs.debug {
         debug::show::show(ctx, d);
@@ -159,6 +172,7 @@ mod tests {
     use crate::ui::components::panel::model::{ButtonStyle, PanelButtonSet, PanelFeatures};
     use crate::ui::components::panel::{show as panel_show, theme};
     use crate::ui::egui_host::PanelInputs;
+    use clowd_rust_core::geometry::ScreenPointF;
     use clowd_rust_core::geometry::{RectExt, ScreenRect};
     use egui::epaint::Shape;
 
@@ -253,6 +267,68 @@ mod tests {
                 .all(|s| matches!(s, Shape::Noop)),
             "{shapes:?}"
         );
+    }
+
+    /// The scroll-picker's reticle is the hidden pointer's stand-in over
+    /// the selection's interior — but the strip can BE inside the
+    /// selection (the picker is locked to a row, so a region with no room
+    /// beneath it gets `Side::Inside`), and there the ordinary pointer is
+    /// back. Drawing the reticle around a pointer that is really on a
+    /// button is what this pins against: `compose` takes the answer from
+    /// the tray it laid out in the same pass.
+    #[test]
+    fn the_scroll_pick_reticle_yields_to_the_tray_under_the_pointer() {
+        let ctx = context();
+        let monitor = monitor();
+        let inputs = HostInputs {
+            panel: Some(PanelInputs {
+                set: PanelButtonSet::ScrollPick,
+                ..panel_inputs(monitor)
+            }),
+            debug: None,
+            pointer: None,
+            overlays: OverlayInputs {
+                overlays_visible: true,
+                scope: Some(scope::show::ScopeInputs {
+                    center: ScreenPointF::new(700.0, 500.0),
+                    dpi: 1.0,
+                    accent: Color32::from_rgb(0x2F, 0x7C, 0xAE),
+                }),
+                ..Default::default()
+            },
+        };
+        // Two passes to place the strip; an `Area` only knows its own rect
+        // from its second, and egui hit-tests the previous pass's rects.
+        for _ in 0..2 {
+            ctx.run_ui(raw_input(monitor, None), |ui| {
+                compose(ui.ctx(), &inputs, monitor);
+            })
+            .drop_without_applying_deltas();
+        }
+        let tray = ctx
+            .memory(|m| m.area_rect(egui::Id::new(panel_show::PANEL_ID)))
+            .expect("the tray has an area rect after a pass");
+
+        // The reticle's centre dot is painted in the accent; count it as
+        // the reticle's signature.
+        let reticle_drawn = |pointer: Option<egui::Pos2>| {
+            let mut outcome = PanelOutcome::default();
+            let output = ctx.run_ui(raw_input(monitor, pointer), |ui| {
+                outcome = compose(ui.ctx(), &inputs, monitor);
+            });
+            let drawn = shapes_of(&output)
+                .iter()
+                .any(|s| matches!(s, Shape::Circle(c) if c.fill == scope::show::HALO));
+            output.drop_without_applying_deltas();
+            (outcome.over_tray, drawn)
+        };
+
+        let (over_tray, drawn) = reticle_drawn(Some(egui::pos2(tray.left() - 40.0, tray.center().y)));
+        assert!(!over_tray && drawn, "off the strip the reticle is drawn");
+
+        let (over_tray, drawn) = reticle_drawn(Some(tray.center()));
+        assert!(over_tray, "the pointer is on the strip");
+        assert!(!drawn, "the reticle must yield to the strip under the pointer");
     }
 
     /// The tray's outcome is `compose`'s return value: the run that draws
