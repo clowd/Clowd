@@ -136,11 +136,6 @@ namespace Clowd.UI.VideoEditor
         private List<AspectRatioOption> _aspectRatioOptions = new List<AspectRatioOption>();
         private bool _syncingAspectRatio;
 
-        // the frame-rate picker, on the same terms: its native entry follows the media too, so it is
-        // rebuilt from the project rather than filled once.
-        private List<FrameRateOption> _frameRateOptions = new List<FrameRateOption>();
-        private bool _syncingFrameRate;
-
         // the sidebar's ColumnDefinition (contentGrid column 3). Avalonia's XAML compiler does not
         // emit a field for an x:Named ColumnDefinition, so reach it through the named grid.
         private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[3];
@@ -328,7 +323,6 @@ namespace Clowd.UI.VideoEditor
             InitVoiceRecorder();
 
             ddAspectRatio.PropertyChanged += AspectRatio_PropertyChanged;
-            ddFrameRate.PropertyChanged += FrameRate_PropertyChanged;
 
             // the zoom readout is derived, not set: the preview owns the letterbox math and
             // reports what it landed on (a resize, a Fit toggle or a resolution change all move it).
@@ -677,10 +671,9 @@ namespace Clowd.UI.VideoEditor
             preview.Session = _editor;
             preview.SetVideo(new Size(project.Output.WidthPx, project.Output.HeightPx));
 
-            // aspect ratio and frame rate only: the duration lives on the transport readout, beside
-            // the playhead.
+            // aspect ratio only: the duration lives on the transport readout, beside the playhead,
+            // and the frame rate is a render choice (the render dialog's Frame rate row).
             RefreshAspectRatioPicker();
-            RefreshFrameRatePicker();
             RefreshTimelineCollapse();
 
             if (_editor.DurationTicks <= 0)
@@ -796,12 +789,11 @@ namespace Clowd.UI.VideoEditor
 
             UpdatePositionReadout(_player?.Position ?? TimeSpan.Zero);
 
-            // the canvas size and the frame rate are editable (and undoable), so the letterbox and
-            // both pickers follow the model on every change rather than only at open.
+            // the canvas size is editable (and undoable), so the letterbox and the picker follow
+            // the model on every change rather than only at open.
             var output = _editor.Project.Output;
             preview.SetVideo(new Size(output.WidthPx, output.HeightPx));
             RefreshAspectRatioPicker();
-            RefreshFrameRatePicker();
             RefreshAddSpeedButton();
             RefreshInputOverlayButtons();
             RefreshTimelineCollapse();
@@ -1773,9 +1765,26 @@ namespace Clowd.UI.VideoEditor
             // another editor window may have saved or deleted a preset since this one last opened
             RebuildUserPresetRows();
             SyncRenderPresetChecks();
+            SyncRenderPresetCaptions();
             renderPopup.PlacementTarget = btnRender;
             renderPopup.IsOpen = true;
         }
+
+        /// <summary>The built-in rows' captions, ending in the frame rate each would actually render
+        /// this project at — "30 fps" for Share on a 30 fps recording, not the 60 it is capped to,
+        /// which the project could never reach. Rebuilt on every open: an import or a relink can
+        /// change the fastest clip.</summary>
+        private void SyncRenderPresetCaptions()
+        {
+            captionPresetShare.Text = "Plays everywhere, sensible size · max 1080p · " + DescribeRenderFps(RenderPresets.MaxFpsOf(RenderPreset.Share));
+            captionPresetBest.Text = "For YouTube or keeping a master · " + DescribeRenderFps(RenderPresets.MaxFpsOf(RenderPreset.BestQuality));
+            captionPresetSmall.Text = "Fits chat upload limits · max 720p · " + DescribeRenderFps(RenderPresets.MaxFpsOf(RenderPreset.SmallFile));
+        }
+
+        /// <summary>"60 fps": the rate a render capped at <paramref name="maxFps"/> is encoded at
+        /// for this project.</summary>
+        private string DescribeRenderFps(int maxFps) =>
+            RenderFrameRate.Describe(RenderFrameRate.Resolve(_editor?.Project, maxFps));
 
         /// <summary>The preset that will render when the flyout is opened and Enter is
         /// pressed — what was rendered last, defaulting to Share.</summary>
@@ -1819,7 +1828,7 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>Rebuilds the user presets' rows between the built-ins and "More options…":
-        /// a separator, then per preset its name, "Created {date}" under it, the last-used check
+        /// a separator, then per preset its name, "Created {date} · {fps}" under it, the last-used check
         /// mark and an X that deletes it. The arrow keys walk them with the built-in rows.</summary>
         private void RebuildUserPresetRows()
         {
@@ -1846,6 +1855,7 @@ namespace Clowd.UI.VideoEditor
                 {
                     FontSize = 11,
                     Text = "Created " + preset.CreatedUtc.ToLocalTime().ToString("d", CultureInfo.CurrentCulture) +
+                           " · " + DescribeRenderFps(preset.MaxFps) +
                            (preset.DeleteSession ? " · deletes session" : ""),
                     TextWrapping = TextWrapping.Wrap,
                     [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SemiColorText2"),
@@ -1959,6 +1969,7 @@ namespace Clowd.UI.VideoEditor
                 Name = request.SaveAsPresetName,
                 Crf = request.Crf,
                 MaxHeight = request.MaxHeight,
+                MaxFps = request.MaxFps,
                 HardwareEncoder = request.HardwareEncoder,
                 CopyToClipboard = request.CopyToClipboard,
                 ShowInFolder = request.ShowInFolder,
@@ -2036,9 +2047,10 @@ namespace Clowd.UI.VideoEditor
             if (durationTicks <= 0)
                 durationTicks = _editor.DurationTicks;
 
+            var ceiling = RenderFrameRate.Ceiling(project);
             var info = new RenderProjectInfo(
                 project.Output.WidthPx, project.Output.HeightPx,
-                project.Output.FpsNum, project.Output.FpsDen,
+                ceiling.Num, ceiling.Den,
                 TimeSpan.FromTicks(Math.Max(0, durationTicks)));
 
             // a user preset opens the dialog on its own values; anything else as before
@@ -2054,10 +2066,11 @@ namespace Clowd.UI.VideoEditor
                 // flyout checks the row they amount to (Custom when they match no preset).
                 Settings.CustomRenderCrf = request.Crf;
                 Settings.CustomRenderMaxHeight = request.MaxHeight;
+                Settings.CustomRenderMaxFps = request.MaxFps;
                 Settings.CopyToClipboardAfterRender = request.CopyToClipboard;
                 Settings.ShowInFolderAfterRender = request.ShowInFolder;
                 Settings.HardwareEncodeRender = request.HardwareEncoder;
-                Settings.LastRenderPreset = RenderPresets.Match(request.Crf, request.MaxHeight);
+                Settings.LastRenderPreset = RenderPresets.Match(request.Crf, request.MaxHeight, request.MaxFps);
 
                 // a new preset becomes the last-used row, so the flyout's Enter repeats it
                 if (!String.IsNullOrEmpty(request.SaveAsPresetName))
@@ -2193,7 +2206,7 @@ namespace Clowd.UI.VideoEditor
         /// without creating any Recents entry.</summary>
         private async Task RunDevRenderAsync(RenderRequest request)
         {
-            var project = _editor.SnapshotForPlayer();
+            var project = RenderFrameRate.Apply(_editor.SnapshotForPlayer(), request.MaxFps);
             var outputPath = String.IsNullOrEmpty(request.OutputPath)
                 ? VideoRenderManager.GetOutputPath(_videoPath)
                 : request.OutputPath;
@@ -2689,42 +2702,6 @@ namespace Clowd.UI.VideoEditor
                 return;
 
             _editor.SetOutputSize(output.HeightPx, output.WidthPx, this);
-        }
-
-        /// <summary>Rebuilds the frame-rate picker from the project and re-selects the rate it is
-        /// actually set to — like the resolution picker, the list depends on the media (the native
-        /// entry) and on the current rate, so undo and an import both have to be able to change
-        /// it.</summary>
-        private void RefreshFrameRatePicker()
-        {
-            if (_editor == null)
-                return;
-
-            _syncingFrameRate = true;
-            try
-            {
-                _frameRateOptions = FrameRateOptions.Build(_editor.Project);
-                ddFrameRate.ItemsSource = _frameRateOptions;
-                ddFrameRate.SelectedItem = FrameRateOptions.FindCurrent(_frameRateOptions, _editor.Project);
-            }
-            finally
-            {
-                _syncingFrameRate = false;
-            }
-        }
-
-        private void FrameRate_PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
-        {
-            if (_syncingFrameRate || _editor == null ||
-                e.Property != Clowd.UI.Controls.DropDownButton.SelectedItemProperty)
-                return;
-
-            if (e.GetNewValue<object>() is not FrameRateOption option)
-                return;
-
-            // as above: the committed change raises ProjectChanged and re-selects this entry, and
-            // picking the rate already set is a no-op.
-            _editor.SetOutputFrameRate(option.Num, option.Den, this);
         }
 
         private void UpdatePlayPauseButton()

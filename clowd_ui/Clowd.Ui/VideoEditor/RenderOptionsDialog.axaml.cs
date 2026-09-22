@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
@@ -14,19 +15,21 @@ using Ursa.Controls;
 namespace Clowd.UI.VideoEditor
 {
     /// <summary>What the render dialog needs to know about the project it is about to render: the
-    /// canvas the edit composes into, the output frame rate, and how long the edit runs. All of it
-    /// is shown (the footer's "0:42 · 1920×1080 · 60 fps") and the canvas decides which size caps
-    /// could shrink the output at all.</summary>
+    /// canvas the edit composes into, the fastest frame rate it can be rendered at, and how long the
+    /// edit runs. All of it is shown (the footer's "0:42 · 1920×1080 · 60 fps"); the canvas decides
+    /// which size caps could shrink the output at all, and the rate which frame-rate caps could.</summary>
     /// <param name="WidthPx">Output canvas width in pixels.</param>
     /// <param name="HeightPx">Output canvas height in pixels.</param>
-    /// <param name="FpsNum">Output frame rate numerator.</param>
-    /// <param name="FpsDen">Output frame rate denominator.</param>
+    /// <param name="FpsNum">Numerator of the frame-rate ceiling (<see cref="RenderFrameRate.Ceiling"/>):
+    /// the fastest clip, what "Actual" renders at.</param>
+    /// <param name="FpsDen">Its denominator.</param>
     /// <param name="Duration">How long the rendered video will be.</param>
     public readonly record struct RenderProjectInfo(int WidthPx, int HeightPx, int FpsNum, int FpsDen, TimeSpan Duration);
 
     /// <summary>
     /// The "Render video" dialog behind the Render flyout's "More options…" row: quality (a CRF
-    /// slider, with the three presets as shortcuts onto it), an encode-time size cap, whether the
+    /// slider, with the three presets as shortcuts onto it), an encode-time size cap, a frame-rate
+    /// cap (the recording frame-rate presets, from settings), whether the
     /// GPU encoder may be used, where the file goes, and what should happen once it is there. It
     /// renders nothing itself — it returns a <see cref="RenderRequest"/> the caller starts, or
     /// null when the user backed out.
@@ -44,7 +47,19 @@ namespace Clowd.UI.VideoEditor
         };
 
         private readonly RenderProjectInfo _project;
+
+        // the rate "Actual" renders at, and the most any cap can be
+        private readonly (int Num, int Den) _fpsCeiling;
+
+        // the three middle cells of the Frame rate row and the rate each stands for (0: no preset
+        // in that box, cell hidden)
+        private readonly (RadioButton Cell, int Fps)[] _fpsPresetCells;
         private readonly string _defaultDirectory;
+
+        // the request the dialog opened on. A cap this project cannot use (Share's 1080p on a 720p
+        // canvas, its 60 fps on a 30 fps recording) opens as Actual; left there, the request keeps
+        // the original cap — it renders identically, and the flyout can still tell it was Share.
+        private readonly RenderRequest _initial;
 
         // an accept already in flight (the overwrite prompt is modal over this window, but Enter
         // can still be delivered here first)
@@ -67,6 +82,10 @@ namespace Clowd.UI.VideoEditor
             bool canDeleteSession)
         {
             _project = project;
+            _initial = initial;
+            _fpsCeiling = project.FpsNum > 0 && project.FpsDen > 0
+                ? (project.FpsNum, project.FpsDen)
+                : (RenderFrameRate.NoVideoCeilingFps, 1);
 
             InitializeComponent();
             Icon = AppStyles.AppIcon;
@@ -83,8 +102,27 @@ namespace Clowd.UI.VideoEditor
             Size480.IsEnabled = _project.HeightPx > 480;
             CustomHeightBox.Maximum = EditorSession.MaxOutputDimension;
 
+            // the recording frame-rate presets (the FPS tile's), ascending and without the emptied boxes; like the size
+            // cells, one at or above the fastest clip could not lower anything, so it is shown
+            // but disabled.
+            var presets = (SettingsRoot.Current?.Recording?.FpsPresets?.Values ?? Array.Empty<int>())
+                .Where(f => f > 0).ToArray();
+            _fpsPresetCells = new[] { FpsPreset1, FpsPreset2, FpsPreset3 }
+                .Select((cell, i) => (cell, i < presets.Length ? presets[i] : 0))
+                .ToArray();
+            foreach (var (cell, fps) in _fpsPresetCells)
+            {
+                cell.IsVisible = fps > 0;
+                cell.Content = fps.ToString(CultureInfo.InvariantCulture) + " fps";
+                cell.IsEnabled = RenderFrameRate.IsBelow(fps, _fpsCeiling);
+            }
+            // a cap is whole frames per second, and the ceiling rounded up is the most one can be
+            // (30 on 29.97 material, which then renders at the material's own rate)
+            CustomFpsBox.Maximum = Math.Max(1, (int)Math.Ceiling(_fpsCeiling.Num / (double)_fpsCeiling.Den));
+
             SelectQuality(initial.Crf);
             SelectSize(initial.MaxHeight);
+            SelectFps(initial.MaxFps);
 
             PathBox.Text = defaultOutputPath;
             HardwareCheck.IsChecked = initial.HardwareEncoder;
@@ -119,9 +157,13 @@ namespace Clowd.UI.VideoEditor
             foreach (var size in new[] { SizeActual, Size1080, Size720, Size480, SizeCustom })
                 size.IsCheckedChanged += (_, _) => SyncSizeCaption();
             CustomHeightBox.ValueChanged += (_, _) => SyncSizeCaption();
+            foreach (var fps in new[] { FpsActual, FpsPreset1, FpsPreset2, FpsPreset3, FpsCustom })
+                fps.IsCheckedChanged += (_, _) => SyncFpsCaption();
+            CustomFpsBox.ValueChanged += (_, _) => SyncFpsCaption();
 
             SyncQualitySegments();
             SyncSizeCaption();
+            SyncFpsCaption();
 
             BrowseButton.Click += (_, _) => _ = BrowseAsync();
             RenderButton.Click += (_, _) => _ = AcceptAsync();
@@ -183,16 +225,8 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>"60", or "23.98" for the fractional rates NTSC material carries.</summary>
-        private static string FormatFps(RenderProjectInfo project)
-        {
-            if (project.FpsNum <= 0 || project.FpsDen <= 0)
-                return "0";
-
-            var fps = project.FpsNum / (double)project.FpsDen;
-            return Math.Abs(fps - Math.Round(fps)) < 0.001
-                ? Math.Round(fps).ToString(CultureInfo.InvariantCulture)
-                : fps.ToString("0.##", CultureInfo.InvariantCulture);
-        }
+        private static string FormatFps(RenderProjectInfo project) =>
+            RenderFrameRate.Format((project.FpsNum, project.FpsDen));
 
         /// <summary>The segment the slider currently sits on, or null when its value is none of
         /// the three.</summary>
@@ -266,6 +300,49 @@ namespace Clowd.UI.VideoEditor
             SizeCaption.Text = String.Format(CultureInfo.InvariantCulture, "{0}×{1}", width, height);
         }
 
+        /// <summary>Checks the frame-rate cell for <paramref name="maxFps"/>, the same way
+        /// <see cref="SelectSize"/> does: a preset cell when the cap is one of them and can lower
+        /// this project, Actual when it cannot (a remembered 60 meeting a 30 fps project), Custom
+        /// with the number filled in for any other cap. The Custom box otherwise starts on the
+        /// ceiling, the most a cap can be.</summary>
+        private void SelectFps(int maxFps)
+        {
+            var max = (int)CustomFpsBox.Maximum;
+            var preset = _fpsPresetCells.FirstOrDefault(c => c.Fps > 0 && c.Fps == maxFps).Cell;
+
+            CustomFpsBox.Value = maxFps > 0 && preset == null ? Math.Min(maxFps, max) : max;
+
+            if (maxFps <= 0 || !RenderFrameRate.IsBelow(maxFps, _fpsCeiling))
+                FpsActual.IsChecked = true;
+            else if (preset != null)
+                preset.IsChecked = true;
+            else
+                FpsCustom.IsChecked = true;
+        }
+
+        private int SelectedMaxFps()
+        {
+            if (FpsCustom.IsChecked == true)
+                return RenderPresets.ClampFps(CustomFpsBox.Value ?? 0);
+
+            foreach (var (cell, fps) in _fpsPresetCells)
+            {
+                if (cell.IsChecked == true)
+                    return fps;
+            }
+
+            return 0;
+        }
+
+        /// <summary>The caption beside the frame-rate cells: the rate the file will actually be
+        /// encoded at, through the same rule the render applies, so a cap at or above the fastest
+        /// clip reads as the clip's own rate rather than as the number typed.</summary>
+        private void SyncFpsCaption()
+        {
+            CustomFpsBox.IsVisible = FpsCustom.IsChecked == true;
+            FpsCaption.Text = RenderFrameRate.Describe(RenderFrameRate.Resolve(_fpsCeiling, SelectedMaxFps()));
+        }
+
         private async Task BrowseAsync()
         {
             var current = ResolveTypedPath(out _);
@@ -322,6 +399,15 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
+            if (FpsCustom.IsChecked == true && (CustomFpsBox.Value ?? 0) <= 0)
+            {
+                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
+                    "Enter the maximum frame rate for the video, or pick one of the other rates.",
+                    "The custom frame rate needs a number");
+                CustomFpsBox.Focus();
+                return;
+            }
+
             string presetName = null;
             if (SavePresetCheck.IsChecked == true)
             {
@@ -361,7 +447,10 @@ namespace Clowd.UI.VideoEditor
             _result = new RenderRequest
             {
                 Crf = SelectedCrf(),
-                MaxHeight = SelectedMaxHeight(),
+                MaxHeight = SizeActual.IsChecked == true && _initial.MaxHeight >= _project.HeightPx
+                    ? _initial.MaxHeight : SelectedMaxHeight(),
+                MaxFps = FpsActual.IsChecked == true && _initial.MaxFps > 0 && !RenderFrameRate.IsBelow(_initial.MaxFps, _fpsCeiling)
+                    ? _initial.MaxFps : SelectedMaxFps(),
                 HardwareEncoder = HardwareCheck.IsChecked == true,
                 OutputPath = path,
                 CopyToClipboard = CopyCheck.IsChecked == true,

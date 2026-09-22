@@ -114,8 +114,9 @@
         </Border>
 
         <Grid Margin="16,18,16,16" ColumnDefinitions="96,*">
-            <!--  quality · the CRF slider · size · encoder · save to · after render · preset  -->
+            <!--  quality · the CRF slider · size · frame rate · encoder · save to · after render · preset  -->
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -241,17 +242,72 @@
                 </StackPanel>
             </StackPanel>
 
+            <!--  Frame rate: a cap, like Size — never above the fastest clip in the project, which
+                  is what Actual renders at. The middle cells are the recording frame-rate presets
+                  (settings, Recording > Video > Frame rate presets), labeled and shown from code.  -->
+            <TextBlock
+                Grid.Row="3"
+                Grid.Column="0"
+                Margin="0,20,12,0"
+                Classes="rowLabel"
+                Text="Frame rate" />
+            <StackPanel
+                Grid.Row="3"
+                Grid.Column="1"
+                Margin="0,14,0,0"
+                Spacing="8">
+                <Border Classes="segments">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton
+                            x:Name="FpsActual"
+                            Content="Actual"
+                            GroupName="fps"
+                            Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="FpsPreset1"
+                            GroupName="fps"
+                            Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="FpsPreset2"
+                            GroupName="fps"
+                            Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="FpsPreset3"
+                            GroupName="fps"
+                            Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="FpsCustom"
+                            Content="Custom"
+                            GroupName="fps"
+                            Theme="{StaticResource SegmentCell}" />
+                    </StackPanel>
+                </Border>
+                <!--  Custom: a whole-number cap of the user's own, bounded by the fastest clip; the
+                      caption is the rate the file will actually have, whichever cell is on.  -->
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <u:NumericIntUpDown
+                        x:Name="CustomFpsBox"
+                        Width="130"
+                        InnerRightContent="fps"
+                        Minimum="1" />
+                    <TextBlock
+                        x:Name="FpsCaption"
+                        VerticalAlignment="Center"
+                        Classes="hint" />
+                </StackPanel>
+            </StackPanel>
+
             <!--  Encoder: the GPU paths exist (NVENC, AMF, VideoToolbox, with x264 as the fallback
                   when none opens) but stay off unless asked: they are engine-bound and their quality
                   mapping runs larger than x264's at the same setting.  -->
             <TextBlock
-                Grid.Row="3"
+                Grid.Row="4"
                 Grid.Column="0"
                 Margin="0,14,12,0"
                 Classes="rowLabel"
                 Text="Encoder" />
             <StackPanel
-                Grid.Row="3"
+                Grid.Row="4"
                 Grid.Column="1"
                 Margin="0,14,0,0"
                 Spacing="2">
@@ -265,13 +321,13 @@
             <!--  Save to: the full path, pre-filled from the recording settings  -->
             <!--  +7: level with the text inside the path box  -->
             <TextBlock
-                Grid.Row="4"
+                Grid.Row="5"
                 Grid.Column="0"
                 Margin="0,21,12,0"
                 Classes="rowLabel"
                 Text="Save to" />
             <Grid
-                Grid.Row="4"
+                Grid.Row="5"
                 Grid.Column="1"
                 Margin="0,14,0,0"
                 ColumnDefinitions="*,Auto">
@@ -291,13 +347,13 @@
 
             <!--  After render  -->
             <TextBlock
-                Grid.Row="5"
+                Grid.Row="6"
                 Grid.Column="0"
                 Margin="0,16,12,0"
                 Classes="rowLabel"
                 Text="After render" />
             <StackPanel
-                Grid.Row="5"
+                Grid.Row="6"
                 Grid.Column="1"
                 Margin="0,16,0,0"
                 Spacing="6">
@@ -321,13 +377,13 @@
 
             <!--  Preset: saves every row above but "Save to" as a row of the Render button's list  -->
             <TextBlock
-                Grid.Row="6"
+                Grid.Row="7"
                 Grid.Column="0"
                 Margin="0,16,12,0"
                 Classes="rowLabel"
                 Text="Preset" />
             <StackPanel
-                Grid.Row="6"
+                Grid.Row="7"
                 Grid.Column="1"
                 Margin="0,16,0,0"
                 Spacing="6">

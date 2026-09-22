@@ -21,6 +21,11 @@ namespace Clowd.UI.Services
         /// preserved (see <c>RenderJob.CapSize</c>).</summary>
         public int MaxHeight { get; init; }
 
+        /// <summary>Cap on the output frame rate in whole frames per second, 0 for none. Never
+        /// raises the rate: the render is encoded at the project's fastest clip, or at this cap
+        /// when it is lower (see <see cref="RenderFrameRate.Resolve(Clowd.VideoSDK.Model.Project, int)"/>).</summary>
+        public int MaxFps { get; init; }
+
         /// <summary>Let the GPU encoder (NVENC, AMF or VideoToolbox, whichever opens; x264 when
         /// none does) encode the video instead of x264. Off by default: on a desktop CPU x264 fast
         /// is faster and its file smaller at the same quality setting.</summary>
@@ -64,17 +69,34 @@ namespace Clowd.UI.Services
             _ => (int)VideoQuality.Medium,
         };
 
-        /// <summary>The preset's encode-time height cap, 0 for none.</summary>
-        public static int MaxHeightOf(RenderPreset preset) => preset == RenderPreset.SmallFile ? 720 : 0;
+        /// <summary>The preset's encode-time height cap, 0 for none: Share stops at 1080p (level 4.2
+        /// H.264, which every phone and browser decodes; 1440p/4K60 is not), Small file at 720p, Best
+        /// quality keeps the full canvas. A cap at or above the canvas changes nothing.</summary>
+        public static int MaxHeightOf(RenderPreset preset) => preset switch
+        {
+            RenderPreset.Share => 1080,
+            RenderPreset.SmallFile => 720,
+            _ => 0,
+        };
 
-        /// <summary>Which preset (if any) a pair of dialog values is: used after a custom render so
+        /// <summary>The preset's frame-rate cap, 0 for none: Share stops at 60 (anything faster
+        /// is mostly bytes a chat player drops), Small file at 30, Best quality keeps every frame
+        /// the material has. A cap above the project's fastest clip changes nothing.</summary>
+        public static int MaxFpsOf(RenderPreset preset) => preset switch
+        {
+            RenderPreset.Share => 60,
+            RenderPreset.SmallFile => 30,
+            _ => 0,
+        };
+
+        /// <summary>Which preset (if any) a set of dialog values is: used after a custom render so
         /// the flyout can still check the row the user effectively picked, and only falls back to
         /// <see cref="RenderPreset.Custom"/> when the values match none of the three.</summary>
-        public static RenderPreset Match(int crf, int maxHeight)
+        public static RenderPreset Match(int crf, int maxHeight, int maxFps)
         {
             foreach (var preset in new[] { RenderPreset.Share, RenderPreset.BestQuality, RenderPreset.SmallFile })
             {
-                if (CrfOf(preset) == crf && MaxHeightOf(preset) == maxHeight)
+                if (CrfOf(preset) == crf && MaxHeightOf(preset) == maxHeight && MaxFpsOf(preset) == maxFps)
                     return preset;
             }
 
@@ -94,6 +116,7 @@ namespace Clowd.UI.Services
             {
                 Crf = custom && settings != null ? ClampCrf(settings.CustomRenderCrf) : CrfOf(preset),
                 MaxHeight = custom && settings != null ? Math.Max(0, settings.CustomRenderMaxHeight) : MaxHeightOf(preset),
+                MaxFps = custom && settings != null ? ClampFps(settings.CustomRenderMaxFps) : MaxFpsOf(preset),
                 OutputPath = outputPath,
                 HardwareEncoder = settings?.HardwareEncodeRender ?? false,
                 CopyToClipboard = settings?.CopyToClipboardAfterRender ?? false,
@@ -107,6 +130,7 @@ namespace Clowd.UI.Services
         {
             Crf = ClampCrf(preset.Crf),
             MaxHeight = Math.Max(0, preset.MaxHeight),
+            MaxFps = ClampFps(preset.MaxFps),
             HardwareEncoder = preset.HardwareEncoder,
             CopyToClipboard = preset.CopyToClipboard,
             ShowInFolder = preset.ShowInFolder,
@@ -116,6 +140,10 @@ namespace Clowd.UI.Services
         /// <summary>The CRF range x264 accepts. A settings file edited by hand (or written by a
         /// future build) must never reach the encoder out of range.</summary>
         public static int ClampCrf(int crf) => Math.Clamp(crf, MinCrf, MaxCrf);
+
+        /// <summary>A frame-rate cap as the request carries it: 0 (none) for anything not
+        /// positive, and never past what a preset box can hold.</summary>
+        public static int ClampFps(int fps) => fps <= 0 ? 0 : Math.Min(fps, FpsPresets.MaxFps);
 
         /// <summary>Lowest CRF the dialog offers — lossless, enormous.</summary>
         public const int MinCrf = 0;

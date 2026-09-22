@@ -338,14 +338,6 @@
             </StackPanel>
 
             <StackPanel>
-                <TextBlock VerticalAlignment="Center" Text="Fps:" />
-                <controls:DropDownButton
-                    x:Name="ddFrameRate"
-                    MinWidth="76"
-                    VerticalAlignment="Center" />
-            </StackPanel>
-
-            <StackPanel>
                 <TextBlock VerticalAlignment="Center" Text="Zoom:" />
                 <TextBlock
                     x:Name="txtZoom"
@@ -930,9 +922,10 @@
                             <StackPanel Spacing="2">
                                 <TextBlock FontWeight="SemiBold" Text="Share" />
                                 <TextBlock
+                                    x:Name="captionPresetShare"
                                     FontSize="11"
                                     Foreground="{DynamicResource SemiColorText2}"
-                                    Text="Plays everywhere, sensible size · full resolution"
+                                    Text="Plays everywhere, sensible size · max 1080p"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <Path
@@ -954,9 +947,10 @@
                             <StackPanel Spacing="2">
                                 <TextBlock FontWeight="SemiBold" Text="Best quality" />
                                 <TextBlock
+                                    x:Name="captionPresetBest"
                                     FontSize="11"
                                     Foreground="{DynamicResource SemiColorText2}"
-                                    Text="For YouTube or keeping a master · full resolution"
+                                    Text="For YouTube or keeping a master"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <Path
@@ -978,6 +972,7 @@
                             <StackPanel Spacing="2">
                                 <TextBlock FontWeight="SemiBold" Text="Small file" />
                                 <TextBlock
+                                    x:Name="captionPresetSmall"
                                     FontSize="11"
                                     Foreground="{DynamicResource SemiColorText2}"
                                     Text="Fits chat upload limits · max 720p"

@@ -246,7 +246,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Frame rate presets")]
-        [Description("The frame rates the FPS tile on the recording toolbar cycles through. A preset above the monitor refresh rate (or above 360) is skipped. Set a box to 0 to drop that preset and cycle between fewer rates.")]
+        [Description("The frame rates the FPS tile on the recording toolbar cycles through, also offered in the video editor's render dialog. A preset above the monitor refresh rate (or above 360) is skipped when recording; a render is never encoded faster than its fastest clip. Set a box to 0 to drop that preset.")]
         public FpsPresets FpsPresets
         {
             get => _fpsPresets;

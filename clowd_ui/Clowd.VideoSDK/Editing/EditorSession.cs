@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -470,6 +470,39 @@ namespace Clowd.VideoSDK.Editing
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// The highest frame rate among the video streams the timeline actually plays: the most a
+        /// render can usefully be encoded at, since frames above it would only repeat pictures that
+        /// already exist. Unlike <see cref="GetNativeFrameRate"/> this is the <i>largest</i> rate,
+        /// so a 60fps webcam on a 30fps recording lets the render keep the webcam's motion. Null
+        /// when nothing referenced declares a rate (an edit of text and stills).
+        /// </summary>
+        public static (int Num, int Den)? GetMaxFrameRate(Project project)
+        {
+            if (project?.Sources == null)
+                return null;
+
+            (int Num, int Den)? best = null;
+            foreach (var source in project.Sources)
+            {
+                if (source.Streams == null || !IsSourceReferenced(project, source.Id))
+                    continue;
+
+                foreach (var stream in source.Streams)
+                {
+                    if (stream.Kind != StreamKind.Video ||
+                        stream.AvgFrameRateNum <= 0 || stream.AvgFrameRateDen <= 0)
+                        continue;
+
+                    // cross-multiplied, so 30000/1001 and 30/1 compare exactly
+                    if (best == null || (long)stream.AvgFrameRateNum * best.Value.Den > (long)best.Value.Num * stream.AvgFrameRateDen)
+                        best = (stream.AvgFrameRateNum, stream.AvgFrameRateDen);
+                }
+            }
+
+            return best;
         }
 
         /// <summary>

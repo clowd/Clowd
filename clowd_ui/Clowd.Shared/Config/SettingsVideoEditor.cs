@@ -9,18 +9,19 @@ namespace Clowd.Config
     /// one keystroke. The three named presets are the flyout's rows (their CRF and size cap live
     /// in the UI's <c>RenderPresets</c> table); <see cref="RenderPreset.Custom"/> means the user
     /// last rendered from the "Render video" dialog, and the values they chose there are in
-    /// <see cref="SettingsVideoEditor.CustomRenderCrf"/> and
-    /// <see cref="SettingsVideoEditor.CustomRenderMaxHeight"/>.
+    /// <see cref="SettingsVideoEditor.CustomRenderCrf"/>,
+    /// <see cref="SettingsVideoEditor.CustomRenderMaxHeight"/> and
+    /// <see cref="SettingsVideoEditor.CustomRenderMaxFps"/>.
     /// </summary>
     public enum RenderPreset
     {
-        /// <summary>Plays everywhere, sensible size (CRF 23, no size cap).</summary>
+        /// <summary>Plays everywhere, sensible size (CRF 23, capped to 1080p and 60 fps).</summary>
         Share,
 
-        /// <summary>For YouTube or keeping a master (CRF 18, no size cap).</summary>
+        /// <summary>For YouTube or keeping a master (CRF 18, no size or frame-rate cap).</summary>
         BestQuality,
 
-        /// <summary>Fits chat upload limits (CRF 29, capped to 720p).</summary>
+        /// <summary>Fits chat upload limits (CRF 29, capped to 720p and 30 fps).</summary>
         SmallFile,
 
         /// <summary>Whatever was last set in the render dialog.</summary>
@@ -33,7 +34,7 @@ namespace Clowd.Config
 
     /// <summary>
     /// A render preset the user saved from the "Render video" dialog ("Save current settings as
-    /// new preset"): quality, size cap and encoder, and the after-render actions ticked with them —
+    /// new preset"): quality, size and frame-rate caps and encoder, and the after-render actions ticked with them —
     /// "Delete session" included, so a preset made with it closes the editor and deletes the
     /// session on every successful one-click render.
     /// </summary>
@@ -50,6 +51,10 @@ namespace Clowd.Config
 
         /// <summary>Encode-time height cap, 0 for none.</summary>
         public int MaxHeight { get; set; }
+
+        /// <summary>Frame-rate cap in whole frames per second, 0 for none (the project's fastest
+        /// clip). A preset saved before the field existed reads 0, which is what it rendered at.</summary>
+        public int MaxFps { get; set; }
 
         public bool HardwareEncoder { get; set; }
 
@@ -130,6 +135,16 @@ namespace Clowd.Config
             set => Set(ref _customRenderMaxHeight, value);
         }
 
+        /// <summary>The frame-rate cap the render dialog was last rendered with, in whole frames per
+        /// second, 0 for none ("Actual": the fastest clip in the project). Like the size cap it
+        /// never raises a rate — see <c>RenderFrameRate.Resolve</c>.</summary>
+        [Browsable(false)]
+        public int CustomRenderMaxFps
+        {
+            get => _customRenderMaxFps;
+            set => Set(ref _customRenderMaxFps, value);
+        }
+
         /// <summary>Put the finished video on the clipboard as a file (so a paste into Explorer,
         /// Discord, Slack or Teams attaches it). Off by default — a render should not take the
         /// clipboard unless the user asked for it.</summary>
@@ -202,6 +217,7 @@ namespace Clowd.Config
         // would have rendered with, until the user changes it.
         private int _customRenderCrf = (int)VideoQuality.Medium;
         private int _customRenderMaxHeight;
+        private int _customRenderMaxFps;
         private bool _copyToClipboardAfterRender;
         private bool _showInFolderAfterRender;
         private bool _hardwareEncodeRender;

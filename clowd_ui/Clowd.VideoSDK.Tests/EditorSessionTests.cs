@@ -1483,5 +1483,41 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.Null(EditorSession.GetNativeFrameRate(session.Project));
         }
+
+        [Fact]
+        public void GetMaxFrameRate_takes_the_fastest_referenced_video_stream()
+        {
+            var session = NewSession(out _, out _, out _, out _);
+            session.Project.Sources[0].Streams[1].AvgFrameRateNum = 60;
+
+            Assert.Equal((60, 1), EditorSession.GetMaxFrameRate(session.Project));
+        }
+
+        [Fact]
+        public void GetMaxFrameRate_ignores_a_source_nothing_plays()
+        {
+            var session = NewSession(out _, out _, out _, out _);
+            session.Project.Sources.Insert(0, new Source
+            {
+                Id = Guid.NewGuid(),
+                Path = TestPath.Native(@"C:\media\unused.mp4"),
+                Streams =
+                {
+                    new SourceStream { Index = 0, Kind = StreamKind.Video, Width = 1280, Height = 720, AvgFrameRateNum = 120, AvgFrameRateDen = 1 },
+                },
+            });
+
+            Assert.Equal((30, 1), EditorSession.GetMaxFrameRate(session.Project));
+        }
+
+        [Fact]
+        public void GetMaxFrameRate_is_null_when_nothing_declares_a_rate()
+        {
+            var session = NewSession(out _, out _, out _, out _);
+            foreach (var stream in session.Project.Sources[0].Streams)
+                stream.AvgFrameRateNum = 0;
+
+            Assert.Null(EditorSession.GetMaxFrameRate(session.Project));
+        }
     }
 }

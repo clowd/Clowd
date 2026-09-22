@@ -17,17 +17,19 @@ namespace Clowd.VideoSDK.Tests
     public class RenderRequestTests
     {
         [Theory]
-        [InlineData(RenderPreset.Share, 23, 0)]
-        [InlineData(RenderPreset.BestQuality, 18, 0)]
-        [InlineData(RenderPreset.SmallFile, 29, 720)]
-        public void Each_preset_carries_the_quality_and_cap_the_flyout_promises(RenderPreset preset, int crf, int maxHeight)
+        [InlineData(RenderPreset.Share, 23, 1080, 60)]
+        [InlineData(RenderPreset.BestQuality, 18, 0, 0)]
+        [InlineData(RenderPreset.SmallFile, 29, 720, 30)]
+        public void Each_preset_carries_the_quality_and_cap_the_flyout_promises(RenderPreset preset, int crf, int maxHeight, int maxFps)
         {
             Assert.Equal(crf, RenderPresets.CrfOf(preset));
             Assert.Equal(maxHeight, RenderPresets.MaxHeightOf(preset));
+            Assert.Equal(maxFps, RenderPresets.MaxFpsOf(preset));
 
             var request = RenderPresets.Create(preset, new SettingsVideoEditor());
             Assert.Equal(crf, request.Crf);
             Assert.Equal(maxHeight, request.MaxHeight);
+            Assert.Equal(maxFps, request.MaxFps);
             // a preset render never names a path: the manager derives the settings default.
             Assert.Null(request.OutputPath);
         }
@@ -45,11 +47,12 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void The_custom_preset_reopens_on_the_values_the_dialog_last_rendered()
         {
-            var settings = new SettingsVideoEditor { CustomRenderCrf = 20, CustomRenderMaxHeight = 1080 };
+            var settings = new SettingsVideoEditor { CustomRenderCrf = 20, CustomRenderMaxHeight = 1080, CustomRenderMaxFps = 48 };
             var request = RenderPresets.Create(RenderPreset.Custom, settings);
 
             Assert.Equal(20, request.Crf);
             Assert.Equal(1080, request.MaxHeight);
+            Assert.Equal(48, request.MaxFps);
         }
 
         [Fact]
@@ -58,6 +61,8 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0, RenderPresets.Create(RenderPreset.Custom, new SettingsVideoEditor { CustomRenderCrf = -5 }).Crf);
             Assert.Equal(51, RenderPresets.Create(RenderPreset.Custom, new SettingsVideoEditor { CustomRenderCrf = 99 }).Crf);
             Assert.Equal(0, RenderPresets.Create(RenderPreset.Custom, new SettingsVideoEditor { CustomRenderMaxHeight = -16 }).MaxHeight);
+            Assert.Equal(0, RenderPresets.Create(RenderPreset.Custom, new SettingsVideoEditor { CustomRenderMaxFps = -30 }).MaxFps);
+            Assert.Equal(FpsPresets.MaxFps, RenderPresets.Create(RenderPreset.Custom, new SettingsVideoEditor { CustomRenderMaxFps = 5000 }).MaxFps);
         }
 
         [Fact]
@@ -74,12 +79,47 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Dialog_values_map_back_to_the_row_the_flyout_should_check()
         {
-            Assert.Equal(RenderPreset.Share, RenderPresets.Match(23, 0));
-            Assert.Equal(RenderPreset.BestQuality, RenderPresets.Match(18, 0));
-            Assert.Equal(RenderPreset.SmallFile, RenderPresets.Match(29, 720));
+            Assert.Equal(RenderPreset.Share, RenderPresets.Match(23, 1080, 60));
+            Assert.Equal(RenderPreset.BestQuality, RenderPresets.Match(18, 0, 0));
+            Assert.Equal(RenderPreset.SmallFile, RenderPresets.Match(29, 720, 30));
             // the same quality with a different cap is not that preset any more
-            Assert.Equal(RenderPreset.Custom, RenderPresets.Match(29, 0));
-            Assert.Equal(RenderPreset.Custom, RenderPresets.Match(20, 1080));
+            Assert.Equal(RenderPreset.Custom, RenderPresets.Match(29, 0, 30));
+            Assert.Equal(RenderPreset.Custom, RenderPresets.Match(20, 1080, 0));
+            Assert.Equal(RenderPreset.Custom, RenderPresets.Match(23, 1080, 30));
+            Assert.Equal(RenderPreset.Custom, RenderPresets.Match(23, 0, 60));
+        }
+
+        [Theory]
+        // no cap, or a cap at/above the fastest clip: the clip's own rate, rational intact
+        [InlineData(60, 1, 0, 60, 1)]
+        [InlineData(60, 1, 60, 60, 1)]
+        [InlineData(30000, 1001, 30, 30000, 1001)]
+        [InlineData(30, 1, 60, 30, 1)]
+        // a cap below it: the cap, as a whole rate
+        [InlineData(60, 1, 30, 30, 1)]
+        [InlineData(60000, 1001, 30, 30, 1)]
+        [InlineData(144, 1, 60, 60, 1)]
+        public void A_frame_rate_cap_lowers_but_never_raises_the_render_rate(int ceilNum, int ceilDen, int maxFps, int num, int den)
+        {
+            Assert.Equal((num, den), RenderFrameRate.Resolve((ceilNum, ceilDen), maxFps));
+        }
+
+        [Fact]
+        public void A_project_without_video_renders_at_the_fallback_rate()
+        {
+            var project = new Clowd.VideoSDK.Model.Project();
+
+            Assert.Equal((RenderFrameRate.NoVideoCeilingFps, 1), RenderFrameRate.Ceiling(project));
+            Assert.Equal((30, 1), RenderFrameRate.Resolve(project, 30));
+        }
+
+        [Theory]
+        [InlineData(60, 1, "60 fps")]
+        [InlineData(30000, 1001, "29.97 fps")]
+        [InlineData(24000, 1001, "23.98 fps")]
+        public void Render_rates_read_the_way_video_tools_write_them(int num, int den, string expected)
+        {
+            Assert.Equal(expected, RenderFrameRate.Describe((num, den)));
         }
 
         [Fact]

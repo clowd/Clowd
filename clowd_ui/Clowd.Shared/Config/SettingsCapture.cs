@@ -15,12 +15,19 @@ namespace Clowd.Config
     public class SettingsCapture : SimpleNotifyObject
     {
         /// <summary>
-        /// Whether the capture overlay offers UPLOAD. On by default like every switch in this
-        /// section — the point is trimming a strip that grew past what fits comfortably under a
-        /// small selection, not shipping features off. Hides the button in both strips: the
-        /// capture panel's UPLOAD and the OCR panel's, because someone who turned uploading off
-        /// did not mean "except for text". Turning it off also takes the U accelerator with it,
-        /// so a hidden button cannot still fire (clowd_capture PanelFeatures).
+        /// Whether the capture overlay offers UPLOAD. The one switch in this section that is OFF
+        /// by default: uploading a capture puts it on someone else's server, so it is opted into
+        /// rather than out of. Every other switch here is on, because the point of those is
+        /// trimming a strip that grew past what fits comfortably under a small selection, not
+        /// shipping features off. Hides the button in both strips: the capture panel's UPLOAD and
+        /// the OCR panel's, because someone who turned uploading off did not mean "except for
+        /// text". Turning it off also takes the U accelerator with it, so a hidden button cannot
+        /// still fire (clowd_capture PanelFeatures).
+        ///
+        /// Only new installs see the new default. The settings file is written with every
+        /// property spelled out (no DefaultIgnoreCondition in
+        /// <see cref="SettingsService.CreateJsonOptions"/>), so an existing user's saved
+        /// <c>true</c> is read straight back and nothing needs migrating.
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Upload")]
@@ -237,7 +244,9 @@ namespace Clowd.Config
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;
         private bool _roundedWindowCorners = true;
-        private bool _uploadButtonEnabled = true;
+        // Off by default — see UploadButtonEnabled. Existing users keep whatever their
+        // settings file already says.
+        private bool _uploadButtonEnabled = false;
         private bool _shareRegionEnabled = true;
         private bool _scrollingCaptureEnabled = true;
         private bool _scrollCaptureRewindToTop = true;

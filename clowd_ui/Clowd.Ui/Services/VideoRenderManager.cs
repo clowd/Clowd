@@ -422,9 +422,9 @@ namespace Clowd.UI.Services
             return session;
         }
 
-        /// <summary>Writes the render job — the project itself, plus the output path, the encoder
-        /// quality, the size cap and the encoder choice it cannot carry — into the session directory
-        /// and returns its path.</summary>
+        /// <summary>Writes the render job — the project itself (at the frame rate the request's cap
+        /// resolves to), plus the output path, the encoder quality, the size cap and the encoder
+        /// choice it cannot carry — into the session directory and returns its path.</summary>
         private static string WriteProjectArgs(SessionInfo session, Project project, string outputPath,
             RenderRequest request)
         {
@@ -440,7 +440,8 @@ namespace Clowd.UI.Services
             // x264's bytes by ~1.7x (measured 2026-09-12, RTX 4070 / i7-14700K). "auto" probes for a
             // working GPU encoder and falls back to x264 by itself, so it never fails a render.
             var encoder = request.HardwareEncoder ? VideoEncoder.Auto : VideoEncoder.Software;
-            return ProjectFileWriter.Write(argsPath, project, outputPath, crf, encoder, maxHeight);
+            return ProjectFileWriter.Write(argsPath, RenderFrameRate.Apply(project, request.MaxFps),
+                outputPath, crf, encoder, maxHeight);
         }
 
         /// <summary>The path of the first media file the project <b>references</b> that is not on
