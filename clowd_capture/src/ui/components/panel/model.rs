@@ -9,10 +9,11 @@
 //!
 //! The buttons sit in groups ([`ButtonGroup`]): consecutive runs of the
 //! table that share one rounded fill, the primary group in the user's
-//! accent and the others in the segment grey. A button has no fill of its
-//! own; only the hovered one lights up, inside its group. The `below`
-//! style sizes each button from its laid-out label, so the label text is
-//! geometry as much as it is copy.
+//! accent and the others in the segment grey or straight on the chassis
+//! ([`GroupTone`]). A button has no fill of its own; only the hovered one
+//! lights up, inside its group. The `below` style sizes each button from
+//! its laid-out label, so the label text is geometry as much as it is
+//! copy.
 
 use crate::ui::command::Command;
 
@@ -120,6 +121,17 @@ impl PanelButtonSet {
     /// ([`Self::axis_lock`]).
     pub const UNION: &'static [PanelButtonSet] = &[Self::Normal, Self::Ocr];
 
+    /// How this set is laid out. The capture strip is the one set whose
+    /// buttons are too many and too unlike each other to read as one
+    /// run, so it gets the two-row chassis; every other set is the
+    /// single strip they have always been.
+    pub const fn layout(self) -> PanelLayout {
+        match self {
+            Self::Normal => PanelLayout::Double,
+            Self::Ocr | Self::ScrollPick => PanelLayout::Single,
+        }
+    }
+
     /// The axis this set must run along, or `None` when placement is free
     /// to choose. The scroll-pick strip is a row wherever it lands: its
     /// instruction wraps to two lines at a width no column could hold.
@@ -194,6 +206,19 @@ impl PanelButtonSet {
     }
 }
 
+/// How a set arranges its chassis.
+///
+/// `Single` is the original strip: emblem, body, then the button groups
+/// in one run along the chosen axis. `Double` is the capture strip's
+/// two-row chassis — the accent actions on their own line with full
+/// labels, the odds and ends on a second line with accelerator hints —
+/// which ignores [`ButtonStyle`] and draws both presentations itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelLayout {
+    Single,
+    Double,
+}
+
 /// What the tray's readout slot shows beside the emblem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Readout {
@@ -218,6 +243,11 @@ pub enum GroupTone {
     Primary,
     /// The segment grey (`theme::tokens::SEG_FILL`).
     Secondary,
+    /// No fill of its own: the buttons sit straight on the chassis, the
+    /// way the readout and the emblem do, and only the hovered one
+    /// lights up. The capture strip's second row uses this so the six
+    /// odds and ends there read as background to the accent row above.
+    Bare,
 }
 
 /// A run of consecutive buttons in a set's table that share one rounded
@@ -271,18 +301,19 @@ pub struct ButtonDef {
 /// The capture-mode panel buttons in strip order, cut by
 /// [`NORMAL_GROUPS`] into three groups.
 ///
-/// The primary group (accent) is the five actions that finish the
-/// capture with the image as it is. The second group is the hand-offs:
-/// SHARE and SCROLL give the region to a live helper, OCR swaps the strip
-/// for a second round of decisions, SEARCH hands the image to the shell's
-/// reverse image search. The last group is the two ways out.
+/// The primary group (accent) is the four actions that finish the capture
+/// with the image in hand. The second group is the hand-offs: UPLOAD puts
+/// the capture somewhere else, SHARE and SCROLL give the region to a live
+/// helper, OCR swaps the strip for a second round of decisions, SEARCH
+/// hands the image to the shell's reverse image search. The last group is
+/// the two ways out.
 ///
 /// Accelerator keys (not stored — derived from `underline_idx`):
-///   0: Upload — U   (0x55)
-///   1: Edit   — E
-///   2: Video  — V   (0x56)
-///   3: Copy   — C   (0x43)
-///   4: Save   — S   (0x53)
+///   0: Edit   — E
+///   1: Video  — V   (0x56)
+///   2: Copy   — C   (0x43)
+///   3: Save   — S   (0x53)
+///   4: Upload — U   (0x55)
 ///   5: Share  — H   (0x48), underlined on the second char because every
 ///      other letter of Share is spoken for (S=Save, A/R/E=Edit, Reset).
 ///      'h' is also the pre-capture color-sampler key, which does not
@@ -299,13 +330,6 @@ pub struct ButtonDef {
 ///   9: Reset  — R   (0x52)
 ///  10: Exit   — X   (0x58), underlined on the second char
 const NORMAL_DEFS: &[ButtonDef] = &[
-    ButtonDef {
-        command: Command::Upload,
-        label: "Upload",
-        underline_idx: 0,
-        icon: &super::assets::UPLOAD,
-        tip: "Upload to default destination",
-    },
     ButtonDef {
         command: Command::Edit,
         label: "Edit",
@@ -333,6 +357,13 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         underline_idx: 0,
         icon: &super::assets::SAVE,
         tip: "Save image to a file",
+    },
+    ButtonDef {
+        command: Command::Upload,
+        label: "Upload",
+        underline_idx: 0,
+        icon: &super::assets::UPLOAD,
+        tip: "Upload to default destination",
     },
     ButtonDef {
         command: Command::Share,
@@ -378,18 +409,35 @@ const NORMAL_DEFS: &[ButtonDef] = &[
     },
 ];
 
-/// [Upload Edit Video Copy Save] [Share Scroll OCR Search] [Reset Exit].
+/// [Edit Video Copy Save] [Upload Share Scroll OCR Search] [Reset Exit].
+///
+/// The double-height layout ([`PanelLayout::Double`]) reads this table by
+/// TONE, not by position: the accent run and any grey run attached to it
+/// are the labelled first row, and the bare runs are the second — every
+/// one but the last is a hand-off, the last one is the ways out. So a run
+/// can be re-toned, or leave the table altogether, without a slot index
+/// somewhere else having to move with it.
+///
+/// UPLOAD is a hand-off rather than a finishing action: it puts the
+/// capture somewhere else and waits on the network, where the four accent
+/// buttons finish with the image in hand. It leads the grey run for the
+/// same reason it used to lead the accent one — it is the most-reached-for
+/// of them.
+///
+/// The `Secondary` tone has no members here at the moment. The layout
+/// still supports one — a grey run flush against the accent block, drawn
+/// as its tail rather than as a second block (`show::finishing_run`).
 const NORMAL_GROUPS: &[ButtonGroup] = &[
     ButtonGroup {
         tone: GroupTone::Primary,
-        len: 5,
-    },
-    ButtonGroup {
-        tone: GroupTone::Secondary,
         len: 4,
     },
     ButtonGroup {
-        tone: GroupTone::Secondary,
+        tone: GroupTone::Bare,
+        len: 5,
+    },
+    ButtonGroup {
+        tone: GroupTone::Bare,
         len: 2,
     },
 ];
@@ -439,13 +487,21 @@ const OCR_DEFS: &[ButtonDef] = &[
 ];
 
 /// [Upload Search Copy] [Back Exit].
+///
+/// The ways out are bare rather than grey: this strip is three accent
+/// buttons and a word count, so a grey slab beside the accent one read as
+/// a second thing to decide about. Sitting them straight on the chassis
+/// leaves one block of choices and two quiet ways out of it. The
+/// scroll-picker keeps its grey — its strip is an instruction with no
+/// accent block at all, so bare buttons there would have nothing to be
+/// quiet against and would read as unfinished.
 const OCR_GROUPS: &[ButtonGroup] = &[
     ButtonGroup {
         tone: GroupTone::Primary,
         len: 3,
     },
     ButtonGroup {
-        tone: GroupTone::Secondary,
+        tone: GroupTone::Bare,
         len: 2,
     },
 ];
@@ -778,7 +834,7 @@ mod tests {
             .collect();
         assert_eq!(
             normal,
-            ["Upload", "Edit", "Video", "Copy", "Save", "Share", "Scroll", "OCR", "Search", "Reset", "Exit"]
+            ["Edit", "Video", "Copy", "Save", "Upload", "Share", "Scroll", "OCR", "Search", "Reset", "Exit"]
         );
         let ocr: Vec<&str> = PanelButtonSet::Ocr
             .defs()
@@ -821,17 +877,23 @@ mod tests {
         assert_eq!(
             labels(PanelButtonSet::Normal),
             vec![
-                (GroupTone::Primary, vec!["Upload", "Edit", "Video", "Copy", "Save"]),
-                (GroupTone::Secondary, vec!["Share", "Scroll", "OCR", "Search"]),
-                (GroupTone::Secondary, vec!["Reset", "Exit"]),
+                (GroupTone::Primary, vec!["Edit", "Video", "Copy", "Save"]),
+                (GroupTone::Bare, vec!["Upload", "Share", "Scroll", "OCR", "Search"]),
+                (GroupTone::Bare, vec!["Reset", "Exit"]),
             ]
         );
         assert_eq!(
             labels(PanelButtonSet::Ocr),
             vec![
                 (GroupTone::Primary, vec!["Upload", "Search", "Copy"]),
-                (GroupTone::Secondary, vec!["Back", "Exit"]),
+                (GroupTone::Bare, vec!["Back", "Exit"]),
             ]
+        );
+        // The scroll-picker keeps its grey: no accent block for a bare
+        // button to be quiet against.
+        assert_eq!(
+            labels(PanelButtonSet::ScrollPick),
+            vec![(GroupTone::Secondary, vec!["Back", "Exit"])]
         );
     }
 
@@ -866,7 +928,7 @@ mod tests {
             PanelButtonSet::Normal
                 .visible_groups(no_handoffs)
                 .len(),
-            2
+            3
         );
     }
 
@@ -918,6 +980,25 @@ mod tests {
         );
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'x'), Some(Command::Exit));
         assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, all, 'b'), Some(Command::OcrBack));
+    }
+
+    /// UPLOAD leads the grey run, not the accent one: it hands the capture
+    /// off and waits on the network, where the accent four finish with the
+    /// image in hand.
+    #[test]
+    fn upload_leads_the_hand_offs() {
+        let groups = PanelButtonSet::Normal.visible_groups(PanelFeatures::ALL);
+        let (tone, members) = &groups[0];
+        assert_eq!(*tone, GroupTone::Primary);
+        assert!(
+            members
+                .iter()
+                .all(|(_, d)| d.command != Command::Upload),
+            "UPLOAD is not an accent button"
+        );
+        let (tone, members) = &groups[1];
+        assert_eq!(*tone, GroupTone::Bare);
+        assert_eq!(members[0].1.command, Command::Upload);
     }
 
     /// UPLOAD is a real button with the paper-plane mark; the Clowd logo

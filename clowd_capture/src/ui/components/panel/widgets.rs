@@ -34,6 +34,11 @@ pub struct StackedButton {
     pub base: Color32,
     /// How far the hover lightens `base` (`theme::hover_veil`).
     pub veil: f32,
+    /// Where the contents sit in whatever room `min_size` leaves over.
+    /// Centred is the default and what every strip along an axis wants;
+    /// `LEFT_CENTER` is for a stack of buttons of one width, where
+    /// centring would put each icon at its own x.
+    pub align: Align2,
 }
 
 impl StackedButton {
@@ -52,10 +57,10 @@ impl StackedButton {
             .gap(self.gap)
             .sense(Sense::CLICK)
             .min_size(self.min_size)
-            // The contents sit in the middle of the segment however much
-            // room `min_size` leaves over, as the retired kit's tile and
-            // button boxes did.
-            .align2(Align2::CENTER_CENTER)
+            // The contents sit where `align` puts them in whatever room
+            // `min_size` leaves over — centred, as the retired kit's tile
+            // and button boxes were, unless a caller asks otherwise.
+            .align2(self.align)
             .frame(
                 Frame::new()
                     .inner_margin(Margin::symmetric(self.pad_h as i8, 0))
@@ -94,7 +99,23 @@ pub fn key_hint_button(def: &ButtonDef, id: Id, min_size: Vec2, base: Color32, v
         pad_h: tokens::KEY_PAD_H,
         base,
         veil,
+        align: Align2::CENTER_CENTER,
     }
+}
+
+/// How wide a [`key_hint_button`] wants to be with `pad_h` on either
+/// side: the icon, the gap and one accelerator glyph. Any glyph will do
+/// for the measurement — they are all uppercase ASCII in the bundled mono
+/// face, so they all have the same advance.
+pub fn key_button_length(ctx: &egui::Context, pad_h: f32) -> f32 {
+    let letter = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            "W".to_owned(),
+            egui::FontId::new(tokens::KEY_FONT, egui::FontFamily::Monospace),
+            tokens::FG_80,
+        )
+    });
+    tokens::ICON + tokens::KEY_GAP + letter.size().x + 2.0 * pad_h
 }
 
 /// `below` style: 48 pt tall, the icon over the Title-case label with the
@@ -110,7 +131,37 @@ pub fn below_button(def: &ButtonDef, id: Id, min_size: Vec2, base: Color32, veil
         pad_h: tokens::BELOW_PAD_H,
         base,
         veil,
+        align: Align2::CENTER_CENTER,
     }
+}
+
+/// `label` style: the icon beside the full Title-case label with the
+/// accelerator glyph underlined, on a `key`-tall row. The capture
+/// strip's primary row uses it: those five buttons are the reason the
+/// panel exists, so they say what they do instead of hinting at a key.
+/// The underline keeps the accelerator discoverable without a chip.
+pub fn label_button(def: &ButtonDef, id: Id, min_size: Vec2, base: Color32, veil: f32) -> StackedButton {
+    StackedButton {
+        id,
+        icon: def.icon.source(),
+        text: WidgetText::from(underlined_label(def)),
+        min_size,
+        direction: Direction::LeftToRight,
+        gap: tokens::LABEL_GAP,
+        pad_h: tokens::LABEL_PAD_H,
+        base,
+        veil,
+        align: Align2::CENTER_CENTER,
+    }
+}
+
+/// How wide a [`label_button`] wants to be along a row: the icon, the
+/// gap, the laid-out label and the padding on either side, never shorter
+/// than a plain tile. Measured rather than laid out, because the tray's
+/// box has to be known before the `Area` exists.
+pub fn label_button_length(ctx: &egui::Context, def: &ButtonDef) -> f32 {
+    let label = ctx.fonts_mut(|f| f.layout_job(underlined_label(def)));
+    tokens::BUTTON_MIN_LENGTH.max(tokens::ICON + tokens::LABEL_GAP + label.size().x + 2.0 * tokens::LABEL_PAD_H)
 }
 
 /// The tooltip chip's text: what the button does (`ButtonDef::tip`),
@@ -244,6 +295,20 @@ pub fn ink_centred(rect: egui::Rect, galley: &egui::Galley) -> egui::Pos2 {
     } else {
         rect.center() - galley.size() / 2.0
     }
+}
+
+/// A hairline across a stack of buttons, inset from either edge, with
+/// air above and below it: the capture column's break between the
+/// hand-offs and the ways out. Dead space — it allocates and paints, and
+/// nothing else, the way the readout and the emblem do.
+pub fn divider(ui: &mut Ui, width: f32) -> egui::Rect {
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, tokens::DIVIDER_BLOCK), Sense::hover());
+    ui.painter().hline(
+        (rect.left() + tokens::DIVIDER_INSET)..=(rect.right() - tokens::DIVIDER_INSET),
+        rect.center().y,
+        tokens::DIVIDER,
+    );
+    rect
 }
 
 /// The emblem in a dead slot: no fill, no hover, the mark centred at its

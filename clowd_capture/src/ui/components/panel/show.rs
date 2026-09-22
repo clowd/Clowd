@@ -1,15 +1,23 @@
 //! The tray as one egui `Area`: measure the strip, place it beside the
-//! selection, then lay the emblem, the readout and the button groups out
-//! along the chosen axis. Inside a group the buttons are flush; between
-//! groups (and before the first) there is one `GAP`.
+//! selection, then lay it out along the chosen axis.
 //!
-//! The `key` style has no labels, so — as the C# strips do — a button
-//! hovered for 350 ms grows a tooltip chip naming it, hung off the strip's
-//! far edge (below a row, right of a column) and flipped to the other
-//! side when the monitor has no room there. Once a chip is up, the next
-//! button's chip follows the pointer without the wait, across the gap
-//! between groups too, until the pointer has been off every button for
-//! the same 350 ms.
+//! Two chassis, one `Area`. [`StripMetrics`] / `single_strip` is the one
+//! run every set but the capture one uses: the emblem, the readout and
+//! the button groups along the axis, flush inside a group and one `GAP`
+//! between them. [`DoubleMetrics`] / `double_strip` is the capture
+//! strip's two-row tray — the five finishing actions with full labels on
+//! the first row, the hand-offs and the two ways out as accelerator tiles
+//! on the second, the latter straight on the chassis with no fill of
+//! their own. [`Strip`] is the pair, and everything from the union fit
+//! down to the `Area` is written against it.
+//!
+//! A button hovered for 350 ms grows a tooltip chip saying what it does
+//! — as the C# strips do — hung off the strip's far edge (below a row,
+//! right of a column) and flipped to the other side when the monitor has
+//! no room there. Once a chip is up, the next button's chip follows the
+//! pointer without the wait, across the gap between groups too, until the
+//! pointer has been off every button for the same 350 ms. The `below`
+//! style is the one that raises none: see [`Presentation::wants_tip`].
 //!
 //! The strip's size is analytic — computed from the same numbers the
 //! widgets are laid out with — because placement needs it before the Area
@@ -20,7 +28,7 @@
 use egui::{pos2, vec2, Rect, Vec2};
 
 use super::assets;
-use super::model::{Body, ButtonDef, ButtonStyle, GroupTone, PanelButtonSet, PanelFeatures, Readout};
+use super::model::{Body, ButtonDef, ButtonStyle, GroupTone, PanelButtonSet, PanelFeatures, PanelLayout, Readout};
 use super::place::{self, Axis, Fit, Footprint, Near};
 use super::theme::{self, tokens};
 use super::widgets;
@@ -291,6 +299,297 @@ impl StripMetrics {
             Axis::Column => vec2(col_inner, along),
         }
     }
+
+    /// The width this strip wants when it stands on its end: the widest
+    /// thing it has to hold. Its caller measures with every switch on, so
+    /// flipping a feature can never move the tray's edge.
+    pub fn col_inner(&self) -> f32 {
+        let mut w = tokens::EMBLEM_SLOT.max(self.body_along);
+        for (_, _, along) in self.buttons() {
+            w = w.max(*along);
+        }
+        w
+    }
+}
+
+/// Every number the capture strip's two-row chassis is laid out with.
+///
+/// The runs are `NORMAL_GROUPS` read by TONE: the accent actions that
+/// finish the capture and any grey run attached to them are the labelled
+/// first row, and the bare runs are the second — every one but the last
+/// is a hand-off, the last is the ways out. A run can empty out under
+/// [`PanelFeatures`], and the layout closes the hole rather than leaving a
+/// gap where it was.
+///
+/// A row is the emblem over the readout in one head column, the accent
+/// actions beside the emblem with their full labels, and the odds and
+/// ends beside the readout as accelerator tiles — the hand-offs left, the
+/// ways out flush right. A column is the emblem beside the readout, then
+/// the accent actions one per line at the tray's full width, then the odds
+/// and ends `DOUBLE_COLS` to a line.
+///
+/// The emblem and the readout take one button's box each and centre their
+/// contents in it, so both sit square over what is under them: in a row
+/// that box is `head`, the same width for the two of them; in a column it
+/// is one grid cell, so the emblem lands dead centre over the first
+/// column of tiles and the readout over the second.
+///
+/// In a row the emblem is followed by a full `GAP`, not the single
+/// strip's tighter `EMBLEM_GAP`: it heads a column of buttons rather than
+/// a run, so it has to take exactly one button's room — a tile and a gap
+/// — or everything under it would start half a step to its left. In a
+/// column the two head boxes are flush, like the grid cells they sit
+/// over.
+///
+/// Switching enough of the accent actions off leaves the first row
+/// shorter than the second, which reads as a tray with a bite out of its
+/// top right corner (UPLOAD and VIDEO both off is the case that does it
+/// with everything else on). The first of the ways out is then lifted onto
+/// the first row, flush right, so the two rows end together and RESET sits
+/// straight above EXIT. A column never does this: its grid has no ragged
+/// row to even out, and it draws a rule between the two clusters instead
+/// (`widgets::divider`), which is the separation a row gets for free from
+/// pushing its ways out to the far end.
+pub struct DoubleMetrics {
+    /// What the readout says: the selection's size.
+    pub readout: Readout,
+    /// The head column of a row-mode tray — the emblem above the readout,
+    /// both as wide as the wider of the two, so the accent row and the
+    /// second row start at the same x.
+    pub head: f32,
+    /// The accent run of the first row: labelled buttons with their row
+    /// lengths.
+    pub primary: Vec<MeasuredButton>,
+    /// The grey run flush against `primary`, labelled the same way. One
+    /// grey pill is drawn under both runs and the accent one laid over
+    /// `primary`, so this reads as the tail of the accent block rather
+    /// than as a second block beside it.
+    pub attached: Vec<MeasuredButton>,
+    /// The second row's left cluster, as `key` tiles.
+    pub funcs: Vec<MeasuredButton>,
+    /// The second row's right cluster, as `key` tiles.
+    pub tail: Vec<MeasuredButton>,
+    /// The one way out lifted off `tail` onto the accent row, flush right,
+    /// when the accent row would otherwise be the shorter of the two.
+    /// Empty otherwise — and irrelevant to a column, whose grid lays the
+    /// same buttons out in table order either way.
+    pub promoted: Vec<MeasuredButton>,
+    /// The width this measure would want in a column: enough for the
+    /// widest labelled button, for the emblem beside the readout and for
+    /// `DOUBLE_COLS` tiles side by side — and a whole multiple of
+    /// `DOUBLE_COLS`, so the grid splits it evenly.
+    ///
+    /// Only `Strip::col_inner` reads it, and only off a measure taken
+    /// with every switch on; the width the tray is laid out at is passed
+    /// in, so flipping a feature never moves the tray's edge.
+    pub col_inner: f32,
+}
+
+impl DoubleMetrics {
+    /// Measure the capture strip under one feature switch set. Only valid
+    /// inside a run: `Context::fonts_mut` panics before the first pass.
+    pub fn measure(ctx: &egui::Context, features: PanelFeatures, readout: Readout) -> Self {
+        let mut primary = Vec::new();
+        let mut attached = Vec::new();
+        let mut bare: Vec<Vec<MeasuredButton>> = Vec::new();
+        for (tone, members) in PanelButtonSet::Normal.visible_groups(features) {
+            let run: Vec<MeasuredButton> = members
+                .into_iter()
+                .map(|(i, def)| {
+                    // The tone is also the presentation: the finishing run
+                    // is labelled and sizes itself from its labels, the
+                    // bare runs are square accelerator tiles.
+                    let along = match tone {
+                        GroupTone::Primary | GroupTone::Secondary => widgets::label_button_length(ctx, def),
+                        GroupTone::Bare => tokens::KEY_TILE,
+                    };
+                    (i, def, along)
+                })
+                .collect();
+            match tone {
+                GroupTone::Primary => primary = run,
+                GroupTone::Secondary => attached = run,
+                GroupTone::Bare => bare.push(run),
+            }
+        }
+        // The last bare run is the ways out; anything before it is a
+        // hand-off. `visible_groups` has already dropped the runs whose
+        // every button is switched off.
+        let mut tail = bare.pop().unwrap_or_default();
+        let funcs: Vec<MeasuredButton> = bare.concat();
+
+        let galley = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(readout)));
+        let body_along = galley.size().x + 2.0 * tokens::READOUT_PAD_H;
+        let head = tokens::EMBLEM_SLOT.max(body_along);
+
+        // Even the two rows up: with the first row the shorter of the two
+        // there is a tile-sized hole above the ways out, so the first of
+        // them moves up into it. Never the last one — a row of ways out
+        // with nothing left on it below would just move the hole. Both
+        // rows share the same head column, so it cancels out of the
+        // comparison.
+        let finishers_len = Self::run_len(&primary) + Self::run_len(&attached);
+        let second_len = Self::run_len(&funcs) + Self::gap_between(&funcs, &tail) + Self::run_len(&tail);
+        let promoted: Vec<MeasuredButton> = if tail.len() > 1 && finishers_len < second_len {
+            vec![tail.remove(0)]
+        } else {
+            Vec::new()
+        };
+
+        let cols = tokens::DOUBLE_COLS as f32;
+        let widest_primary = primary
+            .iter()
+            .chain(attached.iter())
+            .map(|(_, _, along)| *along)
+            .fold(tokens::KEY_TILE, f32::max);
+        // In a column the emblem and the readout are one grid cell each,
+        // flush, so the tray has to be at least `DOUBLE_COLS` of the wider
+        // of the two — otherwise one of them would be squeezed narrower
+        // than the tiles it sits over and stop looking centred on them.
+        let head_row = cols * head;
+        // The grid's buttons are left-aligned at the labelled buttons'
+        // padding so every icon in a column sits at one x, so a cell has
+        // to be wide enough for a tile carrying that padding — wider than
+        // the plain `KEY_TILE` the second row of a wide tray uses.
+        let grid_floor = cols * widgets::key_button_length(ctx, tokens::LABEL_PAD_H);
+        let col_inner = (widest_primary.max(head_row).max(grid_floor) / cols).ceil() * cols;
+
+        Self {
+            readout,
+            head,
+            primary,
+            attached,
+            funcs,
+            tail,
+            promoted,
+            col_inner,
+        }
+    }
+
+    /// One run's length along a row: its buttons flush, no gaps.
+    fn run_len(buttons: &[MeasuredButton]) -> f32 {
+        buttons
+            .iter()
+            .map(|(_, _, along)| *along)
+            .sum()
+    }
+
+    /// One row's length: the head column, the gap after the emblem and
+    /// the run itself.
+    fn row_len(head: f32, buttons: &[MeasuredButton]) -> f32 {
+        head + tokens::GAP + Self::run_len(buttons)
+    }
+
+    /// One gap between a row's two clusters — none when either of them is
+    /// switched off altogether, so a vanished cluster leaves no hole.
+    fn gap_between(left: &[MeasuredButton], right: &[MeasuredButton]) -> f32 {
+        if left.is_empty() || right.is_empty() {
+            0.0
+        } else {
+            tokens::GAP
+        }
+    }
+
+    /// The whole finishing run in order: the accent buttons, then the
+    /// grey ones attached to them. Flush throughout — they are one block
+    /// on screen, drawn in two colours (`show::finishing_run`).
+    pub fn finishers(&self) -> impl Iterator<Item = &MeasuredButton> {
+        self.primary
+            .iter()
+            .chain(self.attached.iter())
+    }
+
+    /// The ways out in table order, whether or not a row lifted the first
+    /// of them up beside the accent actions. A column always shows them
+    /// together, under the rule.
+    pub fn ways_out(&self) -> impl Iterator<Item = &MeasuredButton> {
+        self.promoted.iter().chain(self.tail.iter())
+    }
+
+    /// How many lines the column-mode grid takes. The two clusters are
+    /// chunked apart, so four hand-offs and two ways out are 2 + 1 lines
+    /// whatever the switches did — never a line with one of each on it,
+    /// which is what the rule between them would then be cutting through.
+    fn secondary_rows(&self) -> usize {
+        let lines = |n: usize| n.div_ceil(tokens::DOUBLE_COLS);
+        lines(self.funcs.len()) + lines(self.ways_out().count())
+    }
+
+    /// Whether the column shows the rule: only with something on either
+    /// side of it.
+    fn has_divider(&self) -> bool {
+        !self.funcs.is_empty() && self.ways_out().count() > 0
+    }
+
+    /// The strip's content size (the tray's padding not included).
+    /// `col_inner` is the width this set draws a column at.
+    pub fn content_size(&self, axis: Axis, col_inner: f32) -> Vec2 {
+        match axis {
+            Axis::Row => {
+                // The gap before a right-aligned cluster is the least it
+                // may be; that cluster usually pushes it much wider.
+                let finishers: Vec<MeasuredButton> = self.finishers().copied().collect();
+                let first =
+                    Self::row_len(self.head, &finishers) + Self::gap_between(&finishers, &self.promoted) + Self::run_len(&self.promoted);
+                let second = Self::row_len(self.head, &self.funcs) + Self::gap_between(&self.funcs, &self.tail) + Self::run_len(&self.tail);
+                vec2(first.max(second), 2.0 * tokens::DOUBLE_ROW + tokens::GAP)
+            }
+            Axis::Column => {
+                let mut len = tokens::DOUBLE_ROW;
+                let finishers = self.finishers().count();
+                if finishers > 0 {
+                    len += tokens::GAP + finishers as f32 * tokens::DOUBLE_ROW;
+                }
+                let rows = self.secondary_rows();
+                if rows > 0 {
+                    len += tokens::GAP + rows as f32 * tokens::DOUBLE_ROW;
+                }
+                if self.has_divider() {
+                    len += tokens::DIVIDER_BLOCK;
+                }
+                vec2(col_inner, len)
+            }
+        }
+    }
+
+    /// The air between one row's two clusters, so the right-hand one ends
+    /// flush with the tray's edge whatever the other row is doing.
+    fn spacer(&self, content_width: f32, left: f32, right: &[MeasuredButton]) -> f32 {
+        let used = self.head + tokens::GAP + left + Self::run_len(right);
+        (content_width - used).max(0.0)
+    }
+}
+
+/// The strip as measured, in whichever chassis its set asked for.
+pub enum Strip {
+    Single(StripMetrics),
+    Double(DoubleMetrics),
+}
+
+impl Strip {
+    pub fn measure(ctx: &egui::Context, set: PanelButtonSet, features: PanelFeatures, style: ButtonStyle, readout: Readout) -> Self {
+        match set.layout() {
+            PanelLayout::Single => Self::Single(StripMetrics::measure(ctx, set, features, style, readout)),
+            PanelLayout::Double => Self::Double(DoubleMetrics::measure(ctx, features, readout)),
+        }
+    }
+
+    /// The content size for one axis. `col_inner` is the single strip's
+    /// column width; the double chassis carries its own.
+    pub fn content_size(&self, axis: Axis, col_inner: f32) -> Vec2 {
+        match self {
+            Self::Single(m) => m.content_size(axis, col_inner),
+            Self::Double(m) => m.content_size(axis, col_inner),
+        }
+    }
+
+    /// The width this strip draws at when it stands on its end.
+    pub fn col_inner(&self) -> f32 {
+        match self {
+            Self::Single(m) => m.col_inner(),
+            Self::Double(m) => m.col_inner,
+        }
+    }
 }
 
 /// The strip box in physical pixels: the content plus the tray's padding
@@ -324,22 +623,19 @@ fn readout_for(set: PanelButtonSet, p: &PanelInputs) -> Readout {
     }
 }
 
+/// The width one set draws at when the tray stands on its end: its own,
+/// measured with every switch on, so flipping a feature can never move
+/// the tray's edge. Two sets may want different widths — the capture
+/// strip's grid is twice a tile wide and the OCR strip is one — the same
+/// way they have always drawn rows of different lengths.
+fn col_inner_for(ctx: &egui::Context, p: &PanelInputs, set: PanelButtonSet) -> f32 {
+    Strip::measure(ctx, set, PanelFeatures::ALL, p.style, readout_for(set, p)).col_inner()
+}
+
 /// The longest box either set can become in each orientation with every
-/// feature on, plus the column's inner width — so neither the side choice
-/// nor the column thickness depends on which set is up or which switches
-/// are on.
-fn union_fit(ctx: &egui::Context, p: &PanelInputs, ppp: f32) -> (Fit, f32) {
-    let metrics: Vec<StripMetrics> = PanelButtonSet::UNION
-        .iter()
-        .map(|&set| StripMetrics::measure(ctx, set, PanelFeatures::ALL, p.style, readout_for(set, p)))
-        .collect();
-    let mut col_inner = tokens::EMBLEM_SLOT;
-    for m in &metrics {
-        col_inner = col_inner.max(m.body_along);
-        for (_, _, along) in m.buttons() {
-            col_inner = col_inner.max(*along);
-        }
-    }
+/// feature on, so the side choice depends on neither which set is up nor
+/// which switches are on.
+fn union_fit(ctx: &egui::Context, p: &PanelInputs, ppp: f32) -> Fit {
     let mut fit = Fit {
         row: Footprint {
             len: 0,
@@ -350,7 +646,9 @@ fn union_fit(ctx: &egui::Context, p: &PanelInputs, ppp: f32) -> (Fit, f32) {
             thick: 0,
         },
     };
-    for m in &metrics {
+    for &set in PanelButtonSet::UNION {
+        let m = Strip::measure(ctx, set, PanelFeatures::ALL, p.style, readout_for(set, p));
+        let col_inner = m.col_inner();
         let (w, h) = outer_px(m.content_size(Axis::Row, col_inner), ppp);
         fit.row.len = fit.row.len.max(w);
         fit.row.thick = fit.row.thick.max(h);
@@ -358,7 +656,7 @@ fn union_fit(ctx: &egui::Context, p: &PanelInputs, ppp: f32) -> (Fit, f32) {
         fit.col.len = fit.col.len.max(h);
         fit.col.thick = fit.col.thick.max(w);
     }
-    (fit, col_inner)
+    fit
 }
 
 /// Measure the strip that is up and place its box, in physical pixels —
@@ -368,10 +666,11 @@ fn measure_and_place(
     ctx: &egui::Context,
     p: &PanelInputs,
     monitor: UiMonitor,
-) -> (StripMetrics, place::Side, clowd_rust_core::geometry::ScreenRect) {
+) -> (Strip, f32, place::Side, clowd_rust_core::geometry::ScreenRect) {
     let ppp = monitor.dpi_scale.max(0.1);
-    let (mut fit, col_inner) = union_fit(ctx, p, ppp);
-    let m = StripMetrics::measure(ctx, p.set, p.features, p.style, p.readout);
+    let mut fit = union_fit(ctx, p, ppp);
+    let col_inner = col_inner_for(ctx, p, p.set);
+    let m = Strip::measure(ctx, p.set, p.features, p.style, p.readout);
     // A set outside the union (the scroll-picker) is not in `fit`, and the
     // side cascade's "does the strip fit along the monitor" test has to be
     // asked about the strip that is actually up — otherwise a two-line
@@ -384,7 +683,348 @@ fn measure_and_place(
     let (side, rect_px) = place::place(p.anchor, monitor.bounds, fit, Near::at_dpi(ppp), p.set.axis_lock(), |axis| {
         outer_px(m.content_size(axis, col_inner), ppp)
     });
-    (m, side, rect_px)
+    (m, col_inner, side, rect_px)
+}
+
+/// How a button says what it is. The single strip picks one for the whole
+/// tray from [`ButtonStyle`]; the capture strip's double chassis uses two
+/// at once — `Label` on the accent row, `Key` on the row beneath it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Presentation {
+    /// Icon and accelerator letter in a square: needs a hover chip to say
+    /// what it does.
+    Key,
+    /// Icon over the label.
+    Below,
+    /// Icon beside the full label, one tile tall.
+    Label,
+}
+
+impl Presentation {
+    fn of(style: ButtonStyle) -> Self {
+        match style {
+            ButtonStyle::KeyHint => Self::Key,
+            ButtonStyle::Below => Self::Below,
+        }
+    }
+
+    /// Whether a button drawn this way needs a hover chip to say what it
+    /// does. The accelerator tile has nothing but an icon and a letter,
+    /// and a labelled button's label is one verb where the tip is the
+    /// whole phrase ("Upload" against "Upload to default destination"),
+    /// so both take one. `below` is the exception: it is a whole strip of
+    /// labels under icons, and a chip over every one of them was noise.
+    fn wants_tip(self) -> bool {
+        !matches!(self, Self::Below)
+    }
+
+    /// The padding this presentation carries on either side of its
+    /// contents when nothing asks for a shared one.
+    fn pad_h(self) -> f32 {
+        match self {
+            Self::Key => tokens::KEY_PAD_H,
+            Self::Below => tokens::BELOW_PAD_H,
+            Self::Label => tokens::LABEL_PAD_H,
+        }
+    }
+}
+
+/// Everything about how one run of buttons is drawn, apart from the
+/// buttons themselves: which presentation, where its contents sit, and
+/// the group colours the hover veil works over.
+#[derive(Clone, Copy)]
+struct ButtonSkin {
+    kind: Presentation,
+    align: egui::Align2,
+    pad_h: f32,
+    base: egui::Color32,
+    veil: f32,
+}
+
+impl ButtonSkin {
+    fn new(kind: Presentation, tone: GroupTone, accent: egui::Color32) -> Self {
+        Self {
+            kind,
+            align: egui::Align2::CENTER_CENTER,
+            pad_h: kind.pad_h(),
+            base: theme::group_fill(tone, accent),
+            veil: theme::hover_veil(tone),
+        }
+    }
+
+    /// Contents against the left edge at a shared padding instead of
+    /// centred. A stack of buttons all one width would otherwise put each
+    /// icon at its own x, since each carries a different amount of text.
+    fn left(self, pad_h: f32) -> Self {
+        Self {
+            align: egui::Align2::LEFT_CENTER,
+            pad_h,
+            ..self
+        }
+    }
+}
+
+/// Draw one button at `size`, fold what the pointer did with it into
+/// `out`, and hand back the box it took. A button is registered as the
+/// hovered one only if its presentation wants a chip
+/// ([`Presentation::wants_tip`]).
+fn button(
+    ui: &mut egui::Ui,
+    p: &PanelInputs,
+    measured: &MeasuredButton,
+    size: Vec2,
+    skin: ButtonSkin,
+    out: &mut PanelOutcome,
+    hovered: &mut Option<(egui::Id, Rect, &'static ButtonDef)>,
+) -> Rect {
+    let (table_idx, def, _) = *measured;
+    // The set is part of the id, so hover state and hit tests can never
+    // resolve against another strip; the table index keeps a switched-off
+    // button from renumbering its neighbours.
+    let id = egui::Id::new(("panel", p.set as u8, table_idx));
+    let mut widget = match skin.kind {
+        Presentation::Key => widgets::key_hint_button(def, id, size, skin.base, skin.veil),
+        Presentation::Below => widgets::below_button(def, id, size, skin.base, skin.veil),
+        Presentation::Label => widgets::label_button(def, id, size, skin.base, skin.veil),
+    };
+    widget.align = skin.align;
+    widget.pad_h = skin.pad_h;
+    let r = widget.show(ui);
+    out.over_button |= r.contains_pointer();
+    if r.contains_pointer() && skin.kind.wants_tip() {
+        *hovered = Some((id, r.rect, def));
+    }
+    if r.clicked() {
+        out.clicked = Some(def.command);
+    }
+    r.rect
+}
+
+/// Draw the finishing run: one grey pill under the whole of it, the
+/// accent pill laid over the buttons that carry the accent, so the grey
+/// reads as the tail of the accent block rather than as a second block
+/// beside it.
+///
+/// The accent plate's shape index is reserved before the buttons go down
+/// and filled in once their boxes are known — the way `Frame` reserves
+/// its own background — so it lands behind them without the layout having
+/// to be predicted.
+fn finishing_run(
+    ui: &mut egui::Ui,
+    m: &DoubleMetrics,
+    p: &PanelInputs,
+    size: impl Fn(&MeasuredButton) -> Vec2,
+    // How the accent run and the grey run attached to it are drawn.
+    skins: (ButtonSkin, ButtonSkin),
+    out: &mut PanelOutcome,
+    hovered: &mut Option<(egui::Id, Rect, &'static ButtonDef)>,
+) {
+    let (accent_skin, grey_skin) = skins;
+    theme::group_frame(grey_skin.base).show(ui, |ui| {
+        ui.spacing_mut().item_spacing = Vec2::ZERO;
+        let plate = ui.painter().add(egui::Shape::Noop);
+        let mut accent_box: Option<Rect> = None;
+        for measured in &m.primary {
+            let r = button(ui, p, measured, size(measured), accent_skin, out, hovered);
+            accent_box = Some(accent_box.map_or(r, |b: Rect| b.union(r)));
+        }
+        for measured in &m.attached {
+            button(ui, p, measured, size(measured), grey_skin, out, hovered);
+        }
+        if let Some(b) = accent_box {
+            ui.painter()
+                .set(plate, egui::Shape::rect_filled(b, tokens::RADIUS, accent_skin.base));
+        }
+    });
+}
+
+/// The original one-run strip: the emblem, the body and the button groups
+/// along `axis`, flush inside each group and one `GAP` between them.
+fn single_strip(
+    ui: &mut egui::Ui,
+    m: &StripMetrics,
+    p: &PanelInputs,
+    axis: Axis,
+    col_inner: f32,
+    out: &mut PanelOutcome,
+    hovered: &mut Option<(egui::Id, Rect, &'static ButtonDef)>,
+) {
+    let kind = Presentation::of(p.style);
+    let strip = |ui: &mut egui::Ui| {
+        let across = match axis {
+            Axis::Row => m.thick,
+            Axis::Column => col_inner,
+        };
+        let emblem_slot = match axis {
+            Axis::Row => vec2(tokens::EMBLEM_SLOT, across),
+            Axis::Column => vec2(across, tokens::EMBLEM_SLOT),
+        };
+        // The emblem's slot is padded around a smaller mark, so it needs
+        // less of a gap than the flush button boxes. egui spends
+        // `item_spacing` AFTER a widget, so this is set before the emblem
+        // and restored before the readout.
+        ui.spacing_mut().item_spacing = Vec2::splat(tokens::EMBLEM_GAP);
+        widgets::emblem(ui, emblem_slot);
+        ui.spacing_mut().item_spacing = Vec2::splat(tokens::GAP);
+        let body_slot = match axis {
+            Axis::Row => vec2(m.body_along, across),
+            Axis::Column => vec2(across, m.thick),
+        };
+        match m.body {
+            MeasuredBody::Readout(readout) => {
+                widgets::readout(ui, readout, body_slot);
+            }
+            MeasuredBody::Hint {
+                text,
+                wrap,
+            } => {
+                widgets::hint(ui, text, wrap, body_slot);
+            }
+        }
+        for (tone, buttons) in &m.groups {
+            let skin = ButtonSkin::new(kind, *tone, p.accent);
+            let group = |ui: &mut egui::Ui| {
+                // Flush inside the group; the tray's gap is between
+                // groups only.
+                ui.spacing_mut().item_spacing = Vec2::ZERO;
+                for measured in buttons {
+                    let size = match axis {
+                        Axis::Row => vec2(measured.2, across),
+                        Axis::Column => vec2(across, m.thick),
+                    };
+                    button(ui, p, measured, size, skin, out, hovered);
+                }
+            };
+            // The frame's content ui inherits the strip's layout, so the
+            // buttons run along the same axis; a nested
+            // `horizontal`/`vertical` here would pad the cross axis with
+            // its own initial size.
+            theme::group_frame(skin.base).show(ui, group);
+        }
+    };
+    match axis {
+        Axis::Row => {
+            ui.horizontal(strip);
+        }
+        Axis::Column => {
+            ui.vertical(strip);
+        }
+    }
+}
+
+/// The capture strip's two-row chassis.
+///
+/// A row: the emblem over the readout in one head column, the finishing
+/// actions beside the emblem with their full labels (the accent block
+/// with its grey tail — see `finishing_run`), and beside the readout the
+/// hand-offs left and the ways out flush right, those six straight on the
+/// chassis with no fill under them.
+///
+/// A column: the emblem beside the readout, then the finishing actions
+/// one per line at the tray's full width, then the same six two to a
+/// line with a rule across the break.
+fn double_strip(
+    ui: &mut egui::Ui,
+    m: &DoubleMetrics,
+    p: &PanelInputs,
+    axis: Axis,
+    col_inner: f32,
+    out: &mut PanelOutcome,
+    hovered: &mut Option<(egui::Id, Rect, &'static ButtonDef)>,
+) {
+    let label = ButtonSkin::new(Presentation::Label, GroupTone::Primary, p.accent);
+    let grey = ButtonSkin::new(Presentation::Label, GroupTone::Secondary, p.accent);
+    let tile = ButtonSkin::new(Presentation::Key, GroupTone::Bare, p.accent);
+    let row = tokens::DOUBLE_ROW;
+    let finishers_len: f32 = m
+        .finishers()
+        .map(|(_, _, along)| *along)
+        .sum();
+    match axis {
+        Axis::Row => {
+            let width = m.content_size(Axis::Row, col_inner).x;
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing = vec2(0.0, tokens::GAP);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::ZERO;
+                    widgets::emblem(ui, vec2(m.head, row));
+                    ui.add_space(tokens::GAP);
+                    if m.finishers().next().is_some() {
+                        finishing_run(ui, m, p, |b| vec2(b.2, row), (label, grey), out, hovered);
+                    }
+                    // The way out lifted up here to even the rows: flush
+                    // right, straight above the one left below it.
+                    if !m.promoted.is_empty() {
+                        ui.add_space(m.spacer(width, finishers_len, &m.promoted));
+                        for measured in &m.promoted {
+                            button(ui, p, measured, vec2(measured.2, row), tile, out, hovered);
+                        }
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::ZERO;
+                    widgets::readout(ui, m.readout, vec2(m.head, row));
+                    ui.add_space(tokens::GAP);
+                    for measured in &m.funcs {
+                        button(ui, p, measured, vec2(measured.2, row), tile, out, hovered);
+                    }
+                    ui.add_space(m.spacer(width, DoubleMetrics::run_len(&m.funcs), &m.tail));
+                    for measured in &m.tail {
+                        button(ui, p, measured, vec2(measured.2, row), tile, out, hovered);
+                    }
+                });
+            });
+        }
+        Axis::Column => {
+            let cell = col_inner / tokens::DOUBLE_COLS as f32;
+            // A stacked button is as wide as the tray, so centring would
+            // put every icon at its own x. Left-aligning both runs at one
+            // padding lines the whole first column up — labels included,
+            // since each label starts one icon and one gap along.
+            let label = label.left(tokens::LABEL_PAD_H);
+            let grey = grey.left(tokens::LABEL_PAD_H);
+            let tile = tile.left(tokens::LABEL_PAD_H);
+            let funcs: Vec<&MeasuredButton> = m.funcs.iter().collect();
+            let ways_out: Vec<&MeasuredButton> = m.ways_out().collect();
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing = vec2(0.0, tokens::GAP);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::ZERO;
+                    // One grid cell each, flush: the emblem is then dead
+                    // centre over the first column of tiles and the
+                    // readout over the second.
+                    widgets::emblem(ui, vec2(cell, row));
+                    widgets::readout(ui, m.readout, vec2(cell, row));
+                });
+                if m.finishers().next().is_some() {
+                    finishing_run(ui, m, p, |_| vec2(col_inner, row), (label, grey), out, hovered);
+                }
+                if !funcs.is_empty() || !ways_out.is_empty() {
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::ZERO;
+                        let mut grid = |ui: &mut egui::Ui, run: &[&MeasuredButton]| {
+                            for line in run.chunks(tokens::DOUBLE_COLS) {
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing = Vec2::ZERO;
+                                    for measured in line {
+                                        button(ui, p, measured, vec2(cell, row), tile, out, hovered);
+                                    }
+                                });
+                            }
+                        };
+                        // The two clusters are chunked apart, so the rule
+                        // never has to cut through a line holding one of
+                        // each.
+                        grid(ui, &funcs);
+                        if m.has_divider() {
+                            widgets::divider(ui, col_inner);
+                        }
+                        grid(ui, &ways_out);
+                    });
+                }
+            });
+        }
+    }
 }
 
 /// Build the tray for one monitor and report what the pointer found.
@@ -403,8 +1043,7 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
     // The size readout prints the UNCLIPPED selection, so a rect straddling
     // two monitors keeps showing its true size; only placement uses the
     // clipped anchor.
-    let (m, side, rect_px) = measure_and_place(ctx, p, monitor);
-    let col_inner = union_fit(ctx, p, ppp).1;
+    let (m, col_inner, side, rect_px) = measure_and_place(ctx, p, monitor);
     let axis = side.axis();
     let local = egui::pos2(
         (rect_px.left() - monitor.bounds.left()) as f32 / ppp,
@@ -429,98 +1068,24 @@ pub fn show(ctx: &egui::Context, p: &PanelInputs, monitor: UiMonitor, visible: b
         }
         theme::tray_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing = Vec2::splat(tokens::GAP);
-            let strip = |ui: &mut egui::Ui| {
-                let across = match axis {
-                    Axis::Row => m.thick,
-                    Axis::Column => col_inner,
-                };
-                let emblem_slot = match axis {
-                    Axis::Row => vec2(tokens::EMBLEM_SLOT, across),
-                    Axis::Column => vec2(across, tokens::EMBLEM_SLOT),
-                };
-                // The emblem's slot is padded around a smaller mark, so it
-                // needs less of a gap than the flush button boxes. egui
-                // spends `item_spacing` AFTER a widget, so this is set
-                // before the emblem and restored before the readout.
-                ui.spacing_mut().item_spacing = Vec2::splat(tokens::EMBLEM_GAP);
-                widgets::emblem(ui, emblem_slot);
-                ui.spacing_mut().item_spacing = Vec2::splat(tokens::GAP);
-                let body_slot = match axis {
-                    Axis::Row => vec2(m.body_along, across),
-                    Axis::Column => vec2(across, m.thick),
-                };
-                match m.body {
-                    MeasuredBody::Readout(readout) => {
-                        widgets::readout(ui, readout, body_slot);
-                    }
-                    MeasuredBody::Hint {
-                        text,
-                        wrap,
-                    } => {
-                        widgets::hint(ui, text, wrap, body_slot);
-                    }
-                }
-                for (tone, buttons) in &m.groups {
-                    let base = theme::group_fill(*tone, p.accent);
-                    let veil = theme::hover_veil(*tone);
-                    let group = |ui: &mut egui::Ui| {
-                        // Flush inside the group; the tray's gap is
-                        // between groups only.
-                        ui.spacing_mut().item_spacing = Vec2::ZERO;
-                        for (table_idx, def, along) in buttons {
-                            // The set is part of the id, so hover state
-                            // and hit tests can never resolve against the
-                            // other strip; the table index keeps a
-                            // switched-off button from renumbering its
-                            // neighbours.
-                            let id = egui::Id::new(("panel", p.set as u8, *table_idx));
-                            let min = match axis {
-                                Axis::Row => vec2(*along, across),
-                                Axis::Column => vec2(across, m.thick),
-                            };
-                            let button = match p.style {
-                                ButtonStyle::KeyHint => widgets::key_hint_button(def, id, min, base, veil),
-                                ButtonStyle::Below => widgets::below_button(def, id, min, base, veil),
-                            };
-                            let r = button.show(ui);
-                            out.over_button |= r.contains_pointer();
-                            if r.contains_pointer() {
-                                hovered = Some((id, r.rect, def));
-                            }
-                            if r.clicked() {
-                                out.clicked = Some(def.command);
-                            }
-                        }
-                    };
-                    // The frame's content ui inherits the strip's layout,
-                    // so the buttons run along the same axis; a nested
-                    // `horizontal`/`vertical` here would pad the cross
-                    // axis with its own initial size.
-                    theme::group_frame(base).show(ui, group);
-                }
-            };
-            match axis {
-                Axis::Row => {
-                    ui.horizontal(strip);
-                }
-                Axis::Column => {
-                    ui.vertical(strip);
-                }
+            match &m {
+                Strip::Single(m) => single_strip(ui, m, p, axis, col_inner, &mut out, &mut hovered),
+                Strip::Double(m) => double_strip(ui, m, p, axis, col_inner, &mut out, &mut hovered),
             }
         });
     });
     // The whole tray: emblem, readout, padding and gaps included.
     out.over_tray = inner.response.contains_pointer();
-    // Only the label-less style needs naming; `below` already says it.
-    if p.style == ButtonStyle::KeyHint {
-        show_tip(ctx, axis, inner.response.rect, hovered, visible);
-    }
+    // Only a presentation that wants a chip registers a hovered button,
+    // so a `below` strip never raises one.
+    show_tip(ctx, axis, inner.response.rect, hovered, visible);
     out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::command::Command;
     use crate::ui::components::panel::model::FEATURE_COMBINATIONS;
     use clowd_rust_core::geometry::ScreenRect;
     use egui::{Pos2, Rect};
@@ -678,13 +1243,30 @@ mod tests {
             let mut got = None;
             let raw = self.raw_input(None, &[]);
             let full = self.ctx.run_ui(raw, |ui| {
-                let (_, side, rect) = measure_and_place(ui.ctx(), p, monitor);
+                let (_, _, side, rect) = measure_and_place(ui.ctx(), p, monitor);
                 got = Some((side, rect));
             });
             full.drop_without_applying_deltas();
             got.expect("the closure ran")
         }
     }
+
+    /// A switch set whose first row is comfortably the longer of the two,
+    /// so the ways out stay together on the second row.
+    const LONG_FIRST_ROW: PanelFeatures = PanelFeatures {
+        share: false,
+        scroll_capture: false,
+        ocr: false,
+        image_search: false,
+        ..PanelFeatures::ALL
+    };
+
+    /// A switch set whose first row is comfortably the shorter, so RESET
+    /// is lifted up beside the accent run.
+    const SHORT_FIRST_ROW: PanelFeatures = PanelFeatures {
+        video: false,
+        ..PanelFeatures::ALL
+    };
 
     const HD: (i32, i32) = (1920, 1080);
 
@@ -858,7 +1440,7 @@ mod tests {
         assert!(!tip_shown(&h), "a long pause brings the wait back");
 
         // `below` has labels and never shows a chip.
-        let below = inputs(PanelButtonSet::Normal, PanelFeatures::ALL, ButtonStyle::Below, row_selection(), mon);
+        let below = inputs(PanelButtonSet::Ocr, PanelFeatures::ALL, ButtonStyle::Below, row_selection(), mon);
         let mut h = Harness::new(mon);
         h.run(&below, None);
         let first = h
@@ -919,14 +1501,435 @@ mod tests {
         }
     }
 
+    /// The single-strip sets keep the one-row chassis the `key` and
+    /// `below` styles size: 40 + 2 x 4 and 48 + 2 x 4.
     #[test]
     fn frame_is_48_tall_in_key_style_and_56_in_below_at_100_percent() {
         for (style, height) in [(ButtonStyle::KeyHint, 48.0), (ButtonStyle::Below, 56.0)] {
             let mon = hd(1.0);
             let mut h = Harness::new(mon);
-            let p = inputs(PanelButtonSet::Normal, PanelFeatures::ALL, style, row_selection(), mon);
+            let p = inputs(PanelButtonSet::Ocr, PanelFeatures::ALL, style, row_selection(), mon);
             h.run(&p, None);
             assert!((h.area_rect().height() - height).abs() <= 0.5, "{style:?}: {:?}", h.area_rect());
+        }
+    }
+
+    /// The capture strip is the double chassis: two tile rows, one gap
+    /// between them and the tray's padding round the outside — whichever
+    /// `--panel-buttons` style the run was given, since it draws both
+    /// presentations itself.
+    #[test]
+    fn the_capture_strip_is_two_rows_tall_in_either_style() {
+        let want = 2.0 * tokens::DOUBLE_ROW + tokens::GAP + 2.0 * tokens::PAD;
+        for &style in &[ButtonStyle::KeyHint, ButtonStyle::Below] {
+            let mon = hd(1.0);
+            let mut h = Harness::new(mon);
+            let p = inputs(PanelButtonSet::Normal, PanelFeatures::ALL, style, row_selection(), mon);
+            h.run(&p, None);
+            assert!((h.area_rect().height() - want).abs() <= 0.5, "{style:?}: {:?}", h.area_rect());
+        }
+    }
+
+    /// The design, as a row: the emblem over the readout in one head
+    /// column, the five accent actions on the first row with their labels
+    /// on, and on the second row the four hand-offs left and the two ways
+    /// out flush with the tray's right padding.
+    #[test]
+    fn capture_row_puts_labels_up_top_and_the_ways_out_bottom_right() {
+        let mon = hd(1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(
+            PanelButtonSet::Normal,
+            PanelFeatures::ALL,
+            ButtonStyle::KeyHint,
+            row_selection(),
+            mon,
+        );
+        h.run(&p, None);
+        let area = h.area_rect();
+        // Before `analytic`: its pass lays out no widgets, so it would
+        // leave `interactive_rects_last_pass` empty.
+        let mut rects: Vec<Rect> = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5)
+            .collect();
+        rects.sort_by(|a, b| {
+            a.top()
+                .total_cmp(&b.top())
+                .then(a.left().total_cmp(&b.left()))
+        });
+        assert_eq!(h.analytic(&p).0.axis(), Axis::Row);
+        let (top, bottom): (Vec<Rect>, Vec<Rect>) = rects
+            .iter()
+            .partition(|r| r.top() < area.center().y);
+        assert_eq!(top.len(), 4, "the accent row holds the four finishing actions");
+        assert_eq!(bottom.len(), 7, "the second row holds the five hand-offs and the two ways out");
+
+        // Every accent button is wider than a bare tile: it carries a
+        // label, not a letter. Every second-row button is a tile.
+        assert!(
+            top.iter()
+                .all(|r| r.width() > tokens::KEY_TILE + 0.5),
+            "{top:?}"
+        );
+        assert!(
+            bottom
+                .iter()
+                .all(|r| (r.width() - tokens::KEY_TILE).abs() <= 0.5),
+            "{bottom:?}"
+        );
+
+        // The head column: both rows start past the emblem, at the same x,
+        // one whole button's room (a tile and a gap) in from the padding.
+        assert!((top[0].left() - bottom[0].left()).abs() <= 0.5, "{:?} {:?}", top[0], bottom[0]);
+        let head = area.left() + tokens::PAD + tokens::EMBLEM_SLOT + tokens::GAP;
+        assert!((top[0].left() - head).abs() <= 0.5, "{:?} in {area:?}", top[0]);
+        // The hand-offs are flush, then a hole, then the two ways out end
+        // on the tray's right padding.
+        let ways_out = &bottom[5..];
+        assert!(
+            (ways_out[1].right() - (area.right() - tokens::PAD)).abs() <= 0.5,
+            "{:?} in {area:?}",
+            ways_out[1]
+        );
+        assert!(
+            ways_out[0].left() - bottom[4].right() > tokens::GAP,
+            "the ways out are pushed away from the hand-offs: {bottom:?}"
+        );
+        // UPLOAD leads the hand-offs, as a tile.
+        let upload = bottom[0];
+        assert!((upload.width() - tokens::KEY_TILE).abs() <= 0.5, "{upload:?}");
+        let out = h.press(&p, upload.center());
+        assert_eq!(out.clicked, Some(Command::Upload), "{out:?}");
+    }
+
+    /// The design, as a column: the emblem beside the readout, the accent
+    /// actions one per line at the tray's full width, then the rest two to
+    /// a line.
+    #[test]
+    fn capture_column_stacks_labels_then_a_two_column_grid() {
+        let mon = monitor(rect(0, 0, 1920, 1300), 1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(
+            PanelButtonSet::Normal,
+            PanelFeatures::ALL,
+            ButtonStyle::KeyHint,
+            rect(100, 300, 400, 998),
+            mon,
+        );
+        h.run(&p, None);
+        let area = h.area_rect();
+        let inner = area.width() - 2.0 * tokens::PAD;
+        // Before `analytic`, which lays out no widgets of its own.
+        let mut rects: Vec<Rect> = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5)
+            .collect();
+        rects.sort_by(|a, b| {
+            a.top()
+                .total_cmp(&b.top())
+                .then(a.left().total_cmp(&b.left()))
+        });
+        assert_eq!(h.analytic(&p).0.axis(), Axis::Column);
+        assert_eq!(rects.len(), 11);
+        let (primary, secondary) = rects.split_at(4);
+        for r in primary {
+            assert!((r.width() - inner).abs() <= 0.5, "a primary button spans the tray: {r:?}");
+        }
+        let cell = inner / tokens::DOUBLE_COLS as f32;
+        for r in secondary {
+            assert!((r.width() - cell).abs() <= 0.5, "a secondary button is half the tray: {r:?}");
+        }
+        // Laid out two to a line, the two clusters chunked apart: the five
+        // hand-offs make 2 + 2 + 1, the two ways out make one more line.
+        let lines: Vec<&[Rect]> = {
+            let (funcs, ways) = secondary.split_at(5);
+            funcs
+                .chunks(2)
+                .chain(ways.chunks(2))
+                .collect()
+        };
+        assert_eq!(lines.len(), 4);
+        for line in &lines {
+            assert!((line[0].left() - (area.left() + tokens::PAD)).abs() <= 0.5, "{line:?}");
+            if let [left, right] = line {
+                assert!((left.top() - right.top()).abs() <= 0.5, "{line:?}");
+                assert!((right.left() - left.right()).abs() <= 0.5, "{line:?}");
+            }
+        }
+    }
+
+    /// The emblem and the readout each take one grid cell in a column, so
+    /// the emblem is centred over the first column of tiles and the
+    /// readout over the second. A cell narrower than either of them would
+    /// squeeze it off centre.
+    #[test]
+    fn capture_column_heads_are_one_cell_each() {
+        let mon = monitor(rect(0, 0, 1920, 1300), 1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(
+            PanelButtonSet::Normal,
+            PanelFeatures::ALL,
+            ButtonStyle::KeyHint,
+            rect(100, 300, 400, 998),
+            mon,
+        );
+        h.run(&p, None);
+        let area = h.area_rect();
+        let mut rects: Vec<Rect> = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5)
+            .collect();
+        rects.sort_by(|a, b| {
+            a.top()
+                .total_cmp(&b.top())
+                .then(a.left().total_cmp(&b.left()))
+        });
+        let cell = (area.width() - 2.0 * tokens::PAD) / tokens::DOUBLE_COLS as f32;
+
+        // The measured head box is a cell, and a cell holds it whole.
+        let raw = h.raw_input(None, &[]);
+        let mut head = 0.0;
+        let full = h.ctx.run_ui(raw, |ui| {
+            head = DoubleMetrics::measure(ui.ctx(), PanelFeatures::ALL, p.readout).head;
+        });
+        full.drop_without_applying_deltas();
+        assert!(cell + 0.01 >= head, "a {cell} pt cell cannot hold a {head} pt head box");
+
+        // Which puts the emblem's centre on the first tile column's, since
+        // both are the middle of the same cell.
+        let first_tile = rects[4];
+        let emblem_centre = area.left() + tokens::PAD + cell / 2.0;
+        assert!(
+            (first_tile.center().x - emblem_centre).abs() <= 0.5,
+            "{first_tile:?} is not under the emblem at {emblem_centre} in {area:?}"
+        );
+    }
+
+    /// A column stacks the ways out flush against the hand-offs, so it
+    /// draws a rule between them — the separation a row gets for free from
+    /// pushing its ways out to the far end of their row. The rule's block
+    /// is the only break in an otherwise flush grid, and the line inside
+    /// it stops short of either edge.
+    #[test]
+    fn capture_column_rules_off_the_ways_out() {
+        let mon = monitor(rect(0, 0, 1920, 1300), 1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(
+            PanelButtonSet::Normal,
+            PanelFeatures::ALL,
+            ButtonStyle::KeyHint,
+            rect(100, 300, 400, 998),
+            mon,
+        );
+        h.run(&p, None);
+        let mut rects: Vec<Rect> = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5)
+            .collect();
+        rects.sort_by(|a, b| {
+            a.top()
+                .total_cmp(&b.top())
+                .then(a.left().total_cmp(&b.left()))
+        });
+        // Four labels, then [Upload Share] [Scroll OCR] [Search], the rule,
+        // then [Reset Exit].
+        let grid = &rects[4..];
+        assert_eq!(grid.len(), 7);
+        // Flush inside the hand-offs...
+        assert!((grid[2].top() - grid[1].bottom()).abs() <= 0.5, "{grid:?}");
+        assert!((grid[4].top() - grid[3].bottom()).abs() <= 0.5, "{grid:?}");
+        // ...and one rule block between the clusters.
+        let across = grid[5].top() - grid[4].bottom();
+        assert!(
+            (across - tokens::DIVIDER_BLOCK).abs() <= 0.5,
+            "{across} between the clusters, want {}",
+            tokens::DIVIDER_BLOCK
+        );
+        // The line is inset, not a border across the whole tray, and it
+        // carries air on either side of it.
+        const {
+            assert!(tokens::DIVIDER_INSET > 0.0);
+            assert!(tokens::DIVIDER_BLOCK > tokens::DIVIDER.width);
+        }
+    }
+
+    /// Every button says what it does after the hover delay — the
+    /// labelled ones included. "Upload" is one verb; "Upload to default
+    /// destination" is the sentence, and losing it was a regression.
+    #[test]
+    fn labelled_buttons_still_raise_their_tooltip() {
+        let mon = hd(1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(
+            PanelButtonSet::Normal,
+            PanelFeatures::ALL,
+            ButtonStyle::KeyHint,
+            row_selection(),
+            mon,
+        );
+        h.run(&p, None);
+        let area = h.area_rect();
+        // A first-row button: taller than nothing, wider than a tile.
+        let label = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5 && r.width() > tokens::KEY_TILE + 0.5 && r.top() < area.center().y)
+            .min_by(|a, b| a.left().total_cmp(&b.left()))
+            .expect("a labelled button rect");
+        let tip_layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::new(TIP_ID));
+        let tip_shown = |h: &Harness| {
+            h.ctx
+                .memory(|m| m.areas().visible_last_frame(&tip_layer))
+        };
+        h.run(&p, Some(label.center()));
+        assert!(!tip_shown(&h), "the chip waits out the delay here too");
+        let passes = (tokens::TIP_DELAY_SECS * 60.0).ceil() as usize + 3;
+        for _ in 0..passes / 3 {
+            h.run(&p, Some(label.center()));
+        }
+        assert!(tip_shown(&h), "a labelled button raises its chip");
+    }
+
+    /// The column grid is left-aligned at the labelled buttons' padding so
+    /// every icon in a column sits at one x. That only works if a cell is
+    /// wide enough for a tile carrying that padding — otherwise the
+    /// accelerator letter spills out of the button and the grid stops
+    /// being two even columns.
+    #[test]
+    fn capture_column_cells_hold_a_left_padded_tile() {
+        let mon = monitor(rect(0, 0, 1920, 1300), 1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(
+            PanelButtonSet::Normal,
+            PanelFeatures::ALL,
+            ButtonStyle::KeyHint,
+            rect(100, 300, 400, 998),
+            mon,
+        );
+        h.run(&p, None);
+        let cell = (h.area_rect().width() - 2.0 * tokens::PAD) / tokens::DOUBLE_COLS as f32;
+        let raw = h.raw_input(None, &[]);
+        let mut want = 0.0;
+        let full = h.ctx.run_ui(raw, |ui| {
+            want = widgets::key_button_length(ui.ctx(), tokens::LABEL_PAD_H);
+        });
+        full.drop_without_applying_deltas();
+        assert!(cell + 0.01 >= want, "a {cell} pt cell cannot hold a {want} pt tile");
+    }
+
+    /// With VIDEO off the accent row has only EDIT, COPY and SAVE on it
+    /// and comes up shorter than the row beneath, leaving a bite out of
+    /// the tray's top right corner. RESET moves up into it, flush right
+    /// and straight above EXIT, and the two rows end together.
+    #[test]
+    fn a_short_accent_row_lifts_the_first_way_out_up_beside_it() {
+        let mon = hd(1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(PanelButtonSet::Normal, SHORT_FIRST_ROW, ButtonStyle::KeyHint, row_selection(), mon);
+        h.run(&p, None);
+        let area = h.area_rect();
+        let mut rects: Vec<Rect> = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5)
+            .collect();
+        rects.sort_by(|a, b| {
+            a.top()
+                .total_cmp(&b.top())
+                .then(a.left().total_cmp(&b.left()))
+        });
+        let (top, bottom): (Vec<Rect>, Vec<Rect>) = rects
+            .iter()
+            .partition(|r| r.top() < area.center().y);
+        // Edit, Copy, Save + the lifted Reset; the five hand-offs + Exit.
+        assert_eq!((top.len(), bottom.len()), (4, 6), "{top:?} / {bottom:?}");
+        let lifted = top.last().expect("the lifted tile");
+        let exit = bottom.last().expect("Exit");
+        assert!(
+            (lifted.width() - tokens::KEY_TILE).abs() <= 0.5,
+            "the lifted button is a tile, not a label: {lifted:?}"
+        );
+        // Both rows end on the tray's right padding, and the two ways out
+        // stack.
+        let right = area.right() - tokens::PAD;
+        assert!((lifted.right() - right).abs() <= 0.5, "{lifted:?} in {area:?}");
+        assert!((exit.right() - right).abs() <= 0.5, "{exit:?} in {area:?}");
+        assert!((lifted.left() - exit.left()).abs() <= 0.5, "{lifted:?} above {exit:?}");
+        // And it is really RESET that moved, not EXIT.
+        let out = h.press(&p, lifted.center());
+        assert_eq!(out.clicked, Some(Command::Reset), "{out:?}");
+    }
+
+    /// The lift is for a ragged row only. With the hand-offs switched off
+    /// the accent row is comfortably the longer of the two, so both ways
+    /// out stay together on the second row — and a column never lifts at
+    /// all, since its grid lays the same buttons out in table order
+    /// whatever a row decided.
+    #[test]
+    fn a_long_accent_row_keeps_both_ways_out_below_it() {
+        let mon = hd(1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(PanelButtonSet::Normal, LONG_FIRST_ROW, ButtonStyle::KeyHint, row_selection(), mon);
+        h.run(&p, None);
+        let area = h.area_rect();
+        let below = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5 && r.top() >= area.center().y)
+            .count();
+        assert_eq!(below, 3, "UPLOAD and both ways out");
+
+        // The same switches that lift RESET in a row change nothing in a
+        // column.
+        let tall = monitor(rect(0, 0, 1920, 1300), 1.0);
+        let mut h = Harness::new(tall);
+        let p = inputs(
+            PanelButtonSet::Normal,
+            SHORT_FIRST_ROW,
+            ButtonStyle::KeyHint,
+            rect(100, 300, 400, 998),
+            tall,
+        );
+        h.run(&p, None);
+        let rows = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5)
+            .count();
+        assert_eq!(h.analytic(&p).0.axis(), Axis::Column);
+        assert_eq!(rows, 10, "three labels and the seven-button grid, ungrouped");
+    }
+
+    /// Switching every optional button off may not leave a hole where a
+    /// cluster was: the ways out stay flush right, and the column grid
+    /// closes up.
+    #[test]
+    fn the_capture_strip_survives_every_switch_combination() {
+        for features in FEATURE_COMBINATIONS {
+            let mon = hd(1.0);
+            let mut h = Harness::new(mon);
+            let p = inputs(PanelButtonSet::Normal, features, ButtonStyle::KeyHint, row_selection(), mon);
+            h.run(&p, None);
+            let area = h.area_rect();
+            // The longer row ends on the tray's right padding, whichever
+            // it is, and nothing ever sticks out past it.
+            let edge = area.right() - tokens::PAD;
+            let rights: Vec<f32> = h
+                .interactive_rects()
+                .into_iter()
+                .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5)
+                .map(|r| r.right())
+                .collect();
+            let right = rights
+                .iter()
+                .copied()
+                .fold(f32::MIN, f32::max);
+            assert!((right - edge).abs() <= 0.5, "{features:?}: {right} in {area:?}");
         }
     }
 
@@ -1061,30 +2064,96 @@ mod tests {
         }
     }
 
+    /// A set's column width is its own — the capture strip's grid is two
+    /// tiles wide where the OCR strip is one — but it may never move when
+    /// a switch is flipped, or a user turning UPLOAD off would find the
+    /// tray under a different part of the selection.
     #[test]
-    fn column_width_is_the_union_thickness() {
+    fn column_width_is_fixed_per_set_under_every_switch_combination() {
         let mon = monitor(rect(0, 0, 1920, 1300), 1.0);
         let sel = rect(100, 300, 400, 998);
-        let mut widths = Vec::new();
         for &set in PanelButtonSet::UNION {
-            for features in [
-                PanelFeatures::ALL,
-                PanelFeatures {
-                    upload: false,
-                    ..PanelFeatures::ALL
-                },
-            ] {
+            let mut widths = Vec::new();
+            for features in FEATURE_COMBINATIONS {
                 let mut h = Harness::new(mon);
                 let p = inputs(set, features, ButtonStyle::Below, sel, mon);
                 h.run(&p, None);
                 assert_eq!(h.analytic(&p).0.axis(), Axis::Column, "{set:?} {features:?}");
                 widths.push(h.area_rect().width());
             }
+            let first = widths[0];
+            for w in &widths {
+                assert!((w - first).abs() <= 0.01, "{set:?}: {widths:?}");
+            }
         }
-        let first = widths[0];
-        for w in &widths {
-            assert!((w - first).abs() <= 0.01, "{widths:?}");
+    }
+
+    /// `double_strip` reads `NORMAL_GROUPS` by tone: one accent run, an
+    /// optional grey run attached to it, then the bare runs — every one
+    /// but the last a hand-off, the last the ways out. The table has to
+    /// end on a bare run, or the ways out would be drawn as hand-offs.
+    #[test]
+    fn capture_groups_end_on_the_bare_run_that_holds_the_ways_out() {
+        let groups = PanelButtonSet::Normal.groups();
+        let tones: Vec<GroupTone> = groups.iter().map(|g| g.tone).collect();
+        assert_eq!(tones, vec![GroupTone::Primary, GroupTone::Bare, GroupTone::Bare]);
+        assert_eq!(
+            tones
+                .iter()
+                .filter(|t| **t == GroupTone::Primary)
+                .count(),
+            1
+        );
+        assert!(
+            tones
+                .iter()
+                .filter(|t| **t == GroupTone::Secondary)
+                .count()
+                <= 1
+        );
+        assert_eq!(tones.last(), Some(&GroupTone::Bare));
+
+        // And the last run really is the ways out.
+        let last = groups.last().expect("a last group");
+        let ways_out: Vec<Command> = PanelButtonSet::Normal.defs()[PanelButtonSet::Normal.defs().len() - last.len..]
+            .iter()
+            .map(|d| d.command)
+            .collect();
+        assert_eq!(ways_out, vec![Command::Reset, Command::Exit]);
+    }
+
+    /// The finishing run is one block: its buttons are flush on a single
+    /// pill, with no gap anywhere along it. (A grey run attached to the
+    /// accent one, when the table has one, is part of that same block —
+    /// `finishing_run` lays the accent pill over the grey.)
+    #[test]
+    fn the_finishing_run_is_one_flush_block() {
+        let mon = hd(1.0);
+        let mut h = Harness::new(mon);
+        let p = inputs(PanelButtonSet::Normal, LONG_FIRST_ROW, ButtonStyle::KeyHint, row_selection(), mon);
+        h.run(&p, None);
+        let area = h.area_rect();
+        let mut top: Vec<Rect> = h
+            .interactive_rects()
+            .into_iter()
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5 && r.top() < area.center().y)
+            .collect();
+        top.sort_by(|a, b| a.left().total_cmp(&b.left()));
+        assert_eq!(top.len(), 4, "Edit Video Copy Save: {top:?}");
+        for pair in top.windows(2) {
+            assert!(
+                (pair[1].left() - pair[0].right()).abs() <= 0.5,
+                "a gap opened in the finishing run: {pair:?}"
+            );
         }
+        // Every one of them is a labelled button, not a tile.
+        assert!(
+            top.iter()
+                .all(|r| r.width() > tokens::KEY_TILE + 0.5),
+            "{top:?}"
+        );
+        let out = h.press(&p, top[2].center());
+        assert_eq!(out.clicked, Some(Command::Copy), "{out:?}");
     }
 
     #[test]
@@ -1124,12 +2193,16 @@ mod tests {
             mon,
         );
         h.run(&p, None);
-        // The leftmost button of a row is the first visible def.
+        // The first visible def is the accent row's leftmost button.
         let first = h
             .interactive_rects()
             .into_iter()
-            .filter(|r| r.width() <= tokens::KEY_TILE + 0.5)
-            .min_by(|a, b| a.left().total_cmp(&b.left()))
+            .filter(|r| r.height() <= tokens::DOUBLE_ROW + 0.5)
+            .min_by(|a, b| {
+                a.top()
+                    .total_cmp(&b.top())
+                    .then(a.left().total_cmp(&b.left()))
+            })
             .expect("a button rect");
         let expected = PanelButtonSet::Normal
             .visible_defs(PanelFeatures::ALL)

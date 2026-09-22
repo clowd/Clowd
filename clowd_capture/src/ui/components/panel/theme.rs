@@ -78,6 +78,11 @@ pub mod tokens {
     /// saturated mid tone, so the grey group's 12 % step reads as barely
     /// a change on it.
     pub const HOVER_VEIL_PRIMARY: f32 = 0.28;
+    /// Hover veil on a button sitting straight on the chassis (the
+    /// capture strip's second row): white at 18 %. The chassis is darker
+    /// than the segment grey, so the grey group's 12 % step would land
+    /// short of `SEG_FILL` and the button would not read as lit at all.
+    pub const HOVER_VEIL_BARE: f32 = 0.18;
 
     pub const FG: Color32 = Color32::WHITE;
     /// White text at 85 %: the readout's number.
@@ -103,6 +108,39 @@ pub mod tokens {
     pub const BELOW_GAP: f32 = 4.0;
     /// 12 pt button label in the `below` button style.
     pub const LABEL_FONT: f32 = 12.0;
+
+    /// `label` style — the capture strip's primary row: the icon beside
+    /// the full Title-case label, on the same `KEY_TILE` row height as
+    /// the accelerator tiles beneath it, so the two rows line up.
+    pub const LABEL_PAD_H: f32 = 8.0;
+    pub const LABEL_GAP: f32 = 6.0;
+
+    /// The capture strip's row height, and the pitch of its column-mode
+    /// button rows: one `key` tile.
+    pub const DOUBLE_ROW: f32 = KEY_TILE;
+    /// How many columns the capture strip's secondary buttons form when
+    /// the tray stands on its end.
+    pub const DOUBLE_COLS: usize = 2;
+
+    /// The rule between the capture column's hand-offs and its ways out.
+    /// A row gets that separation for free — the ways out are pushed to
+    /// the far end of their row — but a column stacks them flush against
+    /// the hand-offs, so it needs a break drawn.
+    ///
+    /// White at 12 %: a line you notice as a change of texture rather
+    /// than as a border. It stops short of either edge for the same
+    /// reason — edge to edge would read as the tray being cut in two.
+    pub const DIVIDER: Stroke = Stroke {
+        width: 1.0,
+        color: white_alpha(31),
+    };
+    /// Air above and below the rule.
+    pub const DIVIDER_PAD_V: f32 = 4.0;
+    /// How far the rule stops short of either edge.
+    pub const DIVIDER_INSET: f32 = 8.0;
+    /// The whole block the rule takes in the stack: the air, the line,
+    /// the air.
+    pub const DIVIDER_BLOCK: f32 = 2.0 * DIVIDER_PAD_V + DIVIDER.width;
 
     /// 11 pt "W / × / H" readout, set on 1 em line boxes so the three
     /// lines sit tight.
@@ -228,6 +266,10 @@ pub fn group_fill(tone: GroupTone, accent: Color32) -> Color32 {
     match tone {
         GroupTone::Primary => accent,
         GroupTone::Secondary => tokens::SEG_FILL,
+        // Not "no colour": this is what the hover veil lightens, and at
+        // rest it is the chassis exactly, so the button is invisible
+        // until the pointer is on it.
+        GroupTone::Bare => tokens::TRAY_FILL,
     }
 }
 
@@ -245,6 +287,7 @@ pub fn hover_veil(tone: GroupTone) -> f32 {
     match tone {
         GroupTone::Primary => tokens::HOVER_VEIL_PRIMARY,
         GroupTone::Secondary => tokens::HOVER_VEIL,
+        GroupTone::Bare => tokens::HOVER_VEIL_BARE,
     }
 }
 
@@ -334,6 +377,16 @@ mod tests {
         let accent = Color32::from_rgb(0x2F, 0x7C, 0xAE);
         assert_eq!(group_fill(GroupTone::Primary, accent), accent);
         assert_eq!(group_fill(GroupTone::Secondary, accent), tokens::SEG_FILL);
+        assert_eq!(group_fill(GroupTone::Bare, accent), tokens::TRAY_FILL);
+    }
+
+    /// A bare button lights up from the chassis, which is darker than the
+    /// segment grey: its veil has to clear `SEG_FILL` or the hover would
+    /// read as less lit than a grey group's rest state.
+    #[test]
+    fn bare_hover_clears_the_segment_grey() {
+        let hot = hover_fill(tokens::TRAY_FILL, hover_veil(GroupTone::Bare), 1.0);
+        assert!(hot.r() > tokens::SEG_FILL.r(), "{hot:?} vs {:?}", tokens::SEG_FILL);
     }
 
     /// The buttons are flush with the group edge: any margin here would
