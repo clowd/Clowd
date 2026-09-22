@@ -96,17 +96,22 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Makes the empty space of <paramref name="region"/> drag the window, for the bar a
-        /// window runs under the extended client area. No-op off macOS, where the window keeps a
-        /// real title bar that already drags itself. The region needs a non-null Background
-        /// (Transparent is enough) to be hit-testable at all; only presses that report the region
-        /// itself as their source count, since every control in such a bar reports itself, while
-        /// a background-less panel is not hit-testable and so its padding falls through and
-        /// correctly reads as empty.
+        /// Makes the empty space of <paramref name="region"/> drag the window, and a double-click
+        /// there maximize or restore it — what the title bar itself does.
+        ///
+        /// Every platform, not just the extended-client-area one it was written for: on macOS this
+        /// bar IS the title bar and has to drag, and on Windows it sits right under a real one and
+        /// reads as part of the same strip, so a drag that dies on the seam between them is a
+        /// surprise either way.
+        ///
+        /// The region needs a non-null Background (Transparent is enough) to be hit-testable at
+        /// all; only presses that report the region itself as their source count, since every
+        /// control in such a bar reports itself, while a background-less panel is not hit-testable
+        /// and so its padding falls through and correctly reads as empty.
         /// </summary>
         protected void EnableTitleBarDrag(Control region)
         {
-            if (!_clientAreaExtended || region == null)
+            if (region == null)
                 return;
 
             region.PointerPressed += (_, e) =>
@@ -114,8 +119,21 @@ namespace Clowd.UI
                 if (!ReferenceEquals(e.Source, region))
                     return;
 
-                if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-                    BeginMoveDrag(e);
+                if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+                    return;
+
+                // A double-click never starts a drag: BeginMoveDrag would swallow the second
+                // press, and the gesture people expect from a title bar is maximize/restore.
+                if (e.ClickCount == 2)
+                {
+                    if (CanResize)
+                        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+                    e.Handled = true;
+                    return;
+                }
+
+                BeginMoveDrag(e);
             };
         }
 
