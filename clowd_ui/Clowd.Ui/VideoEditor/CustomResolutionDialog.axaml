@@ -2,9 +2,9 @@
     x:Class="Clowd.UI.VideoEditor.CustomResolutionDialog"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:u="https://irihi.tech/ursa"
     Title="Custom resolution"
-    Width="360"
+    Width="400"
     Background="{DynamicResource ApplicationBackgroundBrush}"
     CanResize="False"
     ShowInTaskbar="False"
@@ -49,23 +49,21 @@
                     Width="46"
                     VerticalAlignment="Center"
                     Text="Width:" />
-                <controls:SpinnerTextBox
+                <u:NumericIntUpDown
                     x:Name="WidthBox"
-                    Width="90"
-                    SnapToWholeNumber="True"
-                    SpinAmount="2"
-                    Suffix="px" />
+                    Width="110"
+                    InnerRightContent="px"
+                    Step="2" />
                 <TextBlock
                     Margin="8,0,0,0"
                     Width="46"
                     VerticalAlignment="Center"
                     Text="Height:" />
-                <controls:SpinnerTextBox
+                <u:NumericIntUpDown
                     x:Name="HeightBox"
-                    Width="90"
-                    SnapToWholeNumber="True"
-                    SpinAmount="2"
-                    Suffix="px" />
+                    Width="110"
+                    InnerRightContent="px"
+                    Step="2" />
             </StackPanel>
         </StackPanel>
 

@@ -26,10 +26,10 @@ namespace Clowd.UI.VideoEditor
             InitializeComponent();
             Icon = AppStyles.AppIcon;
 
-            WidthBox.Min = EditorSession.MinOutputDimension;
-            WidthBox.Max = EditorSession.MaxOutputDimension;
-            HeightBox.Min = EditorSession.MinOutputDimension;
-            HeightBox.Max = EditorSession.MaxOutputDimension;
+            WidthBox.Minimum = EditorSession.MinOutputDimension;
+            WidthBox.Maximum = EditorSession.MaxOutputDimension;
+            HeightBox.Minimum = EditorSession.MinOutputDimension;
+            HeightBox.Maximum = EditorSession.MaxOutputDimension;
             WidthBox.Value = widthPx;
             HeightBox.Value = heightPx;
 
@@ -64,7 +64,11 @@ namespace Clowd.UI.VideoEditor
             EditorSession.ClampOutputDimension(ToPixels(WidthBox.Value)),
             EditorSession.ClampOutputDimension(ToPixels(HeightBox.Value)));
 
-        private static int ToPixels(double value) =>
-            (int)Math.Round(Math.Clamp(value, EditorSession.MinOutputDimension, EditorSession.MaxOutputDimension));
+        // An empty box reads as null; the clamp below turns that into the smallest legal size
+        // rather than a zero-pixel canvas.
+        private static int ToPixels(int? value) =>
+            Math.Clamp(value ?? EditorSession.MinOutputDimension,
+                       EditorSession.MinOutputDimension,
+                       EditorSession.MaxOutputDimension);
     }
 }
