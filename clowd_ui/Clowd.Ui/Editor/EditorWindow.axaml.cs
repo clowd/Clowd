@@ -14,10 +14,12 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Notifications;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -25,6 +27,7 @@ using Clowd.Config;
 using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
 using Clowd.PlatformUtil;
+using Clowd.UI.Config;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
@@ -104,6 +107,11 @@ namespace Clowd.UI
             DataContext = this;
 
             InitializeComponent();
+
+            ApplyChrome();
+            InitializeLayoutCombo();
+            _settings.General.PropertyChanged += OnGeneralSettingChanged;
+            Closed += (_, _) => _settings.General.PropertyChanged -= OnGeneralSettingChanged;
 
             // Under the extended client area (macOS) this bar IS the title bar.
             EnableTitleBarDrag(PropertiesBar);
@@ -714,15 +722,21 @@ namespace Clowd.UI
             public string DisplayName;
             public string IconKey;
             public string Tooltip;
-            public double? Padding;
+
+            /// <summary>Space-separated style classes for the button's icon: its weight
+            /// ("tight" for a glyph that needs more inset than the default) and any optical
+            /// correction ("iconNudgeRight"). The actual inset is a chrome decision — see the
+            /// rules in ToolButton.axaml and EditorWindow.axaml — so the registry names the
+            /// weight rather than a pixel count that only holds at one button size.</summary>
+            public string IconClasses;
         }
 
         // Rows mirror the original static XAML 1:1 (icons, tooltips and the Count/Text
-        // Padding=8 overrides).
+        // tighter-inset overrides).
         private static readonly ToolRegistryEntry[] ToolRegistry =
         {
-            new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", IconKey = "IconToolNone", Tooltip = "Pan Tool (D)\nCan also hold SHIFT or SPACE to enter Pan Mode." },
-            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", IconKey = "IconToolPointer", Tooltip = "Selection Tool (S)" },
+            new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", IconKey = "IconToolNone", Tooltip = "Pan Tool (D)\nCan also hold SPACE to enter Pan Mode." },
+            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", IconKey = "IconToolPointer", Tooltip = "Selection Tool (S or ESC)", IconClasses = "iconNudgeRight" },
             new ToolRegistryEntry { Tool = ToolType.Rectangle, DisplayName = "Rectangle", IconKey = "IconToolRectangle", Tooltip = "Rectangle (R)" },
             new ToolRegistryEntry { Tool = ToolType.FilledRectangle, DisplayName = "Filled Rectangle", IconKey = "IconToolFilledRectangle", Tooltip = "Filled Rectangle (F)" },
             new ToolRegistryEntry { Tool = ToolType.Ellipse, DisplayName = "Ellipse", IconKey = "IconToolEllipse", Tooltip = "Ellipse (E)" },
@@ -730,8 +744,8 @@ namespace Clowd.UI
             new ToolRegistryEntry { Tool = ToolType.Arrow, DisplayName = "Arrow", IconKey = "IconToolArrow", Tooltip = "Arrow (A)" },
             new ToolRegistryEntry { Tool = ToolType.Measure, DisplayName = "Measure", IconKey = "IconToolMeasure", Tooltip = "Measure (M)" },
             new ToolRegistryEntry { Tool = ToolType.PolyLine, DisplayName = "Pencil", IconKey = "IconToolPolyLine", Tooltip = "Pencil (P)" },
-            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", IconKey = "IconToolNumericCount", Tooltip = "Numerical Step Count (N)", Padding = 8 },
-            new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", IconKey = "IconToolText", Tooltip = "Text (T)", Padding = 8 },
+            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", IconKey = "IconToolNumericCount", Tooltip = "Numerical Step Count (N)", IconClasses = "tight" },
+            new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", IconKey = "IconToolText", Tooltip = "Text (T)", IconClasses = "tight" },
             new ToolRegistryEntry { Tool = ToolType.Pixelate, DisplayName = "Obscure", IconKey = "IconToolPixelate", Tooltip = "Obscure (O)" },
         };
 
@@ -796,6 +810,76 @@ namespace Clowd.UI
             _settings.Editor.SidebarWidth = Math.Clamp(sidebarBorder.Bounds.Width, SidebarMinWidth, SidebarMaxWidth);
         }
 
+        /// <summary>The editor is chrome around an image, not a page of prose, so it takes the
+        /// backdrop in the light theme too — the bars and the canvas are the whole window, and
+        /// neither is text the way a settings page is.</summary>
+        protected override bool AllowMicaInLightTheme => true;
+
+        // The legacy flat fill the compact bars have always been painted with.
+        private static readonly IBrush CompactChromeBrush = new SolidColorBrush(Color.FromRgb(0x53, 0x53, 0x53));
+
+        // Holds the modern chrome's Foreground binding so switching back to Compact can drop it —
+        // a plain assignment would sit underneath a live binding and never show.
+        private IDisposable _foregroundBinding;
+
+        /// <summary>The customize popup's chrome picker. Bound straight to the setting, so it and
+        /// the Appearance page are two views of one value and neither has to know about the
+        /// other.</summary>
+        private void InitializeLayoutCombo()
+        {
+            layoutCombo.ItemTemplate = new FuncDataTemplate<object>((o, _) =>
+                new TextBlock { Text = SettingsControlFactory.GetEnumDisplayString(o) });
+            layoutCombo.ItemsSource = Enum.GetValues(typeof(EditorLayout));
+            layoutCombo.Bind(SelectingItemsControl.SelectedItemProperty,
+                new Binding(nameof(SettingsGeneral.EditorLayout))
+                {
+                    Source = _settings.General,
+                    Mode = BindingMode.TwoWay,
+                });
+        }
+
+        private void OnGeneralSettingChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is null or nameof(SettingsGeneral.EditorLayout))
+                ApplyChrome();
+        }
+
+        /// <summary>
+        /// Puts the chosen chrome's class on the root, which is what every size, radius and fill
+        /// in EditorWindow.axaml keys off, and settles the one thing a style cannot say: whether
+        /// the surface the two tool bars sit on paints at all. The modern bars ARE the window's
+        /// own background showing through, so they paint nothing and the window supplies it —
+        /// Mica where the compositor grants it, otherwise the theme's ApplicationBackgroundBrush
+        /// (#FAFAFA light / #202020 dark), which SystemThemedWindow already keeps in step with the
+        /// variant. The compact bars are the legacy opaque grey, whatever the theme.
+        /// </summary>
+        private void ApplyChrome()
+        {
+            if (rootGrid == null)
+                return;
+
+            var modern = _settings.General.EditorLayout != EditorLayout.Compact;
+
+            rootGrid.Classes.Set("modern", modern);
+            rootGrid.Classes.Set("compact", !modern);
+            rootGrid.Background = modern ? Brushes.Transparent : CompactChromeBrush;
+
+            // Everything in the window inherits this, which is the whole point: the Compact bars
+            // are hand-painted dark chrome and need white on them, while the modern ones are the
+            // window's own background and want the theme's text colour — and so does every Semi
+            // and Ursa control in them, none of which states a foreground of its own. Set here
+            // rather than in the markup because a local value in the markup cannot be restated by
+            // a chrome, and the field that inherited the wrong one is inside a template no style
+            // can reach.
+            _foregroundBinding?.Dispose();
+            _foregroundBinding = null;
+
+            if (modern)
+                _foregroundBinding = this.Bind(ForegroundProperty, new DynamicResourceExtension("SemiColorText0"));
+            else
+                SetValue(ForegroundProperty, Brushes.White);
+        }
+
         /// <summary>Rebuilds the generated portion of the vertical tool strip (visible tools in the
         /// resolved order). The fixed Undo/Redo/customize buttons stay at the end; generated
         /// controls are always inserted at the front.</summary>
@@ -848,8 +932,9 @@ namespace Clowd.UI
                 IconPath = FindIconGeometry(entry.IconKey),
             };
 
-            if (entry.Padding.HasValue)
-                button.Padding = new Thickness(entry.Padding.Value);
+            if (entry.IconClasses != null)
+                foreach (var cls in entry.IconClasses.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                    button.Classes.Add(cls);
 
             ToolTip.SetTip(button, entry.Tooltip);
 
@@ -887,9 +972,9 @@ namespace Clowd.UI
         /// tool the registry does not know, so a row index is not an order index.</summary>
         private readonly List<ToolType> _customizeRowTools = new List<ToolType>();
 
-        /// <summary>The checkbox of each popup row, in display order. Only these are tab stops:
-        /// the grips are pointer-only by nature and the two reset buttons are mouse-only, so Tab
-        /// cycles the tools and nothing else.</summary>
+        /// <summary>The checkbox of each popup row, in display order. Tab reaches these, the
+        /// layout picker and the two reset buttons; the grips stay out of it, being pointer-only
+        /// by nature (the rows reorder from the keyboard through the checkboxes instead).</summary>
         private readonly List<CheckBox> _customizeChecks = new List<CheckBox>();
 
         /// <summary>Wires the customize popup once: reorder drag, keyboard focus on open (the

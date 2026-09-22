@@ -1,11 +1,26 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Clowd.UI.Controls"
              x:Class="Clowd.UI.Controls.LayersPanel">
 
     <!-- the row buttons use the shared RowIconButtonTheme (Controls/RowIconButton.axaml), which the
-         timeline track headers use too — see LayersPanel.axaml.cs -->
+         timeline track headers use too — see LayersPanel.axaml.cs
+
+         Two chromes, as everywhere else in the editor, keyed off IsModern (the host sets it; see
+         EditorWindow's chrome styles). They live here rather than in the window because a style on
+         an inner control beats one on an outer container, so the window could not override these
+         even if it wanted to. The Compact rules are the originals, untouched. -->
 
     <UserControl.Styles>
+        <!-- Set here rather than on the elements: a local value in the markup outranks every
+             style, so anything a chrome has to restate cannot be written on the element itself. -->
+        <Style Selector="Panel#panelRoot">
+            <Setter Property="Background" Value="#454545" />
+        </Style>
+        <Style Selector="TextBlock#emptyText">
+            <Setter Property="Foreground" Value="#88FFFFFF" />
+        </Style>
+
         <Style Selector="Border.layerRow">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="MinHeight" Value="27" />
@@ -18,14 +33,49 @@
         <Style Selector="Border.layerRow.selected">
             <Setter Property="Background" Value="#55FFFFFF" />
         </Style>
+
+        <!-- ===== Modern ===== rows read as separate pills on the window backdrop, sized to the
+             same rhythm as the 36px tool buttons, and coloured from the theme so the panel is not
+             a dark island in the light theme. -->
+        <Style Selector="controls|LayersPanel[IsModern=True] Border.layerRow">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Margin" Value="4,1" />
+            <Setter Property="Padding" Value="8,0,6,0" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="controls|LayersPanel[IsModern=True] Border.layerRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+        </Style>
+        <Style Selector="controls|LayersPanel[IsModern=True] Border.layerRow.selected">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill2}" />
+        </Style>
+
+        <!-- the eye/lock/delete buttons, grown and rounded to match -->
+        <Style Selector="controls|LayersPanel[IsModern=True] Button">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="controls|LayersPanel[IsModern=True] Button:pointerover /template/ Border#_bg">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+        </Style>
+        <Style Selector="controls|LayersPanel[IsModern=True] Button:pressed /template/ Border#_bg">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill2}" />
+        </Style>
+
+        <Style Selector="controls|LayersPanel[IsModern=True] Panel#panelRoot">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="controls|LayersPanel[IsModern=True] TextBlock#emptyText">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+        </Style>
     </UserControl.Styles>
 
-    <Panel Background="#454545">
+    <Panel x:Name="panelRoot">
         <TextBlock x:Name="emptyText"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
                    FontSize="12"
-                   Foreground="#88FFFFFF"
                    Text="No objects yet" />
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <!-- the indicator is a sibling laid over the rows (not a Render call) so it paints on

@@ -14,7 +14,7 @@
 
             <!--  The font preview button of the image editor and the video editor's inspector — the
                   dark-chrome tool surfaces, whatever the app theme. Same chrome idiom as
-                  SpinnerTextBox: #454545 fill with a #666666 1px border, and the interactive surface
+                  CompactSpinner: #454545 fill with a #666666 1px border, and the interactive surface
                   drawn 1px inside the border (#33FFFFFF fading to #66FFFFFF on hover over 0.1s, like
                   the spin buttons).  -->
             <ControlTheme x:Key="InnerToolButtonTheme" TargetType="Button">
@@ -81,6 +81,13 @@
                     <StaticResource x:Key="ToolTipForeground" ResourceKey="SemiColorText0" />
                     <StaticResource x:Key="ToolTipBorderBrush" ResourceKey="SemiColorBorder" />
                     <Thickness x:Key="ToolTipBorderThickness">1</Thickness>
+
+                    <!-- Semi's light-theme primary text is a soft near-black (its dark themes are
+                         the ones tuned for contrast); against #FAFAFA it reads washed out at the
+                         12-14px this app runs at. Restated app-wide rather than per page, so the
+                         whole shell shares one ink. Only the primary step moves — the secondary
+                         ones stay where Semi put them, which is what keeps the hierarchy. -->
+                    <SolidColorBrush x:Key="SemiColorText0" Color="#0D0D0F" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="ApplicationBackgroundColor">#202020</Color>

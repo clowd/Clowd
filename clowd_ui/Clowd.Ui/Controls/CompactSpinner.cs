@@ -10,18 +10,19 @@ using Avalonia.Interactivity;
 namespace Clowd.UI.Controls
 {
     /// <summary>
-    /// Numeric spinner (70x22) used in the editor properties bar. This is the Value/Suffix/
-    /// DisplayScale redesign of the WPF SpinnerTextBox (which spun the binding source via
+    /// The Compact chrome's numeric spinner (70x22), used in the editor properties bar and the
+    /// video editor's inspector. This is the Value/Suffix/DisplayScale redesign of the WPF
+    /// SpinnerTextBox it is named after (which spun the binding source via
     /// reflection): the displayed text is $"{Math.Round(Value * DisplayScale, 2)} {Suffix}",
     /// edits commit on Enter/LostFocus (suffix stripped, divided by DisplayScale, reverted on
     /// parse failure), and spinning (buttons, wheel, Up/PageUp/Down/PageDown) snaps, steps by
     /// SpinAmount and clamps to Min/Max — spinning past an end stops there rather than wrapping
     /// to the other end.
     /// </summary>
-    public class SpinnerTextBox : TemplatedControl
+    public class CompactSpinner : TemplatedControl
     {
         public static readonly StyledProperty<double> ValueProperty =
-            AvaloniaProperty.Register<SpinnerTextBox, double>(nameof(Value), 0d, defaultBindingMode: BindingMode.TwoWay);
+            AvaloniaProperty.Register<CompactSpinner, double>(nameof(Value), 0d, defaultBindingMode: BindingMode.TwoWay);
 
         public double Value
         {
@@ -30,7 +31,7 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly StyledProperty<double> SpinAmountProperty =
-            AvaloniaProperty.Register<SpinnerTextBox, double>(nameof(SpinAmount), 1d);
+            AvaloniaProperty.Register<CompactSpinner, double>(nameof(SpinAmount), 1d);
 
         public double SpinAmount
         {
@@ -39,7 +40,7 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly StyledProperty<double?> MinProperty =
-            AvaloniaProperty.Register<SpinnerTextBox, double?>(nameof(Min));
+            AvaloniaProperty.Register<CompactSpinner, double?>(nameof(Min));
 
         public double? Min
         {
@@ -48,7 +49,7 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly StyledProperty<double?> MaxProperty =
-            AvaloniaProperty.Register<SpinnerTextBox, double?>(nameof(Max));
+            AvaloniaProperty.Register<CompactSpinner, double?>(nameof(Max));
 
         public double? Max
         {
@@ -57,7 +58,7 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly StyledProperty<bool> SnapToWholeNumberProperty =
-            AvaloniaProperty.Register<SpinnerTextBox, bool>(nameof(SnapToWholeNumber));
+            AvaloniaProperty.Register<CompactSpinner, bool>(nameof(SnapToWholeNumber));
 
         public bool SnapToWholeNumber
         {
@@ -66,7 +67,7 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly StyledProperty<string> SuffixProperty =
-            AvaloniaProperty.Register<SpinnerTextBox, string>(nameof(Suffix));
+            AvaloniaProperty.Register<CompactSpinner, string>(nameof(Suffix));
 
         public string Suffix
         {
@@ -75,7 +76,7 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly StyledProperty<double> DisplayScaleProperty =
-            AvaloniaProperty.Register<SpinnerTextBox, double>(nameof(DisplayScale), 1d);
+            AvaloniaProperty.Register<CompactSpinner, double>(nameof(DisplayScale), 1d);
 
         public double DisplayScale
         {
@@ -91,12 +92,12 @@ namespace Clowd.UI.Controls
         /// <see cref="OnTunnelPointerWheelChanged"/>.</summary>
         private WheelNotchAccumulator _wheelNotches;
 
-        static SpinnerTextBox()
+        static CompactSpinner()
         {
             ControlThemes.EnsureRegistered();
         }
 
-        public SpinnerTextBox()
+        public CompactSpinner()
         {
             AddHandler(KeyDownEvent, OnTunnelKeyDown, RoutingStrategies.Tunnel);
             AddHandler(PointerWheelChangedEvent, OnTunnelPointerWheelChanged, RoutingStrategies.Tunnel);

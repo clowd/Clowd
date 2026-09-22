@@ -156,6 +156,16 @@
                                    Text="Choose the light or dark appearance, or follow the Windows setting." />
                     </StackPanel>
 
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Layout" />
+                            <ComboBox x:Name="LayoutCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="Chrome for the image and video editors. Modern floats rounded tool bars on the window background; Compact is the denser, flat look. Editors already open follow the change straight away." />
+                    </StackPanel>
+
                     <!-- macOS only (hidden in the code-behind): the window chrome choice. Read
                          once per window in SystemThemedWindow's constructor, hence the caption's
                          promise about new windows; the main window reopens itself on the spot so

@@ -304,7 +304,7 @@
         </Style>
         <!--  the editor's own dropdown (the top bar's picker) rather than the Semi ComboBox, so
               every closed control in the panel wears the same chrome as the spinners  -->
-        <Style Selector="controls|DropDownButton">
+        <Style Selector="controls|CompactDropDown">
             <Setter Property="MinWidth" Value="120" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Margin" Value="6,0,0,0" />
@@ -313,7 +313,7 @@
               nearly every row, and 70px truncates the longer values (e.g. "-360 °"). Right-aligned
               inside the row's fill column so it lines up with the text boxes below it; the theme's
               4px left margin would otherwise push it off that edge.  -->
-        <Style Selector="controls|SpinnerTextBox">
+        <Style Selector="controls|CompactSpinner">
             <Setter Property="MinWidth" Value="120" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Margin" Value="6,0,0,0" />
@@ -456,7 +456,7 @@
                         <controls:ResetDefaultButton x:Name="dotSpeed" CurrentValue="{Binding SpeedChoice, Mode=TwoWay}" />
                     </Panel>
                     <TextBlock Classes="label" Text="Speed" />
-                    <controls:DropDownButton x:Name="ddSpeed" SelectedItem="{Binding SpeedChoice, Mode=TwoWay}" />
+                    <controls:CompactDropDown x:Name="ddSpeed" SelectedItem="{Binding SpeedChoice, Mode=TwoWay}" />
                 </DockPanel>
 
                 <!--  grouped-object banner: shown only while the row still moves with its recording.
@@ -510,7 +510,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding PositionX, Mode=TwoWay}" DefaultValue="0.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Center X" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -524,7 +524,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding PositionY, Mode=TwoWay}" DefaultValue="0.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Center Y" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -540,7 +540,7 @@
                         <!--  "Size" while the height follows the content; "Width" once the item
                               carries a height of its own (the row below appears).  -->
                         <TextBlock Classes="label" Text="{Binding ScaleLabel}" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="4"
                             Min="0.01"
@@ -558,7 +558,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ScaleHeight, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Height" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="4"
                             Min="0.01"
@@ -575,7 +575,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding Rotation, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Rotation" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="360"
                             Min="-360"
                             SnapToWholeNumber="True"
@@ -589,7 +589,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding Opacity, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Opacity" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -751,7 +751,7 @@
                             Spacing="4">
                             <!--  MinWidth 0: the panel's 120px minimum is for lone editors — two
                                   spinners sharing one row at 120 each would overflow the sidebar  -->
-                            <controls:SpinnerTextBox
+                            <controls:CompactSpinner
                                 Width="56"
                                 MinWidth="0"
                                 Margin="0"
@@ -760,7 +760,7 @@
                                 SpinAmount="1"
                                 Value="{Binding CustomAspectW, Mode=TwoWay}" />
                             <TextBlock VerticalAlignment="Center" Foreground="#CCCCCC" Text=":" />
-                            <controls:SpinnerTextBox
+                            <controls:CompactSpinner
                                 Width="56"
                                 MinWidth="0"
                                 Margin="0"
@@ -832,7 +832,7 @@
                     <DockPanel Classes="row" IsVisible="{Binding ShowCropWindow}">
                         <Panel Classes="dot" DockPanel.Dock="Left" />
                         <TextBlock Classes="label" Text="Window" />
-                        <controls:DropDownButton
+                        <controls:CompactDropDown
                             x:Name="ddCropWindow"
                             SelectedItem="{Binding CropWindow, Mode=TwoWay}"
                             ToolTip.Tip="{Binding CropWindowTip}" />
@@ -846,7 +846,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CropLeft, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Left" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="0.95"
                             Min="0"
@@ -860,7 +860,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CropTop, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Top" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="0.95"
                             Min="0"
@@ -874,7 +874,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CropRight, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Right" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="0.95"
                             Min="0"
@@ -888,7 +888,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CropBottom, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
                         <TextBlock Classes="label" Text="Bottom" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="0.95"
                             Min="0"
@@ -951,7 +951,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CornerRadius, Mode=TwoWay}" DefaultValue="0.25" />
                         </Panel>
                         <TextBlock Classes="label" Text="Corners" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="0.5"
                             Min="0"
@@ -1172,7 +1172,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding FontSize, Mode=TwoWay}" DefaultValue="48" />
                         </Panel>
                         <TextBlock Classes="label" Text="Size" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="2000"
                             Min="1"
                             SnapToWholeNumber="True"
@@ -1220,7 +1220,7 @@
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left" />
                         <TextBlock Classes="label" Text="Align" />
-                        <controls:DropDownButton x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 
@@ -1236,7 +1236,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding Volume, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Volume" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="2"
                             Min="0"
@@ -1293,7 +1293,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding DenoiseStrength, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Strength" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1354,7 +1354,7 @@
                             <controls:ResetDefaultButton x:Name="dotSpeedTarget" CurrentValue="{Binding SpeedTarget, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Target" />
-                        <controls:DropDownButton x:Name="ddSpeedTarget" SelectedItem="{Binding SpeedTarget, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="ddSpeedTarget" SelectedItem="{Binding SpeedTarget, Mode=TwoWay}" />
                     </DockPanel>
 
                     <!--  time-stretch the audio under the item so pitch stays put; off resamples
@@ -1381,7 +1381,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ZoomFactor, Mode=TwoWay}" DefaultValue="1.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Zoom" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="5"
                             Min="1"
@@ -1395,7 +1395,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ZoomFocusX, Mode=TwoWay}" DefaultValue="0.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Focus X" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1409,7 +1409,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ZoomFocusY, Mode=TwoWay}" DefaultValue="0.5" />
                         </Panel>
                         <TextBlock Classes="label" Text="Focus Y" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1438,7 +1438,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Size" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="5"
                             Min="0.5"
@@ -1666,7 +1666,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorFillOpacity, Mode=TwoWay}" DefaultValue="0.15" />
                         </Panel>
                         <TextBlock Classes="label" Text="Fill opacity" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -1680,7 +1680,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorHoldSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Hold size" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="4"
                             Min="0.25"
@@ -1694,7 +1694,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorClickSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Effect size" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="4"
                             Min="0.25"
@@ -1708,7 +1708,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorAnimationSpeed, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Speed" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="4"
                             Min="0.25"
                             SpinAmount="0.05"
@@ -1737,7 +1737,7 @@
                             <controls:ResetDefaultButton x:Name="dotKeyFilter" CurrentValue="{Binding KeyboardFilter, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Filter" />
-                        <controls:DropDownButton x:Name="ddKeyFilter" SelectedItem="{Binding KeyboardFilter, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="ddKeyFilter" SelectedItem="{Binding KeyboardFilter, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row">
@@ -1745,7 +1745,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFontSize, Mode=TwoWay}" DefaultValue="40" />
                         </Panel>
                         <TextBlock Classes="label" Text="Size" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="200"
                             Min="8"
                             SnapToWholeNumber="True"
@@ -1759,7 +1759,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding KeyboardLingerMs, Mode=TwoWay}" DefaultValue="1000" />
                         </Panel>
                         <TextBlock Classes="label" Text="Linger" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="10000"
                             Min="0"
                             SnapToWholeNumber="True"
@@ -1773,7 +1773,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding KeyboardPauseBreakMs, Mode=TwoWay}" DefaultValue="1000" />
                         </Panel>
                         <TextBlock Classes="label" Text="New row" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="10000"
                             Min="0"
                             SnapToWholeNumber="True"
@@ -1933,7 +1933,7 @@
                             <controls:ResetDefaultButton x:Name="dotEffectAmount" CurrentValue="{Binding EffectAmount, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Amount" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="1"
                             Min="0"
@@ -2140,7 +2140,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding SurroundDistance, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundDistance}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Distance" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="0.5"
                             Min="0"
@@ -2156,7 +2156,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding SurroundSize, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundSize}" />
                         </Panel>
                         <TextBlock Classes="label" Text="{Binding SurroundSizeLabel}" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             DisplayScale="100"
                             Max="0.5"
                             Min="0"
@@ -2183,7 +2183,7 @@
                             <controls:ResetDefaultButton x:Name="dotEntryKind" CurrentValue="{Binding EntryKind, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Entry" />
-                        <controls:DropDownButton x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
@@ -2191,7 +2191,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding EntryDurationMs, Mode=TwoWay}" DefaultValue="300" />
                         </Panel>
                         <TextBlock Classes="label" Text="Length" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="10000"
                             Min="0"
                             SnapToWholeNumber="True"
@@ -2205,7 +2205,7 @@
                             <controls:ResetDefaultButton x:Name="dotEntryEasing" CurrentValue="{Binding EntryEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <controls:DropDownButton x:Name="comboEntryEasing" SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="comboEntryEasing" SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" Margin="0,6,0,0">
@@ -2213,7 +2213,7 @@
                             <controls:ResetDefaultButton x:Name="dotExitKind" CurrentValue="{Binding ExitKind, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Exit" />
-                        <controls:DropDownButton x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
@@ -2221,7 +2221,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding ExitDurationMs, Mode=TwoWay}" DefaultValue="300" />
                         </Panel>
                         <TextBlock Classes="label" Text="Length" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="10000"
                             Min="0"
                             SnapToWholeNumber="True"
@@ -2235,7 +2235,7 @@
                             <controls:ResetDefaultButton x:Name="dotExitEasing" CurrentValue="{Binding ExitEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <controls:DropDownButton x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 
@@ -2265,7 +2265,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding RampEntryMs, Mode=TwoWay}" DefaultValue="300" />
                         </Panel>
                         <TextBlock Classes="label" Text="Length" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="10000"
                             Min="10"
                             SnapToWholeNumber="True"
@@ -2279,7 +2279,7 @@
                             <controls:ResetDefaultButton x:Name="dotRampEntryEasing" CurrentValue="{Binding RampEntryEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <controls:DropDownButton x:Name="comboRampEntryEasing" SelectedItem="{Binding RampEntryEasing, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="comboRampEntryEasing" SelectedItem="{Binding RampEntryEasing, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" Margin="0,6,0,0">
@@ -2295,7 +2295,7 @@
                             <controls:ResetDefaultButton CurrentValue="{Binding RampExitMs, Mode=TwoWay}" DefaultValue="300" />
                         </Panel>
                         <TextBlock Classes="label" Text="Length" />
-                        <controls:SpinnerTextBox
+                        <controls:CompactSpinner
                             Max="10000"
                             Min="10"
                             SnapToWholeNumber="True"
@@ -2309,7 +2309,7 @@
                             <controls:ResetDefaultButton x:Name="dotRampExitEasing" CurrentValue="{Binding RampExitEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <controls:DropDownButton x:Name="comboRampExitEasing" SelectedItem="{Binding RampExitEasing, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="comboRampExitEasing" SelectedItem="{Binding RampExitEasing, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 
@@ -2335,7 +2335,7 @@
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left" />
                         <TextBlock Classes="label" Text="Device" />
-                        <controls:DropDownButton x:Name="ddVoiceMic" SelectedItem="{Binding VoiceRecorderDevice, Mode=TwoWay}" />
+                        <controls:CompactDropDown x:Name="ddVoiceMic" SelectedItem="{Binding VoiceRecorderDevice, Mode=TwoWay}" />
                     </DockPanel>
 
                     <!--  indented to the label column, like the analysis note in AUDIO  -->

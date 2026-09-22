@@ -26,8 +26,10 @@ namespace Clowd.UI.Controls
 
             Add(app, "ToolButton");
             Add(app, "RowIconButton");
-            Add(app, "SpinnerTextBox");
-            Add(app, "DropDownButton");
+            Add(app, "CompactSpinner");
+            Add(app, "ThemedSpinner");
+            Add(app, "CompactDropDown");
+            Add(app, "ThemedDropDown");
             Add(app, "CaptionedCheckBox");
 
             // The floating tray's controls. A sub-folder is just part of the name, since Add() builds the

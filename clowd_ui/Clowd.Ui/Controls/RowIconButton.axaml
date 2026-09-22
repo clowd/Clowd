@@ -12,12 +12,13 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Width" Value="20" />
         <Setter Property="Height" Value="20" />
+        <Setter Property="CornerRadius" Value="2" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Border Name="_bg"
                         Background="{TemplateBinding Background}"
-                        CornerRadius="2">
+                        CornerRadius="{TemplateBinding CornerRadius}">
                     <ContentPresenter Name="PART_ContentPresenter"
                                       HorizontalAlignment="Center"
                                       VerticalAlignment="Center"

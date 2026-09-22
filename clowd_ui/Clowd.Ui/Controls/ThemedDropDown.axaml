@@ -1,0 +1,29 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:Clowd.UI.Controls">
+
+    <!-- Both pickers are in the template and one is hidden; ThemedDropDown.SyncVisibility picks.
+         Each child is stripped of the margin and minimum width its own theme wants, so the
+         ThemedDropDown is the single thing that sizes the field and the two chromes line up on the
+         same footprint. See ThemedSpinner.axaml, which is the same arrangement. -->
+    <ControlTheme x:Key="{x:Type controls:ThemedDropDown}" TargetType="controls:ThemedDropDown">
+        <Setter Property="MinWidth" Value="70" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <controls:CompactDropDown Name="PART_Compact"
+                                              MinWidth="0"
+                                              Margin="0"
+                                              HorizontalAlignment="Stretch" />
+                    <ComboBox Name="PART_Modern"
+                              MinWidth="0"
+                              HorizontalAlignment="Stretch"
+                              IsVisible="False" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+</ResourceDictionary>

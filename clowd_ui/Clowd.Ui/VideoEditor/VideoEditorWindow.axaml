@@ -313,7 +313,7 @@
             </StackPanel>
 
             <StackPanel>
-                <controls:DropDownButton
+                <controls:CompactDropDown
                     x:Name="ddAspectRatio"
                     MinWidth="76"
                     VerticalAlignment="Center" />

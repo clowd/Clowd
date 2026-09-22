@@ -8,16 +8,16 @@ using Avalonia.Input;
 namespace Clowd.UI.Controls
 {
     /// <summary>
-    /// Editor properties-bar dropdown (22px, same chrome idiom as SpinnerTextBox): a flat label
+    /// Editor properties-bar dropdown (22px, same chrome idiom as CompactSpinner): a flat label
     /// over the chrome fill with a raised full-height ▼ column on the right. The whole control is
     /// one click target; clicking opens a light-dismiss popup listing <see cref="ItemsSource"/>,
     /// and releasing over an item commits it to <see cref="SelectedItem"/>. The label always shows
     /// the selected item (Content tracks SelectedItem).
     /// </summary>
-    public class DropDownButton : Button
+    public class CompactDropDown : Button
     {
         public static readonly StyledProperty<IEnumerable> ItemsSourceProperty =
-            AvaloniaProperty.Register<DropDownButton, IEnumerable>(nameof(ItemsSource));
+            AvaloniaProperty.Register<CompactDropDown, IEnumerable>(nameof(ItemsSource));
 
         public IEnumerable ItemsSource
         {
@@ -26,7 +26,7 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly StyledProperty<object> SelectedItemProperty =
-            AvaloniaProperty.Register<DropDownButton, object>(nameof(SelectedItem), defaultBindingMode: BindingMode.TwoWay);
+            AvaloniaProperty.Register<CompactDropDown, object>(nameof(SelectedItem), defaultBindingMode: BindingMode.TwoWay);
 
         public object SelectedItem
         {
@@ -38,7 +38,7 @@ namespace Clowd.UI.Controls
         private ListBox _list;
         private bool _syncingList;
 
-        static DropDownButton()
+        static CompactDropDown()
         {
             ControlThemes.EnsureRegistered();
         }

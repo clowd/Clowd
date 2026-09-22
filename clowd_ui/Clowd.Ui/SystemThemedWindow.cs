@@ -142,37 +142,63 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Mica (Win11) in the dark theme only. In the light theme the composited backdrop makes
-        /// the text look smeared and low-contrast (ClearType has no opaque surface to blend
-        /// against), so light windows are plain opaque windows with no effect at all. There is
-        /// no acrylic fallback either: compositors that do not grant Mica get the opaque brush.
+        /// Whether this window wants Mica in the LIGHT theme as well as the dark one. Off by
+        /// default: over a light backdrop the composited surface costs text its subpixel
+        /// antialiasing, which the shell's dense pages (settings rows, the recent list) cannot
+        /// afford. A window whose content is chrome rather than prose — the editors, the colour
+        /// picker — can, and says so by overriding this. Read from the base constructor, so an
+        /// override must return a constant rather than read a field of its own.
+        /// </summary>
+        protected virtual bool AllowMicaInLightTheme => false;
+
+        /// <summary>
+        /// Mica (Win11) in the dark theme, and in the light theme for windows that opt in via
+        /// <see cref="AllowMicaInLightTheme"/>. There is no acrylic fallback: compositors that do
+        /// not grant Mica get the opaque brush.
         /// </summary>
         private void UpdateBackdrop()
         {
             // a window's own ActualThemeVariant is not settled until it is attached; the app's is
             var variant = ActualThemeVariant ?? Application.Current?.ActualThemeVariant;
-            var dark = variant == ThemeVariant.Dark;
+            var mica = variant == ThemeVariant.Dark || AllowMicaInLightTheme;
 
-            TransparencyLevelHint = dark
+            TransparencyLevelHint = mica
                 ? new[] { WindowTransparencyLevel.Mica, WindowTransparencyLevel.None }
                 : new[] { WindowTransparencyLevel.None };
 
             UpdateBackground();
         }
 
+        /// <summary>How much of the theme background is washed over Mica in the light theme. The
+        /// light backdrop is far busier than the dark one — it picks up the wallpaper rather than
+        /// merely darkening it — so the windows that opt in take it as a tint rather than neat.
+        /// The dark theme keeps Mica unveiled, which is what it has always looked like.</summary>
+        private const double LightMicaVeilOpacity = 0.5;
+
         private void UpdateBackground()
         {
-            // Mica is subtle enough to sit directly behind the content, so it gets no background
-            // of its own. Anything else paints the opaque theme brush (Light #FAFAFA / Dark
-            // #202020 theme dictionaries in Assets/AppResources.axaml).
+            // Mica is subtle enough in the dark theme to sit directly behind the content, so it
+            // gets no background of its own; in the light theme it takes a veil of the theme
+            // colour. Anything else paints the opaque theme brush (Light #FAFAFA / Dark #202020
+            // theme dictionaries in Assets/AppResources.axaml).
             if (ActualTransparencyLevel == WindowTransparencyLevel.Mica)
             {
-                Background = Brushes.Transparent;
+                Background = ActualThemeVariant == ThemeVariant.Light
+                    ? VeilBrush() ?? Brushes.Transparent
+                    : Brushes.Transparent;
                 return;
             }
 
             if (this.TryFindResource("ApplicationBackgroundBrush", ActualThemeVariant, out var value) && value is IBrush brush)
                 Background = brush;
+        }
+
+        private IBrush VeilBrush()
+        {
+            if (this.TryFindResource("ApplicationBackgroundColor", ActualThemeVariant, out var value) && value is Color color)
+                return new SolidColorBrush(color, LightMicaVeilOpacity);
+
+            return null;
         }
     }
 }

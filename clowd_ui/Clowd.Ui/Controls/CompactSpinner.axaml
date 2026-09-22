@@ -4,7 +4,7 @@
 
     <!-- Minimal chrome-free TextBox theme for the spinner entry (replaces the WPF
          "SimpleTextBox" template: a bare content host with Margin 0,2,0,0). -->
-    <ControlTheme x:Key="ClowdSpinnerTextBoxEntry" TargetType="TextBox">
+    <ControlTheme x:Key="ClowdCompactSpinnerEntry" TargetType="TextBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="White" />
@@ -68,7 +68,7 @@
 
     <!-- 70x22 spinner: #454545 fill, #666666 1px border, centered white text and a
          16px column of FontSize 6 arrow buttons. -->
-    <ControlTheme x:Key="{x:Type controls:SpinnerTextBox}" TargetType="controls:SpinnerTextBox">
+    <ControlTheme x:Key="{x:Type controls:CompactSpinner}" TargetType="controls:CompactSpinner">
         <Setter Property="Width" Value="70" />
         <Setter Property="Height" Value="22" />
         <Setter Property="Margin" Value="4,0,0,0" />
@@ -83,7 +83,7 @@
                             CornerRadius="0" />
                     <TextBox Name="PART_TextBox"
                              Grid.RowSpan="2"
-                             Theme="{StaticResource ClowdSpinnerTextBoxEntry}"
+                             Theme="{StaticResource ClowdCompactSpinnerEntry}"
                              TextAlignment="Center" />
                     <Button Name="PART_SpinUp"
                             Grid.Column="1"

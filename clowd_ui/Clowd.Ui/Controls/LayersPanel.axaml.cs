@@ -31,6 +31,19 @@ namespace Clowd.UI.Controls
         private static readonly Dictionary<Type, string> _typeNameCache = new Dictionary<Type, string>();
         private static readonly SolidColorBrush _badgeBrush = new SolidColorBrush(Color.FromUInt32(0xFF666666));
 
+        /// <summary>Which chrome the panel wears — set by the host from its chrome styles, exactly
+        /// as ThemedSpinner.IsModern is. Everything it changes that a style can reach lives in
+        /// LayersPanel.axaml; this property also drives the brushes the rows are built with in
+        /// code, which a style cannot reach at all.</summary>
+        public static readonly StyledProperty<bool> IsModernProperty =
+            AvaloniaProperty.Register<LayersPanel, bool>(nameof(IsModern));
+
+        public bool IsModern
+        {
+            get => GetValue(IsModernProperty);
+            set => SetValue(IsModernProperty, value);
+        }
+
         private DrawingCanvas _canvas;
         private GraphicCollection _collection;
         private bool _hooked;
@@ -49,6 +62,11 @@ namespace Clowd.UI.Controls
             InitializeComponent();
             dropIndicator.Background = new SolidColorBrush(AppStyles.AccentColor);
             _drag = new RowReorderDrag(this, rowsHost, dropIndicator, this);
+
+            // The modern row brushes are theme resources resolved at build time, so a variant
+            // change has to rebuild the rows rather than just repaint them.
+            ActualThemeVariantChanged += (_, _) => ScheduleRebuild();
+
             Rebuild();
         }
 
@@ -211,13 +229,21 @@ namespace Clowd.UI.Controls
             }
         }
 
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+
+            if (change.Property == IsModernProperty)
+                ScheduleRebuild();
+        }
+
         private Control BuildRow(GraphicBase g, int displayIndex, bool draggable)
         {
             var canvas = _canvas;
 
             // GlyphIcon, not Path + Stretch.Uniform — that leaves wide glyphs hanging above the
             // vertical center (see GlyphIcon)
-            var icon = new GlyphIcon(FindIcon(GetIconKey(g)), Brushes.White)
+            var icon = new GlyphIcon(FindIcon(GetIconKey(g)), RowForeground)
             {
                 Width = 14,
                 Height = 14,
@@ -228,7 +254,7 @@ namespace Clowd.UI.Controls
             {
                 Text = GetDisplayName(g),
                 FontSize = 12,
-                Foreground = Brushes.White,
+                Foreground = RowForeground,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(6, 0, 0, 0),
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -249,7 +275,7 @@ namespace Clowd.UI.Controls
 
             // drag grip, leftmost — the cell is reserved on every row so the names stay on one
             // left edge; the dots (and the drag) are only there when there is somewhere to go
-            var grip = _drag.BuildGrip(displayIndex, draggable, _gripBrush, _gripHoverBrush,
+            var grip = _drag.BuildGrip(displayIndex, draggable, GripBrush, GripHoverBrush,
                 new Thickness(3, 2, 8, 2));
             grid.Children.Add(grip);
 
@@ -338,6 +364,25 @@ namespace Clowd.UI.Controls
             _canvas?.MoveGraphicToIndex(_rowGraphics[fromRow], _rowGraphics.Count - 1 - target);
         }
 
+        // The Compact chrome is the hand-picked dark palette these rows have always used; the
+        // modern one takes the theme's, so the panel is not a dark island in the light theme.
+        // Resolved per build rather than cached: the variant can change under a live panel.
+        private IBrush RowForeground => ThemeBrush("SemiColorText0", Brushes.White);
+
+        // The grip is an affordance, not content: the palest text step at rest, one step up on
+        // hover so it still answers the pointer.
+        private IBrush GripBrush => ThemeBrush("SemiColorText3", _gripBrush);
+
+        private IBrush GripHoverBrush => ThemeBrush("SemiColorText1", _gripHoverBrush);
+
+        private IBrush ThemeBrush(string key, IBrush compact)
+        {
+            if (IsModern && this.TryFindResource(key, ActualThemeVariant, out var value) && value is IBrush brush)
+                return brush;
+
+            return compact;
+        }
+
         private Button BuildRowButton(string iconKey, string tip, Action action, double iconOpacity = 1.0)
         {
             _rowButtonTheme ??= RowIconButton.Theme;
@@ -346,7 +391,7 @@ namespace Clowd.UI.Controls
                 Theme = _rowButtonTheme,
                 Margin = new Thickness(1, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
-                Content = new GlyphIcon(FindIcon(iconKey), Brushes.White)
+                Content = new GlyphIcon(FindIcon(iconKey), RowForeground)
                 {
                     Width = 12,
                     Height = 12,

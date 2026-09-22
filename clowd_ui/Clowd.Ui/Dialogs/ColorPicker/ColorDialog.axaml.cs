@@ -14,6 +14,10 @@ namespace Clowd.UI.Dialogs.ColorPicker
 {
     public partial class ColorDialog : SystemThemedWindow
     {
+        /// <summary>Swatches, sliders and a hex field — chrome rather than prose, so the
+        /// backdrop is worth more here than the sharper text an opaque window would give.</summary>
+        protected override bool AllowMicaInLightTheme => true;
+
         public static readonly StyledProperty<HslRgbColor> CurrentColorProperty =
             AvaloniaProperty.Register<ColorDialog, HslRgbColor>(nameof(CurrentColor));
 

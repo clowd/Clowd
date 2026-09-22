@@ -5,7 +5,10 @@
     <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
 
     <!-- Ported from the WPF App.xaml implicit ToolButton style (30x30 toggle button with
-         transparent bg, #55FFFFFF checked fill and a #33FFFFFF hover veil fading over 0.1s). -->
+         transparent bg, #55FFFFFF checked fill and a #33FFFFFF hover veil fading over 0.1s).
+         Size, padding and CornerRadius are all plain setters so a host can restyle the button
+         wholesale (the editor's Modern chrome grows it to 40x40 with an 8px radius); the theme
+         itself stays the square, dense 30px original. -->
     <ControlTheme x:Key="{x:Type controls:ToolButton}" TargetType="controls:ToolButton">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="White" />
@@ -13,18 +16,21 @@
         <Setter Property="Height" Value="30" />
         <Setter Property="Padding" Value="7" />
         <Setter Property="Margin" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Grid>
-                    <Rectangle Name="_bg"
-                               HorizontalAlignment="Stretch"
-                               VerticalAlignment="Stretch"
-                               Fill="{TemplateBinding Background}" />
+                    <Border Name="_bg"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
                     <Border Name="content" Padding="{TemplateBinding Padding}">
                         <!-- Center the icon: a uniformly-stretched Path is otherwise pinned to the
                              top-left, which visibly offsets non-square geometries. -->
-                        <Path HorizontalAlignment="Center"
+                        <Path Name="_icon"
+                              HorizontalAlignment="Center"
                               VerticalAlignment="Center"
                               Data="{TemplateBinding IconPath}"
                               Fill="{TemplateBinding Foreground}"
@@ -54,26 +60,45 @@
                               StrokeLineCap="Round"
                               StrokeThickness="2" />
                     </Grid>
-                    <Rectangle Name="_hover" Fill="#33FFFFFF">
-                        <Rectangle.Transitions>
+                    <Border Name="_hover"
+                            Background="#33FFFFFF"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                        <Border.Transitions>
                             <Transitions>
                                 <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
                             </Transitions>
-                        </Rectangle.Transitions>
-                    </Rectangle>
+                        </Border.Transitions>
+                    </Border>
                 </Grid>
             </ControlTemplate>
         </Setter>
 
-        <Style Selector="^ /template/ Rectangle#_hover">
+        <Style Selector="^ /template/ Border#_hover">
             <Setter Property="Opacity" Value="0" />
         </Style>
-        <Style Selector="^:pointerover /template/ Rectangle#_hover">
+        <Style Selector="^:pointerover /template/ Border#_hover">
             <Setter Property="Opacity" Value="1" />
         </Style>
-        <Style Selector="^:checked /template/ Rectangle#_bg">
-            <Setter Property="Fill" Value="#55FFFFFF" />
+        <Style Selector="^:checked /template/ Border#_bg">
+            <Setter Property="Background" Value="#55FFFFFF" />
         </Style>
+        <!-- Icon weight, as a class rather than a per-button Padding: the inset that centres a
+             16px glyph in a 30px button is not the one that centres it in a 40px button, so the
+             host chrome has to be able to restate all three. -->
+        <Style Selector="^.wide">
+            <Setter Property="Padding" Value="6" />
+        </Style>
+        <Style Selector="^.tight">
+            <Setter Property="Padding" Value="8" />
+        </Style>
+
+        <!-- Optical centring for a glyph whose ink sits left of its bounding box (the pointer
+             arrows). A nudge on the icon, not the padding, so it survives a chrome that restates
+             the inset. -->
+        <Style Selector="^.iconNudgeRight /template/ Path#_icon">
+            <Setter Property="RenderTransform" Value="translateX(1.5px)" />
+        </Style>
+
         <Style Selector="^:disabled /template/ Border#content">
             <Setter Property="Opacity" Value="0.5" />
         </Style>
@@ -86,7 +111,7 @@
         <Style Selector="^[ShowProgress=True] /template/ Grid#_progress">
             <Setter Property="IsVisible" Value="True" />
         </Style>
-        <Style Selector="^[ShowProgress=True] /template/ Rectangle#_hover">
+        <Style Selector="^[ShowProgress=True] /template/ Border#_hover">
             <Setter Property="Opacity" Value="0" />
         </Style>
     </ControlTheme>

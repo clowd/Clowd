@@ -5,6 +5,19 @@ using Avalonia.Media;
 
 namespace Clowd.Config
 {
+    /// <summary>
+    /// Which chrome the image and video editors wear. Not a theme (that is light/dark, and this
+    /// is orthogonal to it) — it is how much room the editors' own tool surfaces take.
+    /// </summary>
+    public enum EditorLayout
+    {
+        [Description("Modern")]
+        Modern,
+
+        [Description("Compact")]
+        Compact,
+    }
+
     public enum AppTheme
     {
         [Description("Follow system")]
@@ -190,6 +203,18 @@ namespace Clowd.Config
         }
 
         /// <summary>
+        /// Chrome for the image and video editors. Unlike <see cref="Theme"/> this is picked up
+        /// live by editors that are already open, so the two looks can be compared side by side.
+        /// </summary>
+        [DisplayName("Layout")]
+        [Description("How much room the editor tool bars take.")]
+        public EditorLayout EditorLayout
+        {
+            get => _editorLayout;
+            set => Set(ref _editorLayout, value);
+        }
+
+        /// <summary>
         /// macOS only: run window content up under a transparent title bar, so the traffic lights
         /// float over it, instead of sitting below a title bar of its own. Read once per window in
         /// SystemThemedWindow's constructor, which is why the description promises new windows
@@ -300,6 +325,7 @@ namespace Clowd.Config
         private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;
         private bool _registerAutoStart = DefaultRegisterAutoStart;
         private AppTheme _theme = AppTheme.System;
+        private EditorLayout _editorLayout = EditorLayout.Modern;
 
         // On by default: it is what a Tahoe-era mac window looks like, and the windows that
         // extend have been laid out for it (the gutters in SystemThemedWindow).

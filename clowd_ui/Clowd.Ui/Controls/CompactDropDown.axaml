@@ -4,7 +4,7 @@
 
     <!-- Rows of the dropdown popup: flat text on #454545, #66FFFFFF hover, #33FFFFFF for the
          currently-selected item (matching the interactive-surface tints used across the bar). -->
-    <ControlTheme x:Key="ClowdDropDownItem" TargetType="ListBoxItem">
+    <ControlTheme x:Key="ClowdCompactDropDownItem" TargetType="ListBoxItem">
         <Setter Property="Foreground" Value="White" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Padding" Value="10,3" />
@@ -29,10 +29,10 @@
 
     <!-- 22px dropdown button: #454545 fill with a #666666 1px border. The label is deliberately
          NOT drawn as a surface — the text sits flat on the chrome fill; only the 14px full-height
-         ▼ column (the visible width of SpinnerTextBox's spin buttons) reads as a raised button,
+         ▼ column (the visible width of CompactSpinner's spin buttons) reads as a raised button,
          drawn 1px inside the border with the shared #33FFFFFF→#66FFFFFF hover and top highlight.
-         Clicking anywhere opens the popup; DropDownButton.cs owns open/commit/close. -->
-    <ControlTheme x:Key="{x:Type controls:DropDownButton}" TargetType="controls:DropDownButton">
+         Clicking anywhere opens the popup; CompactDropDown.cs owns open/commit/close. -->
+    <ControlTheme x:Key="{x:Type controls:CompactDropDown}" TargetType="controls:CompactDropDown">
         <Setter Property="Foreground" Value="White" />
         <Setter Property="Height" Value="22" />
         <Setter Property="Margin" Value="4,0,0,0" />
@@ -88,7 +88,7 @@
                                      Background="Transparent"
                                      BorderThickness="0"
                                      Padding="0"
-                                     ItemContainerTheme="{StaticResource ClowdDropDownItem}"
+                                     ItemContainerTheme="{StaticResource ClowdCompactDropDownItem}"
                                      ItemsSource="{TemplateBinding ItemsSource}" />
                         </Border>
                     </Popup>

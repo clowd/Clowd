@@ -101,6 +101,9 @@ namespace Clowd.Drawing
         public static readonly StyledProperty<string> SubjectTypeProperty =
             AvaloniaProperty.Register<DrawingCanvas, string>(nameof(SubjectType));
 
+        public static readonly StyledProperty<bool> IsCanvasSubjectProperty =
+            AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(IsCanvasSubject));
+
         public static readonly StyledProperty<string> SubjectNameProperty =
             AvaloniaProperty.Register<DrawingCanvas, string>(nameof(SubjectName));
 
@@ -247,6 +250,19 @@ namespace Clowd.Drawing
         {
             get => GetValue(SubjectTypeProperty);
             private set => SetValue(SubjectTypeProperty, value);
+        }
+
+        /// <summary>
+        /// True while the active tool works on the canvas itself — pan or pointer — rather than
+        /// drawing into it. Separate from <see cref="SubjectSkill"/> because that describes what is
+        /// SELECTED, and the canvas-level rows (zoom, canvas colour) belong to the tool: they stay
+        /// put while the pointer moves from one object to another, and are gone the moment a
+        /// drawing tool is picked up.
+        /// </summary>
+        public bool IsCanvasSubject
+        {
+            get => GetValue(IsCanvasSubjectProperty);
+            private set => SetValue(IsCanvasSubjectProperty, value);
         }
 
         public string SubjectName
@@ -1230,6 +1246,14 @@ namespace Clowd.Drawing
                     binding.Dispose();
                 _skillBindings.Clear();
                 DetachBoundGraphic();
+
+                // before the panning early-out below: the canvas rows are shown for a held-key pan
+                // too, which is the same canvas-level context by another route. A selection takes
+                // them away even under the pointer — the bar is then describing the arrow you
+                // picked, and the canvas is no longer the subject.
+                IsCanvasSubject = IsPanning
+                                  || Tool == ToolType.None
+                                  || (Tool == ToolType.Pointer && selected.Length == 0);
 
                 if (IsPanning)
                 {

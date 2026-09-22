@@ -150,7 +150,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             public int Id { get; }
 
             /// <summary>What the closed button and the popup row read, already shortened to what a
-            /// 250px sidebar can show: DropDownButton renders items through ToString and neither it
+            /// 250px sidebar can show: CompactDropDown renders items through ToString and neither it
             /// nor its theme trims, so an untrimmed window title runs off the panel.</summary>
             public string Label { get; }
 

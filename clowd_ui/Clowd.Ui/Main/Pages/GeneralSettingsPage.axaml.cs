@@ -19,6 +19,7 @@ namespace Clowd.UI.Pages
             DataContext = SettingsRoot.Current.General;
 
             BindEnumCombo(ThemeCombo, nameof(SettingsGeneral.Theme), typeof(AppTheme));
+            BindEnumCombo(LayoutCombo, nameof(SettingsGeneral.EditorLayout), typeof(EditorLayout));
             BindEnumCombo(TrayClickCombo, nameof(SettingsGeneral.TrayClick), typeof(ClickAction));
             BindEnumCombo(ShortcutClickCombo, nameof(SettingsGeneral.ShortcutClick), typeof(ClickAction));
             BindEnumCombo(UpdateIntervalCombo, nameof(SettingsGeneral.UpdateCheckInterval), typeof(UpdateInterval));

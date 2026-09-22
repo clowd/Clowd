@@ -2606,9 +2606,9 @@ namespace Clowd.UI.VideoEditor
 
         private void AspectRatio_PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
         {
-            // qualified: Avalonia has a DropDownButton of its own, and this is not it
+            // qualified: Avalonia has a DropDownButton of its own, and this is not that or its replacement
             if (_syncingAspectRatio || _editor == null ||
-                e.Property != Clowd.UI.Controls.DropDownButton.SelectedItemProperty)
+                e.Property != Clowd.UI.Controls.CompactDropDown.SelectedItemProperty)
                 return;
 
             if (e.GetNewValue<object>() is not AspectRatioOption option)

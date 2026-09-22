@@ -267,7 +267,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// the enum pickers in the constructor.
         ///
         /// Only the list is pushed. Unlike the wallpaper theme tiles (see
-        /// <see cref="RefreshBackgroundThemes"/>), a DropDownButton's SelectedItem is an ordinary
+        /// <see cref="RefreshBackgroundThemes"/>), a CompactDropDown's SelectedItem is an ordinary
         /// two-way styled property that the list does not own — its popup ListBox is synced only
         /// when it opens — so swapping ItemsSource cannot drop the selection and the binding keeps
         /// working. The view model raises CropWindowOptions before CropWindow so the binding
