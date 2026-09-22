@@ -15,17 +15,18 @@
     FontSize="13"
     UseLayoutRounding="True"
     WindowStartupLocation="CenterScreen">
+    <!--  Entries go in directly, with no <ResourceDictionary> wrapper: the wrapper assigns a
+          fresh dictionary over Resources and so drops what the base window put there in its
+          constructor (the MacTitleBarGutter* keys the toolbar's traffic-light spacer binds to).  -->
     <Window.Resources>
-        <ResourceDictionary>
-            <!--  The chrome brushes this window used to declare (the icon ink, the side panel's
-                  slab, the canvas surround and its edge line) are all app-wide in AppResources
-                  now, since the video editor wears every one of them too.  -->
+        <!--  The chrome brushes this window used to declare (the icon ink, the side panel's
+              slab, the canvas surround and its edge line) are all app-wide in AppResources
+              now, since the video editor wears every one of them too.  -->
 
-            <draw:ToolTypeConverter x:Key="convToolType" />
-            <conv:ColorToBrushConverter x:Key="convColorToBrush" />
-            <conv:EnumMatchToBooleanConverter x:Key="enumMatch" />
-            <conv:StringToFontFamilyConverter x:Key="convFontFamily" />
-        </ResourceDictionary>
+        <draw:ToolTypeConverter x:Key="convToolType" />
+        <conv:ColorToBrushConverter x:Key="convColorToBrush" />
+        <conv:EnumMatchToBooleanConverter x:Key="enumMatch" />
+        <conv:StringToFontFamilyConverter x:Key="convFontFamily" />
     </Window.Resources>
 
     <!--  Classes selects the editor chrome, and ApplyChrome sets it from General.EditorLayout
