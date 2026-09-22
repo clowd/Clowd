@@ -24,27 +24,35 @@ namespace Clowd.Config
         /// text". Turning it off also takes the U accelerator with it, so a hidden button cannot
         /// still fire (clowd_capture PanelFeatures).
         ///
-        /// Only new installs see the new default. The settings file is written with every
-        /// property spelled out (no DefaultIgnoreCondition in
-        /// <see cref="SettingsService.CreateJsonOptions"/>), so an existing user's saved
-        /// <c>true</c> is read straight back and nothing needs migrating.
+        /// RENAMED from <c>UploadButtonEnabled</c> to carry existing users to the new default.
+        /// The settings file is written with every property spelled out (no
+        /// DefaultIgnoreCondition in <see cref="SettingsService.CreateJsonOptions"/>), so every
+        /// installed copy has <c>"UploadButtonEnabled": true</c> on disk and would have kept the
+        /// button for ever. <see cref="SettingsService.Load"/> binds by property name onto an
+        /// instance whose field initializers have already run, so the old key now matches nothing
+        /// and is dropped, this property keeps its compiled-in <c>false</c>, and the stale key
+        /// disappears from the file on the next save.
+        ///
+        /// Do NOT add back-compatible binding for the old name — that would undo the migration.
+        /// The trick is one-shot per rename, and it resets a deliberate choice along with an
+        /// untouched default, so it is only for a default worth moving everyone to.
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Upload")]
         [Description("Show the UPLOAD button in the capture window, which uploads the capture and " +
                      "copies its link to the clipboard")]
         [VisibleWhen(nameof(SettingsUpload.Mode), UploadsMode.On, Section = nameof(SettingsRoot.Uploads))]
-        public bool UploadButtonEnabled
+        public bool UploadButtonVisible
         {
-            get => _uploadButtonEnabled;
-            set => Set(ref _uploadButtonEnabled, value);
+            get => _uploadButtonVisible;
+            set => Set(ref _uploadButtonVisible, value);
         }
 
         /// <summary>
         /// Whether the capture overlay offers SHARE. Trims the button and its H accelerator only —
         /// the action itself stays reachable from the tray item and the Share Region hotkey, which
         /// dispatch it without ever raising the panel. Same division as
-        /// <see cref="UploadButtonEnabled"/>, which hides the strip's UPLOAD while the shell's
+        /// <see cref="UploadButtonVisible"/>, which hides the strip's UPLOAD while the shell's
         /// "Upload File…" tray item stays (clowd_capture PanelFeatures, over <c>--no-share</c>).
         /// </summary>
         [Category("Optional features")]
@@ -244,9 +252,9 @@ namespace Clowd.Config
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;
         private bool _roundedWindowCorners = true;
-        // Off by default — see UploadButtonEnabled. Existing users keep whatever their
-        // settings file already says.
-        private bool _uploadButtonEnabled = false;
+        // Off by default, for everyone — see UploadButtonVisible, whose rename is what
+        // carries existing users onto this default.
+        private bool _uploadButtonVisible = false;
         private bool _shareRegionEnabled = true;
         private bool _scrollingCaptureEnabled = true;
         private bool _scrollCaptureRewindToTop = true;

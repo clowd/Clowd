@@ -538,7 +538,7 @@ namespace Clowd.UI
             // The overlay's optional buttons (SettingsCapture "Optional features"). All on by
             // default, so these only ever appear when the user has switched something off. UPLOAD
             // also goes with uploads as a whole (Uploads page, Off).
-            if (!settings.UploadButtonEnabled || !root.Uploads.IsEnabled)
+            if (!settings.UploadButtonVisible || !root.Uploads.IsEnabled)
                 args.Add("--no-upload");
 
             // Hides the SHARE button, and nothing more: a share started from the tray item or the
