@@ -156,12 +156,17 @@
                                           RowDefinitions="Auto,Auto,Auto"
                                           Classes.dimmed="{Binding !IsEnabled}">
 
-                                        <Image Grid.RowSpan="3"
-                                               MaxWidth="32"
-                                               MaxHeight="32"
-                                               VerticalAlignment="Center"
-                                               Stretch="Uniform"
-                                               Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
+                                        <!-- rounded mask: several provider logos are full-bleed squares, and their hard corners
+                                             read as harsher than the rounded row they sit in -->
+                                        <Border Grid.RowSpan="3"
+                                                Width="32"
+                                                Height="32"
+                                                VerticalAlignment="Center"
+                                                CornerRadius="7"
+                                                ClipToBounds="True">
+                                            <Image Stretch="Uniform"
+                                                   Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
+                                        </Border>
 
                                         <TextBlock Grid.Column="2"
                                                    Grid.Row="0"
@@ -175,13 +180,13 @@
 
                                         <StackPanel Grid.Column="2"
                                                     Grid.Row="2"
+                                                    IsVisible="{Binding IsEnabled}"
                                                     Margin="0,6,0,0"
                                                     Orientation="Horizontal"
                                                     Spacing="6">
                                             <Button Classes="chip"
                                                     Tag="Image"
                                                     Click="DefaultChipClicked"
-                                                    IsEnabled="{Binding IsEnabled}"
                                                     IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
                                                     Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
                                                     ToolTip.Tip="Use this provider as the default destination for images">
@@ -198,7 +203,6 @@
                                             <Button Classes="chip"
                                                     Tag="Video"
                                                     Click="DefaultChipClicked"
-                                                    IsEnabled="{Binding IsEnabled}"
                                                     IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
                                                     Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
                                                     ToolTip.Tip="Use this provider as the default destination for videos">
@@ -215,7 +219,6 @@
                                             <Button Classes="chip"
                                                     Tag="Text"
                                                     Click="DefaultChipClicked"
-                                                    IsEnabled="{Binding IsEnabled}"
                                                     IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
                                                     Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
                                                     ToolTip.Tip="Use this provider as the default destination for text">
@@ -232,7 +235,6 @@
                                             <Button Classes="chip"
                                                     Tag="Binary"
                                                     Click="DefaultChipClicked"
-                                                    IsEnabled="{Binding IsEnabled}"
                                                     IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
                                                     Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
                                                     ToolTip.Tip="Use this provider as the default destination for other files">
