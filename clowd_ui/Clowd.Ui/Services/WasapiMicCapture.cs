@@ -41,7 +41,7 @@ namespace Clowd.UI.Services
         public override MicSampleFormat SampleFormat => _format;
 
         /// <summary>See <see cref="MicCapture.Open"/>.</summary>
-        public static WasapiMicCapture Open(string deviceId, int bufferMs)
+        public static WasapiMicCapture Create(string deviceId, int bufferMs)
         {
             var device = ResolveDevice(deviceId);
             WasapiCapture capture = null;

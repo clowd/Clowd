@@ -51,10 +51,10 @@ namespace Clowd.UI.Services
         public static MicCapture Open(string deviceId, int bufferMs)
         {
             if (OperatingSystem.IsWindows())
-                return WasapiMicCapture.Open(deviceId, bufferMs);
+                return WasapiMicCapture.Create(deviceId, bufferMs);
 
             if (OperatingSystem.IsMacOS())
-                return CoreAudioMicCapture.Open(deviceId, bufferMs);
+                return CoreAudioMicCapture.Create(deviceId, bufferMs);
 
             throw new PlatformNotSupportedException("Microphone capture is not supported on this platform.");
         }

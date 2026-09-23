@@ -184,7 +184,7 @@ namespace Clowd.UI.Services
         public override MicSampleFormat SampleFormat => MicSampleFormat.Float32;
 
         /// <summary>See <see cref="MicCapture.Open"/>.</summary>
-        public static CoreAudioMicCapture Open(string deviceId, int bufferMs)
+        public static CoreAudioMicCapture Create(string deviceId, int bufferMs)
         {
             ThrowIfMicrophoneDenied();
 

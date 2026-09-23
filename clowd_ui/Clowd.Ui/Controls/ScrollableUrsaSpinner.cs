@@ -46,7 +46,7 @@ namespace Clowd.UI.Controls
         // looks itself up, finds nothing, and lays out as a 0px-high blank.
         protected override Type StyleKeyOverride => typeof(UrsaNumericUpDown);
 
-        private ButtonSpinner _spinner;
+        private ButtonSpinner _buttonSpinner;
 
         public ScrollableUrsaSpinner()
         {
@@ -68,18 +68,18 @@ namespace Clowd.UI.Controls
 
             IsTabStop = false;
 
-            if (_spinner != null)
-                _spinner.TemplateApplied -= OnSpinnerTemplateApplied;
+            if (_buttonSpinner != null)
+                _buttonSpinner.TemplateApplied -= OnSpinnerTemplateApplied;
 
-            _spinner = e.NameScope.Find<ButtonSpinner>(UrsaNumericUpDown.PART_Spinner);
+            _buttonSpinner = e.NameScope.Find<ButtonSpinner>(UrsaNumericUpDown.PART_Spinner);
 
-            if (_spinner != null)
+            if (_buttonSpinner != null)
             {
-                _spinner.IsTabStop = false;
+                _buttonSpinner.IsTabStop = false;
 
                 // The arrows live in the ButtonSpinner's own template, which has not been applied
                 // yet — a second name scope, and the only way into it.
-                _spinner.TemplateApplied += OnSpinnerTemplateApplied;
+                _buttonSpinner.TemplateApplied += OnSpinnerTemplateApplied;
             }
         }
 

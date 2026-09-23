@@ -76,8 +76,6 @@ namespace Clowd.UI
                     // leaving the strip to the buttons alone.
                     Resources["MacTitleBarGutterHorz"] = 105d;
                     Resources["MacTitleBarGutterVert"] = 28d;
-
-                    _clientAreaExtended = true;
                 }
 
                 // No Windows branch yet, and the row is hidden there (GeneralSettingsPage), so the
@@ -144,13 +142,6 @@ namespace Clowd.UI
         /// where a missing settings file must not be able to take every window in the app down.
         /// </summary>
         internal static bool ExtendIntoTitleBar => SettingsRoot.Current?.General?.ExtendIntoTitleBar ?? true;
-
-        /// <summary>
-        /// Whether this window actually got an extended client area, as opposed to merely being
-        /// asked for one. Fixed at construction, and the thing to test before assuming the window
-        /// has no title bar of its own.
-        /// </summary>
-        private readonly bool _clientAreaExtended;
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
