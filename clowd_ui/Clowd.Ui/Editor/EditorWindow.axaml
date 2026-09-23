@@ -71,20 +71,20 @@
                 <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
             </Style>
 
-            <!--  46px strips: a 36px item lane, a 4px gutter, and 6px on the edge that faces
-                  the canvas — 4 of gutter plus 2 the canvas shadow falls across and eats. The
-                  buttons carry 2px of their own on the flow axis, which is the gap between one
-                  item and the next; the lane itself stays 36 so the strip width does not move.  -->
+            <!--  45px strips: a 36px item lane, a 4px gutter, and 5px on the edge that faces
+                  the canvas — 4 of gutter plus 1 for the canvas shadow, which falls across the
+                  rest of it. The buttons carry 2px of their own on the flow axis, which is the gap
+                  between one item and the next; the lane stays 36 so the strip width does not move.  -->
             <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar">
                 <Setter Property="ItemWidth" Value="36" />
-                <Setter Property="Margin" Value="4,0,6,4" />
+                <Setter Property="Margin" Value="4,0,5,4" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar > controls|ToolButton">
                 <Setter Property="Margin" Value="0,1" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#PropertiesBar">
                 <Setter Property="ItemHeight" Value="36" />
-                <Setter Property="Margin" Value="4,4,4,6" />
+                <Setter Property="Margin" Value="4,4,4,5" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#PropertiesBar > controls|ToolButton">
                 <Setter Property="Margin" Value="1,0" />

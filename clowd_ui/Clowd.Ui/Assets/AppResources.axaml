@@ -106,12 +106,12 @@
 
                     <!-- The surround the artwork or the video sits on, and the line along the lip
                          of it where the tool bars meet it. Both are the editors', shared so the
-                         two windows cannot drift apart. The light edge is a soft black rather than
-                         the dark theme's grey: the same nominal line reads far heavier over a
-                         light ground, and the shadow under it is doing most of the separating
-                         anyway. -->
+                         two windows cannot drift apart. Both edges are opaque, each one the colour the
+                         old translucent line composited to over its own canvas fill, so the line
+                         never changes weight with what happens to sit behind it. It stays faint
+                         in both themes: the shadow under it is doing most of the separating. -->
                     <SolidColorBrush x:Key="ClowdEditorCanvasBrush" Color="#E9E9E9" />
-                    <SolidColorBrush x:Key="ClowdEditorSurfaceEdgeBrush" Color="#26000000" />
+                    <SolidColorBrush x:Key="ClowdEditorSurfaceEdgeBrush" Color="#D3D3D3" />
                     <!-- The lift under that surface. Far softer than the dark theme's: a shadow
                          over a light ground is read as a grey halo rather than as depth, and over
                          a dark one it barely registers until it is this strong. -->
@@ -124,7 +124,7 @@
                     <!-- an alpha-white overlay already, so the backdrop reads through it as it stands -->
                     <StaticResource x:Key="ClowdEditorSidebarBrush" ResourceKey="SemiColorFill0" />
                     <SolidColorBrush x:Key="ClowdEditorCanvasBrush" Color="#1E1E1E" />
-                    <SolidColorBrush x:Key="ClowdEditorSurfaceEdgeBrush" Color="#CC515255" />
+                    <SolidColorBrush x:Key="ClowdEditorSurfaceEdgeBrush" Color="#38383A" />
                     <BoxShadows x:Key="ClowdEditorSurfaceShadow">0 0 9 0 #A6000000</BoxShadows>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
