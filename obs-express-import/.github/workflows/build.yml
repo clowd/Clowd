@@ -478,13 +478,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # x64 only for now. aarch64 needs a pinned BtbN linuxarm64 archive in
-          # crates/build-support (the build scripts panic with instructions on
-          # any other arch), the manylinux_2_34_aarch64 base (the Dockerfile's
-          # BASE build arg) and an ubuntu-24.04-arm row here.
+          # Each arch builds natively on its own runner (no cross toolchain or
+          # emulation): the manylinux base matches the runner's arch, and
+          # crates/build-support pins the BtbN FFmpeg archive per arch.
           - arch: x64
             runner: ubuntu-24.04
             base: quay.io/pypa/manylinux_2_34_x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            base: quay.io/pypa/manylinux_2_34_aarch64
     defaults:
       run:
         shell: bash
@@ -536,7 +538,7 @@ jobs:
             gcc --version | sed -n 1p
             cmake --version | sed -n 1p
             echo "ninja $(ninja --version)"
-            nasm -v
+            nasm -v 2>/dev/null || echo "nasm: not installed (only needed on x86_64)"
             patchelf --version
             clang --version | sed -n 1p
             rustc --version
@@ -686,8 +688,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64]
-        runner: [ubuntu-22.04, ubuntu-24.04]
+        include:
+          - { arch: x64, runner: ubuntu-22.04 }
+          - { arch: x64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-22.04-arm }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
     defaults:
       run:
         shell: bash

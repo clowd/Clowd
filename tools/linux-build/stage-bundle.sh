@@ -55,7 +55,7 @@ for exe in obs-express vid2gif; do
 done
 
 cat > "$dist/README.txt" <<'README'
-obs-express (Linux x64, self-contained)
+obs-express (Linux, self-contained)
 
 libobs, the OpenGL renderer, the OBS plugins (obs-plugins/), their data
 (data/) and the FFmpeg shared libraries are bundled alongside the binaries;

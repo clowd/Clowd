@@ -56,18 +56,25 @@ pub const FFMPEG_LINUX_X64: FfmpegAsset = FfmpegAsset {
     dir_name: "ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-shared-7.1",
 };
 
+/// The same BtbN release and FFmpeg revision as [`FFMPEG_LINUX_X64`], built
+/// for aarch64, so both Linux arches ship the same FFmpeg source.
+pub const FFMPEG_LINUX_ARM64: FfmpegAsset = FfmpegAsset {
+    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-linuxarm64-gpl-shared-7.1.tar.xz",
+    sha256: "659a2801655f9ca187efd95e594ddb1eba9f309c809d91d3e95669a4f22469ee",
+    dir_name: "ffmpeg-n7.1.5-12-g1fdbca85aa-linuxarm64-gpl-shared-7.1",
+};
+
 /// The asset for a Rust target arch (`CARGO_CFG_TARGET_ARCH`).
 ///
-/// Only x86_64 is wired up. aarch64 needs nothing structural — BtbN publishes
-/// a matching `linuxarm64-gpl-shared-7.1` archive in the same release — just a
-/// second constant with its own verified hash, and the x264 configure in
-/// obs-sys already builds natively for whatever the host is.
+/// x86_64 and aarch64 are the Linux arches obs-express ships. Anything else
+/// panics here, before any download or native build starts.
 pub fn ffmpeg_asset(target_arch: &str) -> &'static FfmpegAsset {
     match target_arch {
         "x86_64" => &FFMPEG_LINUX_X64,
+        "aarch64" => &FFMPEG_LINUX_ARM64,
         other => panic!(
-            "obs-express supports Linux on x86_64 only for now (target arch `{other}`). \
-             To add it, pin the BtbN linuxarm64-gpl-shared-7.1 archive (URL + SHA-256) in \
+            "obs-express supports Linux on x86_64 and aarch64 only (target arch `{other}`). \
+             A new arch needs a pinned BtbN FFmpeg archive (URL + SHA-256) in \
              crates/build-support/src/linux.rs::ffmpeg_asset."
         ),
     }

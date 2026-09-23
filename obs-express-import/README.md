@@ -26,7 +26,7 @@ Each release publishes a zipped, self-contained bundle for every supported targe
 
 - `obs-express-windows-x64`, `obs-express-windows-arm64`
 - `obs-express-macos-x64`, `obs-express-macos-arm64`
-- `obs-express-linux-x64` (a `.tar.gz`: `tar -xzf` keeps the execute bits)
+- `obs-express-linux-x64`, `obs-express-linux-arm64` (a `.tar.gz`: `tar -xzf` keeps the execute bits)
 
 Unzip and run `obs-express` in place — the bundled OBS runtime (plugins, data, and the FFmpeg/x264 libraries) lives alongside the executable and is fully relocatable.
 
@@ -44,7 +44,7 @@ See [Building](#building) below.
 
 ## Linux
 
-Linux x64 is supported on **X11** and **Wayland**. The session type is detected at startup (`XDG_SESSION_TYPE=wayland` or `WAYLAND_DISPLAY` means Wayland, otherwise `DISPLAY` / X11). An X11 session is never used from inside a Wayland session: XWayland only captures black.
+Linux (x64 and arm64) is supported on **X11** and **Wayland**. The session type is detected at startup (`XDG_SESSION_TYPE=wayland` or `WAYLAND_DISPLAY` means Wayland, otherwise `DISPLAY` / X11). An X11 session is never used from inside a Wayland session: XWayland only captures black.
 
 - **X11** — works like the other platforms: `--monitor` and `--region` use the XRandR monitor layout (a monitor is matched by connector name such as `DP-1`, or by 0-based index), and capture runs through OBS's XSHM source.
 - **Wayland** — the monitor or window is chosen in the desktop's own screen-share dialog (xdg-desktop-portal + PipeWire), so `--monitor` and `--region` are rejected (exit 2). The recorder builds the pipeline, waits for the pick (up to 120 s), sizes the canvas to what was picked, then prints `initialized`. Cancelling the dialog exits 1, and `quit` or a signal during the wait exits 0. The dialog appears on every run: portal restore tokens are not used.
@@ -283,7 +283,7 @@ libobs is compiled from the `obs-studio` submodule (pinned to **32.1.2**), so a 
 - `git`, `cmake` (≥ 3.28), and a recent **Rust** toolchain (`cargo`)
 - **Windows** — Visual Studio 2022 (the "Visual Studio 17 2022" generator) and LLVM/`libclang` (for `bindgen`; point `LIBCLANG_PATH` at it if not on `PATH`)
 - **macOS** — full **Xcode** (not just the Command Line Tools — the Metal renderer and Swift are required)
-- **Linux** (x86_64 only for now) — build in the reference image, `tools/linux-build/Dockerfile`. It is a manylinux_2_34 (AlmaLinux 9, glibc 2.34) base with clang/`libclang` (for `bindgen`), `ninja`, `nasm`, `patchelf`, Rust, and the development packages of the system libraries the bundle links. CI builds in the same image, and building there is what keeps the result portable to every glibc 2.34+ distribution:
+- **Linux** (x86_64 and aarch64) — build in the reference image, `tools/linux-build/Dockerfile`. It is a manylinux_2_34 (AlmaLinux 9, glibc 2.34) base with clang/`libclang` (for `bindgen`), `ninja`, `nasm`, `patchelf`, Rust, and the development packages of the system libraries the bundle links. CI builds in the same image, and building there is what keeps the result portable to every glibc 2.34+ distribution:
 
   ```sh
   docker build -t obs-express-linux tools/linux-build

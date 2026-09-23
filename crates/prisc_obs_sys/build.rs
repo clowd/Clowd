@@ -35,7 +35,7 @@ fn obs_version_override() -> String {
 /// Rust's target arch (`CARGO_CFG_TARGET_ARCH`) drives the native OBS build's
 /// architecture, so a single `cargo build --target <triple>` yields a matching
 /// native or cross build. `x86_64` and `aarch64` are the only architectures
-/// obs-express ships (Windows x64/ARM64, macOS x86_64/arm64, Linux x86_64).
+/// obs-express ships (Windows x64/ARM64, macOS x86_64/arm64, Linux x86_64/aarch64).
 fn target_arch() -> String {
     env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default()
 }
@@ -613,10 +613,10 @@ const LINUX_TARGETS: &[&str] = &[
 /// need a libobs patch.
 const LINUX_INSTALL_PREFIX: &str = "/nonexistent/obs-express";
 
-/// OBS build-dir suffix for the target arch (`<target>/obs-x64`), matching the
-/// Windows naming. Only x86_64 is supported for now; the FFmpeg asset lookup
-/// (obs-build-support) panics with instructions for anything else, and calling
-/// it first makes sure that happens before any other work.
+/// OBS build-dir suffix for the target arch (`<target>/obs-x64`,
+/// `<target>/obs-arm64`), matching the Windows naming. The FFmpeg asset lookup
+/// (obs-build-support) panics with instructions for any unsupported arch, and
+/// calling it first makes sure that happens before any other work.
 fn linux_arch_suffix() -> &'static str {
     let arch = target_arch();
     let _ = obs_build_support::linux::ffmpeg_asset(&arch);
@@ -650,11 +650,15 @@ fn build_linux() {
         "pkg-config",
         "git",
         "make",
-        "nasm",
         "patchelf",
         "ar",
     ] {
         linux::require_tool(tool);
+    }
+    // x264's x86 assembly is NASM syntax; on aarch64 its assembly goes through
+    // the C compiler (GNU as), so nasm is only a requirement on x86_64.
+    if target_arch() == "x86_64" {
+        linux::require_tool("nasm");
     }
 
     let ffmpeg = linux::ensure_ffmpeg(&deps_dir, &target_arch());

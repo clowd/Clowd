@@ -1,4 +1,4 @@
-# Linux build image for obs-express (x86_64): manylinux_2_34 = AlmaLinux 9,
+# Linux build image for obs-express: manylinux_2_34 = AlmaLinux 9,
 # glibc 2.34. Everything built here runs on any distro with glibc >= 2.34
 # (Ubuntu 22.04+, Debian 12+, Fedora / RHEL 9+), which the Ubuntu 24.04 image
 # (glibc 2.38) could not offer. CI builds inside this exact image (see the
@@ -18,6 +18,10 @@
 # linked statically, so the output only needs the system libstdc++) and a
 # current CMake. Its glib is 2.68; OBS's linux-pipewire asks for 2.76 only
 # for the inline g_clear_fd(), which obs-sys backfills (crates/obs-sys/cmake).
+#
+# One Dockerfile for both arches: BASE picks the manylinux flavour, and the
+# image is built on a host of that arch (CI uses ubuntu-24.04-arm for arm64):
+#   docker build --build-arg BASE=quay.io/pypa/manylinux_2_34_aarch64 ...
 ARG BASE=quay.io/pypa/manylinux_2_34_x86_64
 FROM ${BASE}
 

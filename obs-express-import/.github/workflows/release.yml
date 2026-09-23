@@ -1,7 +1,7 @@
 name: Release
 
 # Manually dispatched. Bumps the obs-express version to the freetext input,
-# commits it, builds all five variants (via the reusable build.yml), and
+# commits it, builds all six variants (via the reusable build.yml), and
 # publishes a GitHub Release with each build's archive (.zip on Windows/macOS,
 # .tar.gz on Linux) attached as an asset.
 on:
@@ -81,7 +81,7 @@ jobs:
       - name: List release assets
         run: |
           ls -la artifacts
-          for expected in windows-x64.zip windows-arm64.zip macos-x64.zip macos-arm64.zip linux-x64.tar.gz; do
+          for expected in windows-x64.zip windows-arm64.zip macos-x64.zip macos-arm64.zip linux-x64.tar.gz linux-arm64.tar.gz; do
             test -f "artifacts/obs-express-$expected" || { echo "::error::missing obs-express-$expected"; exit 1; }
           done
 

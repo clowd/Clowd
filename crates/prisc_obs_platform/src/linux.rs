@@ -1,5 +1,5 @@
-//! Linux platform implementation (DESIGN §2.2), x86_64 only for now (the OBS
-//! build in obs-sys refuses other architectures).
+//! Linux platform implementation (DESIGN §2.2), for x86_64 and aarch64 (the
+//! OBS build in obs-sys refuses other architectures).
 //!
 //! Linux is two platforms in one: an X11 session and a Wayland session need
 //! different libobs setup and a different display-capture source, and which
