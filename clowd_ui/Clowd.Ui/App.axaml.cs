@@ -74,6 +74,10 @@ namespace Clowd
                 RenderOptions.SetEdgeMode(topLevel, EdgeMode.Antialias);
             });
 
+            // Dims a window for as long as a modal dialog it owns is open. Installed here, once,
+            // for every dialog in the app — see ModalDim for why no call site has to opt in.
+            ModalDim.Install();
+
             // the SDK's AI generators resolve the inference binary through this delegate on every
             // run — installed before Startup so the --video-edit/--video-spike harnesses (which
             // return before the tray lifetime is set up) get it too.
