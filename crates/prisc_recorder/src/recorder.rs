@@ -602,9 +602,6 @@ impl Recorder {
             // window that later grows is letterboxed rather than cropped, and
             // one that shrinks leaves black at the right/bottom.
             let canvas = ((w + 1) & !1, (h + 1) & !1);
-            scene_item.set_bounds_type(obs_sys::obs_bounds_type_OBS_BOUNDS_MAX_ONLY);
-            scene_item.set_bounds_alignment(obs_sys::OBS_ALIGN_LEFT | obs_sys::OBS_ALIGN_TOP);
-            scene_item.set_bounds(canvas.0 as f32, canvas.1 as f32);
             eprintln!(
                 "Screen-share stream chosen: {w}x{h}, recording a {}x{} canvas",
                 canvas.0, canvas.1
@@ -616,6 +613,28 @@ impl Recorder {
                 region::compute_output_size(canvas, settings.max_width, settings.max_height);
             if let Err(e) = context.reset_video(&video_info_for(canvas, output_size)) {
                 fail(format_args!("Failed to reset OBS video: {e}"));
+            }
+            // Only now, on the final canvas: libobs stores item transforms
+            // relative to the canvas they were set on, so anything set on the
+            // placeholder would come out moved and rescaled here (see
+            // `ObsSceneItem::place_top_left_bounded`). That includes the
+            // default (0,0) the item got when it was added, which is why the
+            // position is re-applied too. Read back and refuse to record if
+            // libobs still disagrees, rather than ship a misplaced capture.
+            scene_item.place_top_left_bounded(canvas.0 as f32, canvas.1 as f32);
+            let (pos, bounds) = (scene_item.pos(), scene_item.bounds());
+            let expected = (canvas.0 as f32, canvas.1 as f32);
+            let off = |a: f32, b: f32| (a - b).abs() > 0.5;
+            if off(pos.0, 0.0)
+                || off(pos.1, 0.0)
+                || off(bounds.0, expected.0)
+                || off(bounds.1, expected.1)
+            {
+                fail(format_args!(
+                    "Screen-share placement is wrong after the canvas reset: position \
+                     ({:.1}, {:.1}), bounds {:.1}x{:.1}; expected (0, 0) and {}x{}",
+                    pos.0, pos.1, bounds.0, bounds.1, canvas.0, canvas.1
+                ));
             }
             display_sources.push(source);
             scene_items.push(scene_item);

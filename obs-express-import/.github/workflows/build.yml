@@ -612,6 +612,12 @@ jobs:
           # platforms; verify-bundle.sh records for real below.
           tools/linux-build/run-in-image.sh cargo test --release --workspace --exclude clowd_share_region
 
+      # Scene-item placement across a canvas reset, against real libobs (it
+      # needs a graphics context, hence Xvfb). This is the transform Wayland
+      # picker mode depends on, and portal capture itself cannot run in CI.
+      - name: Test canvas-reset placement (Xvfb)
+        run: tools/linux-build/run-in-image.sh xvfb-run -a -s "'-screen 0 1280x720x24'" cargo test --release -p obs-express --test canvas_reset -- --ignored
+
       # Copies the runtime tree out of target/release, strips the build-tree
       # RUNPATH entries, and enforces the relocation, glibc-ceiling and
       # no-forbidden-library rules (see the script header).
