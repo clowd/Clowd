@@ -20,8 +20,8 @@ namespace Clowd.UI.Converters
             {
                 // 0 shows as an empty box rather than a literal "0", so the state the user typed
                 // and the state they see agree.
-                var fps = System.Convert.ToDecimal(value, culture);
-                return fps == 0 ? (decimal?)null : fps;
+                var fps = System.Convert.ToDouble(value, culture);
+                return fps == 0 ? (double?)null : fps;
             }
             catch
             {

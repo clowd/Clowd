@@ -65,9 +65,9 @@ namespace Clowd.UI.VideoEditor
             EditorSession.ClampOutputDimension(ToPixels(HeightBox.Value)));
 
         // An empty box reads as null; the clamp below turns that into the smallest legal size
-        // rather than a zero-pixel canvas.
-        private static int ToPixels(int? value) =>
-            Math.Clamp(value ?? EditorSession.MinOutputDimension,
+        // rather than a zero-pixel canvas. The box holds a double, so a typed fraction is rounded.
+        private static int ToPixels(double? value) =>
+            Math.Clamp(value is { } v ? (int)Math.Round(v) : EditorSession.MinOutputDimension,
                        EditorSession.MinOutputDimension,
                        EditorSession.MaxOutputDimension);
     }

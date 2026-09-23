@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Clowd.UI.Controls"
         x:Class="Clowd.UI.Dialogs.FontDialog"
         Title="Font"
         Width="460" Height="460"
@@ -27,12 +28,12 @@
                  Background="Transparent" />
 
         <StackPanel x:Name="SizeStylePanel" Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Margin="12,0,0,0" Spacing="8">
-            <NumericUpDown x:Name="SizeBox"
-                           Minimum="8"
-                           Maximum="64"
-                           Increment="1"
-                           FormatString="0"
-                           ClipValueToMinMax="True" />
+            <controls:ScrollableUrsaSpinner x:Name="SizeBox"
+                                            Minimum="8"
+                                            Maximum="64"
+                                            Step="1"
+                                            FormatString="0"
+                                            SnapToWholeNumber="True" />
             <ToggleButton x:Name="BoldToggle"
                           Content="Bold"
                           FontWeight="Bold"

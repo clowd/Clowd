@@ -288,11 +288,15 @@ namespace Clowd.UI.VideoEditor
 
         private int SelectedCrf() => RenderPresets.ClampCrf((int)Math.Round(CrfSlider.Value));
 
+        /// <summary>The whole number in a custom box, rounded (the box holds a double, so a typed
+        /// fraction is possible); an empty box is 0.</summary>
+        private static int WholeNumber(double? value) => value is { } v ? (int)Math.Round(v) : 0;
+
         private int SelectedMaxHeight() =>
             Size1080.IsChecked == true ? 1080 :
             Size720.IsChecked == true ? 720 :
             Size480.IsChecked == true ? 480 :
-            SizeCustom.IsChecked == true ? Math.Max(0, CustomHeightBox.Value ?? 0) : 0;
+            SizeCustom.IsChecked == true ? Math.Max(0, WholeNumber(CustomHeightBox.Value)) : 0;
 
         /// <summary>The caption beside the size segments: what the encoder will actually be opened
         /// at, straight from the SDK's own rounding (even dimensions, aspect preserved) so the
@@ -334,7 +338,7 @@ namespace Clowd.UI.VideoEditor
         private int SelectedMaxFps()
         {
             if (FpsCustom.IsChecked == true)
-                return RenderPresets.ClampFps(CustomFpsBox.Value ?? 0);
+                return RenderPresets.ClampFps(WholeNumber(CustomFpsBox.Value));
 
             foreach (var (cell, fps) in _fpsPresetCells)
             {
@@ -434,7 +438,7 @@ namespace Clowd.UI.VideoEditor
         {
             // a cleared Custom box is null, which would otherwise read as "no cap" and render at
             // full size behind a checked Custom
-            if (SizeCustom.IsChecked == true && (CustomHeightBox.Value ?? 0) <= 0)
+            if (SizeCustom.IsChecked == true && WholeNumber(CustomHeightBox.Value) <= 0)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
                     "Enter the maximum height for the video, or pick one of the other sizes.",
@@ -443,7 +447,7 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
-            if (FpsCustom.IsChecked == true && (CustomFpsBox.Value ?? 0) <= 0)
+            if (FpsCustom.IsChecked == true && WholeNumber(CustomFpsBox.Value) <= 0)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
                     "Enter the maximum frame rate for the video, or pick one of the other rates.",

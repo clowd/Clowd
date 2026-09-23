@@ -2,7 +2,7 @@
     x:Class="Clowd.UI.VideoEditor.RenderOptionsDialog"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:u="https://irihi.tech/ursa"
+    xmlns:controls="using:Clowd.UI.Controls"
     Title="Render video"
     Width="520"
     Background="{DynamicResource ApplicationBackgroundBrush}"
@@ -230,11 +230,13 @@
                 <!--  Custom: a height of the user's own, still a cap (never an upscale); the
                       caption is the size the file will actually be, whichever cell is on.  -->
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <u:NumericIntUpDown
+                    <controls:ScrollableUrsaSpinner
                         x:Name="CustomHeightBox"
                         Width="130"
+                        FormatString="0"
                         InnerRightContent="px"
                         Minimum="2"
+                        SnapToWholeNumber="True"
                         Step="2" />
                     <TextBlock
                         x:Name="SizeCaption"
@@ -286,11 +288,13 @@
                 <!--  Custom: a whole-number cap of the user's own, bounded by the fastest clip; the
                       caption is the rate the file will actually have, whichever cell is on.  -->
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <u:NumericIntUpDown
+                    <controls:ScrollableUrsaSpinner
                         x:Name="CustomFpsBox"
                         Width="130"
+                        FormatString="0"
                         InnerRightContent="fps"
-                        Minimum="1" />
+                        Minimum="1"
+                        SnapToWholeNumber="True" />
                     <TextBlock
                         x:Name="FpsCaption"
                         VerticalAlignment="Center"

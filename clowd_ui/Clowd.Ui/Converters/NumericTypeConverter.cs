@@ -6,8 +6,8 @@ using Avalonia.Data.Converters;
 namespace Clowd.UI.Converters
 {
     /// <summary>
-    /// Bridges Avalonia NumericUpDown (decimal? Value) and the int/double settings properties
-    /// (decision table #53). Convert: numeric setting → decimal?; ConvertBack: decimal? → the
+    /// Bridges ScrollableUrsaSpinner (double? Value) and the int/double settings properties
+    /// (decision table #53). Convert: numeric setting → double?; ConvertBack: double? → the
     /// setting's type (per Type.GetTypeCode, as used by SettingsControlFactory).
     /// </summary>
     public class NumericTypeConverter : IValueConverter
@@ -19,7 +19,7 @@ namespace Clowd.UI.Converters
 
             try
             {
-                return (decimal?)System.Convert.ToDecimal(value, culture);
+                return (double?)System.Convert.ToDouble(value, culture);
             }
             catch
             {

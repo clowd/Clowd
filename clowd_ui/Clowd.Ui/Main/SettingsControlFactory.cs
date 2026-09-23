@@ -27,7 +27,7 @@ namespace Clowd.UI.Config
     /// <summary>
     /// Builds a reflection-driven settings page (label + editor rows) for a settings category
     /// object. Direct port of the WPF SettingsControlFactory; WPF-only editors translated per
-    /// the decision table (#53 NumberBox -> NumericUpDown + NumericTypeConverter, folder
+    /// the decision table (#53 NumberBox -> ScrollableUrsaSpinner + NumericTypeConverter, folder
     /// browser -> StorageProvider, AudioDeviceInfo rows dropped with the video feature).
     /// </summary>
     public class SettingsControlFactory
@@ -444,19 +444,19 @@ namespace Clowd.UI.Config
                     return StackCtrl(slider, valueLabel);
                 }
 
-                // decision table #53: WPFUI NumberBox -> NumericUpDown (decimal?) bridged to the
-                // int/double settings property by NumericTypeConverter. [Range] bounds the spinner
-                // so it cannot walk the value out of the valid domain.
-                var numeric = new NumericUpDown { Increment = 1, FormatString = "0.##" };
+                // decision table #53: WPFUI NumberBox -> ScrollableUrsaSpinner (double?) bridged to
+                // the int/double settings property by NumericTypeConverter. [Range] bounds the
+                // spinner so it cannot walk the value out of the valid domain.
+                var numeric = new ScrollableUrsaSpinner { Step = 1, FormatString = "0.##" };
                 if (range != null)
                 {
-                    numeric.Minimum = Convert.ToDecimal(range.Minimum, CultureInfo.InvariantCulture);
-                    numeric.Maximum = Convert.ToDecimal(range.Maximum, CultureInfo.InvariantCulture);
+                    numeric.Minimum = Convert.ToDouble(range.Minimum, CultureInfo.InvariantCulture);
+                    numeric.Maximum = Convert.ToDouble(range.Maximum, CultureInfo.InvariantCulture);
                     if (numeric.Maximum - numeric.Minimum <= 2)
-                        numeric.Increment = 0.05m;
+                        numeric.Step = 0.05;
                 }
 
-                return new PreferredWidthBox(160, SimpleControlBinding(numeric, pd, NumericUpDown.ValueProperty, new NumericTypeConverter()));
+                return new PreferredWidthBox(160, SimpleControlBinding(numeric, pd, ScrollableUrsaSpinner.ValueProperty, new NumericTypeConverter()));
             }
 
             if (Is(pd, typeof(Color)))
@@ -531,8 +531,8 @@ namespace Clowd.UI.Config
                 var child = new SettingsControlFactory(_wndFn, pd.GetValue(_obj));
                 var pdNum = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Number));
                 var pdUnit = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Unit));
-                var ctNum = child.SimpleControlBinding(new NumericUpDown { MinWidth = 120, Minimum = 1, Increment = 1, FormatString = "0" },
-                                                       pdNum, NumericUpDown.ValueProperty, new NumericTypeConverter());
+                var ctNum = child.SimpleControlBinding(new ScrollableUrsaSpinner { MinWidth = 120, Minimum = 1, Step = 1, FormatString = "0", SnapToWholeNumber = true },
+                                                       pdNum, ScrollableUrsaSpinner.ValueProperty, new NumericTypeConverter());
                 var ctUnit = child.ComboSelectBinding(() => Enum.GetValues(pdUnit.PropertyType), pdUnit, null, false);
                 return StackCtrl(ctNum, ctUnit);
             }
@@ -675,18 +675,19 @@ namespace Clowd.UI.Config
         /// drops it (<c>FpsCycleRules</c>), which is how a user asks for fewer than three stops.</summary>
         Control FpsPresetBox(PropertyDescriptor pd, int ordinal)
         {
-            var box = new NumericUpDown
+            var box = new ScrollableUrsaSpinner
             {
                 Width = 64,
                 Minimum = FpsPresets.MinFps,
                 Maximum = FpsPresets.MaxFps,
-                Increment = 1,
+                Step = 1,
                 FormatString = "0",
+                SnapToWholeNumber = true,
                 ShowButtonSpinner = false,
                 PlaceholderText = "—",
             };
             Avalonia.Automation.AutomationProperties.SetName(box, $"Frame rate preset {ordinal}");
-            return SimpleControlBinding(box, pd, NumericUpDown.ValueProperty, new FpsPresetConverter());
+            return SimpleControlBinding(box, pd, ScrollableUrsaSpinner.ValueProperty, new FpsPresetConverter());
         }
 
         Panel StackCtrl(params Control[] children)

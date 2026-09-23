@@ -69,8 +69,8 @@ namespace Clowd.UI.Dialogs
 
             FilterBox.TextChanged += (_, _) => ApplyFilter();
 
-            // The WPF FontDialog enforced MinSize 8 / MaxSize 64 — mirrored by the NumericUpDown.
-            SizeBox.Value = (decimal)Math.Clamp(double.IsFinite(fontSize) ? fontSize : 12d, 8d, 64d);
+            // The WPF FontDialog enforced MinSize 8 / MaxSize 64 — mirrored by the size spinner.
+            SizeBox.Value = Math.Clamp(double.IsFinite(fontSize) ? fontSize : 12d, 8d, 64d);
 
             // Like WPF (ToOpenTypeWeight() > 400), anything heavier than Normal lights up Bold.
             BoldToggle.IsChecked = fontWeight > FontWeight.Normal;
@@ -128,7 +128,7 @@ namespace Clowd.UI.Dialogs
             }
         }
 
-        private double CurrentSize => (double)(SizeBox.Value ?? 12);
+        private double CurrentSize => SizeBox.Value ?? 12;
 
         private FontStyle CurrentStyle => ItalicToggle.IsChecked == true ? FontStyle.Italic : FontStyle.Normal;
 
