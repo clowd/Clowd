@@ -5,4 +5,5 @@ edition = "2021"
 links = "obs"
 
 [build-dependencies]
+obs-build-support = { workspace = true }
 bindgen = { workspace = true }

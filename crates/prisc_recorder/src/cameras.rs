@@ -100,11 +100,19 @@ fn list_cameras() -> Result<Vec<obs::properties::ListItem>, String> {
     // properties; mac-avcapture only fills it from a modified callback on a
     // real instance, so an empty type-level list falls through to the
     // instance probe rather than reporting "no cameras".
+    //
+    // Linux skips the type-level query entirely: linux-v4l2's
+    // `v4l2_properties` dereferences its instance data unconditionally, so
+    // `obs_get_source_properties("v4l2_input")` (no instance) segfaults. The
+    // instance probe below lists the same /dev/video* devices.
     let key = platform::WEBCAM_DEVICE_KEY;
-    let from_type = obs::properties::source_list_property(source_id, key);
-    if let Some(items) = from_type {
-        if !items.is_empty() {
-            return Ok(items);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let from_type = obs::properties::source_list_property(source_id, key);
+        if let Some(items) = from_type {
+            if !items.is_empty() {
+                return Ok(items);
+            }
         }
     }
     obs::properties::source_instance_list_property(source_id, key)

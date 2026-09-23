@@ -20,8 +20,9 @@ pub struct Cli {
     #[arg(long, required_unless_present = "list_cameras")]
     pub output: Option<PathBuf>,
 
-    /// List available webcam (DirectShow) devices as one JSON line on stdout
-    /// and exit. Mutually exclusive with all recording flags.
+    /// List available webcam (DirectShow / AVFoundation / V4L2) devices as
+    /// one JSON line on stdout and exit. Mutually exclusive with all
+    /// recording flags.
     #[arg(long, conflicts_with_all = [
         "output", "region", "monitor", "fps", "crf", "max_width", "max_height",
         "hw_accel", "low_cpu", "no_cursor", "tracker", "tracker_color", "pause",
@@ -50,24 +51,28 @@ pub struct Cli {
     /// Record cursor position/shape, mouse buttons and keys to a JSONL
     /// sidecar at this path (DESIGN §1 wire format) alongside the video.
     /// Session-fixed, like --output; the parent directory must exist.
+    /// Not supported on Linux.
     #[arg(long)]
     pub input_capture: Option<PathBuf>,
 
     /// Record the live geometry of every on-screen window intersecting the
     /// capture region to a JSONL sidecar at this path, in coordinates relative
     /// to that region. Session-fixed, like --input-capture; the parent
-    /// directory must exist.
+    /// directory must exist. Not supported on Linux.
     #[arg(long)]
     pub window_capture: Option<PathBuf>,
 
     /// Capture region "X,Y,W,H" in the platform capture coordinate space
-    /// (Windows: physical px, virtual desktop; macOS: CG points).
+    /// (Windows: physical px, virtual desktop; macOS: CG points; Linux X11:
+    /// root-window px). Rejected under a Wayland session, where the desktop
+    /// portal's picker chooses what is recorded.
     /// X,Y may be negative (virtual desktop), hence allow_hyphen_values.
     #[arg(long, allow_hyphen_values = true)]
     pub region: Option<String>,
 
     /// Record a whole monitor (id, alternate id, or 0-based index).
-    /// Mutually exclusive with --region.
+    /// Mutually exclusive with --region. Rejected under a Wayland session,
+    /// like --region.
     #[arg(long, conflicts_with = "region")]
     pub monitor: Option<String>,
 
@@ -99,9 +104,9 @@ pub struct Cli {
     pub no_cursor: bool,
 
     /// Which OS API backs display capture: `auto`, `dxgi` or `wgc`.
-    /// Windows only — ignored on macOS. Session-fixed (the capture sources are
-    /// built once), so unlike the tuning knobs it is not re-readable via
-    /// `--settings` / stdin `configure`.
+    /// Windows only — ignored on macOS and Linux. Session-fixed (the capture
+    /// sources are built once), so unlike the tuning knobs it is not
+    /// re-readable via `--settings` / stdin `configure`.
     ///
     /// `auto` (the default) takes WGC on Windows 11 and newer, where the
     /// yellow border Windows draws around a WGC-captured display can be
@@ -116,7 +121,8 @@ pub struct Cli {
     pub capture_method: crate::platform::CaptureMethod,
 
     /// Render an expanding, fading highlight at the pointer on every mouse
-    /// click (recording only — the real screen is untouched).
+    /// click (recording only — the real screen is untouched). Not supported
+    /// on Linux.
     #[arg(long)]
     pub tracker: bool,
 
@@ -144,8 +150,8 @@ pub struct Cli {
     /// the audio device applies it in software (on such devices the loopback
     /// stream Windows hands to recorders is already attenuated by the volume
     /// slider, so recordings sound quieter than the played content). Devices
-    /// with hardware volume are unaffected, as is macOS. Tracks volume changes
-    /// while recording (~100 ms).
+    /// with hardware volume are unaffected, as are macOS and Linux. Tracks
+    /// volume changes while recording (~100 ms).
     #[arg(long)]
     pub speaker_volume_compensation: bool,
 
@@ -195,6 +201,20 @@ impl Cli {
                 return Err(format!("--output is not a file path: '{output_str}'"));
             }
             _ => {}
+        }
+
+        // Linux: both sidecars need global pointer/keyboard state and a window
+        // list, which a Wayland client cannot get at all (see
+        // platform/linux.rs). Rejected before the other sidecar checks so the
+        // reason is the first thing the caller reads.
+        #[cfg(target_os = "linux")]
+        for (flag, requested) in [
+            ("--input-capture", self.input_capture.is_some()),
+            ("--window-capture", self.window_capture.is_some()),
+        ] {
+            if requested {
+                return Err(format!("{flag} is not supported on Linux"));
+            }
         }
 
         // Same parent-dir rule as --output for both JSONL sidecars: fail fast
@@ -298,6 +318,19 @@ mod tests {
         Cli::try_parse_from(std::iter::once("obs-express").chain(args.iter().copied()))
     }
 
+    /// A command line that is valid apart from requesting a sidecar: it
+    /// validates everywhere except Linux, which rejects the sidecar flags
+    /// themselves (see `linux_rejects_the_sidecars_and_the_tracker`).
+    fn assert_valid_with_sidecars(cli: &Cli) {
+        let result = cli.validate();
+        if cfg!(target_os = "linux") {
+            let err = result.unwrap_err();
+            assert!(err.contains("not supported on Linux"), "{err}");
+        } else {
+            assert!(result.is_ok(), "{result:?}");
+        }
+    }
+
     #[test]
     fn output_must_be_mp4_or_mkv() {
         let cli = parse(&["--output", "video.mov"]).unwrap();
@@ -342,11 +375,11 @@ mod tests {
 
         // A bare file name (CWD parent) and an existing dir are both fine.
         let cli = parse(&["--output", "a.mp4", "--input-capture", "input.jsonl"]).unwrap();
-        assert!(cli.validate().is_ok());
+        assert_valid_with_sidecars(&cli);
         let dir = std::env::temp_dir().join("ic.jsonl");
         let path = dir.to_string_lossy().into_owned();
         let cli = parse(&["--output", "a.mp4", "--input-capture", &path]).unwrap();
-        assert!(cli.validate().is_ok());
+        assert_valid_with_sidecars(&cli);
     }
 
     #[test]
@@ -366,7 +399,7 @@ mod tests {
         assert!(parse(&["--list-cameras", "--input-capture", "input.jsonl"]).is_err());
         // The jsonl sidecar itself does not require --multi-track.
         let cli = parse(&["--output", "a.mp4", "--input-capture", "input.jsonl"]).unwrap();
-        assert!(cli.validate().is_ok());
+        assert_valid_with_sidecars(&cli);
     }
 
     #[test]
@@ -439,13 +472,15 @@ mod tests {
             "windows.jsonl",
         ])
         .unwrap();
-        assert!(cli.validate().is_ok());
+        assert_valid_with_sidecars(&cli);
         assert_eq!(
             cli.window_capture.as_deref(),
             Some(std::path::Path::new("windows.jsonl"))
         );
     }
 
+    // Linux rejects both sidecar flags before this check can run.
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn the_two_sidecars_must_not_share_a_file() {
         let cli = parse(&[
@@ -563,13 +598,26 @@ mod tests {
             "obs-express-cli-settings-{}.json",
             std::process::id()
         ));
-        std::fs::write(&path, r#"{"fps": 60, "tracker": true}"#).unwrap();
+        // The tracker is rejected on Linux (Settings::validate), so the
+        // non-default bool proving the file flows through is the cursor
+        // there.
+        let tracker_supported = !cfg!(target_os = "linux");
+        let json = if tracker_supported {
+            r#"{"fps": 60, "tracker": true}"#
+        } else {
+            r#"{"fps": 60, "cursor": false}"#
+        };
+        std::fs::write(&path, json).unwrap();
 
         let path_str = path.to_string_lossy().into_owned();
         let cli = parse(&["--output", "a.mp4", "--settings", &path_str]).unwrap();
         let settings = cli.validate().unwrap();
         assert_eq!(settings.fps, 60);
-        assert!(settings.tracker);
+        if tracker_supported {
+            assert!(settings.tracker);
+        } else {
+            assert!(!settings.cursor);
+        }
         assert_eq!(settings.crf, 24); // missing field = default
 
         std::fs::write(&path, r#"{"fps": 0}"#).unwrap();
@@ -716,7 +764,38 @@ mod tests {
             "0,128,255",
         ])
         .unwrap();
-        assert!(cli.validate().is_ok());
+        // Linux rejects the tracker itself (a valid color does not help).
+        assert_eq!(cli.validate().is_ok(), !cfg!(target_os = "linux"));
         assert!(cli.tracker);
+        // Without --tracker, a valid color validates everywhere.
+        let cli = parse(&["--output", "a.mp4", "--tracker-color", "0,128,255"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    /// The Linux out-of-scope features fail fast with a reason instead of
+    /// recording without them.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_rejects_the_sidecars_and_the_tracker() {
+        for flag in ["--input-capture", "--window-capture"] {
+            let cli = parse(&["--output", "a.mp4", flag, "x.jsonl"]).unwrap();
+            let err = cli.validate().unwrap_err();
+            assert_eq!(err, format!("{flag} is not supported on Linux"));
+        }
+        let cli = parse(&["--output", "a.mp4", "--tracker"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("tracker") && err.contains("Linux"), "{err}");
+
+        // The same rejection covers a tracker requested by a settings file.
+        let path = std::env::temp_dir().join(format!(
+            "obs-express-linux-tracker-{}.json",
+            std::process::id()
+        ));
+        std::fs::write(&path, r#"{"tracker": true}"#).unwrap();
+        let path_str = path.to_string_lossy().into_owned();
+        let cli = parse(&["--output", "a.mp4", "--settings", &path_str]).unwrap();
+        let result = cli.validate();
+        std::fs::remove_file(&path).unwrap();
+        assert!(result.unwrap_err().contains("tracker"));
     }
 }

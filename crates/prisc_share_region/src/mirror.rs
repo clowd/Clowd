@@ -207,14 +207,14 @@ impl Mirror {
         //    get_display_name returns null exactly when unregistered.
         context.add_module_path(&paths.module_bin, &paths.module_data);
         context.load_all_modules();
-        let display_capture_c = CString::new(obs_platform::DISPLAY_CAPTURE_ID).unwrap();
+        let display_capture_c = CString::new(obs_platform::display_capture_id()).unwrap();
         let display_name =
             unsafe { obs_sys::obs_source_get_display_name(display_capture_c.as_ptr()) };
         if display_name.is_null() {
             fail(format_args!(
                 "Display capture source '{}' is not registered — the capture plugin failed to \
                  load.\n  module bin:  {}\n  module data: {}",
-                obs_platform::DISPLAY_CAPTURE_ID,
+                obs_platform::display_capture_id(),
                 paths.module_bin,
                 paths.module_data
             ));
@@ -385,7 +385,7 @@ fn build_scene_items(
         let source_settings =
             obs_platform::display_capture_settings(m, show_cursor, capture_method);
         let source = match ObsSource::create(
-            obs_platform::DISPLAY_CAPTURE_ID,
+            obs_platform::display_capture_id(),
             &format!("display_{i}"),
             Some(&source_settings),
         ) {

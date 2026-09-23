@@ -10,6 +10,10 @@ use std::path::{Path, PathBuf};
 /// - macOS: add rpaths so the dylibs resolve from the obs-deps bundle during
 ///   development and from `@executable_path/Frameworks` in the shipped
 ///   bundle (the release staging strips the absolute rpath).
+/// - Linux: both of the above — copy the bundle's FFmpeg shared objects next
+///   to the binary (under their SONAMEs, see obs-build-support) and link with
+///   RUNPATH `$ORIGIN` so the profile dir is self-contained, plus an absolute
+///   RUNPATH into the bundle for the test executables in `deps/`.
 ///
 /// The bundle location comes from ffmpeg-sys (`links = "ffmpeg"`), NOT from a
 /// scan of `.deps` here: that ordering guarantee is the point. ffmpeg-sys
@@ -21,6 +25,7 @@ fn main() {
     match env::var("CARGO_CFG_TARGET_OS").as_deref() {
         Ok("windows") => windows(),
         Ok("macos") => macos(),
+        Ok("linux") => linux(),
         _ => {}
     }
 }
@@ -84,6 +89,34 @@ fn macos() {
         ),
     }
     println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/Frameworks");
+}
+
+fn linux() {
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    // OUT_DIR = target/{debug,release}/build/vid2gif-<hash>/out
+    let profile_dir = out_dir
+        .ancestors()
+        .nth(3)
+        .expect("could not resolve the cargo profile dir from OUT_DIR")
+        .to_path_buf();
+
+    // Hard error, as on macOS: without it the binary links and then fails to
+    // start.
+    let root = env::var_os("DEP_FFMPEG_DEPS_ROOT").map(PathBuf::from).unwrap_or_else(|| {
+        panic!(
+            "vid2gif: DEP_FFMPEG_DEPS_ROOT not set — ffmpeg-sys did not export the FFmpeg              bundle path (is its `links = \"ffmpeg\"` key still present?)"
+        )
+    });
+    let bundle = obs_build_support::linux::FfmpegBundle { root };
+
+    // $ORIGIN first, so a staged or relocated vid2gif always prefers the copies
+    // beside it; the absolute bundle path serves the test executables in
+    // `deps/` (the release staging strips it). `$ORIGIN` reaches the linker
+    // verbatim: cargo passes link args without a shell.
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", bundle.lib().display());
+
+    obs_build_support::linux::stage_ffmpeg_runtime(&bundle, &profile_dir);
 }
 
 /// Copy `src` to `dst` only when it is newer or a different size, keeping

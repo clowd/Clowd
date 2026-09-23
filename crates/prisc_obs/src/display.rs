@@ -28,6 +28,7 @@ impl ObsDisplay {
     /// # Safety
     /// `window` must be a valid platform window/view pointer that outlives
     /// the display.
+    #[cfg_attr(target_os = "linux", allow(unreachable_code, unused_variables))]
     pub unsafe fn new(window: *mut c_void, cx: u32, cy: u32) -> Result<Self, ObsError> {
         // bindgen renders the platform-specific gs_window field per target:
         // Windows `hwnd: *mut c_void`, macOS `view: id` (id = *mut
@@ -38,6 +39,16 @@ impl ObsDisplay {
         #[cfg(target_os = "macos")]
         let gs_window = obs_sys::gs_window {
             view: window.cast::<obs_sys::objc_object>(),
+        };
+        // Linux's gs_window is `{ id: u32, display: *mut c_void }` (an X11
+        // window id plus its Display*), which a single pointer cannot express.
+        // The only caller, clowd_share_region, is not supported on Linux, so
+        // refuse instead of guessing at a window.
+        #[cfg(target_os = "linux")]
+        let gs_window: obs_sys::gs_window = {
+            return Err(ObsError::NullPointer(
+                "obs_display_create (not supported on Linux)",
+            ));
         };
 
         let init = obs_sys::gs_init_data {

@@ -10,6 +10,7 @@ fn main() {
     match target_os.as_str() {
         "macos" => build_macos(),
         "windows" => build_windows(),
+        "linux" => build_linux(),
         other => panic!("obs-sys: unsupported CARGO_CFG_TARGET_OS `{other}`"),
     }
 }
@@ -34,7 +35,7 @@ fn obs_version_override() -> String {
 /// Rust's target arch (`CARGO_CFG_TARGET_ARCH`) drives the native OBS build's
 /// architecture, so a single `cargo build --target <triple>` yields a matching
 /// native or cross build. `x86_64` and `aarch64` are the only architectures
-/// obs-express ships (Windows x64/ARM64, macOS x86_64/arm64).
+/// obs-express ships (Windows x64/ARM64, macOS x86_64/arm64, Linux x86_64).
 fn target_arch() -> String {
     env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default()
 }
@@ -82,7 +83,12 @@ fn build_macos() {
     mac_cmake_configure(&obs_src, &obs_build);
     mac_cmake_build(&obs_build, config);
     mac_emit_link_directives(&obs_src, &obs_build, config);
-    generate_bindings(&manifest_dir, &obs_src, &obs_build);
+    generate_bindings(
+        &manifest_dir,
+        &obs_src,
+        &obs_build,
+        find_obs_deps_include(&obs_src),
+    );
 }
 
 fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
@@ -264,7 +270,12 @@ fn build_windows() {
     win_cmake_configure(&cmake, &obs_src, &build_dir);
     win_cmake_build(&cmake, &build_dir, config);
     win_emit_link_directives(&build_dir, config);
-    generate_bindings(&manifest_dir, &obs_src, &build_dir);
+    generate_bindings(
+        &manifest_dir,
+        &obs_src,
+        &build_dir,
+        find_obs_deps_include(&obs_src),
+    );
     win_emit_exports(&obs_src, &build_dir, config);
 }
 
@@ -274,6 +285,14 @@ fn build_windows() {
 /// OUT_DIR ancestor named `target`. The arch suffix keeps the x64 and ARM64
 /// build trees from colliding in a shared target dir.
 fn win_build_dir() -> PathBuf {
+    workspace_obs_build_dir(&win_vs_platform().to_lowercase())
+}
+
+/// `OBS_BUILD_DIR`, else `<workspace_target>/obs-<arch_suffix>` — the layout
+/// shared by the Windows and Linux branches (see [`win_build_dir`]). Keeping
+/// the OBS tree outside cargo's OUT_DIR also means it survives `cargo clean -p
+/// obs-sys` and can be shared across worktrees via `OBS_BUILD_DIR`.
+fn workspace_obs_build_dir(arch_suffix: &str) -> PathBuf {
     if let Ok(dir) = env::var("OBS_BUILD_DIR") {
         return PathBuf::from(dir);
     }
@@ -289,7 +308,7 @@ fn win_build_dir() -> PathBuf {
             .to_path_buf()
     };
 
-    workspace_target.join(format!("obs-{}", win_vs_platform().to_lowercase()))
+    workspace_target.join(format!("obs-{arch_suffix}"))
 }
 
 /// cmake is frequently not on PATH on dev machines; fall back to the copy that
@@ -489,16 +508,463 @@ fn is_target_arch_bundle(name: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Linux (Ninja generator, pinned BtbN FFmpeg + source-built x264, libobs.so)
+// ---------------------------------------------------------------------------
+//
+// Linux has no obs-deps bundle, so the two third-party pieces OBS cannot take
+// from the distro are supplied here before CMake runs:
+//
+// - FFmpeg: the pinned BtbN build (obs-build-support), shared with ffmpeg-sys
+//   so libobs, the plugins and vid2gif all load one FFmpeg. The system libav*
+//   is never used — distro FFmpeg versions vary per release, and two copies in
+//   one process would each carry their own codec registry and allocator.
+// - x264: built from a pinned source commit into a static, PIC archive that
+//   obs-x264.so embeds, so the runtime directory carries no libx264.so and the
+//   encoder does not depend on whichever x264 ABI the distro ships.
+//
+// Everything else (X11/xcb, Wayland, EGL, PipeWire, PulseAudio, libv4l2, udev,
+// jansson, curl, mbedTLS, glib, libva/libdrm/libpci) is linked from the
+// system's -dev packages, as every Linux OBS build does.
+
+/// x264 source: the head of the upstream `stable` branch (X264_BUILD 165) when
+/// this was pinned. A commit hash rather than a tarball because
+/// code.videolan.org generates archives on the fly and their bytes are not
+/// stable; the checked-out commit is verified against this hash, which pins
+/// the content as firmly as a SHA-256 of an archive would.
+const X264_REPO: &str = "https://code.videolan.org/videolan/x264.git";
+const X264_COMMIT: &str = "b35605ace3ddf7c1a5d67a2eb553f034aef41d55";
+
+/// The OBS targets built on Linux, and why each is needed. Configure still
+/// visits every plugin's CMakeLists (so their REQUIRED packages matter even
+/// when not built — see `linux_cmake_configure`), but only these compile.
+const LINUX_TARGETS: &[&str] = &[
+    "libobs",
+    // The only Linux graphics backend; libobs dlopens it at obs_reset_video
+    // (by its soname, libobs-opengl.so.30).
+    "libobs-opengl",
+    // ffmpeg_muxer / ffmpeg_aac, and the out-of-process muxer it spawns.
+    "obs-ffmpeg",
+    "obs-ffmpeg-mux",
+    "obs-x264",
+    // mp4_output: the hybrid MP4 muxer behind --multi-track.
+    "obs-outputs",
+    // image_source + color_filter: the mouse click tracker (--tracker), and
+    // color_source for `--webcam test`.
+    "image-source",
+    "obs-filters",
+    // xshm_input_v2: X11 display capture.
+    "linux-capture",
+    // pipewire-screen-capture-source: Wayland capture via xdg-desktop-portal.
+    "linux-pipewire",
+    // pulse_output_capture / pulse_input_capture (these also serve PipeWire
+    // hosts, through pipewire-pulse).
+    "linux-pulseaudio",
+    // v4l2_input: webcam capture (--webcam / --list-cameras).
+    "linux-v4l2",
+];
+
+/// A path that will never exist, compiled into libobs as OBS_INSTALL_PREFIX.
+///
+/// libobs searches `OBS_INSTALL_PREFIX/lib/obs-plugins` and
+/// `OBS_INSTALL_PREFIX/share/obs/libobs` at runtime in addition to the paths
+/// we register. With the default `/usr/local` (or a distro-style `/usr`), a
+/// system-wide OBS installation's plugins and effect files — built against a
+/// different libobs — could be loaded next to ours. A bogus prefix makes
+/// those two particular lookups miss harmlessly.
+///
+/// It is NOT the whole defence: libobs's `add_default_module_paths()` also
+/// registers exe-relative (`<exe>/../lib/obs-plugins`) and CWD-relative plugin
+/// dirs that no configure option removes. Plugin loading is therefore
+/// restricted to our own registered directory at runtime instead
+/// (`obs::ObsContext::load_all_modules`, Linux branch). libobs *data* files
+/// still resolve CWD-relative `share/obs/libobs/` and exe-relative
+/// `../share/obs/libobs/` before our `obs_add_data_path` entry
+/// (`find_libobs_data_file`, libobs/obs-nix.c); that only matters if the
+/// bundle is unpacked next to a system OBS's `share/obs`, and fixing it would
+/// need a libobs patch.
+const LINUX_INSTALL_PREFIX: &str = "/nonexistent/obs-express";
+
+/// OBS build-dir suffix for the target arch (`<target>/obs-x64`), matching the
+/// Windows naming. Only x86_64 is supported for now; the FFmpeg asset lookup
+/// (obs-build-support) panics with instructions for anything else, and calling
+/// it first makes sure that happens before any other work.
+fn linux_arch_suffix() -> &'static str {
+    let arch = target_arch();
+    let _ = obs_build_support::linux::ffmpeg_asset(&arch);
+    match arch.as_str() {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        other => unreachable!("ffmpeg_asset accepted unsupported arch `{other}`"),
+    }
+}
+
+fn build_linux() {
+    use obs_build_support::linux;
+
+    let arch_suffix = linux_arch_suffix();
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let obs_src = repo_root.join("obs-studio");
+    let deps_dir = obs_src.join(".deps");
+    let build_dir = workspace_obs_build_dir(arch_suffix);
+    let config = "RelWithDebInfo";
+
+    // Like Windows: idempotency comes from the CMakeCache / .build_complete
+    // markers and the bundle markers under .deps, not from watching sources.
+    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-env-changed=OBS_BUILD_DIR");
+    println!("cargo:rerun-if-env-changed=CARGO_TARGET_DIR");
+
+    for tool in [
+        "cmake",
+        "ninja",
+        "pkg-config",
+        "git",
+        "make",
+        "nasm",
+        "patchelf",
+    ] {
+        linux::require_tool(tool);
+    }
+
+    let ffmpeg = linux::ensure_ffmpeg(&deps_dir, &target_arch());
+    let x264 = linux_ensure_x264(&deps_dir, arch_suffix);
+
+    linux_cmake_configure(&obs_src, &build_dir, &ffmpeg, &x264);
+    linux_cmake_build(&build_dir, &ffmpeg, &x264);
+    let lib_dir = linux_emit_link_directives(&build_dir, config, &ffmpeg);
+    generate_bindings(&manifest_dir, &obs_src, &build_dir, Some(ffmpeg.include()));
+
+    // Consumed downstream as DEP_OBS_*: the build dir/config (same keys as the
+    // other platforms), the rundir lib dir holding libobs.so.30,
+    // libobs-opengl.so.30 and obs-plugins/, and the FFmpeg bundle (the same
+    // one ffmpeg-sys exports as DEP_FFMPEG_DEPS_*).
+    println!("cargo:obs_build_dir={}", build_dir.display());
+    println!("cargo:obs_build_config={config}");
+    println!("cargo:obs_lib_dir={}", lib_dir.display());
+    println!("cargo:deps_root={}", ffmpeg.root.display());
+    println!("cargo:deps_lib={}", ffmpeg.lib().display());
+}
+
+/// Builds x264 from [`X264_COMMIT`] into `<.deps>/x264-<commit>-<arch>` (once)
+/// and returns that prefix.
+///
+/// `--enable-static --enable-pic`: the archive is linked into obs-x264.so, a
+/// shared object, so it must be position independent. `--disable-cli`: only
+/// the library is wanted. `--disable-opencl`: OBS never enables the OpenCL
+/// lookahead, and disabling it drops x264's runtime dlopen of libOpenCL.
+///
+/// Lives under `.deps` next to the FFmpeg bundle, not in the OBS build dir, so
+/// CI's `.deps` cache and worktrees sharing `.deps` reuse it; the file lock is
+/// for the same sharing. The prefix name carries the commit, so a pin bump
+/// builds side by side instead of reusing a stale archive.
+fn linux_ensure_x264(deps_dir: &Path, arch_suffix: &str) -> PathBuf {
+    use obs_build_support::linux::run;
+
+    let prefix = deps_dir.join(format!("x264-{}-{arch_suffix}", &X264_COMMIT[..12]));
+    let marker = prefix.join(".obs-express-complete");
+    let is_complete = || std::fs::read_to_string(&marker).is_ok_and(|s| s.trim() == X264_COMMIT);
+    if is_complete() {
+        return prefix;
+    }
+
+    std::fs::create_dir_all(deps_dir).unwrap();
+    let lock = std::fs::File::create(deps_dir.join(".x264.lock")).expect("create x264 lock");
+    lock.lock().expect("lock x264 build");
+    if is_complete() {
+        return prefix;
+    }
+
+    let src = deps_dir.join(format!(".x264-src-{arch_suffix}"));
+    let _ = std::fs::remove_dir_all(&src);
+    let _ = std::fs::remove_dir_all(&prefix);
+    std::fs::create_dir_all(&src).unwrap();
+    let git = |args: &[&str]| {
+        let mut cmd = Command::new("git");
+        cmd.arg("-C").arg(&src).args(args);
+        run(&mut cmd);
+    };
+    git(&["init", "-q"]);
+    git(&["fetch", "-q", "--depth", "1", X264_REPO, X264_COMMIT]);
+    git(&[
+        "-c",
+        "advice.detachedHead=false",
+        "checkout",
+        "-q",
+        "FETCH_HEAD",
+    ]);
+    let head = Command::new("git")
+        .arg("-C")
+        .arg(&src)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git rev-parse");
+    let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+    assert_eq!(
+        head, X264_COMMIT,
+        "x264 checkout is at {head}, expected the pinned {X264_COMMIT}"
+    );
+
+    run(Command::new("./configure")
+        .current_dir(&src)
+        .arg(format!("--prefix={}", prefix.display()))
+        .args([
+            "--enable-static",
+            "--enable-pic",
+            "--disable-cli",
+            "--disable-opencl",
+        ]));
+    let jobs = env::var("NUM_JOBS").unwrap_or_else(|_| "4".into());
+    run(Command::new("make")
+        .current_dir(&src)
+        .arg(format!("-j{jobs}")));
+    run(Command::new("make").current_dir(&src).arg("install"));
+    assert!(
+        prefix.join("lib/libx264.a").exists() && prefix.join("include/x264.h").exists(),
+        "x264 install did not produce lib/libx264.a + include/x264.h under {}",
+        prefix.display()
+    );
+
+    std::fs::write(&marker, X264_COMMIT).unwrap();
+    let _ = std::fs::remove_dir_all(&src);
+    prefix
+}
+
+/// `PKG_CONFIG_PATH` with the bundled FFmpeg and x264 first.
+///
+/// OBS's FindFFmpeg / FindLibx264 consult pkg-config for versions and extra
+/// cflags even when the include/library cache variables are preset; putting
+/// our `.pc` files first guarantees they describe our copies (BtbN's are
+/// `${pcfiledir}`-relative, so they are valid wherever the bundle sits). The
+/// system path is kept, not replaced: PipeWire, Gio, libva and the rest are
+/// found through it.
+fn linux_pkg_config_path(ffmpeg: &obs_build_support::linux::FfmpegBundle, x264: &Path) -> String {
+    let mut parts = vec![
+        ffmpeg.pkgconfig().display().to_string(),
+        x264.join("lib/pkgconfig").display().to_string(),
+    ];
+    if let Ok(existing) = env::var("PKG_CONFIG_PATH") {
+        if !existing.is_empty() {
+            parts.push(existing);
+        }
+    }
+    parts.join(":")
+}
+
+fn linux_cmake_configure(
+    obs_src: &Path,
+    build_dir: &Path,
+    ffmpeg: &obs_build_support::linux::FfmpegBundle,
+    x264: &Path,
+) {
+    let mut args: Vec<String> = vec![
+        "-G".into(),
+        "Ninja".into(),
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo".into(),
+        format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()),
+        // See the macOS branch: no warnings-as-errors for the vendored tree.
+        "-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF".into(),
+        format!("-DCMAKE_INSTALL_PREFIX={LINUX_INSTALL_PREFIX}"),
+        // GNUInstallDirs picks lib/x86_64-linux-gnu for a /usr prefix; pin the
+        // flat `lib` the staging code expects under rundir.
+        "-DCMAKE_INSTALL_LIBDIR=lib".into(),
+        // The same set Windows disables...
+        "-DENABLE_FRONTEND=OFF".into(),
+        "-DENABLE_UI=OFF".into(),
+        "-DENABLE_SCRIPTING=OFF".into(),
+        "-DENABLE_BROWSER=OFF".into(),
+        "-DENABLE_WEBSOCKET=OFF".into(),
+        "-DENABLE_VST=OFF".into(),
+        "-DENABLE_AJA=OFF".into(),
+        "-DENABLE_DECKLINK=OFF".into(),
+        "-DENABLE_WEBRTC=OFF".into(),
+        "-DENABLE_NEW_MPEGTS_OUTPUT=OFF".into(),
+        // ...plus Linux plugins whose configure hard-requires packages we
+        // neither ship nor use: VLC (vlc/libvlc.h), text-freetype2 (Freetype +
+        // Fontconfig), ALSA (PulseAudio covers audio capture), and the speexdsp
+        // noise suppressor in obs-filters (libspeexdsp).
+        "-DENABLE_VLC=OFF".into(),
+        "-DENABLE_FREETYPE=OFF".into(),
+        "-DENABLE_ALSA=OFF".into(),
+        "-DENABLE_SPEEXDSP=OFF".into(),
+        // Hardware encoding is out of scope on Linux (--hw-accel falls back to
+        // x264): no NVENC (FFnvcodec) or QSV (libvpl). The VAAPI encoder inside
+        // obs-ffmpeg has no switch and is compiled regardless; it is simply
+        // never selected.
+        "-DENABLE_NVENC=OFF".into(),
+        "-DENABLE_QSV11=OFF".into(),
+        // rtmp-services is always built; stop it from fetching service lists.
+        "-DENABLE_SERVICE_UPDATES=OFF".into(),
+        // The capture backends this port exists for, explicitly ON so that a
+        // missing -dev package fails configure rather than silently dropping
+        // Wayland or webcam support.
+        "-DENABLE_PIPEWIRE=ON".into(),
+        "-DENABLE_WAYLAND=ON".into(),
+        "-DENABLE_PULSEAUDIO=ON".into(),
+        "-DENABLE_V4L2=ON".into(),
+        // $ORIGIN-relative INSTALL_RPATHs. The build tree itself keeps absolute
+        // RUNPATHs into rundir (so it runs in place), and the copies that
+        // obs-express's build script stages are re-pointed at $ORIGIN with
+        // patchelf, so neither relies on this; it only makes a `cmake
+        // --install` of this tree relocatable as well.
+        "-DENABLE_RELOCATABLE=ON".into(),
+        // Search our prefixes before the system's.
+        format!(
+            "-DCMAKE_PREFIX_PATH={};{}",
+            ffmpeg.root.display(),
+            x264.display()
+        ),
+        // Static x264 inside obs-x264.so: keep its symbols local. Otherwise the
+        // module exports x264_* and, ELF symbol interposition being
+        // process-global, another x264 in the process (a distro libx264 pulled
+        // in by some system library) could satisfy obs-x264's own calls with a
+        // different ABI, or ours could satisfy theirs.
+        "-DCMAKE_MODULE_LINKER_FLAGS=-Wl,--exclude-libs,libx264.a".into(),
+        // ...and give obs-x264.so its own DT_NEEDED on libm. The static archive
+        // calls exp/exp2/log etc., but obs-x264 links only libobs, so without
+        // this those references stay unversioned and resolve only by luck of
+        // libm already being loaded. The standard-libraries slot goes at the
+        // END of each link line, where --as-needed keeps it only for targets
+        // that actually use libm.
+        "-DCMAKE_C_STANDARD_LIBRARIES=-lm".into(),
+        format!("-DLibx264_INCLUDE_DIR={}", x264.join("include").display()),
+        format!("-DLibx264_LIBRARY={}", x264.join("lib/libx264.a").display()),
+        "-Wno-dev".into(),
+    ];
+    // Preset FindFFmpeg's per-component cache variables so every consumer
+    // (libobs, obs-ffmpeg, ffmpeg-mux, linux-v4l2, media-playback) resolves to
+    // the bundle, never to a system copy found through the default paths.
+    for c in [
+        "avcodec",
+        "avdevice",
+        "avfilter",
+        "avformat",
+        "avutil",
+        "swscale",
+        "swresample",
+    ] {
+        args.push(format!(
+            "-DFFmpeg_{c}_INCLUDE_DIR={}",
+            ffmpeg.include().display()
+        ));
+        args.push(format!(
+            "-DFFmpeg_{c}_LIBRARY={}",
+            ffmpeg.lib().join(format!("lib{c}.so")).display()
+        ));
+    }
+
+    // Unlike Windows (configure once, never again), re-run configure when the
+    // argument list changes: a bumped FFmpeg or x264 pin changes paths in it,
+    // and a stale cache would keep linking the old copies. cmake on an
+    // existing cache only updates what changed, so this is cheap.
+    let stamp = build_dir.join(".configure_args");
+    let signature = args.join("\n");
+    if build_dir.join("CMakeCache.txt").exists()
+        && std::fs::read_to_string(&stamp).is_ok_and(|s| s == signature)
+    {
+        return;
+    }
+
+    let status = Command::new("cmake")
+        .arg("-S")
+        .arg(obs_src)
+        .arg("-B")
+        .arg(build_dir)
+        .args(&args)
+        .env("PKG_CONFIG_PATH", linux_pkg_config_path(ffmpeg, x264))
+        .status()
+        .expect("Failed to run cmake configure");
+    assert!(
+        status.success(),
+        "cmake configure failed. On Debian/Ubuntu the build needs the OBS -dev packages \
+         listed in the Linux CI job (notably extra-cmake-modules, uuid-dev, \
+         libpipewire-0.3-dev, libwayland-dev, libxkbcommon-dev, libv4l-dev, libva-dev, \
+         libpci-dev, libdrm-dev, libmbedtls-dev, libcurl4-openssl-dev, libjansson-dev)."
+    );
+    std::fs::write(&stamp, signature).expect("write configure stamp");
+    // A (re)configure can change how existing targets link, so the target
+    // list alone no longer proves the build is current: drop the marker so
+    // `linux_cmake_build` runs (ninja rebuilds only what the change touched).
+    let _ = std::fs::remove_file(build_dir.join(".build_complete"));
+}
+
+fn linux_cmake_build(
+    build_dir: &Path,
+    ffmpeg: &obs_build_support::linux::FfmpegBundle,
+    x264: &Path,
+) {
+    let marker = build_dir.join(".build_complete");
+    if build_is_current(&marker, LINUX_TARGETS) {
+        return;
+    }
+
+    let mut cmd = Command::new("cmake");
+    cmd.arg("--build").arg(build_dir);
+    for target in LINUX_TARGETS {
+        cmd.arg("--target").arg(target);
+    }
+    // A build can re-run configure (a CMakeLists changed); keep it resolving
+    // the same FFmpeg/x264 as the initial configure did.
+    cmd.env("PKG_CONFIG_PATH", linux_pkg_config_path(ffmpeg, x264));
+    let status = cmd.status().expect("Failed to run cmake build");
+    assert!(status.success(), "cmake build failed");
+
+    write_build_marker(&marker, LINUX_TARGETS);
+}
+
+/// Links `libobs.so` and returns the rundir `lib` dir (libobs.so.30,
+/// libobs-opengl.so.30, obs-plugins/).
+///
+/// The link-search dir is the libobs target's own output dir, not rundir:
+/// rundir only receives the real file and its SONAME name (libobs.so.30), not
+/// the unversioned `libobs.so` development link `-lobs` needs. Binaries record
+/// `libobs.so.30` (the SONAME) either way.
+fn linux_emit_link_directives(
+    build_dir: &Path,
+    config: &str,
+    ffmpeg: &obs_build_support::linux::FfmpegBundle,
+) -> PathBuf {
+    let link_search = build_dir.join("libobs");
+    assert!(
+        link_search.join("libobs.so").exists(),
+        "libobs.so not found at {} — did the libobs target build?",
+        link_search.display()
+    );
+    let lib_dir = build_dir.join("rundir").join(config).join("lib");
+    assert!(
+        lib_dir.join("libobs.so.30").exists(),
+        "libobs.so.30 not found in the OBS rundir at {}",
+        lib_dir.display()
+    );
+
+    println!("cargo:rustc-link-search=native={}", link_search.display());
+    println!("cargo:rustc-link-lib=dylib=obs");
+
+    // Absolute RUNPATHs for this crate's own test harness. As on macOS,
+    // `rustc-link-arg` is package-scoped, so every executable-producing
+    // consumer repeats these from DEP_OBS_OBS_LIB_DIR / DEP_OBS_DEPS_LIB.
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", ffmpeg.lib().display());
+    lib_dir
+}
+
+// ---------------------------------------------------------------------------
 // Shared: bindgen + obs-deps include discovery (identical wrapper/allowlists)
 // ---------------------------------------------------------------------------
 
-fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
+/// `deps_include` is the FFmpeg header dir: the obs-deps bundle's `include`
+/// on Windows/macOS, the pinned BtbN bundle's on Linux.
+fn generate_bindings(
+    manifest_dir: &Path,
+    obs_src: &Path,
+    obs_build: &Path,
+    deps_include: Option<PathBuf>,
+) {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let bindings_path = out_dir.join("bindings.rs");
 
     let libobs_include = obs_src.join("libobs");
     let config_include = obs_build.join("config");
-    let deps_include = find_obs_deps_include(obs_src);
 
     let mut builder = bindgen::Builder::default()
         .header(manifest_dir.join("wrapper.h").to_str().unwrap())

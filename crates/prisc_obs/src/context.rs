@@ -87,11 +87,16 @@ impl ObsContext {
         let bin_c = CString::new(bin).unwrap();
         let data_c = CString::new(data).unwrap();
         unsafe { obs_sys::obs_add_module_path(bin_c.as_ptr(), data_c.as_ptr()) };
+        #[cfg(target_os = "linux")]
+        linux_modules::register_dir(bin);
     }
 
     pub fn load_all_modules(&self) {
         unsafe {
+            #[cfg(not(target_os = "linux"))]
             obs_sys::obs_load_all_modules();
+            #[cfg(target_os = "linux")]
+            linux_modules::load_registered();
             obs_sys::obs_post_load_modules();
         }
     }
@@ -114,5 +119,97 @@ impl ObsContext {
 
     pub fn get_audio(&self) -> *mut obs_sys::audio_t {
         unsafe { obs_sys::obs_get_audio() }
+    }
+}
+
+/// Linux: load plugins ONLY from the directories registered through
+/// [`ObsContext::add_module_path`], never from libobs's built-in defaults.
+///
+/// `obs_startup` calls `add_default_module_paths()` (libobs/obs-nix.c), which
+/// registers, ahead of anything we add:
+///   - `<exe dir>/../lib/obs-plugins` (exe-relative; e.g. a bundle unpacked to
+///     `/usr/local/obs-express` would pick up `/usr/local/lib/obs-plugins`),
+///   - the CWD-relative `../../obs-plugins/64bit`,
+///   - `OBS_INSTALL_PREFIX/lib/obs-plugins` and the Flatpak plugin dir.
+/// The bogus install prefix obs-sys compiles in neutralises only the third.
+/// `obs_load_all_modules` dlopens every `.so` found on any of those paths and
+/// has no duplicate-name check (obs-module.c load_all_callback), so a system
+/// OBS's `obs-ffmpeg.so` would load beside ours - dragging a second, system
+/// FFmpeg into the process and registering `ffmpeg_muxer` / `obs_x264` etc.
+/// against a foreign build first. There is no API to remove a module path, so
+/// instead we walk the same search (`obs_find_modules2`, which keeps libobs's
+/// `%module%` data-dir resolution) and open only modules that live directly in
+/// one of our own directories.
+///
+/// Windows and macOS keep plain `obs_load_all_modules`: their default paths
+/// are exe-relative into our own bundle layout, and changing them is out of
+/// scope for the Linux port.
+#[cfg(target_os = "linux")]
+mod linux_modules {
+    use std::collections::HashSet;
+    use std::ffi::{c_void, CStr};
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
+
+    /// Directories passed to `add_module_path`, i.e. the only places a plugin
+    /// may be loaded from.
+    static DIRS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+    pub(super) fn register_dir(bin: &str) {
+        // A `%module%` pattern (per-module subdirectories) is not something
+        // obs-express uses on Linux; take the part before it so the check
+        // below would still accept those modules' parent tree.
+        let base = bin.split("%module%").next().unwrap_or(bin);
+        let mut dirs = DIRS.lock().unwrap_or_else(|e| e.into_inner());
+        dirs.push(PathBuf::from(base));
+    }
+
+    struct Walk {
+        dirs: Vec<PathBuf>,
+        seen: HashSet<String>,
+    }
+
+    unsafe extern "C" fn on_module(param: *mut c_void, info: *const obs_sys::obs_module_info2) {
+        let walk = &mut *(param as *mut Walk);
+        let info = &*info;
+        if info.bin_path.is_null() || info.name.is_null() {
+            return;
+        }
+        let bin_path = CStr::from_ptr(info.bin_path).to_string_lossy().into_owned();
+        let name = CStr::from_ptr(info.name).to_string_lossy().into_owned();
+        // Path comparison ignores trailing and doubled separators, which
+        // libobs may introduce when it appends '/' to the search dir.
+        let ours = walk
+            .dirs
+            .iter()
+            .any(|d| Path::new(&bin_path).starts_with(d));
+        if !ours {
+            return;
+        }
+        // The same directory registered twice would be globbed twice.
+        if !walk.seen.insert(name) {
+            return;
+        }
+        let mut module: *mut obs_sys::obs_module_t = std::ptr::null_mut();
+        // obs_open_module logs its own warning on dlopen / version failures;
+        // a non-zero code here just means "skip", as in load_all_callback.
+        if obs_sys::obs_open_module(&mut module, info.bin_path, info.data_path) != 0
+            || module.is_null()
+        {
+            return;
+        }
+        // On failure libobs logs "Failed to initialize module" and leaves the
+        // module on its loaded list; load_all_callback frees it, but
+        // free_module is not exported and an inert entry is harmless.
+        obs_sys::obs_init_module(module);
+    }
+
+    pub(super) unsafe fn load_registered() {
+        let dirs = DIRS.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let mut walk = Walk {
+            dirs,
+            seen: HashSet::new(),
+        };
+        obs_sys::obs_find_modules2(Some(on_module), &mut walk as *mut Walk as *mut c_void);
     }
 }

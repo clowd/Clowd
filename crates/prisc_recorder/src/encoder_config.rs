@@ -27,7 +27,8 @@ pub const KEYINT_SEC: i64 = 2;
 
 /// Picks the video encoder id from the available list. Hardware priority
 /// (Windows): NVENC → AMF → QSV; anything else (or `hw_accel == false`) falls
-/// back to x264. macOS scans for a VideoToolbox H.264 encoder instead.
+/// back to x264. macOS scans for a VideoToolbox H.264 encoder instead; Linux
+/// has no hardware selection and always falls back.
 pub fn select_encoder(available: &[String], hw_accel: bool) -> String {
     if hw_accel {
         if let Some(id) = select_hardware_encoder(available) {
@@ -38,7 +39,7 @@ pub fn select_encoder(available: &[String], hw_accel: bool) -> String {
     X264_ID.to_string()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
 fn select_hardware_encoder(available: &[String]) -> Option<String> {
     const PRIORITY: [&str; 3] = ["obs_nvenc_h264_tex", "h264_texture_amf", "obs_qsv11_v2"];
     PRIORITY
@@ -50,6 +51,16 @@ fn select_hardware_encoder(available: &[String]) -> Option<String> {
 #[cfg(target_os = "macos")]
 fn select_hardware_encoder(available: &[String]) -> Option<String> {
     select_videotoolbox_encoder(available)
+}
+
+/// Linux: never. Hardware encoding is out of scope for the Linux port: the
+/// OBS build disables the NVENC and QSV plugins, and the VAAPI encoders that
+/// obs-ffmpeg always compiles on Linux are deliberately not selected.
+/// `--hw-accel` therefore takes the same "falling back to x264" path as a
+/// machine without a hardware encoder.
+#[cfg(target_os = "linux")]
+fn select_hardware_encoder(_available: &[String]) -> Option<String> {
+    None
 }
 
 /// VideoToolbox registers one OBS encoder per OS-enumerated VT encoder, id =
@@ -194,7 +205,7 @@ mod tests {
         assert_eq!(select_encoder(&available, false), "obs_x264");
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
     #[test]
     fn hw_priority_nvenc_first() {
         let available = ids(&[
@@ -206,18 +217,33 @@ mod tests {
         assert_eq!(select_encoder(&available, true), "obs_nvenc_h264_tex");
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
     #[test]
     fn hw_priority_amf_over_qsv() {
         let available = ids(&["obs_qsv11_v2", "h264_texture_amf", "obs_x264"]);
         assert_eq!(select_encoder(&available, true), "h264_texture_amf");
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
     #[test]
     fn hw_qsv_when_only_qsv() {
         let available = ids(&["obs_qsv11_v2", "obs_x264"]);
         assert_eq!(select_encoder(&available, true), "obs_qsv11_v2");
+    }
+
+    /// Even with every Windows hardware id registered (they are not, on
+    /// Linux), `--hw-accel` must not pick one there.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_never_selects_hardware() {
+        let available = ids(&[
+            "obs_nvenc_h264_tex",
+            "h264_texture_amf",
+            "obs_qsv11_v2",
+            "ffmpeg_vaapi_tex",
+            "obs_x264",
+        ]);
+        assert_eq!(select_encoder(&available, true), "obs_x264");
     }
 
     #[test]

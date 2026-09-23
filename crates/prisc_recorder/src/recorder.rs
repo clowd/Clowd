@@ -6,12 +6,13 @@
 //! skipped, §1.4). Runtime `configure` failures never exit: they ack with
 //! `configure_error` and let the parent decide.
 
+use std::collections::VecDeque;
 use std::ffi::CString;
 use std::fmt::Display;
 use std::io::BufRead;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
 use obs::audio::AudioInfo;
@@ -30,8 +31,8 @@ use crate::commands::{self, Command};
 use crate::encoder_config::{self, EncoderConfig};
 use crate::frame_clock::{FrameClock, FrameClockCallback};
 use crate::input_capture::InputCapture;
-use crate::platform;
-use crate::region::{self, Rect};
+use crate::platform::{self, DisplayCaptureMode};
+use crate::region::{self, Rect, RegionPlan};
 use crate::settings::Settings;
 use crate::status::{self, LevelPeaks, RecordingClock};
 use crate::tracker::{self, MouseTracker};
@@ -47,6 +48,27 @@ const STOP_WARN_INTERVAL: Duration = Duration::from_secs(10);
 /// [`Recorder::wait_for_flush`]). Generous: mp4_output's buffered serializer
 /// can hold up to 256 MiB that still needs to reach a possibly slow disk.
 const FLUSH_DEADLINE: Duration = Duration::from_secs(30);
+
+/// How long [`DisplayCaptureMode::Picker`] waits for the user to choose a
+/// screen or window in the desktop portal's dialog. The portal itself never
+/// times out, and a dialog left open (or hidden behind other windows) would
+/// otherwise hold the recorder in construction forever; the parent can still
+/// `quit` / signal at any point before this.
+const PICKER_TIMEOUT: Duration = Duration::from_secs(120);
+const PICKER_POLL_INTERVAL: Duration = Duration::from_millis(50);
+/// Canvas the pipeline is first brought up with in picker mode, before the
+/// chosen stream's size is known: graphics must exist to load modules and to
+/// create the capture source at all. Replaced by the real size before any
+/// encoder is bound, so the value is never recorded.
+const PICKER_PLACEHOLDER_CANVAS: (u32, u32) = (1280, 720);
+/// libobs log lines that mean the portal's screen-share dialog ended without a
+/// stream: linux-pipewire reports a cancelled or refused request, and any
+/// portal error, only as a log line and then leaves the source 0x0 forever
+/// (plugins/linux-pipewire/screencast-portal.c — "Failed to create session /
+/// select source / start screencast, denied or cancelled by user", "Error
+/// selecting screencast source", "Error creating screencast session", "Error
+/// retrieving pipewire fd").
+const PORTAL_FAILURE_LINES: &[&str] = &["denied or cancelled by user", "[pipewire] Error"];
 
 fn fail(msg: impl Display) -> ! {
     eprintln!("Fatal: {msg}");
@@ -282,6 +304,9 @@ pub struct Recorder {
     encoder_types: Vec<String>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: mpsc::Receiver<Command>,
+    /// Commands received before `run` (only picker mode reads the channel
+    /// that early); `run` handles them first, in arrival order.
+    early_commands: VecDeque<Command>,
 }
 
 impl Recorder {
@@ -312,6 +337,26 @@ impl Recorder {
         // `configure` diffs against reality.
         settings.webcam_device = webcam_device.clone().unwrap_or_default();
 
+        // Under a Wayland session the portal's picker decides what is
+        // recorded (DisplayCaptureMode::Picker), so there is nothing a
+        // monitor id or a region could name. Rejected up front — the mode is
+        // pure environment inspection, so this happens before libobs or the
+        // compositor is touched.
+        let capture_mode = platform::display_capture_mode();
+        if capture_mode == DisplayCaptureMode::Picker {
+            for (flag, given) in [
+                ("--monitor", cli.monitor.is_some()),
+                ("--region", cli.region.is_some()),
+            ] {
+                if given {
+                    fail_args(format_args!(
+                        "{flag} is not supported under a Wayland session: the desktop portal's \
+                         screen-share dialog chooses the monitor or window to record"
+                    ));
+                }
+            }
+        }
+
         // 1. Log/crash handlers were installed first thing in main (stdout must
         //    stay protocol-only from the first libobs line).
         platform::init_process();
@@ -330,12 +375,27 @@ impl Recorder {
             context.add_data_path(libobs_data);
         }
 
-        // 3. Resolve region.
-        let monitors = platform::enumerate_monitors();
-        if monitors.is_empty() {
+        // 3. Resolve region. Picker mode has no monitors to plan against: a
+        //    placeholder canvas stands in until the user has answered the
+        //    portal dialog, and step 7 replaces it with the chosen stream's
+        //    size.
+        let picker = capture_mode == DisplayCaptureMode::Picker;
+        let monitors = if picker {
+            Vec::new()
+        } else {
+            platform::enumerate_monitors()
+        };
+        if monitors.is_empty() && !picker {
             fail("No displays found");
         }
-        let capture_region = if let Some(ref region_str) = cli.region {
+        let mut capture_region = if picker {
+            Rect {
+                x: 0,
+                y: 0,
+                w: PICKER_PLACEHOLDER_CANVAS.0,
+                h: PICKER_PLACEHOLDER_CANVAS.1,
+            }
+        } else if let Some(ref region_str) = cli.region {
             match region::parse_region(region_str) {
                 Ok(r) => r,
                 Err(e) => fail_args(e),
@@ -362,9 +422,17 @@ impl Recorder {
                 h: primary.height,
             }
         };
-        let plan = match region::plan_region(capture_region, &monitors) {
-            Ok(p) => p,
-            Err(e) => fail_args(e),
+        let mut plan = if picker {
+            RegionPlan {
+                canvas: PICKER_PLACEHOLDER_CANVAS,
+                canvas_scale: 1.0,
+                items: Vec::new(),
+            }
+        } else {
+            match region::plan_region(capture_region, &monitors) {
+                Ok(p) => p,
+                Err(e) => fail_args(e),
+            }
         };
 
         // 4. Video (canvas = region plan, output = single-pass scaled).
@@ -384,17 +452,17 @@ impl Recorder {
                 "Warning: no graphics adapter could be matched to the captured display(s);                  using the default. Under --capture-method dxgi the capture may stay black."
             ),
         }
-        let video_info = VideoInfo {
+        let video_info_for = |canvas: (u32, u32), (out_w, out_h): (u32, u32)| VideoInfo {
             graphics_module: platform::GRAPHICS_MODULE,
-            base_width: plan.canvas.0,
-            base_height: plan.canvas.1,
+            base_width: canvas.0,
+            base_height: canvas.1,
             output_width: out_w,
             output_height: out_h,
             fps_num: settings.fps,
             fps_den: 1,
             adapter: adapter.unwrap_or(0),
         };
-        if let Err(e) = context.reset_video(&video_info) {
+        if let Err(e) = context.reset_video(&video_info_for(plan.canvas, (out_w, out_h))) {
             fail(format_args!("Failed to reset OBS video: {e}"));
         }
 
@@ -416,14 +484,29 @@ impl Recorder {
         }
         // NOT obs_source_create != null: libobs creates a placeholder source for
         // unknown ids; get_display_name returns null exactly when unregistered.
-        let display_capture_c = CString::new(platform::DISPLAY_CAPTURE_ID).unwrap();
+        let display_capture_c = CString::new(platform::display_capture_id()).unwrap();
         let display_name =
             unsafe { obs_sys::obs_source_get_display_name(display_capture_c.as_ptr()) };
+        if display_name.is_null() && picker {
+            // linux-pipewire registers the portal source only after asking
+            // xdg-desktop-portal which capture types it offers; no answer (no
+            // session bus, no portal, no ScreenCast backend) means no source.
+            fail(format_args!(
+                "Display capture source '{}' is not registered — the screen-share portal is \
+                 unavailable. Wayland capture needs xdg-desktop-portal with a ScreenCast \
+                 backend for this desktop (e.g. xdg-desktop-portal-gnome / -kde / -wlr) on the \
+                 session D-Bus, and the linux-pipewire plugin.\n  module bin:  {}\n  module \
+                 data: {}",
+                platform::display_capture_id(),
+                paths.module_bin,
+                paths.module_data
+            ));
+        }
         if display_name.is_null() {
             fail(format_args!(
                 "Display capture source '{}' is not registered — the capture plugin failed to \
                                load.\n  module bin:  {}\n  module data: {}",
-                platform::DISPLAY_CAPTURE_ID,
+                platform::display_capture_id(),
                 paths.module_bin,
                 paths.module_data
             ));
@@ -456,7 +539,7 @@ impl Recorder {
             let source_settings =
                 platform::display_capture_settings(m, settings.cursor, cli.capture_method);
             let source = match ObsSource::create(
-                platform::DISPLAY_CAPTURE_ID,
+                platform::display_capture_id(),
                 &format!("display_{i}"),
                 Some(&source_settings),
             ) {
@@ -469,6 +552,71 @@ impl Recorder {
             let scene_item = scene.add(&source);
             scene_item.set_pos(item.pos.0, item.pos.1);
             scene_item.set_scale(item.scale, item.scale);
+            display_sources.push(source);
+            scene_items.push(scene_item);
+        }
+
+        // The command channel exists before the pipeline is complete because
+        // picker mode has to honour `quit` while it waits for the user.
+        let (cmd_tx, cmd_rx) = mpsc::channel::<Command>();
+        // Commands that arrived during the picker wait, replayed by `run`
+        // ahead of anything newer so their order is preserved.
+        let mut early_commands = VecDeque::new();
+
+        // Picker mode: the single portal source, created now that the scene
+        // exists, and the wait for the user's choice — which finally fixes
+        // the canvas. All of it happens before any encoder, view mix or
+        // output exists, the one window in which `obs_reset_video` is free
+        // (see the invariant in `configure_full`).
+        if picker {
+            // Registered before the source: creating it starts the portal
+            // request chain, and a refusal can be logged at any point after.
+            let portal_failure = obs::log::watch(PORTAL_FAILURE_LINES);
+            let source = match ObsSource::create(
+                platform::display_capture_id(),
+                "display_0",
+                Some(&platform::cursor_update_settings(settings.cursor)),
+            ) {
+                Ok(s) => s,
+                Err(e) => fail(format_args!(
+                    "Failed to create the screen-share capture: {e}"
+                )),
+            };
+            let scene_item = scene.add(&source);
+            // Active while negotiating, the same as in the finished pipeline.
+            context.set_output_source_raw(0, scene.get_source());
+
+            // `quit` / Ctrl+C must work while the dialog is open, so the
+            // stdin reader and signal handler start here rather than in
+            // `run` (both are once-per-process; `run`'s calls become no-ops).
+            spawn_stdin_thread(cmd_tx.clone());
+            install_signal_handler(cmd_tx.clone());
+            let (w, h) = wait_for_picker(&source, &portal_failure, &cmd_rx, &mut early_commands);
+            drop(portal_failure);
+
+            // The canvas is the stream size rounded UP to even (4:2:0 needs
+            // even dimensions), with the item at the origin, unscaled: an odd
+            // size gets a 1px black edge instead of a resample of the whole
+            // frame. Bounds cap the item at the canvas (OBS_BOUNDS_MAX_ONLY
+            // scales down only when larger, anchored top-left), so a chosen
+            // window that later grows is letterboxed rather than cropped, and
+            // one that shrinks leaves black at the right/bottom.
+            let canvas = ((w + 1) & !1, (h + 1) & !1);
+            scene_item.set_bounds_type(obs_sys::obs_bounds_type_OBS_BOUNDS_MAX_ONLY);
+            scene_item.set_bounds_alignment(obs_sys::OBS_ALIGN_LEFT | obs_sys::OBS_ALIGN_TOP);
+            scene_item.set_bounds(canvas.0 as f32, canvas.1 as f32);
+            eprintln!(
+                "Screen-share stream chosen: {w}x{h}, recording a {}x{} canvas",
+                canvas.0, canvas.1
+            );
+
+            capture_region = Rect { x: 0, y: 0, w, h };
+            plan.canvas = canvas;
+            let output_size =
+                region::compute_output_size(canvas, settings.max_width, settings.max_height);
+            if let Err(e) = context.reset_video(&video_info_for(canvas, output_size)) {
+                fail(format_args!("Failed to reset OBS video: {e}"));
+            }
             display_sources.push(source);
             scene_items.push(scene_item);
         }
@@ -650,7 +798,6 @@ impl Recorder {
         };
 
         // 10. Signals → command-loop injection.
-        let (cmd_tx, cmd_rx) = mpsc::channel::<Command>();
         let start_tx = cmd_tx.clone();
         let sig_start = SignalConnection::connect(output.signal_handler(), "start", move || {
             let _ = start_tx.send(Command::OutputStarted);
@@ -701,6 +848,7 @@ impl Recorder {
             encoder_types,
             cmd_tx,
             cmd_rx,
+            early_commands,
         }
     }
 
@@ -709,8 +857,8 @@ impl Recorder {
     pub fn run(&mut self, pause: bool) -> ! {
         status::emit_simple("initialized");
 
-        self.spawn_stdin_thread();
-        self.install_signal_handler();
+        spawn_stdin_thread(self.cmd_tx.clone());
+        install_signal_handler(self.cmd_tx.clone());
 
         let mut start_requested = false;
         let mut started = false;
@@ -737,7 +885,11 @@ impl Recorder {
         }
 
         loop {
-            let cmd = match self.cmd_rx.recv() {
+            let next = match self.early_commands.pop_front() {
+                Some(c) => Ok(c),
+                None => self.cmd_rx.recv(),
+            };
+            let cmd = match next {
                 Ok(c) => c,
                 // Unreachable in practice (self holds a sender), but never spin.
                 Err(_) => fail("Command channel closed unexpectedly"),
@@ -1506,11 +1658,75 @@ impl Recorder {
             }
         }
     }
+}
 
-    /// stdin reader: line-oriented commands; EOF is equivalent to `quit` (the
-    /// orphan-safety mechanism — a dead parent closes the pipe).
-    fn spawn_stdin_thread(&self) {
-        let tx = self.cmd_tx.clone();
+/// Blocks until picker mode's portal source reports a size, i.e. the user has
+/// chosen a screen or window and the PipeWire stream has negotiated a format
+/// (linux-pipewire reports 0x0 until then). Returns that size.
+///
+/// Ends the process instead of returning when the dialog was cancelled or the
+/// portal failed (seen through `portal_failure`, since the plugin reports
+/// that only as a log line), on [`PICKER_TIMEOUT`], or on `quit` — which is
+/// answered exactly like a `quit` before `start` in `run`: a
+/// `stopped_recording` "Cancelled before recording started", exit 0. Any
+/// other command is kept in `early` for `run` to handle once the pipeline
+/// exists.
+fn wait_for_picker(
+    source: &ObsSource,
+    portal_failure: &obs::log::LogWatch,
+    cmd_rx: &mpsc::Receiver<Command>,
+    early: &mut VecDeque<Command>,
+) -> (u32, u32) {
+    eprintln!(
+        "Waiting for a screen or window to be chosen in the screen-share dialog (up to {} s)...",
+        PICKER_TIMEOUT.as_secs()
+    );
+    let deadline = Instant::now() + PICKER_TIMEOUT;
+    loop {
+        let (w, h) = (source.get_width(), source.get_height());
+        if w > 0 && h > 0 {
+            return (w, h);
+        }
+        if let Some(line) = portal_failure.matched() {
+            fail(format_args!(
+                "the screen-share dialog was cancelled or failed; nothing to record ({})",
+                line.trim()
+            ));
+        }
+        if Instant::now() >= deadline {
+            fail(format_args!(
+                "no screen or window was chosen in the screen-share dialog within {} s",
+                PICKER_TIMEOUT.as_secs()
+            ));
+        }
+        match cmd_rx.recv_timeout(PICKER_POLL_INTERVAL) {
+            Ok(Command::Quit) => {
+                status::emit_json(serde_json::json!({
+                    "type": "stopped_recording",
+                    "code": 0,
+                    "message": "Cancelled before recording started",
+                    "error": null,
+                }));
+                platform::exit_process(0);
+            }
+            Ok(other) => early.push_back(other),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            // Unreachable in practice (the caller holds a sender).
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                fail("Command channel closed unexpectedly")
+            }
+        }
+    }
+}
+
+/// stdin reader: line-oriented commands; EOF is equivalent to `quit` (the
+/// orphan-safety mechanism — a dead parent closes the pipe).
+///
+/// Once per process: picker mode starts it during construction, and `run`'s
+/// call is then a no-op — two readers would split stdin lines between them.
+fn spawn_stdin_thread(tx: mpsc::Sender<Command>) {
+    static STARTED: Once = Once::new();
+    STARTED.call_once(move || {
         std::thread::spawn(move || {
             let stdin = std::io::stdin();
             let mut lines = stdin.lock().lines();
@@ -1537,27 +1753,31 @@ impl Recorder {
                 }
             }
         });
-    }
+    });
+}
 
-    /// CTRL_C/CTRL_BREAK/CTRL_CLOSE (Windows) / SIGINT+SIGTERM (POSIX) behave
-    /// exactly like stdin `quit` (§1.5).
-    ///
-    /// Windows uses a directly-registered `SetConsoleCtrlHandler` routine, NOT
-    /// the ctrlc crate: for CTRL_CLOSE/LOGOFF/SHUTDOWN the OS grace period
-    /// lasts only while the HandlerRoutine itself is executing — returning
-    /// from it terminates the process immediately. ctrlc's registered routine
-    /// returns in microseconds (it only signals a worker thread), which would
-    /// forfeit the grace window and leave the mp4 unflushed. Our routine sends
-    /// `quit` and then blocks; the stop sequence terminates the process via
-    /// `exit_process` underneath it.
-    #[cfg(windows)]
-    fn install_signal_handler(&self) {
-        console_ctrl::install(self.cmd_tx.clone());
-    }
+/// CTRL_C/CTRL_BREAK/CTRL_CLOSE (Windows) / SIGINT+SIGTERM (POSIX) behave
+/// exactly like stdin `quit` (§1.5). Once per process, like
+/// [`spawn_stdin_thread`].
+///
+/// Windows uses a directly-registered `SetConsoleCtrlHandler` routine, NOT
+/// the ctrlc crate: for CTRL_CLOSE/LOGOFF/SHUTDOWN the OS grace period
+/// lasts only while the HandlerRoutine itself is executing — returning
+/// from it terminates the process immediately. ctrlc's registered routine
+/// returns in microseconds (it only signals a worker thread), which would
+/// forfeit the grace window and leave the mp4 unflushed. Our routine sends
+/// `quit` and then blocks; the stop sequence terminates the process via
+/// `exit_process` underneath it.
+#[cfg(windows)]
+fn install_signal_handler(tx: mpsc::Sender<Command>) {
+    static INSTALLED: Once = Once::new();
+    INSTALLED.call_once(move || console_ctrl::install(tx));
+}
 
-    #[cfg(not(windows))]
-    fn install_signal_handler(&self) {
-        let tx = self.cmd_tx.clone();
+#[cfg(not(windows))]
+fn install_signal_handler(tx: mpsc::Sender<Command>) {
+    static INSTALLED: Once = Once::new();
+    INSTALLED.call_once(move || {
         let result = ctrlc::set_handler(move || {
             let _ = tx.send(Command::Quit);
             loop {
@@ -1567,7 +1787,7 @@ impl Recorder {
         if let Err(e) = result {
             eprintln!("Warning: failed to install console signal handler: {e}");
         }
-    }
+    });
 }
 
 #[cfg(windows)]

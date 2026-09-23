@@ -244,6 +244,11 @@ mod appkit;
 #[cfg(target_os = "macos")]
 pub use appkit::run;
 
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::run;
+
 #[cfg(test)]
 mod tests {
     use super::*;

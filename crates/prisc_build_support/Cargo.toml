@@ -1,0 +1,11 @@
+[package]
+name = "obs-build-support"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Build-script helpers shared by the workspace's build.rs files (Linux runtime bundle)."
+
+# Deliberately dependency-free: it is a build-dependency of every crate that
+# links libobs or FFmpeg, so anything added here lands in each of their
+# build-script compiles.
+[dependencies]

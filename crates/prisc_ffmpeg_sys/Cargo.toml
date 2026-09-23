@@ -17,4 +17,5 @@ doctest = false
 libc = { workspace = true }
 
 [build-dependencies]
+obs-build-support = { workspace = true }
 bindgen = { workspace = true }

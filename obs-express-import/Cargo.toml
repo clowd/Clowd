@@ -8,6 +8,7 @@ members = [
     "crates/clowd-share-region",
     "crates/ffmpeg-sys",
     "crates/vid2gif",
+    "crates/build-support",
 ]
 
 [workspace.dependencies]
@@ -17,6 +18,9 @@ obs-sys = { path = "crates/obs-sys" }
 obs = { path = "crates/obs" }
 obs-platform = { path = "crates/obs-platform" }
 ffmpeg-sys = { path = "crates/ffmpeg-sys" }
+# Build-dependency only: the Linux FFmpeg pin and staging helpers shared by the
+# build scripts (crates/build-support).
+obs-build-support = { path = "crates/build-support" }
 
 # External crates. Versions (and shared feature sets) live here only; members
 # declare `{ workspace = true }`.

@@ -31,6 +31,12 @@
 //! but no keys. And a tap the OS has disabled (`kCGEventTapDisabledBy*`) stays
 //! dead until re-armed, which the tap callback does on the spot.
 
+// Linux has no hook (see its `imp` below), so the event model here — the
+// button bits, `RawEventKind`, `InputState` — has no producer there. It stays
+// compiled and unit-tested on Linux rather than being cfg'd out piecemeal,
+// hence the Linux-only allow.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
+
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// Mouse button bits of the frame-row `b` bitmask and the event-row `btn`
@@ -808,6 +814,35 @@ mod imp {
             drop(unsafe {
                 CFRetained::from_raw(NonNull::new_unchecked(self.runloop as *mut CFRunLoop))
             });
+        }
+    }
+}
+
+/// Linux: no global input hook. Wayland gives a non-focused client no access
+/// to other clients' input by design, and the input-capture sidecar that
+/// consumes this hook is rejected by `Cli::validate` on Linux, so `start`
+/// always fails with an explanation rather than recording nothing.
+///
+/// The hook type is uninhabited (it wraps [`std::convert::Infallible`]): since
+/// `start` can never produce one, the compiler proves `snapshot` unreachable
+/// instead of the stub returning a made-up empty state.
+#[cfg(target_os = "linux")]
+mod imp {
+    use std::convert::Infallible;
+
+    use super::EventSink;
+
+    pub struct InputHook {
+        never: Infallible,
+    }
+
+    impl InputHook {
+        pub fn start(_sink: EventSink) -> Result<InputHook, String> {
+            Err("global input capture is not supported on Linux".to_string())
+        }
+
+        pub fn snapshot(&self) -> (u32, Vec<u32>) {
+            match self.never {}
         }
     }
 }

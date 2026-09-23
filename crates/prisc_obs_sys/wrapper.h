@@ -12,3 +12,10 @@
 /* os_gettime_ns: the monotonic clock obs_get_video_frame_time is based on —
  * input-capture event timestamps use it so both share one timebase. */
 #include <util/platform.h>
+
+#if defined(__linux__)
+/* obs_set_nix_platform / obs_set_nix_platform_display: libobs must be told
+ * X11-EGL vs Wayland (and handed the Display* / wl_display*) before
+ * obs_startup. Linux-only so the Windows/macOS bindings stay unchanged. */
+#include <obs-nix-platform.h>
+#endif

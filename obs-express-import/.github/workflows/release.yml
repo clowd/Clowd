@@ -1,8 +1,9 @@
 name: Release
 
 # Manually dispatched. Bumps the obs-express version to the freetext input,
-# commits it, builds all four variants (via the reusable build.yml), and
-# publishes a GitHub Release with each build's zip attached as an asset.
+# commits it, builds all five variants (via the reusable build.yml), and
+# publishes a GitHub Release with each build's archive (.zip on Windows/macOS,
+# .tar.gz on Linux) attached as an asset.
 on:
   workflow_dispatch:
     inputs:
@@ -65,10 +66,10 @@ jobs:
     needs: [bump, build]
     runs-on: ubuntu-latest
     steps:
-      # Each build job uploads an already-zipped bundle (see build.yml: the
-      # macOS tree would lose its execute bits and symlinks if it round-tripped
-      # through the artifact store unpacked), so the release attaches the
-      # artifacts as-is.
+      # Each build job uploads an already-archived bundle (see build.yml: the
+      # macOS and Linux trees would lose their execute bits and symlinks if
+      # they round-tripped through the artifact store unpacked), so the
+      # release attaches the artifacts as-is.
       - name: Download all build artifacts
         uses: actions/download-artifact@v8
         with:
@@ -78,8 +79,8 @@ jobs:
       - name: List release assets
         run: |
           ls -la artifacts
-          for expected in windows-x64 windows-arm64 macos-x64 macos-arm64; do
-            test -f "artifacts/obs-express-$expected.zip" || { echo "::error::missing obs-express-$expected.zip"; exit 1; }
+          for expected in windows-x64.zip windows-arm64.zip macos-x64.zip macos-arm64.zip linux-x64.tar.gz; do
+            test -f "artifacts/obs-express-$expected" || { echo "::error::missing obs-express-$expected"; exit 1; }
           done
 
       - name: Create GitHub Release
@@ -91,4 +92,4 @@ jobs:
             --target "${{ needs.bump.outputs.sha }}" \
             --title "v${{ inputs.version }}" \
             --generate-notes \
-            artifacts/*.zip
+            artifacts/*.zip artifacts/*.tar.gz

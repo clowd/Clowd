@@ -8,6 +8,7 @@ fn main() {
     match target_os.as_str() {
         "macos" => build_macos(),
         "windows" => build_windows(),
+        "linux" => build_linux(),
         _ => {}
     }
 }
@@ -437,4 +438,103 @@ fn copy_dir_all(src_dir: &Path, dst_dir: &Path) {
             copy_if_newer(&path, &dst);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Linux (assemble a self-contained, relocatable runtime next to obs-express)
+// ---------------------------------------------------------------------------
+
+/// Stages the OBS runtime into the cargo profile dir, mirroring
+/// `build_windows`, so `target/{debug,release}` is the same directory layout
+/// the release archive ships:
+///
+/// ```text
+/// obs-express, obs-ffmpeg-mux, vid2gif, clowd_share_region
+/// libobs.so.30, libobs-opengl.so.30        RUNPATH $ORIGIN
+/// libavcodec.so.61, ... (FFmpeg)           RUNPATH $ORIGIN
+/// obs-plugins/<plugin>.so                  RUNPATH $ORIGIN/..
+/// data/libobs/*.effect
+/// data/obs-plugins/<plugin>/...
+/// ```
+///
+/// The OBS build tree links everything with absolute RUNPATHs into that tree
+/// (right for running in place, wrong for a directory that moves), so every
+/// staged ELF file gets a `$ORIGIN`-relative RUNPATH instead. Plugins get
+/// `$ORIGIN/..`: they need libobs and FFmpeg libraries libobs itself does not
+/// load (obs-ffmpeg wants libavdevice/libavfilter), and those live one level
+/// up. libobs needs `$ORIGIN` for more than its FFmpeg dependencies: it
+/// dlopens `libobs-opengl.so.30` by bare name, and dlopen consults the
+/// *calling object's* RUNPATH, not the executable's.
+///
+/// Only the SONAME names are staged (libobs.so.30, not the libobs.so
+/// development link nor the legacy libobs.so.0 copy): the loader asks for
+/// nothing else, and plain files survive any archive format.
+fn build_linux() {
+    use obs_build_support::linux::{self, FfmpegBundle};
+
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    // OUT_DIR = target/{debug,release}/build/obs-express-<hash>/out
+    let profile_dir = out_dir
+        .ancestors()
+        .nth(3)
+        .expect("could not resolve the cargo profile dir from OUT_DIR")
+        .to_path_buf();
+
+    let obs_build =
+        PathBuf::from(env::var("DEP_OBS_OBS_BUILD_DIR").expect("DEP_OBS_OBS_BUILD_DIR not set"));
+    let lib_dir =
+        PathBuf::from(env::var("DEP_OBS_OBS_LIB_DIR").expect("DEP_OBS_OBS_LIB_DIR not set"));
+    let bundle = FfmpegBundle {
+        root: PathBuf::from(env::var("DEP_OBS_DEPS_ROOT").expect("DEP_OBS_DEPS_ROOT not set")),
+    };
+    let rundir = lib_dir
+        .parent()
+        .expect("DEP_OBS_OBS_LIB_DIR has no parent")
+        .to_path_buf();
+
+    // Re-stage after a manual OBS rebuild recreates the marker, as on Windows.
+    println!(
+        "cargo:rerun-if-changed={}",
+        obs_build.join(".build_complete").display()
+    );
+
+    // $ORIGIN first: the shipped binary resolves libobs and FFmpeg beside
+    // itself. The absolute build-tree paths after it serve this crate's test
+    // executables in `deps/` (same as the macOS branch's absolute rpaths; the
+    // release staging rewrites the RUNPATH to plain $ORIGIN). cargo passes
+    // link args without a shell, so `$ORIGIN` reaches the linker verbatim.
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", bundle.lib().display());
+
+    linux::require_tool("patchelf");
+
+    for name in ["libobs.so.30", "libobs-opengl.so.30"] {
+        let src = lib_dir.join(name);
+        assert!(src.exists(), "OBS build output missing: {}", src.display());
+        linux::stage_with_runpath(&src, &profile_dir.join(name), "$ORIGIN");
+    }
+
+    // Located by libobs as <dir of /proc/self/exe>/obs-ffmpeg-mux, so it must
+    // sit next to obs-express, exactly as on Windows.
+    let mux = rundir.join("bin").join("obs-ffmpeg-mux");
+    assert!(mux.exists(), "OBS build output missing: {}", mux.display());
+    linux::stage_with_runpath(&mux, &profile_dir.join("obs-ffmpeg-mux"), "$ORIGIN");
+
+    let plugin_src = lib_dir.join("obs-plugins");
+    let plugin_dst = profile_dir.join("obs-plugins");
+    let plugins = fs::read_dir(&plugin_src)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", plugin_src.display()));
+    for entry in plugins.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("so") {
+            linux::stage_with_runpath(&path, &plugin_dst.join(entry.file_name()), "$ORIGIN/..");
+        }
+    }
+
+    // share/obs/{libobs,obs-plugins/<p>} -> data/{libobs,obs-plugins/<p>}: the
+    // same data layout the Windows runtime has.
+    copy_dir_all(&rundir.join("share").join("obs"), &profile_dir.join("data"));
+
+    linux::stage_ffmpeg_runtime(&bundle, &profile_dir);
 }

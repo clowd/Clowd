@@ -3,17 +3,29 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 /// Links the FFmpeg libraries from the obs-deps bundle and generates bindings
-/// from its headers. Import libraries (Windows) and dylibs (macOS) both live
-/// in the bundle's `lib` dir; headers in `include`.
+/// from its headers. Import libraries (Windows), dylibs (macOS) and shared
+/// objects (Linux) all live in the bundle's `lib` dir; headers in `include`.
+///
+/// On Linux the "bundle" is the pinned BtbN FFmpeg that obs-sys links libobs
+/// against (see obs-build-support). It is not downloaded by the OBS configure
+/// there, so instead of waiting for obs-sys this script materialises it
+/// itself through the same locked, idempotent routine — which also lets
+/// vid2gif build on Linux without building OBS first.
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os != "windows" && target_os != "macos" {
+    if target_os != "windows" && target_os != "macos" && target_os != "linux" {
         panic!("ffmpeg-sys: unsupported CARGO_CFG_TARGET_OS `{target_os}`");
     }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let deps = wait_for_deps(&repo_root.join("obs-studio").join(".deps"));
+    let deps_dir = repo_root.join("obs-studio").join(".deps");
+    let deps = if target_os == "linux" {
+        let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+        obs_build_support::linux::ensure_ffmpeg(&deps_dir, &arch).root
+    } else {
+        wait_for_deps(&deps_dir)
+    };
     let include = deps.join("include");
     let lib = deps.join("lib");
 
@@ -33,6 +45,11 @@ fn main() {
         // own rpaths — link-args do not propagate across crates.)
         println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib.display());
         println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/Frameworks");
+    }
+    if target_os == "linux" {
+        // For this crate's own test binaries, as on macOS. The bundle's
+        // libraries carry a $ORIGIN RUNPATH, so their siblings resolve too.
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib.display());
     }
 
     generate_bindings(&manifest_dir, &include);

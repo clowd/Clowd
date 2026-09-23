@@ -22,6 +22,9 @@ fn main() {
     if target_os == "windows" {
         build_windows();
     }
+    if target_os == "linux" {
+        build_linux();
+    }
 }
 
 /// Compiles `assets/clowd.ico` into the executable as icon resource 1.
@@ -144,4 +147,18 @@ fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// Linux: the share-region UI is not supported there (the binary exits with an
+/// error), but it still links libobs through the workspace crates, so it needs
+/// RUNPATHs just to start and print that error: `$ORIGIN` for the staged
+/// runtime beside it (obs-express's build script stages it into the shared
+/// profile dir, as on Windows), then the absolute build-tree paths for the
+/// test harness, as on macOS.
+fn build_linux() {
+    let lib_dir = env::var("DEP_OBS_OBS_LIB_DIR").expect("DEP_OBS_OBS_LIB_DIR not set");
+    let deps_lib = env::var("DEP_OBS_DEPS_LIB").expect("DEP_OBS_DEPS_LIB not set");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{lib_dir}");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{deps_lib}");
 }

@@ -1,9 +1,10 @@
 //! Shared platform layer (SHARE_REGION_PLAN §4.3): monitor enumeration, obs
 //! paths, display-capture settings and region math, extracted from obs-express
 //! so every binary in the workspace (obs-express, clowd_share_region) uses the
-//! same primitives. Both platform modules expose identical public signatures
-//! (DESIGN §2.2) and are re-exported at the crate root; shared,
-//! platform-neutral types and the pure monitor-matching logic live here.
+//! same primitives. All platform modules (Windows, macOS, Linux) expose
+//! identical public signatures (DESIGN §2.2) and are re-exported at the crate
+//! root; shared, platform-neutral types and the pure monitor-matching logic
+//! live here.
 //!
 //! Everything recorder-specific (cursor sprites, mouse sampling, audio/webcam
 //! helpers) deliberately stays behind in obs-express.
@@ -22,27 +23,61 @@ mod macos;
 #[cfg(target_os = "macos")]
 pub use self::macos::*;
 
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use self::linux::*;
+
+/// How the display-capture source decides *what* it records, from the
+/// platform's `display_capture_mode()`.
+///
+/// Every capture API obs-express drove before the Linux port takes a monitor
+/// the caller chose (`display_capture_settings` + the region planner). A
+/// Wayland session has no such API: compositors do not let a client name an
+/// output to capture, so libobs' `pipewire-screen-capture-source` asks
+/// xdg-desktop-portal, which shows its own picker (monitor or window) and
+/// hands back a PipeWire stream of whatever the user chose. That inverts the
+/// recorder's flow — the canvas size is known only after the user answers —
+/// hence a runtime mode rather than a compile-time per-OS branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayCaptureMode {
+    /// The caller picks monitors and places one capture source per monitor
+    /// (Windows, macOS, Linux X11).
+    Monitors,
+    /// A system dialog picks the target (Linux Wayland). There are no
+    /// monitors to enumerate or regions to plan: exactly one source is
+    /// created, from `cursor_update_settings` alone (the cursor flag is the
+    /// only setting such a source takes), and its size is unknown (0x0) until
+    /// the user has answered the dialog.
+    Picker,
+}
+
 #[derive(Debug, Clone)]
 pub struct MonitorInfo {
-    /// Stable id: Windows device interface path (`\\?\DISPLAY#…`) / mac display UUID.
+    /// Stable id: Windows device interface path (`\\?\DISPLAY#…`) / mac display
+    /// UUID / X11 RandR monitor name (`DP-1`, `HDMI-A-0`, ...).
     pub id: String,
-    /// Windows: GDI device name (`\\.\DISPLAY1`); mac: CGDirectDisplayID as string.
+    /// Windows: GDI device name (`\\.\DISPLAY1`); mac: CGDirectDisplayID as
+    /// string; X11: the RandR monitor index that xshm_input_v2's `screen`
+    /// setting takes.
     pub alt_id: Option<String>,
     /// Origin in the platform capture coordinate space (§1.1):
-    /// Windows = physical px, virtual desktop; macOS = CG points.
+    /// Windows = physical px, virtual desktop; macOS = CG points; X11 = root
+    /// window px.
     pub x: i32,
     pub y: i32,
     pub width: u32,
     pub height: u32,
-    /// Capture pixels per coordinate-space unit: 1.0 on Windows (coords are
-    /// already physical px); the Retina backing scale on macOS, where coords
+    /// Capture pixels per coordinate-space unit: 1.0 on Windows and X11 (coords
+    /// are already physical px); the Retina backing scale on macOS, where coords
     /// are CG points but the capture source emits pixel-sized frames.
     pub scale: f64,
     pub is_primary: bool,
 }
 
 /// Which OS API backs display capture. Windows-only in effect: the macOS
-/// screen-capture source exposes no equivalent knob and ignores the value.
+/// screen-capture source and the Linux xshm / PipeWire sources expose no
+/// equivalent knob and ignore the value.
 ///
 /// The Windows mapping is win-capture's `method` property
 /// (`enum display_capture_method` in

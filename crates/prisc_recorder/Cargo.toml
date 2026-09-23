@@ -31,3 +31,8 @@ objc2-core-foundation = { workspace = true }
 objc2-core-graphics = { workspace = true }
 # NSDictionary/NSData: the cursor sprite PNG encode (platform/macos.rs).
 objc2-foundation = { workspace = true }
+
+[build-dependencies]
+# Linux: stages the shared FFmpeg bundle (and, for obs-express, libobs + plugins)
+# next to the binary with $ORIGIN RUNPATHs.
+obs-build-support = { workspace = true }

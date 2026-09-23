@@ -7,3 +7,8 @@ edition = "2021"
 clap = { workspace = true }
 anyhow = { workspace = true }
 ffmpeg-sys = { workspace = true }
+
+[build-dependencies]
+# Linux: stages the shared FFmpeg bundle (and, for obs-express, libobs + plugins)
+# next to the binary with $ORIGIN RUNPATHs.
+obs-build-support = { workspace = true }
