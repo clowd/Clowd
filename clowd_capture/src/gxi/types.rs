@@ -190,14 +190,16 @@ pub enum AcquireResult {
     /// The surface is occluded. Same handling as [`AcquireResult::Skip`]
     /// in the steady-state loop; frame 0 on macOS retries this for a
     /// bounded window (see `render::present_first_frame`) because the
-    /// early order-front races the metal backend's occlusion guard.
-    #[cfg_attr(windows, allow(dead_code))] // constructed only by the metal backend
+    /// early order-front races the metal backend's occlusion guard. The
+    /// wgpu backend forwards wgpu's own `Occluded` acquire result here.
+    #[cfg_attr(windows, allow(dead_code))] // constructed only by the metal and wgpu backends
     Occluded,
-    /// The device itself is gone. Produced only by the d3d11 backend,
-    /// which maps `DXGI_ERROR_DEVICE_REMOVED/RESET` here (in
-    /// `Surface::acquire`) so the worker can exit via its fail path;
-    /// Metal has no equivalent runtime device-loss signal.
-    #[cfg_attr(target_os = "macos", allow(dead_code))] // constructed only by the d3d11 backend
+    /// The device itself is gone. The d3d11 backend maps
+    /// `DXGI_ERROR_DEVICE_REMOVED/RESET` here and the wgpu backend its
+    /// device-lost callback (both in `Surface::acquire`) so the worker can
+    /// exit via its fail path; Metal has no equivalent runtime
+    /// device-loss signal.
+    #[cfg_attr(target_os = "macos", allow(dead_code))] // constructed only by the d3d11 and wgpu backends
     DeviceLost,
 }
 

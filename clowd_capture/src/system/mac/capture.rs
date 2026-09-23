@@ -62,7 +62,7 @@ pub fn has_screen_recording_permission() -> bool {
 /// each display into a single BGRA buffer. Assumes Screen Recording is
 /// already granted — `main()` gates on that before anything runs.
 pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
-    let vd = super::virtual_desktop_bounds(monitors);
+    let vd = crate::system::virtual_desktop_bounds(monitors);
     let vd_w = vd.width() as usize;
     let vd_h = vd.height() as usize;
 

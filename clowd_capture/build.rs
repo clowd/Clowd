@@ -19,7 +19,17 @@ const SHARED_MANIFEST: &str = "../clowd_rust_core/app.manifest";
 // was built against, which caused too many compatibility problems across
 // supported macOS versions; MSL source has no such pin, so naga still
 // never runs on user machines and WGSL stays the single source of truth.
-#[cfg(any(windows, target_os = "macos"))]
+// Linux precompiles nothing: the wgpu backend embeds the WGSL and
+// translates it at runtime (naga ships inside wgpu there anyway), so the
+// build only validates each shader against its binding table — the same
+// contract check the other two arms get for free from their translation.
+//
+// The arms are picked by the TARGET OS, not the host: the MSL and Linux
+// arms are pure naga, so a Windows machine cross-checking the macOS or
+// Linux build gets the real `.metal` files and the real validation (which
+// is what makes `cargo check --target aarch64-apple-darwin` a usable
+// guard here). Only the Windows arm is also host-bound, because FXC is a
+// DLL that exists nowhere else.
 include!("src/shader_bindings.rs");
 
 fn main() {
@@ -29,28 +39,32 @@ fn main() {
     // telemetry::release), so a version bump has to invalidate the cached build
     println!("cargo:rerun-if-env-changed=CLOWD_VERSION");
 
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+
     #[cfg(windows)]
     {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let manifest_path = std::path::Path::new(&manifest_dir).join(SHARED_MANIFEST);
-        // Fail loudly rather than link an unmanifested exe: without the
-        // manifest the process is DPI-virtualized, which is a subtle
-        // wrong-pixels bug rather than an obvious one.
-        assert!(
-            manifest_path.is_file(),
-            "shared app manifest not found at {}",
-            manifest_path.display()
-        );
-        println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
-        println!("cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}", manifest_path.display());
+        if target_os == "windows" {
+            let manifest_path = std::path::Path::new(&manifest_dir).join(SHARED_MANIFEST);
+            // Fail loudly rather than link an unmanifested exe: without the
+            // manifest the process is DPI-virtualized, which is a subtle
+            // wrong-pixels bug rather than an obvious one.
+            assert!(
+                manifest_path.is_file(),
+                "shared app manifest not found at {}",
+                manifest_path.display()
+            );
+            println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
+            println!("cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}", manifest_path.display());
 
-        compile_shaders(&manifest_dir);
+            compile_shaders(&manifest_dir);
+        }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        compile_shaders_msl(&manifest_dir);
+    match target_os.as_str() {
+        "macos" => compile_shaders_msl(&manifest_dir),
+        "linux" => validate_shaders(&manifest_dir),
+        _ => {}
     }
 }
 
@@ -491,7 +505,6 @@ impl FxcCompiler {
 // buffer(30), so it can never collide with the uniform-buffer slots.
 // ═══════════════════════════════════════════════════════════════════════
 
-#[cfg(target_os = "macos")]
 fn compile_shaders_msl(manifest_dir: &str) {
     let out_dir = std::env::var("OUT_DIR").unwrap();
 
@@ -548,7 +561,6 @@ fn compile_shaders_msl(manifest_dir: &str) {
 // per entry point; both stages see the same module globals, so both
 // keys carry the identical map.
 
-#[cfg(target_os = "macos")]
 fn build_msl_options(bindings: &[BindingEntry]) -> naga::back::msl::Options {
     use naga::back::msl;
 
@@ -612,4 +624,118 @@ fn build_msl_options(bindings: &[BindingEntry]) -> naga::back::msl::Options {
         fake_missing_bindings: false,
         ..Default::default()
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Linux: WGSL → naga validation only (nothing emitted)
+//
+// The wgpu backend embeds the WGSL and translates it at runtime, so this
+// arm exists so a shader that fails to parse, or drifts from its binding
+// table, fails the BUILD instead of the first live overlay frame — the
+// other two arms get that for free from their translation step. Checked
+// per shader: every `@group(0) @binding(n)` global has a table entry of
+// the matching kind, every table entry names a shader global, and no
+// entry point uses a resource its table entry hides from that stage —
+// exactly what wgpu's bind-group-layout validation would reject at
+// pipeline creation (see src/gxi/wgpu/pipeline.rs).
+// ═══════════════════════════════════════════════════════════════════════
+
+fn validate_shaders(manifest_dir: &str) {
+    for shader in ALL_SHADERS {
+        let wgsl_path = format!("{}/{}", manifest_dir, shader.wgsl_path);
+        println!("cargo:rerun-if-changed={}", wgsl_path);
+
+        let wgsl_source = std::fs::read_to_string(&wgsl_path).unwrap_or_else(|e| panic!("failed to read {}: {e}", wgsl_path));
+
+        let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap_or_else(|e| panic!("failed to parse {}: {e}", shader.name));
+
+        let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty())
+            .validate(&module)
+            .unwrap_or_else(|e| panic!("validation failed for {}: {e}", shader.name));
+
+        check_bindings(shader, &module, &info);
+    }
+}
+
+fn check_bindings(shader: &ShaderDef, module: &naga::Module, info: &naga::valid::ModuleInfo) {
+    use naga::valid::GlobalUse;
+
+    let mut bound_globals = 0usize;
+    for (handle, var) in module.global_variables.iter() {
+        let Some(rb) = var.binding else {
+            continue;
+        };
+        let name = var.name.as_deref().unwrap_or("<unnamed>");
+        assert_eq!(
+            rb.group, 0,
+            "{}: global `{name}` is in @group({}); gxi binds group 0 only",
+            shader.name, rb.group
+        );
+        let entry = shader
+            .bindings
+            .iter()
+            .find(|b| b.binding == rb.binding)
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}: global `{name}` (@binding({})) has no entry in its binding table",
+                    shader.name, rb.binding
+                )
+            });
+        bound_globals += 1;
+
+        let actual = match (&var.space, &module.types[var.ty].inner) {
+            (naga::AddressSpace::Uniform, _) => ResourceKind::UniformBuffer,
+            (
+                naga::AddressSpace::Handle,
+                naga::TypeInner::Image {
+                    dim: naga::ImageDimension::D2,
+                    arrayed: false,
+                    class:
+                        naga::ImageClass::Sampled {
+                            multi: false,
+                            ..
+                        },
+                },
+            ) => ResourceKind::Texture2D,
+            (
+                naga::AddressSpace::Handle,
+                naga::TypeInner::Sampler {
+                    comparison: false,
+                },
+            ) => ResourceKind::Sampler,
+            (space, ty) => panic!(
+                "{}: global `{name}` (@binding({})) is {space:?} {ty:?}, which gxi cannot bind",
+                shader.name, rb.binding
+            ),
+        };
+        assert_eq!(
+            actual, entry.kind,
+            "{}: global `{name}` (@binding({})) is {actual:?} but its table entry says {:?}",
+            shader.name, rb.binding, entry.kind
+        );
+
+        for (index, ep) in module.entry_points.iter().enumerate() {
+            let used = info.get_entry_point(index)[handle].intersects(GlobalUse::READ | GlobalUse::WRITE | GlobalUse::QUERY);
+            let visible = match ep.stage {
+                naga::ShaderStage::Vertex => entry.vertex,
+                naga::ShaderStage::Fragment => entry.fragment,
+                other => panic!("{}: unexpected {other:?} entry point `{}`", shader.name, ep.name),
+            };
+            assert!(
+                !used || visible,
+                "{}: `{}` ({:?}) uses `{name}` (@binding({})) but the table hides it from that stage",
+                shader.name,
+                ep.name,
+                ep.stage,
+                rb.binding
+            );
+        }
+    }
+    assert_eq!(
+        bound_globals,
+        shader.bindings.len(),
+        "{}: binding table has {} entries but the WGSL declares {bound_globals} bound globals",
+        shader.name,
+        shader.bindings.len()
+    );
 }

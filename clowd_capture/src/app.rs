@@ -9,6 +9,8 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 #[cfg(windows)]
 use winit::platform::windows::WindowAttributesExtWindows;
+#[cfg(target_os = "linux")]
+use winit::platform::x11::{WindowAttributesExtX11, WindowType as X11WindowType};
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture_output::{copy_text_to_clipboard, copy_to_clipboard_with_peek, ActionResult};
@@ -31,6 +33,7 @@ use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage
 use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::panel;
+use crate::ui::dialogs;
 use crate::ui::egui_host::{EguiHosts, FontInstall, PanelOutcome, SyncArgs};
 use crate::ui::shared::{active_panel_set, cursor_image_rect, peek_covers_cursor, sample_bgra, UiMonitor, UiSharedState};
 use clowd_rust_core::geometry::{
@@ -194,6 +197,7 @@ pub enum CycleAction {
     /// OCR mode's COPY: the recognized text went to the clipboard.
     OcrCopy,
     /// OCR mode's SEARCH: a web search for the recognized text was opened.
+    #[cfg(not(target_os = "linux"))]
     OcrSearch,
     /// OCR mode's UPLOAD: the recognized text was handed to the shell to
     /// upload as a paste.
@@ -377,22 +381,28 @@ fn set_cursor_if_changed(windows: &WindowSet, last_cursor: &mut HashMap<WindowId
 ///   plain screenshot session and destroy the OCR result.
 /// - Scanning/Retracting are transitions with nothing to accept yet (or
 ///   any more), so Return waits them out.
-fn default_action(input: &InteractionState) -> Option<Command> {
+fn default_action(input: &InteractionState, features: panel::model::PanelFeatures) -> Option<Command> {
     if !input.captured || input.scroll_pick_mode {
         return None;
     }
-    match input.ocr {
+    let command = match input.ocr {
         OcrState::Scanning {
             ..
         }
         | OcrState::Retracting {
             ..
-        } => None,
+        } => return None,
         OcrState::Lifted {
             ..
-        } => Some(Command::OcrCopy),
-        OcrState::Idle => Some(Command::Edit),
-    }
+        } => Command::OcrCopy,
+        OcrState::Idle => Command::Edit,
+    };
+    // The same gate the strip and its accelerators read: a command that
+    // is not offered (COPY on Linux, where the clipboard would not outlive
+    // the process) must not fire from Return either. Nothing is
+    // substituted — with the strip's default gone, Return does nothing
+    // and the user picks from the buttons that are there.
+    features.allows(command).then_some(command)
 }
 
 /// How long panel-aimed mouse dispatch stays ignored after the visible
@@ -1362,8 +1372,6 @@ impl App {
     /// wheel inside the region it is going to stitch, and re-clicking is a
     /// friendlier correction than dropping the user back to the panel.
     fn dispatch_scroll_pick(&mut self, event_loop: &ActiveEventLoop) {
-        use xdialog::XDialogIcon::Error as ErrorIcon;
-
         let Some(cycle) = self.cycle.as_mut() else {
             return;
         };
@@ -1421,7 +1429,7 @@ impl App {
             ActionResult::Failed(msg) => {
                 // Retry re-shows the overlay still in pick mode, so the
                 // user lands back on the crosshair, not on the panel.
-                if xdialog::show_message_retry_cancel("Clowd Capture", "Scrolling Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                if dialogs::show_retry_cancel("Scrolling Capture Failed", &msg) {
                     self.show_all_windows();
                 } else {
                     self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1431,7 +1439,6 @@ impl App {
     }
 
     fn dispatch_command(&mut self, command: Command, event_loop: &ActiveEventLoop, window_id: WindowId) {
-        use xdialog::XDialogIcon::Error as ErrorIcon;
         log::info!("dispatch command: {:?}", command);
 
         self.ensure_peek_images();
@@ -1464,8 +1471,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Copy),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
-                        {
+                        if dialogs::show_retry_cancel("Copy to Clipboard Failed", &msg) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1494,7 +1500,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Save),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Save Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if dialogs::show_retry_cancel("Save Failed", &msg) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1534,7 +1540,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, cycle_action),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Session Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if dialogs::show_retry_cancel("Session Capture Failed", &msg) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1569,7 +1575,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SearchImage),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Image Search Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if dialogs::show_retry_cancel("Image Search Failed", &msg) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1599,7 +1605,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SelectColor),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Color Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if dialogs::show_retry_cancel("Color Capture Failed", &msg) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1631,7 +1637,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Video),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Video Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if dialogs::show_retry_cancel("Video Capture Failed", &msg) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1660,7 +1666,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Share),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Share Region Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if dialogs::show_retry_cancel("Share Region Failed", &msg) {
                             // Unlatch before re-showing, which VIDEO does not have to do: its
                             // retry can go back through the panel's VIDEO button, while SHARE is
                             // auto-dispatch only (no panel button, by design). Leaving the
@@ -1866,8 +1872,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrCopy),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
-                        {
+                        if dialogs::show_retry_cancel("Copy to Clipboard Failed", &msg) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1875,6 +1880,11 @@ impl App {
                     }
                 }
             }
+            // Never offered on Linux (`PanelFeatures::allows`), so nothing
+            // dispatches it there.
+            #[cfg(target_os = "linux")]
+            Command::OcrSearch => log::info!("command OcrSearch ignored: not offered on Linux"),
+            #[cfg(not(target_os = "linux"))]
             Command::OcrSearch => {
                 let OcrState::Lifted {
                     outcome,
@@ -1944,7 +1954,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrUpload),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Text Upload Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if dialogs::show_retry_cancel("Text Upload Failed", &msg) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1995,7 +2005,9 @@ impl ApplicationHandler for App {
             let width = m.bounds.size.width.max(1) as u32;
             let height = m.bounds.size.height.max(1) as u32;
 
-            #[cfg(windows)]
+            // Physical on Windows and X11 alike: both hand winit
+            // device-pixel positions, and the monitor rects already are.
+            #[cfg(any(windows, target_os = "linux"))]
             let (win_pos, win_size): (winit::dpi::Position, winit::dpi::Size) = (
                 winit::dpi::PhysicalPosition::new(m.bounds.origin.x, m.bounds.origin.y).into(),
                 winit::dpi::PhysicalSize::new(width, height).into(),
@@ -2037,6 +2049,22 @@ impl ApplicationHandler for App {
                 // monitor — only the focused window is ever raised, and SW_SHOWNOACTIVATE
                 // never raises the others. Release only: a topmost overlay while paused
                 // in a debugger locks up the entire desktop.
+                if !cfg!(debug_assertions) {
+                    attrs = attrs.with_window_level(winit::window::WindowLevel::AlwaysOnTop);
+                }
+            }
+            #[cfg(target_os = "linux")]
+            {
+                // _NET_WM_WINDOW_TYPE_UTILITY: the window managers keep it
+                // out of the taskbar and pager and leave it undecorated,
+                // while it still takes keyboard focus — the closest EWMH
+                // spelling of WS_EX_TOOLWINDOW. Splash and notification
+                // types would also skip the taskbar but are unfocusable
+                // on some managers.
+                attrs = attrs.with_x11_window_type(vec![X11WindowType::Utility]);
+                // _NET_WM_STATE_ABOVE, release only, for the same reason as
+                // Windows: a topmost fullscreen overlay while paused in a
+                // debugger locks up the whole desktop.
                 if !cfg!(debug_assertions) {
                     attrs = attrs.with_window_level(winit::window::WindowLevel::AlwaysOnTop);
                 }
@@ -2250,7 +2278,7 @@ impl ApplicationHandler for App {
                 // accept once a selection is made — "open in editor"
                 // normally, COPY while OCR lines are lifted. Which (if
                 // either) is `default_action`'s decision.
-                if let Some(cmd) = default_action(&cycle.input) {
+                if let Some(cmd) = default_action(&cycle.input, cycle.settings.panel_features) {
                     self.dispatch_command(cmd, event_loop, id);
                 }
             }
@@ -2763,8 +2791,9 @@ impl ApplicationHandler for App {
             }
             // Without this override winit resizes the window by
             // new_scale/old_scale, permanently shrinking any overlay whose
-            // monitor has a different DPI than the primary.
-            #[cfg(windows)]
+            // monitor has a different DPI than the primary. X11 winit does
+            // the same resize when its scale changes under the window.
+            #[cfg(any(windows, target_os = "linux"))]
             WindowEvent::ScaleFactorChanged {
                 mut inner_size_writer,
                 ..
@@ -2915,6 +2944,8 @@ mod tests {
         assert_eq!(cursor_for(&outside, false, false), Hittest::Outside.cursor());
     }
 
+    const ALL: panel::model::PanelFeatures = panel::model::PanelFeatures::ALL;
+
     /// A result-shaped payload for gating assertions; recognition itself is
     /// never exercised here.
     fn dummy_outcome() -> Arc<OcrOutcome> {
@@ -2928,9 +2959,9 @@ mod tests {
     #[test]
     fn enter_opens_editor_once_captured() {
         let mut i = input();
-        assert_eq!(default_action(&i), None);
+        assert_eq!(default_action(&i, ALL), None);
         i.captured = true;
-        assert_eq!(default_action(&i), Some(Command::Edit));
+        assert_eq!(default_action(&i, ALL), Some(Command::Edit));
     }
 
     /// The panel is hidden while a scroll point is being picked, and Enter
@@ -2941,24 +2972,65 @@ mod tests {
         let mut i = input();
         i.captured = true;
         i.scroll_pick_mode = true;
-        assert_eq!(default_action(&i), None);
+        assert_eq!(default_action(&i, ALL), None);
     }
 
-    /// With OCR lines lifted, the default accept is the recognized text,
-    /// not the editor: Edit would write a plain screenshot session and
-    /// destroy the OCR result.
-    #[test]
-    fn enter_copies_while_ocr_lifted() {
-        let mut i = input();
-        i.captured = true;
-        i.ocr = OcrState::Lifted {
+    fn lifted() -> OcrState {
+        OcrState::Lifted {
             anchor: Instant::now(),
             req: 1,
             region: ScreenRect::from_xy_size(0, 0, 10, 10),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
-        };
-        assert_eq!(default_action(&i), Some(Command::OcrCopy));
+        }
+    }
+
+    /// With OCR lines lifted, the default accept is the recognized text,
+    /// not the editor: Edit would write a plain screenshot session and
+    /// destroy the OCR result. (Not on Linux, where COPY is never offered;
+    /// see `enter_never_copies_on_linux`.)
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn enter_copies_while_ocr_lifted() {
+        let mut i = input();
+        i.captured = true;
+        i.ocr = lifted();
+        assert_eq!(default_action(&i, ALL), Some(Command::OcrCopy));
+    }
+
+    /// Return honours the same gate as the strip: COPY is compile-gated
+    /// out on Linux (the clipboard would not outlive the process), so the
+    /// lifted state has no default action there, under every switch
+    /// combination — and nothing else (Edit would destroy the OCR result)
+    /// is substituted for it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn enter_never_copies_on_linux() {
+        let mut i = input();
+        i.captured = true;
+        i.ocr = lifted();
+        for features in panel::model::FEATURE_COMBINATIONS {
+            assert_eq!(default_action(&i, features), None, "{features:?}");
+        }
+    }
+
+    /// The gate is the strip's, not a Linux special case: a command the
+    /// switches turned off is not the default either. Edit has no switch,
+    /// so it is always the default once captured.
+    #[test]
+    fn default_action_honours_the_feature_gate() {
+        let mut i = input();
+        i.captured = true;
+        for features in panel::model::FEATURE_COMBINATIONS {
+            assert_eq!(default_action(&i, features), Some(Command::Edit), "{features:?}");
+        }
+        i.ocr = lifted();
+        for features in panel::model::FEATURE_COMBINATIONS {
+            let expected = features
+                .allows(Command::OcrCopy)
+                .then_some(Command::OcrCopy);
+            assert_eq!(default_action(&i, features), expected, "{features:?}");
+        }
     }
 
     /// The transitional phases have nothing to accept: Scanning has no text
@@ -2972,12 +3044,12 @@ mod tests {
             req: 1,
             region: ScreenRect::from_xy_size(0, 0, 10, 10),
         };
-        assert_eq!(default_action(&i), None);
+        assert_eq!(default_action(&i, ALL), None);
 
         i.ocr = OcrState::Retracting {
             anchor: Instant::now(),
         };
-        assert_eq!(default_action(&i), None);
+        assert_eq!(default_action(&i, ALL), None);
     }
 
     /// The swap guard's whole contract: a click inside one double-click

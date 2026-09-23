@@ -17,8 +17,8 @@
 //! lives next to each walker.
 
 // Each half is only called from its own platform's walker glue — the
-// Windows policy from `win_corners`, the macOS table + alpha estimator from
-// `mac_corners` — but the whole module is compiled (and its tests run) on
+// Windows policy from `win::corners`, the macOS table + alpha estimator from
+// `mac::corners` — but the whole module is compiled (and its tests run) on
 // every host so either build still checks the other platform's logic.
 #![allow(dead_code)]
 
@@ -95,7 +95,7 @@ pub fn windows_corner_radius_logical(i: WindowsCornerInputs) -> f32 {
 }
 
 /// macOS window corner radius in points for an OS major version, used when
-/// the window server cannot be asked (the probe in `mac_corners` is the
+/// the window server cannot be asked (the probe in `mac::corners` is the
 /// primary source — Tahoe alone has at least three radii depending on the
 /// window's chrome). Big Sur through Sequoia: 10 pt. Tahoe: 16 pt is the
 /// titlebar-only default (toolbar windows are 26 pt, which the probe picks

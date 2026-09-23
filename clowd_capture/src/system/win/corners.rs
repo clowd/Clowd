@@ -1,4 +1,4 @@
-//! Win32 glue for [`super::corners`]: asks DWM and user32 what the
+//! Win32 glue for [`crate::system::corners`]: asks DWM and user32 what the
 //! capturer cannot decide for itself, then hands the answers to the
 //! platform-neutral policy.
 //!
@@ -20,7 +20,7 @@ use windows::Win32::System::SystemInformation::{GetVersionExW, OSVERSIONINFOW};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, IsZoomed, SM_REMOTESESSION, WS_CAPTION, WS_THICKFRAME};
 
-use super::corners::{windows_corner_radius_logical, CornerPreference, WindowsCornerInputs};
+use crate::system::corners::{windows_corner_radius_logical, CornerPreference, WindowsCornerInputs};
 
 // `IsWindowArranged` (Windows 10 2004+) is exported by user32.dll without an
 // import library, so it is bound here by name rather than through the
@@ -102,7 +102,7 @@ fn has_window_region(hwnd: HWND) -> bool {
 pub fn window_corner_radius(hwnd: HWND, style: u32) -> f32 {
     let build = os_build();
     // Everything below is Windows 11 only; skip the per-window calls on 10.
-    if build < super::corners::WINDOWS_11_FIRST_BUILD {
+    if build < crate::system::corners::WINDOWS_11_FIRST_BUILD {
         return 0.0;
     }
     let has_frame = (style & WS_CAPTION.0) == WS_CAPTION.0 || (style & WS_THICKFRAME.0) != 0;

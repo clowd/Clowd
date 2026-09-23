@@ -147,6 +147,43 @@ pub struct CapturerSettings {
     pub save_directory: Option<PathBuf>,
 }
 
+impl CapturerSettings {
+    /// Switch off what this platform cannot do, whatever the command line
+    /// asked for. Applied to every settings value there is (`Default` and
+    /// `CliArgs::into_settings` both go through here), so a flag the shell
+    /// keeps sending on every platform never reaches a code path the
+    /// platform lacks.
+    ///
+    /// Linux, first pass: no peek (no window enumeration), no scrolling
+    /// capture driver, no recorder and no share-region mirror, no reverse
+    /// image search, and no window pre-selection (the walker knows no windows, so `window` mode
+    /// would only ever pre-select the active screen — `region` is the
+    /// honest spelling). COPY and OCR SEARCH have no switch, so they are
+    /// compile-gated in the panel model instead: X11 and Wayland clipboards
+    /// die with the process that owns them, and this process exits as soon
+    /// as the copy is done.
+    #[cfg(target_os = "linux")]
+    fn apply_platform_limits(mut self) -> Self {
+        self.obscured_window_peek_enabled = false;
+        self.video_mode = false;
+        self.share_mode = false;
+        self.panel_features.share = false;
+        self.panel_features.scroll_capture = false;
+        self.panel_features.video = false;
+        self.panel_features.image_search = false;
+        if self.capture_mode == CaptureMode::Window {
+            self.capture_mode = CaptureMode::Region;
+        }
+        self
+    }
+
+    /// Windows and macOS implement everything the command line can ask for.
+    #[cfg(not(target_os = "linux"))]
+    fn apply_platform_limits(self) -> Self {
+        self
+    }
+}
+
 impl Default for CapturerSettings {
     fn default() -> Self {
         Self {
@@ -171,6 +208,7 @@ impl Default for CapturerSettings {
             filename_pattern: DEFAULT_FILENAME_PATTERN.to_string(),
             save_directory: None,
         }
+        .apply_platform_limits()
     }
 }
 
@@ -376,6 +414,7 @@ impl CliArgs {
             filename_pattern: self.filename_pattern,
             save_directory: self.save_dir,
         }
+        .apply_platform_limits()
     }
 }
 
@@ -433,7 +472,9 @@ mod tests {
     /// flag turns on exactly its own mode, and asking for both is a
     /// command-line error rather than a silent win for one of them: the
     /// first confirmed selection cannot be both a recording region and a
-    /// mirror region.
+    /// mirror region. (Not on Linux, where both modes are forced off — see
+    /// `linux_forces_unsupported_features_off`.)
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn video_and_share_modes_are_mutually_exclusive() {
         let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
@@ -450,8 +491,41 @@ mod tests {
         assert!(CliArgs::try_parse_from(["clowd_capture", "--share", "--video"]).is_err());
     }
 
+    /// Whatever the shell sends, the Linux build keeps the features it has
+    /// no implementation for switched off, and `Default` agrees with the
+    /// command line about it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_forces_unsupported_features_off() {
+        let everything = CliArgs::parse_from(["clowd_capture", "--video", "--capture-mode", "window"]).into_settings();
+        assert!(!everything.video_mode);
+        assert!(!everything.obscured_window_peek_enabled);
+        assert!(!everything.panel_features.video);
+        assert!(!everything.panel_features.share);
+        assert!(!everything.panel_features.scroll_capture);
+        assert!(!everything.panel_features.image_search);
+        assert_eq!(everything.capture_mode, CaptureMode::Region);
+        assert!(
+            !CliArgs::parse_from(["clowd_capture", "--share"])
+                .into_settings()
+                .share_mode
+        );
+        // What Linux does support is untouched.
+        assert!(everything.panel_features.upload && everything.panel_features.ocr);
+        assert_eq!(
+            CliArgs::parse_from(["clowd_capture", "--capture-mode", "screen"])
+                .into_settings()
+                .capture_mode,
+            CaptureMode::Screen
+        );
+        let default = CapturerSettings::default();
+        assert!(!default.obscured_window_peek_enabled && !default.panel_features.video);
+    }
+
     /// The optional-button flags are opt-OUT: a bare command line shows
     /// the full strip, and each flag removes exactly its own button.
+    /// (Not on Linux: SHARE, SCROLL and VIDEO are forced off there.)
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn panel_feature_flags_are_opt_out() {
         let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();

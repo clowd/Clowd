@@ -24,8 +24,13 @@ egui_extras.workspace = true
 egui_plot.workspace = true
 arboard.workspace = true
 rfd.workspace = true
-xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
 sentry.workspace = true
+
+# Native retry/cancel message boxes. Windows and macOS only: on Linux the
+# same prompts go through rfd's portal/zenity path instead (see
+# `ui::dialogs`), so xdialog's GTK backend never enters the build.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
 
 # Deliberately no OCR engine: recognition runs in the clowd_ai binary (`clowd_ai ocr`) so
 # an abort or segfault inside ONNX Runtime cannot take a capture down, and its tens of MB
@@ -104,9 +109,27 @@ objc2-metal = { workspace = true, features = [
 objc2-quartz-core = { workspace = true, features = ["CALayer", "CAAnimation", "CAMediaTiming", "CAMediaTimingFunction", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
 block2.workspace = true
 
+# The X11 system layer (src/system/linux_*): RandR for the monitor topology
+# and refresh rates, XFixes for the cursor image, core protocol for the root
+# GetImage capture and pointer query/warp. Pure Rust (RustConnection), so no
+# libxcb link and nothing to dlopen.
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { workspace = true, features = ["randr", "xfixes"] }
+# The SAVE dialog and the retry/cancel prompts: xdg-desktop-portal (falling
+# back to zenity) rather than GTK, so the overlay links no toolkit.
+rfd = { workspace = true, features = ["xdg-portal"] }
+# The wgpu gxi backend (src/gxi/wgpu): Vulkan by default, GL only as the
+# explicit fallback (`Instance` probes for a Vulkan adapter, or
+# CLOWD_GPU_BACKEND forces one); `wgsl` because the shaders are compiled at
+# runtime from their WGSL source. pollster drives wgpu's async
+# adapter/device requests to completion on the calling thread.
+wgpu = { workspace = true, features = ["std", "vulkan", "gles", "wgsl"] }
+pollster.workspace = true
+
 # Build-time shader translation (see build.rs): WGSL to DXBC on Windows, WGSL
-# to MSL source on macOS. One block for both; the unused naga backend only
-# costs build time, and nothing from naga ships in the binary.
+# to MSL source on macOS, and WGSL validation against the binding tables on
+# Linux. One block for all three; the unused naga backends only cost build
+# time, and nothing from naga ships in the binary through this path.
 [build-dependencies]
 naga = { workspace = true, features = ["wgsl-in", "hlsl-out", "msl-out"] }
 libloading.workspace = true

@@ -408,6 +408,21 @@ fn capture_peek_images(
     info!("walker: obstructed window capture complete");
 }
 
+/// No peek on Linux: the walker there enumerates no windows, so there is
+/// never anything obstructed to photograph, and `CapturerSettings` forces
+/// the feature off anyway (`apply_platform_limits`). The latch is still
+/// published so a dispatch that waits on it (`App::ensure_peek_images`)
+/// sees an empty batch rather than a latch that never sets.
+#[cfg(target_os = "linux")]
+fn capture_peek_images(
+    obstructed: &[crate::system::ObstructedWindow],
+    _peek_txs: &[std::sync::mpsc::Sender<RenderMsg>],
+    peek_latch: &Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
+) {
+    debug_assert!(obstructed.is_empty(), "the Linux walker never reports obstructed windows");
+    peek_latch.set(Vec::new());
+}
+
 #[cfg(target_os = "macos")]
 fn capture_peek_images(
     obstructed: &[crate::system::ObstructedWindow],

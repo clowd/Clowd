@@ -13,7 +13,7 @@ extern "C" {
 
 #[allow(deprecated)]
 pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
-    let position = super::mac_mouse::get_position(monitors);
+    let position = super::mouse::get_position(monitors);
 
     let cursor = NSCursor::currentSystemCursor()?;
     let hotspot = cursor.hotSpot();

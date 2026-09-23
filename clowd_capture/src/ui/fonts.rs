@@ -104,7 +104,24 @@ const FALLBACK_FAMILIES: &[&str] = &[
     "Apple Symbols",
 ];
 
-#[cfg(not(any(windows, target_os = "macos")))]
+/// The same list for Linux, in the family names the Noto and DejaVu
+/// packages register with fontconfig. Also written blind (see the macOS
+/// note); a distribution without a family simply skips it. The three CJK
+/// families are one OTC file whose faces differ in the Han variants they
+/// prefer, so all three are listed rather than guessing a locale.
+#[cfg(target_os = "linux")]
+const FALLBACK_FAMILIES: &[&str] = &[
+    "Noto Sans CJK SC",
+    "Noto Sans CJK JP",
+    "Noto Sans CJK KR",
+    "Noto Sans Devanagari",
+    "Noto Sans Thai",
+    "Noto Sans Symbols",
+    "Noto Color Emoji",
+    "DejaVu Sans",
+];
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 const FALLBACK_FAMILIES: &[&str] = &[];
 
 /// Walk the machine's fonts and memory-map the curated fallback faces.

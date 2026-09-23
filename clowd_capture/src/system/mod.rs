@@ -1,52 +1,19 @@
 pub(crate) mod corners;
 
 #[cfg(windows)]
-mod win_browser;
-
-#[cfg(windows)]
-mod win_corners;
-
-#[cfg(windows)]
-pub(crate) mod win_capture;
-
-#[cfg(windows)]
-mod win_cursor;
-
-#[cfg(windows)]
-mod win_foreground;
-
-#[cfg(windows)]
-mod win_monitor;
-
-#[cfg(windows)]
-mod win_mouse;
-
-#[cfg(windows)]
-mod win_walker;
-
-#[cfg(windows)]
-pub use win_walker::WindowWalker;
+mod win;
 
 #[cfg(target_os = "macos")]
-mod mac_browser;
+pub(crate) mod mac;
 
-#[cfg(target_os = "macos")]
-mod mac_corners;
+#[cfg(target_os = "linux")]
+mod linux;
 
-#[cfg(target_os = "macos")]
-pub(crate) mod mac_capture;
+#[cfg(windows)]
+pub use win::walker::WindowWalker;
 
-#[cfg(target_os = "macos")]
-mod mac_cursor;
-
-#[cfg(target_os = "macos")]
-mod mac_monitor;
-
-#[cfg(target_os = "macos")]
-mod mac_mouse;
-
-#[cfg(target_os = "macos")]
-mod mac_walker;
+#[cfg(target_os = "linux")]
+pub use linux::walker::WindowWalker;
 
 #[cfg(target_os = "macos")]
 use clowd_rust_core::geometry::{LogicalPoint, LogicalSize};
@@ -65,6 +32,11 @@ pub struct WindowTarget {
 }
 
 /// Full hit-test result including peek metadata.
+///
+/// Never built on Linux: the walker there knows no windows (see
+/// `linux::walker`), so the peek types below exist only to keep the
+/// callers' shape.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 #[derive(Debug, Clone)]
 pub struct HitTestResult {
     pub rect: ScreenRect,
@@ -76,12 +48,11 @@ pub struct HitTestResult {
 /// A window partially obstructed by higher-Z windows. Produced by
 /// `WindowWalker::obstructed_windows`, consumed by the background
 /// PrintWindow capture phase.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 #[derive(Debug, Clone)]
 pub struct ObstructedWindow {
     pub window_index: usize,
-    #[cfg(windows)]
-    capture_ref: WindowCaptureRef,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(windows, target_os = "macos"))]
     capture_ref: WindowCaptureRef,
     /// DWM extended frame bounds (true visual bounds).
     pub rect: ScreenRect,
@@ -90,6 +61,9 @@ pub struct ObstructedWindow {
     pub obstruction_rects: Vec<ScreenRect>,
 }
 
+/// The OS handle a peek capture photographs. No Linux arm: nothing there
+/// produces an obstructed window, so nothing needs a handle to it.
+#[cfg(any(windows, target_os = "macos"))]
 #[derive(Debug, Clone, Copy)]
 pub struct WindowCaptureRef {
     #[cfg(windows)]
@@ -120,6 +94,7 @@ unsafe impl Send for ObstructedWindow {}
 unsafe impl Sync for ObstructedWindow {}
 
 /// A captured window image ready for GPU upload by render workers.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 #[derive(Debug)]
 pub struct WindowPeekImage {
     pub window_index: usize,
@@ -308,43 +283,43 @@ impl SystemInterop {
     }
 
     pub fn get_mouse_position(_monitors: &[MonitorInfo]) -> ScreenPoint {
-        win_mouse::get_position()
+        win::mouse::get_position()
     }
 
     pub fn set_mouse_position(pos: ScreenPoint, _monitors: &[MonitorInfo]) {
-        win_mouse::set_position(pos)
+        win::mouse::set_position(pos)
     }
 
     /// Record the shell's pid (`--shell-pid`) for
     /// [`Self::hand_foreground_to_shell`]. Called once during startup.
     pub fn set_shell_pid(pid: Option<u32>) {
-        win_foreground::set_shell_pid(pid)
+        win::foreground::set_shell_pid(pid)
     }
 
     /// Let the shell that spawned us take the foreground next. Called as a
     /// cycle ends, while the overlay is still the foreground window — see
-    /// [`win_foreground`] for why the shell needs it back.
+    /// [`win::foreground`] for why the shell needs it back.
     pub fn hand_foreground_to_shell() {
-        win_foreground::hand_to_shell()
+        win::foreground::hand_to_shell()
     }
 
     /// Let whoever takes the foreground next have it, rather than naming
     /// the shell. Needed only by the OCR search action, whose browser may
-    /// already be running — see [`win_foreground::allow_any_foreground`].
+    /// already be running — see [`win::foreground::allow_any_foreground`].
     /// Called while the overlay is still foreground, like its sibling.
     pub fn allow_any_foreground() {
-        win_foreground::allow_any_foreground()
+        win::foreground::allow_any_foreground()
     }
 
     /// Open `url` in the user's default browser. `false` means the shell
     /// refused it and nothing was launched, so the caller still owns the
     /// screen and should stay where it is.
     pub fn open_url(url: &str) -> bool {
-        win_browser::open_url(url)
+        win::browser::open_url(url)
     }
 
     pub fn capture_cursor(_monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
-        win_cursor::capture_cursor()
+        win::cursor::capture_cursor()
     }
 
     /// Capture the desktop bitmap using pre-enumerated monitors. The
@@ -355,7 +330,7 @@ impl SystemInterop {
         // Runs on the screenshot thread: a panic here would leave the main thread
         // blocked on the screenshot latch forever with nothing on screen, so treat
         // failure as fatal for the whole process and let the shell report it.
-        let bitmap = match win_capture::capture_desktop(&vd) {
+        let bitmap = match win::capture::capture_desktop(&vd) {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
@@ -374,9 +349,9 @@ impl SystemInterop {
     }
 
     pub fn all_monitors() -> Vec<MonitorInfo> {
-        let dxgi_map = win_monitor::build_dxgi_adapter_map();
+        let dxgi_map = win::monitor::build_dxgi_adapter_map();
 
-        win_monitor::all()
+        win::monitor::all()
             .expect("Unable to enumerate monitors")
             .into_iter()
             .map(|m| {
@@ -416,7 +391,7 @@ impl SystemInterop {
     }
 
     pub fn capture_peek_image(window: &ObstructedWindow) -> Option<(Vec<u8>, u32, u32)> {
-        win_capture::capture_window_image(window.capture_ref.hwnd, &window.raw_rect)
+        win::capture::capture_window_image(window.capture_ref.hwnd, &window.raw_rect)
     }
 
     pub fn install_pinch_monitor() -> Option<PinchMonitor> {
@@ -425,7 +400,7 @@ impl SystemInterop {
 }
 
 #[cfg(target_os = "macos")]
-pub use mac_walker::WindowWalker;
+pub use mac::walker::WindowWalker;
 
 #[cfg(target_os = "macos")]
 impl SystemInterop {
@@ -435,15 +410,15 @@ impl SystemInterop {
     }
 
     pub fn has_screen_recording_permission() -> bool {
-        mac_capture::has_screen_recording_permission()
+        mac::capture::has_screen_recording_permission()
     }
 
     pub fn get_mouse_position(monitors: &[MonitorInfo]) -> ScreenPoint {
-        mac_mouse::get_position(monitors)
+        mac::mouse::get_position(monitors)
     }
 
     pub fn set_mouse_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
-        mac_mouse::set_position(pos, monitors)
+        mac::mouse::set_position(pos, monitors)
     }
 
     /// No foreground lock on macOS, so there is nothing to hand back and
@@ -462,11 +437,11 @@ impl SystemInterop {
     /// Open `url` in the user's default browser. `false` means nothing was
     /// launched.
     pub fn open_url(url: &str) -> bool {
-        mac_browser::open_url(url)
+        mac::browser::open_url(url)
     }
 
     pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
-        mac_cursor::capture_cursor(monitors)
+        mac::cursor::capture_cursor(monitors)
     }
 
     /// Capture the desktop bitmap using pre-enumerated monitors. On
@@ -476,7 +451,7 @@ impl SystemInterop {
         // Runs on the screenshot thread: a panic here would leave the main thread
         // blocked on the screenshot latch forever with nothing on screen, so treat
         // failure as fatal for the whole process and let the shell report it.
-        let bitmap = match mac_capture::capture_bitmap(&monitors) {
+        let bitmap = match mac::capture::capture_bitmap(&monitors) {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
@@ -496,7 +471,7 @@ impl SystemInterop {
     }
 
     pub fn all_monitors() -> Vec<MonitorInfo> {
-        mac_monitor::all_monitors().expect("Unable to enumerate monitors")
+        mac::monitor::all_monitors().expect("Unable to enumerate monitors")
     }
 
     pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32, rounded_corners: bool) -> WindowWalker {
@@ -504,11 +479,85 @@ impl SystemInterop {
     }
 
     pub fn capture_peek_image(window: &ObstructedWindow) -> Option<(Vec<u8>, u32, u32)> {
-        mac_capture::capture_window_image(window.capture_ref.window_id)
+        mac::capture::capture_window_image(window.capture_ref.window_id)
     }
 
     pub fn install_pinch_monitor() -> Option<PinchMonitor> {
         crate::system::install_pinch_monitor()
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl SystemInterop {
+    /// Nothing to set up: no COM apartment to enter and no dialog
+    /// subsystem to prime (the Linux prompts go through rfd, which needs
+    /// no init). Kept so `main` has one call on every platform.
+    pub fn init() {}
+
+    /// X11 has no screen-capture permission to ask for; any client of the
+    /// display can read the root window.
+    pub fn has_screen_recording_permission() -> bool {
+        true
+    }
+
+    pub fn get_mouse_position(_monitors: &[MonitorInfo]) -> ScreenPoint {
+        linux::mouse::get_position()
+    }
+
+    pub fn set_mouse_position(pos: ScreenPoint, _monitors: &[MonitorInfo]) {
+        linux::mouse::set_position(pos)
+    }
+
+    /// No foreground lock on X11, so there is nothing to hand back and
+    /// nobody to hand it to — the same shape as macOS.
+    pub fn set_shell_pid(_pid: Option<u32>) {}
+
+    /// See [`Self::set_shell_pid`].
+    pub fn hand_foreground_to_shell() {}
+
+    // No `allow_any_foreground`/`open_url`: their only caller is OCR
+    // SEARCH, which Linux does not offer (see `PanelFeatures::allows`).
+
+    pub fn capture_cursor(_monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
+        linux::cursor::capture_cursor()
+    }
+
+    /// Capture the desktop bitmap using pre-enumerated monitors. The
+    /// bitmap is one root-window `GetImage` of the virtual desktop; the
+    /// monitors are bundled into the result for downstream consumers.
+    pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>, cursor: Option<CapturedCursor>) -> CapturedDesktop {
+        let vd = virtual_desktop_bounds(&monitors);
+        // Runs on the screenshot thread: a panic here would leave the main thread
+        // blocked on the screenshot latch forever with nothing on screen, so treat
+        // failure as fatal for the whole process and let the shell report it.
+        let bitmap = match linux::capture::capture_desktop(&vd) {
+            Ok(bitmap) => bitmap,
+            Err(err) => {
+                error!("unable to capture the desktop: {err:#}");
+                clowd_rust_core::telemetry::flush();
+                std::process::exit(EXIT_CAPTURE_FAILED);
+            }
+        };
+        CapturedDesktop {
+            bgra: bitmap.bgra,
+            width: bitmap.width,
+            height: bitmap.height,
+            bounds: bitmap.bounds,
+            monitors,
+            cursor,
+        }
+    }
+
+    pub fn all_monitors() -> Vec<MonitorInfo> {
+        linux::monitor::all_monitors().expect("Unable to enumerate monitors")
+    }
+
+    pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32, rounded_corners: bool) -> WindowWalker {
+        WindowWalker::snapshot(monitors, visibility_threshold, rounded_corners)
+    }
+
+    pub fn install_pinch_monitor() -> Option<PinchMonitor> {
+        None
     }
 }
 
@@ -563,7 +612,9 @@ impl PinchMonitor {
 /// Process-wide scheduling posture, called once early in main: high
 /// priority class + high GPU scheduler class + MMCSS-scheduled DWM
 /// composition on Windows; a latency-critical activity assertion (no App
-/// Nap, no timer coalescing) on macOS.
+/// Nap, no timer coalescing) on macOS. A no-op on Linux, as are the
+/// thread tiers below: raising priority there needs CAP_SYS_NICE, and the
+/// first pass runs at whatever the scheduler gives it.
 /// The v3 C++ capturer shipped exactly this
 /// (`SetPriorityClass(HIGH_PRIORITY_CLASS)` in `DxScreenCapture`'s
 /// constructor) for years: a capture overlay is a short-lived, fullscreen,

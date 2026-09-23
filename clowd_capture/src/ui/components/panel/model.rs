@@ -78,7 +78,13 @@ impl PanelFeatures {
     };
 
     /// Whether a button emitting `command` may appear at all. Commands
-    /// with no switch of their own are always allowed.
+    /// with no switch of their own are always allowed — except COPY and
+    /// OCR SEARCH on Linux, which have no switch because they are never
+    /// offered there: an X11 or Wayland clipboard belongs to the process
+    /// that set it and is gone when that process exits, which this one
+    /// does the moment the copy lands, and the Linux port does not open a
+    /// browser. Gated here, on the one path both strips and the
+    /// accelerator lookup read, so the letter is as dead as the button.
     pub fn allows(self, command: Command) -> bool {
         match command {
             Command::Upload | Command::OcrUpload => self.upload,
@@ -87,6 +93,8 @@ impl PanelFeatures {
             Command::Video => self.video,
             Command::Ocr => self.ocr,
             Command::SearchImage => self.image_search,
+            #[cfg(target_os = "linux")]
+            Command::Copy | Command::OcrCopy | Command::OcrSearch => false,
             _ => true,
         }
     }
@@ -704,8 +712,31 @@ mod tests {
         assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, all, 'l'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'b'), None);
         // The shared letters must still resolve — to *this* set's command.
+        // (COPY is not offered on Linux at all; see `copy_and_ocr_search_never_offered_on_linux`.)
+        #[cfg(not(target_os = "linux"))]
         assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, all, 'c'), Some(Command::OcrCopy));
+        #[cfg(not(target_os = "linux"))]
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'c'), Some(Command::Copy));
+    }
+
+    /// Both COPY buttons and OCR SEARCH are compile-gated out on Linux —
+    /// the clipboard would not outlive the process, and the port opens no
+    /// browser — and so are their letters, under every switch combination.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn copy_and_ocr_search_never_offered_on_linux() {
+        for features in FEATURE_COMBINATIONS {
+            assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, features, 'c'), None);
+            assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, features, 'c'), None);
+            assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, features, 's'), None);
+            for set in PanelButtonSet::ALL {
+                assert!(
+                    set.visible_defs(features)
+                        .all(|(_, d)| !matches!(d.command, Command::Copy | Command::OcrCopy | Command::OcrSearch)),
+                    "{set:?} {features:?}"
+                );
+            }
+        }
     }
 
     /// The whole point of the feature switches: a button the user turned
@@ -730,12 +761,14 @@ mod tests {
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'a'), None);
         // UPLOAD is one switch across both strips — text is still an upload.
         assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, off, 'u'), None);
+        #[cfg(not(target_os = "linux"))]
         assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, off, 's'), Some(Command::OcrSearch));
 
         // The non-configurable core survives every combination.
         for features in FEATURE_COMBINATIONS {
             for (key, cmd) in [
                 ('e', Command::Edit),
+                #[cfg(not(target_os = "linux"))]
                 ('c', Command::Copy),
                 ('s', Command::Save),
                 ('r', Command::Reset),
@@ -857,7 +890,9 @@ mod tests {
     }
 
     /// The design: the accent group holds the actions that finish the
-    /// capture, the grey groups the hand-offs and the ways out.
+    /// capture, the grey groups the hand-offs and the ways out. (Not on
+    /// Linux, whose strips lack COPY.)
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn groups_match_the_design() {
         let labels = |set: PanelButtonSet| -> Vec<(GroupTone, Vec<&str>)> {

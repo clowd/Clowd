@@ -18,6 +18,8 @@
 mod client;
 
 pub mod anim;
+// OCR SEARCH opens a browser, which Linux does not offer.
+#[cfg(not(target_os = "linux"))]
 pub mod search;
 
 // The result types are the process boundary's contract, so they live in the

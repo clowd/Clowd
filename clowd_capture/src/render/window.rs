@@ -432,6 +432,11 @@ fn apply_capture_window_tweaks(window: &Window) {
     }
 }
 
+/// Nothing to tweak on X11: no DWM to keep out of Peek/transitions, and
+/// the window type and level are set at creation (`app.rs`).
+#[cfg(target_os = "linux")]
+fn apply_capture_window_tweaks(_window: &Window) {}
+
 /// Show a window without activating the app or making it key.
 /// The window appears at its configured level (above all other windows)
 /// but the previously-focused app retains focus until we explicitly take it.
@@ -493,6 +498,13 @@ pub(crate) fn set_hardware_cursor_visible(visible: bool) {
     }
 }
 
+/// X11 has no global cursor switch (`XFixesHideCursor` is per window and
+/// per client); the per-window winit hide in `WindowHandle::new` and
+/// `hide_cursor` is the whole implementation, and the overlay covers every
+/// monitor, so there is nowhere for the hardware cursor to show through.
+#[cfg(target_os = "linux")]
+pub(crate) fn set_hardware_cursor_visible(_visible: bool) {}
+
 // ── Platform: screenshot crop (private) ────────────────────────────
 
 #[cfg(target_os = "macos")]
@@ -501,12 +513,12 @@ fn crop_screenshot_to_cgimage(screenshot: &CapturedDesktop, monitor_bounds: Scre
     use core_graphics::context::CGContext;
 
     // CoreGraphics already produced a CGImage for this display while capturing;
-    // `mac_capture` parks it instead of dropping it, so the common case is a
+    // `mac::capture` parks it instead of dropping it, so the common case is a
     // pointer move. The crop below is the fallback, and it is not cheap: it
     // copies the monitor's pixels out of the composite row by row and then
     // `CGBitmapContextCreateImage` copies them again — on the main thread, once
     // per monitor, in the middle of window creation.
-    if let Some(image) = crate::system::mac_capture::take_display_image(monitor_bounds) {
+    if let Some(image) = crate::system::mac::capture::take_display_image(monitor_bounds) {
         return Some(image);
     }
 

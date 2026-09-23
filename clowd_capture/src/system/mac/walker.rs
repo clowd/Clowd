@@ -1,7 +1,7 @@
 //! Window walker — enumerates visible top-level windows on macOS and finds
 //! the best capture-target rectangle under a given point.
 //!
-//! Simplified macOS port of `win_walker.rs`: returns whole window rects only,
+//! Simplified macOS port of `system/win/walker.rs`: returns whole window rects only,
 //! no child-window walking.
 
 use std::ffi::c_void;
@@ -15,9 +15,9 @@ use core_graphics::display::CGDisplay;
 use core_graphics::geometry::CGRect;
 use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
-use super::mac_corners::{self, CgBounds};
-use super::{HitTestResult, ObstructedWindow, WindowCaptureRef, WindowTarget};
+use super::corners::{self, CgBounds};
 use crate::system::MonitorInfo;
+use crate::system::{HitTestResult, ObstructedWindow, WindowCaptureRef, WindowTarget};
 use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
@@ -84,11 +84,7 @@ impl WindowWalker {
         info!("WindowWalker: captured {} top-level windows", windows.len());
         // Seed every entry with the lookup-table radius for this OS; the
         // probe replaces these one by one once the snapshot is published.
-        let fallback_pts = if rounded_corners {
-            mac_corners::fallback_radius_points()
-        } else {
-            0.0
-        };
+        let fallback_pts = if rounded_corners { corners::fallback_radius_points() } else { 0.0 };
         let corner_radii = windows
             .iter()
             .map(|w| fallback_pts * w.scale)
@@ -111,7 +107,7 @@ impl WindowWalker {
         }
         let mut probed = 0usize;
         for (i, w) in self.windows.iter().enumerate() {
-            let Some(r) = mac_corners::probe_corner_radius(w.window_id, w.cg_bounds, monitors) else {
+            let Some(r) = corners::probe_corner_radius(w.window_id, w.cg_bounds, monitors) else {
                 continue;
             };
             debug!(
@@ -156,7 +152,7 @@ impl WindowWalker {
 
     /// The scrolling-capture target under `point`: the topmost enumerated
     /// window, as a `CGWindowID` widened to the `isize` the `scroll` marker
-    /// carries on both platforms (`win_walker` puts an `HWND` in the same
+    /// carries on both platforms (`win::walker` puts an `HWND` in the same
     /// field). The driver re-validates whatever it is given, and `0` — which
     /// is what "no window here" becomes at the call site — tells it to
     /// resolve the target from the point itself.

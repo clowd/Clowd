@@ -54,6 +54,25 @@ fn main() -> anyhow::Result<()> {
     system::SystemInterop::init();
     let mut event_loop = build_event_loop()?;
 
+    // Linux is one-shot only in this pass: no warm capturer, no hotkey hook
+    // (handy-keys' evdev listener wants input-group access the shell cannot
+    // assume), so a shell that asks for standby anyway gets a clear refusal
+    // rather than a process that idles with no way to trigger it.
+    //
+    // Host contract note: the refusal exits with CAPTURE_FAILED, which the
+    // shell's CaptureStandbySupervisor cannot tell from a crash (it would
+    // retry, file a standby-crash report per attempt, then fall back to
+    // one-shot). The shell must therefore not construct the supervisor on
+    // Linux at all; a distinct "standby unsupported" exit code is the
+    // alternative if that ever becomes awkward, but today no such code
+    // exists in `clowd_rust_core::exit` and NO_SCREEN_PERMISSION (the only
+    // one mapped to a silent fallback) would be a lie.
+    #[cfg(target_os = "linux")]
+    if args.standby {
+        error!("--standby is not supported on Linux; run one capture per process with --session-dir");
+        std::process::exit(system::EXIT_CAPTURE_FAILED);
+    }
+
     if !args.standby {
         if let Some(dir) = &args.session_dir {
             logger.begin_session(dir);
@@ -126,6 +145,12 @@ fn run_cycle(
     if let Some(dir) = &settings.session_dir {
         info!("session mode: payload will be written to {:?}", dir);
     }
+    // The wgpu backend's GL fallback can only present on the display its
+    // instance was built for; the event loop (pinned to X11, see
+    // `build_event_loop`) is the one place that display comes from, and
+    // the session below builds the instance without ever seeing it.
+    #[cfg(target_os = "linux")]
+    gxi::set_display_handle(event_loop.owned_display_handle());
     let session = capture::session::CaptureSession::new(settings, t_start)?;
     let timings = session.timings().clone();
     timings.apply_prologue(prologue);
@@ -162,6 +187,22 @@ fn build_event_loop() -> anyhow::Result<winit::event_loop::EventLoop<()>> {
             .with_activate_ignoring_other_apps(false)
             .build()?)
     }
-    #[cfg(not(target_os = "macos"))]
+    // Pinned to X11: every Linux system piece (RandR monitor rectangles,
+    // the root-window GetImage, the XFixes cursor, WarpPointer, the X11
+    // window type and physical placement) speaks root-window coordinates,
+    // and winit would otherwise pick Wayland whenever WAYLAND_DISPLAY is
+    // set — placing the overlays wherever the compositor likes while the
+    // photograph and the pointer are in X11 space. Under a Wayland session
+    // this makes the process an XWayland client (only X clients appear in
+    // the shot, but the geometry is coherent); the shell routes real
+    // Wayland sessions to clowd_capture_wayland instead.
+    #[cfg(target_os = "linux")]
+    {
+        use winit::platform::x11::EventLoopBuilderExtX11;
+        Ok(winit::event_loop::EventLoop::builder()
+            .with_x11()
+            .build()?)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     Ok(winit::event_loop::EventLoop::new()?)
 }

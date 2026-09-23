@@ -1,4 +1,4 @@
-//! macOS glue for [`super::corners`]: the OS-version lookup used until the
+//! macOS glue for [`crate::system::corners`]: the OS-version lookup used until the
 //! window server has been asked, and the probe that asks it.
 //!
 //! There is no public API that reports an `NSWindow`'s corner radius from
@@ -16,8 +16,8 @@ use core_graphics::geometry::{CGPoint, CGRect, CGSize};
 use core_graphics::window::{self, kCGWindowImageBestResolution, kCGWindowImageBoundsIgnoreFraming, kCGWindowListOptionIncludingWindow};
 use objc2_foundation::NSProcessInfo;
 
-use super::corners::{estimate_radius_from_alpha, macos_fallback_radius_points, Corner};
-use super::MonitorInfo;
+use crate::system::corners::{estimate_radius_from_alpha, macos_fallback_radius_points, Corner};
+use crate::system::MonitorInfo;
 
 /// Side of the square captured at a window corner, in CG points. Has to
 /// exceed the largest radius in use (26 pt on Tahoe) with room for the

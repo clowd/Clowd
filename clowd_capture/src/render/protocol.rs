@@ -25,6 +25,9 @@ pub enum RenderMsg {
     },
     UiState(Arc<UiSharedState>),
     BlurredDesktop(Arc<BlurredDesktopImage>),
+    /// Never sent on Linux, where the walker enumerates no windows and the
+    /// peek capture phase is a no-op (`capture::session`).
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     PeekImage(Arc<WindowPeekImage>),
     ShowPeek(Option<PeekCommand>),
     Shutdown,

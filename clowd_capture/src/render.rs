@@ -95,7 +95,7 @@ fn spawn_deferred_stack(
             // `scope` lets both borrow the one device. A third thread
             // would only contend on the platform shader compiler, which is
             // the real serialization point — `create_pipeline` takes no
-            // device-wide lock on either backend.
+            // device-wide lock on any backend.
             let (peek, selection, egui) = thread::scope(|s| {
                 let peek = s.spawn(|| {
                     crate::system::lower_thread_priority();
@@ -159,12 +159,14 @@ fn present_first_frame(surface: &mut gxi::Surface, pipeline: &gxi::RenderPipelin
     // path with the render loop picking up the first paint. The common case
     // where the surface is already acquirable — every non-macOS platform,
     // and any macOS run slow enough that AppKit caught up — breaks out of
-    // the loop on the first attempt and never sleeps.
+    // the loop on the first attempt and never sleeps. Linux gets the same
+    // bounded wait, for whatever the wgpu backend reports as `Occluded`: the
+    // window there is likewise created hidden and mapped only after frame 0.
     let occluded_deadline = Instant::now() + Duration::from_millis(500);
     let mut frame = loop {
         match surface.acquire(None) {
             AcquireResult::Frame(f) => break f,
-            AcquireResult::Occluded if cfg!(target_os = "macos") && Instant::now() < occluded_deadline => {
+            AcquireResult::Occluded if cfg!(any(target_os = "macos", target_os = "linux")) && Instant::now() < occluded_deadline => {
                 thread::sleep(Duration::from_millis(1));
             }
             // Like the other misses, the render loop picks up the first

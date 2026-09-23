@@ -27,7 +27,7 @@ use windows::{
     },
 };
 
-use super::{HitTestResult, MonitorInfo, ObstructedWindow, WindowCaptureRef, WindowTarget};
+use crate::system::{HitTestResult, MonitorInfo, ObstructedWindow, WindowCaptureRef, WindowTarget};
 use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
@@ -87,7 +87,7 @@ struct WindowEntry {
     obstruction_rects: Vec<ScreenRect>,
     /// Corner radius DWM composites this window with, in physical px
     /// (0 = square; always 0 when the walker was built with rounded
-    /// corners off). See `win_corners`.
+    /// corners off). See `win::corners`.
     corner_radius: f32,
 }
 
@@ -555,7 +555,7 @@ fn evaluate_window(
         // user32/DWM round-trips per window, skipped entirely when the
         // feature is off.
         let corner_radius = if rounded_corners {
-            super::win_corners::window_corner_radius(hwnd, style)
+            super::corners::window_corner_radius(hwnd, style)
         } else {
             0.0
         };

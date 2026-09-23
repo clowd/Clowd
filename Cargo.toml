@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "clowd_ai",
     "clowd_capture",
+    "clowd_capture_wayland",
     "clowd_rust_core",
     "clowd_scroll_driver",
     "clowd_shell_ext",
@@ -72,6 +73,16 @@ egui_plot = "0.37"
 arboard = "3.6"
 rfd = { version = "0.17", default-features = false }
 xdialog = "3.1"
+# clowd_capture's X11 system layer (monitors, root capture, cursor, pointer). Extension
+# features (randr, xfixes) are enabled per crate; the default RustConnection needs no libxcb.
+x11rb = "0.13"
+# clowd_capture_wayland's route to the desktop's screenshot UI (xdg-desktop-portal over
+# D-Bus). Default features off: they would bring tokio in as zbus's executor, and the
+# crate picks `async-io` (zbus's own executor thread) so one blocking request needs no
+# runtime of its own. Interface features (screenshot) are enabled per crate.
+ashpd = { version = "0.13", default-features = false }
+# `file://` URI to path for the portal's reply — already in the tree through sentry/reqwest.
+url = "2.5"
 windows = "0.62"
 foreign-types = "0.5"
 core-graphics = "0.25"
@@ -83,8 +94,15 @@ objc2-foundation = "0.3"
 objc2-metal = "0.3"
 objc2-quartz-core = "0.3"
 block2 = "0.6"
+# clowd_capture's Linux gxi backend (src/gxi/wgpu). Default features off: the backend
+# features (vulkan, gles) and the runtime WGSL front end are enabled per crate; the
+# naga inside must match the build-time naga below so the WGSL the build validates is
+# the WGSL the binary compiles.
+wgpu = { version = "30.0", default-features = false }
+pollster = "1.0"
 # build-time shader precompilation (clowd_capture/build.rs): WGSL to HLSL on
-# Windows, WGSL to MSL source on macOS. Build time only; never in a binary.
+# Windows, WGSL to MSL source on macOS, WGSL validation on Linux. Build time
+# only; never in a binary (Linux carries naga through wgpu instead).
 naga = "30.0"
 libloading = "0.9"
 # rustls keeps every target off OpenSSL/schannel, and debug-images/log/anyhow are what make the reports symbolicated and readable.

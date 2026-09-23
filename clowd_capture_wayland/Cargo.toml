@@ -1,0 +1,31 @@
+[package]
+name = "clowd_capture_wayland"
+version = "1.0.0"
+edition = "2021"
+
+# The Wayland screenshot path: a Wayland compositor gives no process a copy of the screen, so
+# there is no overlay to draw — the user picks the region inside the desktop's own screenshot UI,
+# reached through the xdg-desktop-portal Screenshot interface, and this binary turns the file
+# the portal hands back into a session directory the shell can open in the editor. Kept out of
+# clowd_capture because it shares nothing with it at runtime: no window, no event loop, no GPU.
+
+# Everything but the shared core is Linux-only: on any other target the binary is a stub that
+# exits `CAPTURE_FAILED` (see main.rs), and a dependency that only the stub could reach would be
+# build time spent for nothing. image, euclid and sentry reach this crate through clowd_rust_core.
+[dependencies]
+clowd_rust_core.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+log.workspace = true
+simplelog.workspace = true
+serde_json.workspace = true
+# Decoding the portal's PNG so the session's own PNGs are written by the same encoder as every
+# other capture's, and so a file the portal misdescribed fails here rather than in the editor.
+image = { workspace = true, features = ["png"] }
+# The portal's `file://` URI to a path: percent-decoding plus the `file://localhost/` spelling.
+url.workspace = true
+# `screenshot` is the one portal interface used; `async-io` picks zbus's own executor over
+# tokio, so the whole request is a single `block_on` with no runtime of our own to stand up.
+ashpd = { workspace = true, features = ["screenshot", "async-io"] }
