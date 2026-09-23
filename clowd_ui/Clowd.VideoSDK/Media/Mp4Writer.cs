@@ -106,6 +106,10 @@ namespace Clowd.VideoSDK.Media
     /// samples.
     /// </para>
     /// <para>
+    /// An output path ending in <c>.mkv</c> is muxed as Matroska instead (see
+    /// <see cref="IsMatroskaPath"/>); everything else here holds for it too, bar faststart.
+    /// </para>
+    /// <para>
     /// <c>+faststart</c> is set via movflags, so av_write_trailer rewrites the file to put moov
     /// first. Trailer semantics port render.rs's fix verbatim: FFmpeg deinits the muxer even when
     /// av_write_trailer fails (movenc frees its track array), so a retry from Dispose would
@@ -129,6 +133,7 @@ namespace Clowd.VideoSDK.Media
         private int _vstreamIndex = -1;
         private int _astreamIndex = -1;
         private bool _legacyContainerTiming;
+        private bool _matroska;
 
         private bool _headerWritten;
         private bool _trailerWritten;
@@ -203,9 +208,10 @@ namespace Clowd.VideoSDK.Media
         private void Initialize(string outputPath, Mp4WriterOptions options)
         {
             _legacyContainerTiming = options.LegacyContainerTiming;
+            _matroska = IsMatroskaPath(outputPath);
             AVFormatContext* fmt = null;
-            Check(ffmpeg.avformat_alloc_output_context2(&fmt, null, "mp4", outputPath),
-                "could not create mp4 muxer");
+            Check(ffmpeg.avformat_alloc_output_context2(&fmt, null, _matroska ? "matroska" : "mp4", outputPath),
+                _matroska ? "could not create matroska muxer" : "could not create mp4 muxer");
             _fmt = fmt;
             bool globalHeader = (_fmt->oformat->flags & ffmpeg.AVFMT_GLOBALHEADER) != 0;
 
@@ -282,10 +288,11 @@ namespace Clowd.VideoSDK.Media
                 "could not open output file");
 
             AVDictionary* opts = null;
-            ffmpeg.av_dict_set(&opts, "movflags", "+faststart", 0);
+            if (!_matroska)
+                ffmpeg.av_dict_set(&opts, "movflags", "+faststart", 0);
             int header = ffmpeg.avformat_write_header(_fmt, &opts);
             ffmpeg.av_dict_free(&opts);
-            Check(header, "could not write mp4 header");
+            Check(header, "could not write the container header");
             _headerWritten = true;
         }
 
@@ -597,10 +604,16 @@ namespace Clowd.VideoSDK.Media
             // attempt, success or not.
             int ret = ffmpeg.av_write_trailer(_fmt);
             _trailerWritten = true;
-            Check(ret, "could not finalize the mp4");
+            Check(ret, "could not finalize the output file");
 
             Check(ffmpeg.avio_closep(&_fmt->pb), "could not close the output file");
         }
+
+        /// <summary>True when <paramref name="path"/> names a Matroska file (<c>.mkv</c>), which
+        /// the writer muxes as Matroska instead of mp4 — the container follows the extension, as
+        /// it does for the recorder. The streams are the same H.264 and aac either way.</summary>
+        public static bool IsMatroskaPath(string path) =>
+            ".mkv".Equals(System.IO.Path.GetExtension(path), StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Marks the writer abandoned: <see cref="Dispose"/> skips the mp4 trailer and just

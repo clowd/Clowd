@@ -221,6 +221,54 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void An_mkv_path_is_muxed_as_matroska()
+        {
+            RequireFFmpeg();
+
+            const int W = 320, H = 240, Fps = 30, Frames = 60; // 2s of video
+            const int Rate = 48000;
+            string path = Path.ChangeExtension(TempMp4(), ".mkv");
+            try
+            {
+                using (var writer = new Mp4Writer(path, new Mp4WriterOptions
+                {
+                    Width = W,
+                    Height = H,
+                    FpsNum = Fps,
+                    FpsDen = 1,
+                    Audio = new Mp4AudioOptions { SampleRate = Rate, Channels = 2 },
+                }))
+                {
+                    SubmitSolidFrames(writer, W, H, Frames);
+                    SubmitSine(writer, Rate, 2 * Rate);
+                    writer.Finish();
+                }
+
+                // EBML magic, not an mp4 ftyp box
+                var head = new byte[4];
+                using (var file = File.OpenRead(path))
+                    Assert.Equal(4, file.Read(head, 0, 4));
+                Assert.Equal(new byte[] { 0x1A, 0x45, 0xDF, 0xA3 }, head);
+
+                var probe = MediaProbe.ProbeDetailed(path);
+                Assert.True(probe.HasAudio);
+                var v = Assert.Single(probe.VideoStreams);
+                Assert.Equal(W, v.Width);
+                Assert.Equal(H, v.Height);
+                Assert.Equal("h264", v.CodecName);
+                Assert.InRange(probe.DurationTicks, 19_000_000, 22_500_000);
+
+                var raw = ProbeRaw(path);
+                Assert.Equal(AVCodecID.AV_CODEC_ID_AAC, raw.AudioCodecId);
+                Assert.Equal(Rate, raw.AudioSampleRate);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void Encodes_video_only_mp4()
         {
             RequireFFmpeg();

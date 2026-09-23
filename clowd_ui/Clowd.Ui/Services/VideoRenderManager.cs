@@ -350,7 +350,7 @@ namespace Clowd.UI.Services
             // the dialog's "Save to" box wins when there was one; otherwise the settings-derived
             // default, which is what every render used before the dialog existed. Resolved before
             // the old entry goes, so the free name it picks is one no file on disk holds.
-            var outputPath = String.IsNullOrEmpty(request.OutputPath) ? GetOutputPath(source) : request.OutputPath;
+            var outputPath = String.IsNullOrEmpty(request.OutputPath) ? GetOutputPath(source, request.Container) : request.OutputPath;
 
             // …a finished one is replaced: its Recents row always, but the file it wrote only when
             // this render is about to write over that very path anyway. Now that the dialog lets the
@@ -476,32 +476,35 @@ namespace Clowd.UI.Services
         ///
         /// Public because the render dialog shows this path in its "Save to" box and hands back
         /// whatever the user made of it: the default the dialog offers has to be the one a preset
-        /// render would have used. Each call resolves a fresh free name, so ask once per render.</summary>
-        public static string GetOutputPath(SessionInfo source)
+        /// render would have used. Each call resolves a fresh free name, so ask once per render.
+        /// <paramref name="container"/> decides the extension, which is what the renderer muxes by.</summary>
+        public static string GetOutputPath(SessionInfo source, VideoContainer container = VideoContainer.Mp4)
         {
-            var configured = RecordingOutputPath.GetSavePath(SettingsRoot.Current?.Recording);
+            var extension = container.ToExtension();
+            var configured = RecordingOutputPath.GetSavePath(SettingsRoot.Current?.Recording, extension);
             if (!String.IsNullOrEmpty(configured))
                 return configured;
 
             if (!String.IsNullOrEmpty(source.VideoPath))
-                return GetOutputPath(source.VideoPath);
+                return GetOutputPath(source.VideoPath, container);
 
             var dir = Path.GetDirectoryName(source.FilePath);
-            return GetOutputPath(Path.Combine(dir, "project.mp4"));
+            return GetOutputPath(Path.Combine(dir, "project.mp4"), container);
         }
 
-        /// <summary>"<c>name</c>-edited.mp4" beside the source, uniquified with a counter when that
+        /// <summary>"<c>name</c>-edited.mp4" (or <c>.mkv</c>) beside the source, uniquified with a counter when that
         /// is taken (an earlier render the user kept, or a file they made themselves). The fallback
         /// for when the configured output folder cannot be written to, and what the dev harness —
         /// which has a file but no session and so no settings to follow — renders to.</summary>
-        internal static string GetOutputPath(string sourceVideoPath)
+        internal static string GetOutputPath(string sourceVideoPath, VideoContainer container = VideoContainer.Mp4)
         {
+            var extension = container.ToExtension();
             var dir = Path.GetDirectoryName(sourceVideoPath);
             var stem = Path.GetFileNameWithoutExtension(sourceVideoPath) + "-edited";
 
-            var candidate = Path.Combine(dir, stem + ".mp4");
+            var candidate = Path.Combine(dir, stem + extension);
             for (var i = 2; File.Exists(candidate); i++)
-                candidate = Path.Combine(dir, stem + "-" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".mp4");
+                candidate = Path.Combine(dir, stem + "-" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + extension);
 
             return candidate;
         }

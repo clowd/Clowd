@@ -58,6 +58,10 @@ namespace Clowd.Config
 
         public bool HardwareEncoder { get; set; }
 
+        /// <summary>MP4 or MKV. A preset saved before the field existed reads MP4, which is what
+        /// it rendered.</summary>
+        public VideoContainer Container { get; set; }
+
         public bool CopyToClipboard { get; set; }
 
         public bool ShowInFolder { get; set; }
@@ -175,6 +179,16 @@ namespace Clowd.Config
             set => Set(ref _hardwareEncodeRender, value);
         }
 
+        /// <summary>The container the render dialog was last rendered with (its "Container" row).
+        /// MP4 by default; the flyout's preset rows render into it too, so the file they write has
+        /// the extension the dialog last showed.</summary>
+        [Browsable(false)]
+        public VideoContainer RenderContainer
+        {
+            get => _renderContainer;
+            set => Set(ref _renderContainer, value);
+        }
+
         /// <summary>The user's own presets, in the order they were saved; the Render flyout lists
         /// them under the built-in rows. Replace the list rather than mutating it, so the change is
         /// raised.</summary>
@@ -245,6 +259,7 @@ namespace Clowd.Config
         private bool _copyToClipboardAfterRender;
         private bool _showInFolderAfterRender;
         private bool _hardwareEncodeRender;
+        private VideoContainer _renderContainer = VideoContainer.Mp4;
         private List<RenderUserPreset> _renderUserPresets = new List<RenderUserPreset>();
         private string _lastUserRenderPresetId;
         private int _customOutputWidthPx;

@@ -127,7 +127,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var dir = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
 
-            var resolved = RenderOutputPath.Resolve("holiday", dir, out var problem);
+            var resolved = RenderOutputPath.Resolve("holiday", dir, VideoContainer.Mp4, out var problem);
 
             Assert.Null(problem);
             Assert.Equal(Path.Combine(dir, "holiday.mp4"), resolved);
@@ -139,11 +139,39 @@ namespace Clowd.VideoSDK.Tests
             var dir = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
             var other = Path.Combine(dir, "sub");
 
-            Assert.Equal(Path.Combine(other, "clip.mp4"), RenderOutputPath.Resolve(Path.Combine(other, "clip.mp4"), dir, out _));
-            Assert.Equal(Path.Combine(other, "clip.mp4"), RenderOutputPath.Resolve(Path.Combine(other, "clip"), dir, out _));
-            // a name that already ends in another extension keeps it and becomes an mp4 as well:
-            // the renderer writes mp4 whatever the box says.
-            Assert.Equal(Path.Combine(other, "clip.mkv.mp4"), RenderOutputPath.Resolve(Path.Combine(other, "clip.mkv"), dir, out _));
+            Assert.Equal(Path.Combine(other, "clip.mp4"), RenderOutputPath.Resolve(Path.Combine(other, "clip.mp4"), dir, VideoContainer.Mp4, out _));
+            Assert.Equal(Path.Combine(other, "clip.mp4"), RenderOutputPath.Resolve(Path.Combine(other, "clip"), dir, VideoContainer.Mp4, out _));
+            // a name that already ends in some other extension keeps it and becomes an mp4 as well
+            Assert.Equal(Path.Combine(other, "clip.mov.mp4"), RenderOutputPath.Resolve(Path.Combine(other, "clip.mov"), dir, VideoContainer.Mp4, out _));
+        }
+
+        [Fact]
+        public void The_container_decides_the_extension_and_swaps_the_other_one()
+        {
+            var dir = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+
+            Assert.Equal(Path.Combine(dir, "clip.mkv"), RenderOutputPath.Resolve("clip", dir, VideoContainer.Mkv, out _));
+            Assert.Equal(Path.Combine(dir, "clip.mkv"), RenderOutputPath.Resolve("clip.mp4", dir, VideoContainer.Mkv, out _));
+            Assert.Equal(Path.Combine(dir, "clip.mp4"), RenderOutputPath.Resolve("clip.mkv", dir, VideoContainer.Mp4, out _));
+            Assert.Equal(Path.Combine(dir, "clip.MKV"), RenderOutputPath.Resolve("clip.MKV", dir, VideoContainer.Mkv, out _));
+        }
+
+        [Fact]
+        public void A_path_names_a_container_only_by_a_known_extension()
+        {
+            Assert.Equal(VideoContainer.Mp4, RenderOutputPath.ContainerOf("a/clip.mp4"));
+            Assert.Equal(VideoContainer.Mkv, RenderOutputPath.ContainerOf("a/clip.Mkv"));
+            Assert.Null(RenderOutputPath.ContainerOf("a/clip.mov"));
+            Assert.Null(RenderOutputPath.ContainerOf("a/clip"));
+            Assert.Null(RenderOutputPath.ContainerOf(null));
+        }
+
+        [Fact]
+        public void Renders_use_the_remembered_or_saved_container()
+        {
+            Assert.Equal(VideoContainer.Mkv, RenderPresets.Create(new RenderUserPreset { Container = VideoContainer.Mkv }).Container);
+            Assert.Equal(VideoContainer.Mp4, RenderPresets.Create(RenderPreset.Share, null).Container);
+            Assert.Equal(VideoContainer.Mkv, RenderPresets.Create(RenderPreset.Share, new SettingsVideoEditor { RenderContainer = VideoContainer.Mkv }).Container);
         }
 
         [Fact]
@@ -151,7 +179,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var dir = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
 
-            Assert.Equal(Path.Combine(dir, "clip.mp4"), RenderOutputPath.Resolve("  clip.mp4  ", dir, out _));
+            Assert.Equal(Path.Combine(dir, "clip.mp4"), RenderOutputPath.Resolve("  clip.mp4  ", dir, VideoContainer.Mp4, out _));
         }
 
         [Fact]
@@ -159,15 +187,15 @@ namespace Clowd.VideoSDK.Tests
         {
             var dir = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
 
-            Assert.Null(RenderOutputPath.Resolve("", dir, out var empty));
+            Assert.Null(RenderOutputPath.Resolve("", dir, VideoContainer.Mp4, out var empty));
             Assert.False(String.IsNullOrEmpty(empty));
 
-            Assert.Null(RenderOutputPath.Resolve("   ", dir, out var blank));
+            Assert.Null(RenderOutputPath.Resolve("   ", dir, VideoContainer.Mp4, out var blank));
             Assert.False(String.IsNullOrEmpty(blank));
 
             // the invalid characters are the platform's own list, so this is one that is invalid
             // everywhere the app runs.
-            Assert.Null(RenderOutputPath.Resolve("cli\0p.mp4", dir, out var invalid));
+            Assert.Null(RenderOutputPath.Resolve("cli\0p.mp4", dir, VideoContainer.Mp4, out var invalid));
             Assert.False(String.IsNullOrEmpty(invalid));
         }
 
@@ -176,7 +204,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var dir = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
 
-            Assert.Null(RenderOutputPath.Resolve(dir + Path.DirectorySeparatorChar, dir, out var problem));
+            Assert.Null(RenderOutputPath.Resolve(dir + Path.DirectorySeparatorChar, dir, VideoContainer.Mp4, out var problem));
             Assert.False(String.IsNullOrEmpty(problem));
         }
 

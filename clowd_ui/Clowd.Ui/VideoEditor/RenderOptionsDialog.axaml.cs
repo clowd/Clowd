@@ -30,20 +30,25 @@ namespace Clowd.UI.VideoEditor
     /// The "Render video" dialog behind the Render flyout's "More options…" row: quality (a CRF
     /// slider, with the three presets as shortcuts onto it), an encode-time size cap, a frame-rate
     /// cap (the recording frame-rate presets, from settings), whether the
-    /// GPU encoder may be used, where the file goes, and what should happen once it is there. It
-    /// renders nothing itself — it returns a <see cref="RenderRequest"/> the caller starts, or
-    /// null when the user backed out.
+    /// GPU encoder may be used, the container (MP4 or MKV), where the file goes, and what should
+    /// happen once it is there. It renders nothing itself — it returns a <see cref="RenderRequest"/>
+    /// the caller starts, or null when the user backed out.
     ///
-    /// H.264 in MP4, x264 <c>fast</c>, is the only thing the renderer writes today, so there is no
-    /// codec, container or speed row: every row here is a choice that actually changes the file.
+    /// H.264 and aac, x264 <c>fast</c>, is the only thing the renderer encodes today, so there is
+    /// no codec or speed row: every row here is a choice that actually changes the file.
     /// </summary>
     public partial class RenderOptionsDialog : Window
     {
-        /// <summary>MP4 only — the one container the render tool writes.</summary>
         private static readonly FilePickerFileType Mp4FileType = new FilePickerFileType("MP4 video")
         {
             Patterns = new[] { "*.mp4" },
             MimeTypes = new[] { "video/mp4" },
+        };
+
+        private static readonly FilePickerFileType MkvFileType = new FilePickerFileType("MKV video")
+        {
+            Patterns = new[] { "*.mkv" },
+            MimeTypes = new[] { "video/x-matroska" },
         };
 
         private readonly RenderProjectInfo _project;
@@ -124,7 +129,8 @@ namespace Clowd.UI.VideoEditor
             SelectSize(initial.MaxHeight);
             SelectFps(initial.MaxFps);
 
-            PathBox.Text = defaultOutputPath;
+            SelectContainer(initial.Container);
+            PathBox.Text = RenderOutputPath.WithExtension(defaultOutputPath, initial.Container);
             HardwareCheck.IsChecked = initial.HardwareEncoder;
             CopyCheck.IsChecked = initial.CopyToClipboard;
             RevealCheck.IsChecked = initial.ShowInFolder;
@@ -160,6 +166,11 @@ namespace Clowd.UI.VideoEditor
             foreach (var fps in new[] { FpsActual, FpsPreset1, FpsPreset2, FpsPreset3, FpsCustom })
                 fps.IsCheckedChanged += (_, _) => SyncFpsCaption();
             CustomFpsBox.ValueChanged += (_, _) => SyncFpsCaption();
+            // the container is the path's extension: a cell renames the file, and a path that
+            // arrives with the other extension (typed or picked) moves the check to match
+            foreach (var cell in new[] { ContainerMp4, ContainerMkv })
+                cell.IsCheckedChanged += (_, _) => SyncPathExtension();
+            PathBox.TextChanged += (_, _) => SyncContainerFromPath();
 
             SyncQualitySegments();
             SyncSizeCaption();
@@ -343,6 +354,36 @@ namespace Clowd.UI.VideoEditor
             FpsCaption.Text = RenderFrameRate.Describe(RenderFrameRate.Resolve(_fpsCeiling, SelectedMaxFps()));
         }
 
+        private VideoContainer SelectedContainer() =>
+            ContainerMkv.IsChecked == true ? VideoContainer.Mkv : VideoContainer.Mp4;
+
+        private void SelectContainer(VideoContainer container) =>
+            (container == VideoContainer.Mkv ? ContainerMkv : ContainerMp4).IsChecked = true;
+
+        /// <summary>Gives the "Save to" path the checked container's extension, when it names one
+        /// of the two now (a path still being typed, with no extension yet, is left alone — the
+        /// render adds it).</summary>
+        private void SyncPathExtension()
+        {
+            var text = PathBox.Text;
+            if (String.IsNullOrWhiteSpace(text))
+                return;
+
+            var container = SelectedContainer();
+            var current = RenderOutputPath.ContainerOf(text.Trim());
+            if (current != null && current != container)
+                PathBox.Text = RenderOutputPath.WithExtension(text.Trim(), container);
+        }
+
+        /// <summary>A path typed or picked with the other container's extension checks that
+        /// container.</summary>
+        private void SyncContainerFromPath()
+        {
+            var current = RenderOutputPath.ContainerOf(PathBox.Text?.Trim());
+            if (current != null && current != SelectedContainer())
+                SelectContainer(current.Value);
+        }
+
         private async Task BrowseAsync()
         {
             var current = ResolveTypedPath(out _);
@@ -352,9 +393,12 @@ namespace Clowd.UI.VideoEditor
             {
                 Title = "Render video",
                 SuggestedFileName = String.IsNullOrEmpty(current) ? null : Path.GetFileName(current),
-                DefaultExtension = "mp4",
+                DefaultExtension = SelectedContainer().ToExtension().TrimStart('.'),
                 ShowOverwritePrompt = true,
-                FileTypeChoices = new[] { Mp4FileType },
+                // the checked container first, so it is the one the picker opens on
+                FileTypeChoices = SelectedContainer() == VideoContainer.Mkv
+                    ? new[] { MkvFileType, Mp4FileType }
+                    : new[] { Mp4FileType, MkvFileType },
             };
 
             if (!String.IsNullOrEmpty(directory) && Directory.Exists(directory))
@@ -363,7 +407,7 @@ namespace Clowd.UI.VideoEditor
             var picked = await StorageProvider.SaveFilePickerAsync(options);
             var path = picked?.TryGetLocalPath();
             if (!String.IsNullOrEmpty(path))
-                PathBox.Text = RenderOutputPath.WithExtension(path);
+                PathBox.Text = RenderOutputPath.WithExtension(path, RenderOutputPath.ContainerOf(path) ?? SelectedContainer());
         }
 
         /// <summary>Validates the typed path, asks about an overwrite, and closes with the request
@@ -452,6 +496,7 @@ namespace Clowd.UI.VideoEditor
                 MaxFps = FpsActual.IsChecked == true && _initial.MaxFps > 0 && !RenderFrameRate.IsBelow(_initial.MaxFps, _fpsCeiling)
                     ? _initial.MaxFps : SelectedMaxFps(),
                 HardwareEncoder = HardwareCheck.IsChecked == true,
+                Container = SelectedContainer(),
                 OutputPath = path,
                 CopyToClipboard = CopyCheck.IsChecked == true,
                 ShowInFolder = RevealCheck.IsChecked == true,
@@ -465,6 +510,6 @@ namespace Clowd.UI.VideoEditor
         /// <summary>What the "Save to" box currently names, with the same rules the Render button
         /// applies (<see cref="RenderOutputPath"/>).</summary>
         private string ResolveTypedPath(out string problem) =>
-            RenderOutputPath.Resolve(PathBox.Text, _defaultDirectory, out problem);
+            RenderOutputPath.Resolve(PathBox.Text, _defaultDirectory, SelectedContainer(), out problem);
     }
 }

@@ -31,7 +31,12 @@ namespace Clowd.UI.Services
         /// is faster and its file smaller at the same quality setting.</summary>
         public bool HardwareEncoder { get; init; }
 
-        /// <summary>Where to write the mp4, or null to let the render manager derive the default
+        /// <summary>The file the render writes: MP4 (the default) or MKV. The container follows the
+        /// output path's extension, so this is what the default path is given and what the dialog
+        /// keeps the "Save to" box ending in; the streams inside are the same either way.</summary>
+        public VideoContainer Container { get; init; }
+
+        /// <summary>Where to write the video, or null to let the render manager derive the default
         /// from the recording settings (output folder + filename pattern). Only the dialog sets
         /// this: a preset render never asks the user where the file goes.</summary>
         public string OutputPath { get; init; }
@@ -119,6 +124,7 @@ namespace Clowd.UI.Services
                 MaxFps = custom && settings != null ? ClampFps(settings.CustomRenderMaxFps) : MaxFpsOf(preset),
                 OutputPath = outputPath,
                 HardwareEncoder = settings?.HardwareEncodeRender ?? false,
+                Container = settings?.RenderContainer ?? VideoContainer.Mp4,
                 CopyToClipboard = settings?.CopyToClipboardAfterRender ?? false,
                 ShowInFolder = settings?.ShowInFolderAfterRender ?? false,
             };
@@ -132,6 +138,7 @@ namespace Clowd.UI.Services
             MaxHeight = Math.Max(0, preset.MaxHeight),
             MaxFps = ClampFps(preset.MaxFps),
             HardwareEncoder = preset.HardwareEncoder,
+            Container = preset.Container,
             CopyToClipboard = preset.CopyToClipboard,
             ShowInFolder = preset.ShowInFolder,
             DeleteSession = preset.DeleteSession,

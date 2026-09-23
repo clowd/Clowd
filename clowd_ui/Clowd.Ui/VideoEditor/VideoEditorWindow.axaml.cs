@@ -2196,6 +2196,7 @@ namespace Clowd.UI.VideoEditor
                 MaxHeight = request.MaxHeight,
                 MaxFps = request.MaxFps,
                 HardwareEncoder = request.HardwareEncoder,
+                Container = request.Container,
                 CopyToClipboard = request.CopyToClipboard,
                 ShowInFolder = request.ShowInFolder,
                 DeleteSession = request.DeleteSession,
@@ -2281,7 +2282,7 @@ namespace Clowd.UI.VideoEditor
             // a user preset opens the dialog on its own values; anything else as before
             var lastUser = LastUserPreset();
             var initial = lastUser != null ? RenderPresets.Create(lastUser) : RenderPresets.Create(LastRenderPreset, Settings);
-            var request = await RenderOptionsDialog.ShowAsync(this, info, initial, DefaultRenderOutputPath(), _session != null);
+            var request = await RenderOptionsDialog.ShowAsync(this, info, initial, DefaultRenderOutputPath(initial.Container), _session != null);
             if (request == null)
                 return; // canceled
 
@@ -2295,6 +2296,7 @@ namespace Clowd.UI.VideoEditor
                 Settings.CopyToClipboardAfterRender = request.CopyToClipboard;
                 Settings.ShowInFolderAfterRender = request.ShowInFolder;
                 Settings.HardwareEncodeRender = request.HardwareEncoder;
+                Settings.RenderContainer = request.Container;
                 Settings.LastRenderPreset = RenderPresets.Match(request.Crf, request.MaxHeight, request.MaxFps);
 
                 // a new preset becomes the last-used row, so the flyout's Enter repeats it
@@ -2314,8 +2316,8 @@ namespace Clowd.UI.VideoEditor
         /// <summary>The path the dialog's "Save to" box opens on: what a preset render would have
         /// written to — the recording settings' output folder and filename pattern, or, in the dev
         /// harness (no session), the file beside the one being edited.</summary>
-        private string DefaultRenderOutputPath() =>
-            _session != null ? VideoRenderManager.GetOutputPath(_session) : VideoRenderManager.GetOutputPath(_videoPath);
+        private string DefaultRenderOutputPath(VideoContainer container) =>
+            _session != null ? VideoRenderManager.GetOutputPath(_session, container) : VideoRenderManager.GetOutputPath(_videoPath, container);
 
         /// <summary>Starts <paramref name="request"/>: through the render manager when this editor
         /// has a session behind it, in-process when it does not (the dev harness).</summary>
@@ -2433,7 +2435,7 @@ namespace Clowd.UI.VideoEditor
         {
             var project = RenderFrameRate.Apply(_editor.SnapshotForPlayer(), request.MaxFps);
             var outputPath = String.IsNullOrEmpty(request.OutputPath)
-                ? VideoRenderManager.GetOutputPath(_videoPath)
+                ? VideoRenderManager.GetOutputPath(_videoPath, request.Container)
                 : request.OutputPath;
             var workDir = Path.Combine(Path.GetTempPath(), "clowd-video-edit-" + Guid.NewGuid().ToString("N"));
 
