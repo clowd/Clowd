@@ -454,8 +454,6 @@
                                                         <!-- Edit leads because it is what double-click does. "Show in folder" and
                                                              Delete trail the bar in that order: they are the two actions every kind
                                                              of entry offers, so they hold the same two slots on every row. -->
-                                                        <!-- a recording or gif has a poster frame, but putting that still on the
-                                                             clipboard is never what "copy" meant for a video — so it has no Copy. -->
                                                         <Button Classes="rowAction"
                                                                 Click="OpenItemClicked"
                                                                 IsVisible="{Binding ShowOpen}"
@@ -468,10 +466,10 @@
                                                         <Button Classes="rowAction"
                                                                 Click="CopyItemClicked"
                                                                 IsVisible="{Binding CanCopy}"
-                                                                ToolTip.Tip="Copy image to clipboard"
-                                                                AutomationProperties.Name="Copy image to clipboard">
+                                                                ToolTip.Tip="Copy to clipboard"
+                                                                AutomationProperties.Name="Copy to clipboard">
                                                             <Viewbox>
-                                                                <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopySmall}" />
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopyDocument}" />
                                                             </Viewbox>
                                                         </Button>
                                                         <!-- leads the project actions because it is also what double-click

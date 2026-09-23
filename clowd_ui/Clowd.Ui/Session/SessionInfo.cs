@@ -380,10 +380,9 @@ namespace Clowd
             }
         }
 
-        // a recording (and a converted GIF) carries a poster frame in PreviewImgPath, but putting
-        // that single still on the clipboard is never what the user meant by copying a video, so
-        // video entries offer no Copy at all.
-        [JsonIgnore] public bool CanCopy => !IsVideo && !IsProject && !String.IsNullOrEmpty(PreviewImgPath);
+        // an image copies its picture; a video (a recording, GIF or render) copies its file, not the
+        // poster frame in PreviewImgPath. A project has no finished file of its own, so no Copy.
+        [JsonIgnore] public bool CanCopy => !IsProject && (IsVideo ? CanPlay : !String.IsNullOrEmpty(PreviewImgPath));
 
         // every entry can be (re-)uploaded as long as it isn't busy and owns some content to send.
         // A project owns no finished file — its render does — so it is never uploadable.

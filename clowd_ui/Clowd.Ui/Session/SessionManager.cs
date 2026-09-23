@@ -230,6 +230,19 @@ namespace Clowd
 
         public void CopySession(SessionInfo session)
         {
+            // a video goes on the clipboard as the file itself (a file-drop list, like the render
+            // dialog's "Copy to clipboard"), never as its poster frame.
+            if (session != null && session.IsVideo)
+            {
+                var video = session.VideoPath;
+                if (String.IsNullOrEmpty(video) || !File.Exists(video))
+                    return;
+
+                var top = Toast.GetActiveOrMainWindow();
+                _ = ClipboardImpl.SetClipboardFiles(top?.Clipboard, top?.StorageProvider, video);
+                return;
+            }
+
             var path = session?.PreviewImgPath;
             if (String.IsNullOrEmpty(path) || !File.Exists(path))
                 return;
