@@ -42,7 +42,7 @@ impl ObsDisplay {
         };
         // Linux's gs_window is `{ id: u32, display: *mut c_void }` (an X11
         // window id plus its Display*), which a single pointer cannot express.
-        // The only caller, clowd_share_region, is not supported on Linux, so
+        // The only caller, clowd_share_region, is not built on Linux, so
         // refuse instead of guessing at a window.
         #[cfg(target_os = "linux")]
         let gs_window: obs_sys::gs_window = {

@@ -449,7 +449,7 @@ fn copy_dir_all(src_dir: &Path, dst_dir: &Path) {
 /// the release archive ships:
 ///
 /// ```text
-/// obs-express, obs-ffmpeg-mux, vid2gif, clowd_share_region
+/// obs-express, obs-ffmpeg-mux, vid2gif
 /// libobs.so.30, libobs-opengl.so.30        RUNPATH $ORIGIN
 /// libavcodec.so.61, ... (FFmpeg)           RUNPATH $ORIGIN
 /// obs-plugins/<plugin>.so                  RUNPATH $ORIGIN/..

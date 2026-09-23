@@ -83,10 +83,6 @@
 // line and every stderr line goes. Debug builds stay on the console subsystem
 // so that running the binary by hand still prints where it was started.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
-// Linux builds the crate only so the workspace builds: `main` exits before the
-// mirror exists (`refuse_unsupported_platform`) and there is no platform UI to
-// drive the app core, so most of the crate is dead code there by design.
-#![cfg_attr(target_os = "linux", allow(dead_code))]
 
 mod commands;
 mod mirror;
@@ -223,33 +219,12 @@ impl AppEvents for App {
     }
 }
 
-/// The share-region mirror is not implemented on Linux: it needs a prompt
-/// window that a meeting app can pick and that can then be hidden from the
-/// display capture feeding it (see ui/mod.rs), and neither half has a Linux
-/// design — under Wayland a client cannot even position its own window. The
-/// crate still builds there so the workspace does, but the binary exits 1 with
-/// a clear message instead of misbehaving.
-///
-/// Returns `()` rather than `!` on Linux so the rest of `main` does not become
-/// unreachable code; it never actually returns there.
-#[cfg(target_os = "linux")]
-fn refuse_unsupported_platform() {
-    eprintln!("Error: clowd_share_region is not supported on Linux");
-    obs_platform::exit_process(1);
-}
-
-#[cfg(not(target_os = "linux"))]
-fn refuse_unsupported_platform() {}
-
 fn main() {
     // Route every libobs log line to stderr (and install the crash handler)
     // before anything else can touch libobs.
     obs::log::install_handlers();
 
     let cli = Cli::parse();
-    // Linux: not supported (see `refuse_unsupported_platform`). After parsing
-    // so `--help` still answers, before anything touches libobs or a display.
-    refuse_unsupported_platform();
     let region = match region::parse_region(&cli.region) {
         Ok(r) => r,
         Err(e) => {

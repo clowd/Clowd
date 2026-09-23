@@ -69,11 +69,13 @@ jobs:
       # Each build job uploads an already-archived bundle (see build.yml: the
       # macOS and Linux trees would lose their execute bits and symlinks if
       # they round-tripped through the artifact store unpacked), so the
-      # release attaches the artifacts as-is.
+      # release attaches the artifacts as-is. Only the obs-express-* bundles:
+      # CI-internal artifacts (the Linux portability test tools) stay behind.
       - name: Download all build artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts
+          pattern: obs-express-*
           merge-multiple: true
 
       - name: List release assets

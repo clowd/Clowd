@@ -135,28 +135,17 @@ pub fn ensure_ffmpeg(deps_dir: &Path, target_arch: &str) -> FfmpegBundle {
         return bundle;
     }
 
-    for tool in ["curl", "tar", "sha256sum", "patchelf"] {
+    for tool in ["tar", "patchelf"] {
         require_tool(tool);
     }
 
     let archive = deps_dir.join(format!("{}.tar.xz.part", asset.dir_name));
-    eprintln!("obs-build-support: downloading {}", asset.url);
-    run(Command::new("curl")
-        .args(["-fL", "--retry", "3", "--retry-delay", "2", "-sS", "-o"])
-        .arg(&archive)
-        .arg(asset.url));
-
-    let actual = sha256_of(&archive);
-    if actual != asset.sha256 {
-        let _ = fs::remove_file(&archive);
-        panic!(
-            "FFmpeg bundle hash mismatch for {}\n  expected {}\n  actual   {actual}\n\
-             The download was deleted. If the archive was deliberately replaced, update \
-             FfmpegAsset::sha256 in crates/build-support/src/linux.rs; otherwise the file \
-             at that URL has changed and must not be trusted.",
-            asset.url, asset.sha256
-        );
-    }
+    download_verified(
+        asset.url,
+        asset.sha256,
+        &archive,
+        "FfmpegAsset::sha256 in crates/build-support/src/linux.rs",
+    );
 
     let scratch = deps_dir.join(format!(".{}.extract", asset.dir_name));
     let _ = fs::remove_dir_all(&scratch);
@@ -372,7 +361,8 @@ pub fn require_tool(tool: &str) {
         };
         panic!(
             "`{tool}` is required to build obs-express on Linux but was not found on PATH \
-             (Debian/Ubuntu package: {package}). See the apt list in the Linux CI job."
+             (package: {package}). tools/linux-build/Dockerfile is the reference build \
+             environment and lists every package the build needs."
         );
     }
 }
@@ -388,6 +378,34 @@ fn sha256_of(file: &Path) -> String {
         .next()
         .unwrap_or_default()
         .to_ascii_lowercase()
+}
+
+/// Downloads `url` to `dest` and checks its SHA-256 against `sha256`.
+///
+/// On a mismatch the file is deleted and the build panics: a pinned archive
+/// whose bytes changed must never be used. `pin_location` names where the
+/// expected hash lives, for the panic message. Callers hold their own lock;
+/// this does no locking of its own.
+pub fn download_verified(url: &str, sha256: &str, dest: &Path, pin_location: &str) {
+    for tool in ["curl", "sha256sum"] {
+        require_tool(tool);
+    }
+    eprintln!("obs-build-support: downloading {url}");
+    run(Command::new("curl")
+        .args(["-fL", "--retry", "3", "--retry-delay", "2", "-sS", "-o"])
+        .arg(dest)
+        .arg(url));
+
+    let actual = sha256_of(dest);
+    if actual != sha256 {
+        let _ = fs::remove_file(dest);
+        panic!(
+            "hash mismatch for {url}\n  expected {sha256}\n  actual   {actual}\n\
+             The download was deleted. If the archive was deliberately replaced, update \
+             {pin_location}; otherwise the file at that URL has changed and must not be \
+             trusted."
+        );
+    }
 }
 
 /// Runs a command, panicking with its command line if it fails.
