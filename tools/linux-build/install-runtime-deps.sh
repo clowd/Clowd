@@ -24,10 +24,20 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 # Ubuntu 24.04 / Debian 13 renamed several libraries for the 64-bit time_t
 # transition (libglib2.0-0 -> libglib2.0-0t64, ...); prefer the t64 name
-# wherever the distro has one.
+# wherever the distro has one. "Has one" means an installable candidate:
+# `apt-cache show` also succeeds for a name that some configured repository
+# only mentions (GitHub's ubuntu-22.04 image lists libglib2.0-0t64 without
+# offering it).
+has_candidate() {
+  # Capture first: grep -q exiting early would SIGPIPE apt-cache and, under
+  # pipefail, turn a match into a failure.
+  local policy
+  policy=$(apt-cache policy "$1" 2>/dev/null)
+  grep -Eq '^\s*Candidate: [^(]' <<< "$policy"
+}
 pkgs=()
 for p in "${runtime[@]}"; do
-  if apt-cache show "${p}t64" > /dev/null 2>&1; then pkgs+=("${p}t64"); else pkgs+=("$p"); fi
+  if has_candidate "${p}t64"; then pkgs+=("${p}t64"); else pkgs+=("$p"); fi
 done
 apt-get install -y -qq --no-install-recommends "${pkgs[@]}" "${headless_test[@]}" > /dev/null
 echo "Installed: ${pkgs[*]} ${headless_test[*]}"
