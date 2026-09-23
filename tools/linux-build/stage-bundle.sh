@@ -111,6 +111,7 @@ echo "Newest GLIBC symbol version needed: GLIBC_$max_glibc (ceiling GLIBC_$GLIBC
 
 echo "System libraries needed (outside the bundle):"
 # (readelf fails on the non-ELF files, such as data/; that is expected.)
+# shellcheck disable=SC2016 # $0 is expanded by the inner sh
 find "$dist" -type f -print0 | xargs -0 -n1 sh -c 'readelf -d "$0" 2>/dev/null || true' \
   | grep NEEDED | sed -E 's/.*\[(.*)\]/\1/' | sort -u \
   | grep -vE '^lib(obs|obs-opengl|av[a-z]*|sw[a-z]*|postproc)\.so' | sed 's/^/  /'

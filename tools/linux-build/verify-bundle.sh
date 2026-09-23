@@ -47,11 +47,32 @@ echo "ldd: every ELF file in the relocated bundle resolves, with all symbols def
 # 2. Record ~3 s under Xvfb, then `quit` on stdin. Without a pulse server the
 #    audio sources still create and record silence, which is enough to prove
 #    the AAC tracks are wired.
+#    The 3 s count from `started_recording`, not from process start: startup
+#    (Xvfb, EGL on llvmpipe, module loading) varies by seconds between
+#    runners, and a fixed delay from launch once left only 3 frames.
 record() {
   local name=$1; shift
+  local fifo="$out/$name.stdin" pid w
+  rm -f "$fifo"; mkfifo "$fifo"
   xvfb-run -a -s "-screen 0 1280x720x24 +extension RANDR" \
-    sh -c "(sleep 3; echo quit) | '$moved/obs-express' $* > '$out/$name.out' 2> '$out/$name.err'" \
-    || { echo "::error::$name recording exited non-zero"; tail -40 "$out/$name.err"; exit 1; }
+    sh -c "'$moved/obs-express' $* < '$fifo' > '$out/$name.out' 2> '$out/$name.err'" &
+  pid=$!
+  # Read-write open: never blocks, and keeps the pipe open until `quit`.
+  exec {w}<> "$fifo"
+  for _ in $(seq 1 600); do
+    grep -q '"type":"started_recording"' "$out/$name.out" 2> /dev/null && break
+    kill -0 "$pid" 2> /dev/null || break
+    sleep 0.1
+  done
+  if ! grep -q '"type":"started_recording"' "$out/$name.out" 2> /dev/null; then
+    echo "::error::$name: no started_recording within 60 s"
+    kill "$pid" 2> /dev/null || true
+    cat "$out/$name.out"; tail -40 "$out/$name.err"; exit 1
+  fi
+  sleep 3
+  echo quit >&"$w"
+  exec {w}>&-
+  wait "$pid" || { echo "::error::$name recording exited non-zero"; tail -40 "$out/$name.err"; exit 1; }
   # Key order in the JSON line is not part of the protocol.
   grep '"type":"stopped_recording"' "$out/$name.out" | grep -q '"code":0[,}]' \
     || { echo "::error::$name: no successful stopped_recording"; cat "$out/$name.out"; tail -40 "$out/$name.err"; exit 1; }
@@ -85,4 +106,5 @@ if [ -e "$moved/clowd_share_region" ]; then
 fi
 code=0; "$moved/obs-express" --output "$out/x.mp4" --tracker 2> "$out/tracker.err" || code=$?
 [ "$code" -eq 2 ] || { echo "::error::--tracker should exit 2 on Linux, got $code"; exit 1; }
+# shellcheck disable=SC1091 # the running system's os-release
 echo "Smoke OK ($(. /etc/os-release && echo "$PRETTY_NAME"), $(ldd --version | sed -n 1p))"
