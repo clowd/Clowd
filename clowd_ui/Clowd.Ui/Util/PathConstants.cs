@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -41,15 +42,20 @@ namespace Clowd
             Path.Combine(Path.GetFullPath(directory), GetDatedFileName(name, extension));
 
         public static string GetDatedFileName(string name, string extension) =>
-            name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "." + extension.TrimStart('.');
+            name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + "." + extension.TrimStart('.');
 
+        /// <summary>The pattern rendered for now, with a " (n)" suffix past any name already in the
+        /// directory. Always the invariant culture: the overlay renders the same setting in Rust
+        /// (<c>clowd_capture/src/filename_pattern.rs</c>: Gregorian, literal separators, English
+        /// names) and both routes must name one capture the same way, which the user's culture
+        /// would break — th-TH writes the year 2569, de-DE turns "/" into ".".</summary>
         public static string GetFreePatternFileName(string directory, string pattern)
         {
             var files = Directory.EnumerateFiles(directory).Select(Path.GetFileNameWithoutExtension).ToArray();
 
             for (int i = 0; i < 100; i++)
             {
-                var dateStr = DateTime.Now.ToString(pattern);
+                var dateStr = DateTime.Now.ToString(pattern, CultureInfo.InvariantCulture);
                 if (i > 0) dateStr += $" ({i})";
 
                 if (files.Any(f => String.Equals(f, dateStr, StringComparison.OrdinalIgnoreCase)))
@@ -58,7 +64,7 @@ namespace Clowd
                 return dateStr;
             }
 
-            return DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+            return DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture);
         }
 
         private static string GetClowdFolder(Environment.SpecialFolder dataDirectory, string dataName) =>

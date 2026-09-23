@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -480,9 +481,9 @@ namespace Clowd.Drawing
             {
                 if (obj == null) return def;
                 if (obj is string str)
-                    if (double.TryParse(str, out var i))
+                    if (double.TryParse(str, NumberStyles.Float, CultureInfo.InvariantCulture, out var i))
                         return i;
-                try { return Convert.ToDouble(obj); }
+                try { return Convert.ToDouble(obj, CultureInfo.InvariantCulture); }
                 catch { return def; }
             }
 

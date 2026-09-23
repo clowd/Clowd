@@ -1295,7 +1295,7 @@ namespace Clowd.UI
                 if (String.IsNullOrEmpty(dir) || !Directory.Exists(dir))
                     dir = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
-                var logPath = Path.Combine(dir, $"share_error_log_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
+                var logPath = Path.Combine(dir, $"share_error_log_{DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}.txt");
                 File.WriteAllText(logPath, message + Environment.NewLine + Environment.NewLine + (_driver?.GetLog() ?? ""));
                 return logPath;
             }

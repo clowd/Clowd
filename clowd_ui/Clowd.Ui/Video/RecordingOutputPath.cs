@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Diagnostics;
 using System.IO;
 using Clowd.Config;
@@ -72,7 +73,7 @@ namespace Clowd.UI
             // a pattern containing a separator ("yyyy/MM/dd") would write outside the chosen folder,
             // and one made only of literal text collides with itself on the next recording.
             if (String.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-                name = "recording_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+                name = "recording_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture);
 
             return Path.Combine(dir, name + extension);
         }

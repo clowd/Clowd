@@ -1291,12 +1291,12 @@ namespace Clowd.UI
                 // copy any pasted bitmaps into this session directory
                 foreach (var img in graphics.OfType<GraphicImage>()) {
                     if (!String.IsNullOrEmpty(img.CursorFilePath) &&
-                        !img.CursorFilePath.StartsWith(sessionDir, StringComparison.InvariantCultureIgnoreCase)) {
+                        !img.CursorFilePath.StartsWith(sessionDir, StringComparison.OrdinalIgnoreCase)) {
                         img.CursorFilePath = CopyFileToSessionDir(img.CursorFilePath);
                     }
 
                     if (!String.IsNullOrEmpty(img.BitmapFilePath) &&
-                        !img.BitmapFilePath.StartsWith(sessionDir, StringComparison.InvariantCultureIgnoreCase)) {
+                        !img.BitmapFilePath.StartsWith(sessionDir, StringComparison.OrdinalIgnoreCase)) {
                         img.BitmapFilePath = CopyFileToSessionDir(img.BitmapFilePath);
                     }
                 }

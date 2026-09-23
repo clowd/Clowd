@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -55,6 +56,9 @@ namespace Clowd.VideoSDK.Ai
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                // stdin and stdout are binary (BaseStream); stderr is the helper's text, which may name
+                // a path, so it is decoded as the UTF-8 the helper writes rather than the console code page.
+                StandardErrorEncoding = new UTF8Encoding(false),
             };
             foreach (var arg in args)
                 psi.ArgumentList.Add(arg);

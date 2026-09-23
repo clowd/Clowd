@@ -65,7 +65,7 @@ namespace Clowd.Upload
 
         public IMimeEntry GetMimeFromExtension(string extension)
         {
-            extension = extension.ToLower().Trim('.');
+            extension = extension.ToLowerInvariant().Trim('.'); // invariant: tr-TR lowercases ".GIF" to "gıf"
             return _database.Values.FirstOrDefault(o => o.Extensions.Contains(extension)) ?? GetDefaultDownloadMime();
         }
 
@@ -117,7 +117,7 @@ namespace Clowd.Upload
 
         public ContentCategory GetCategoryFromExtension(string extension)
         {
-            extension = extension.ToLower().Trim('.');
+            extension = extension.ToLowerInvariant().Trim('.'); // invariant: tr-TR lowercases ".GIF" to "gıf"
 
             var mime = GetMimeFromExtension(extension);
             var cat = GetCategoryFromMime(mime);

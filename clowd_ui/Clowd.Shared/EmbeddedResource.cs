@@ -126,7 +126,7 @@ namespace Clowd
             var filename = name.Substring(_resourceNameSpace.Length);
             var stream = _resourceAssembly.GetManifestResourceStream(name);
 
-            if (filename.EndsWith(".gz"))
+            if (filename.EndsWith(".gz", StringComparison.Ordinal))
             {
                 stream = new GZipStream(stream, CompressionMode.Decompress, false);
                 filename = filename.Substring(0, filename.Length - 3);

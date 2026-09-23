@@ -47,7 +47,8 @@ namespace Clowd.UI
 
             var parts = saved.Split(',');
             if (parts.Length != 4
-                || !int.TryParse(parts[0], out var x) || !int.TryParse(parts[1], out var y)
+                || !int.TryParse(parts[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var x)
+                || !int.TryParse(parts[1], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var y)
                 || !double.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture, out var w)
                 || !double.TryParse(parts[3], System.Globalization.CultureInfo.InvariantCulture, out var h))
                 return;

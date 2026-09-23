@@ -103,6 +103,9 @@ namespace Clowd.UI.Converters
         Hsl,
     }
 
+    /// <summary>CSS colour text for the pickers and the clipboard. The alpha is written with the
+    /// invariant culture: it is CSS, and <see cref="TryParse"/> reads it back, so under a
+    /// comma-decimal locale "rgba(10, 20, 30, 0,5)" would be neither valid nor parseable.</summary>
     public class ColorTextHelper
     {
         public static string GetHsl(Color color)
@@ -115,7 +118,7 @@ namespace Clowd.UI.Converters
             if (hsl.Alpha >= 1)
                 return $"hsl({hsl.Hue:0}, {hsl.Saturation * 100:0}%, {hsl.Lightness * 100:0}%)";
             else
-                return $"hsla({hsl.Hue:0}, {hsl.Saturation * 100:0}%, {hsl.Lightness * 100:0}%, {Math.Round(hsl.Alpha, 2)})";
+                return $"hsla({hsl.Hue:0}, {hsl.Saturation * 100:0}%, {hsl.Lightness * 100:0}%, {Math.Round(hsl.Alpha, 2).ToString(CultureInfo.InvariantCulture)})";
         }
 
         public static string GetRgb(Color color)
@@ -123,7 +126,7 @@ namespace Clowd.UI.Converters
             if (color.A == 255)
                 return $"rgb({color.R}, {color.G}, {color.B})";
             else
-                return $"rgba({color.R}, {color.G}, {color.B}, {Math.Round(color.A / 255d, 2)})";
+                return $"rgba({color.R}, {color.G}, {color.B}, {Math.Round(color.A / 255d, 2).ToString(CultureInfo.InvariantCulture)})";
         }
 
         public static string GetRgb(HslRgbColor color)
@@ -131,7 +134,7 @@ namespace Clowd.UI.Converters
             if (color.Alpha >= 1d)
                 return $"rgb({color.R}, {color.G}, {color.B})";
             else
-                return $"rgba({color.R}, {color.G}, {color.B}, {Math.Round(color.Alpha, 2)})";
+                return $"rgba({color.R}, {color.G}, {color.B}, {Math.Round(color.Alpha, 2).ToString(CultureInfo.InvariantCulture)})";
         }
 
         public static string GetHex(Color color)

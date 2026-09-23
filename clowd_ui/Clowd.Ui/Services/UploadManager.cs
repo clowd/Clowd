@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -585,7 +586,7 @@ namespace Clowd
             var filePattern = SettingsRoot.Current.Capture.FilenamePattern;
             filePattern ??= "yyyy-MM-dd HH-mm-ss";
             filePattern = Path.GetFileNameWithoutExtension(filePattern);
-            return DateTime.Now.ToString(filePattern) + extension;
+            return DateTime.Now.ToString(filePattern, CultureInfo.InvariantCulture) + extension;
         }
 
         private static string GetRandomName(int length)

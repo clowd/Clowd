@@ -292,7 +292,7 @@ namespace Clowd.UI
                     }
 
                     Console.WriteLine("snapshot " + path);
-                    Console.WriteLine("shadow " + window.Tray.Shadow + " margin " + window.Tray.Margin);
+                    Console.WriteLine(String.Create(CultureInfo.InvariantCulture, $"shadow {window.Tray.Shadow} margin {window.Tray.Margin}"));
                     Console.WriteLine(Line("shadow-bottom", i => Alpha(cx, tray.Bottom + i), (int)(size.Height - tray.Bottom)));
                     Console.WriteLine(Line("shadow-top", i => Alpha(cx, tray.Top - 1 - i), (int)tray.Top));
                     Console.WriteLine(Line("shadow-left", i => Alpha(tray.Left - 1 - i, cy), (int)tray.Left));

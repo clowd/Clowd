@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -193,7 +194,7 @@ namespace Clowd.UI.Helpers
             }
             catch
             {
-                fileName = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+                fileName = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture);
             }
 
             var options = new FilePickerSaveOptions

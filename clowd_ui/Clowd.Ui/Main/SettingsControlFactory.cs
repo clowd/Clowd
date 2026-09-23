@@ -420,7 +420,7 @@ namespace Clowd.UI.Config
                 var range = GetFirstAttributeOrDefault<System.ComponentModel.DataAnnotations.RangeAttribute>(pd);
 
                 // a 0..1 fraction reads much better as a percentage slider than a spinner.
-                if (range != null && Convert.ToDouble(range.Minimum) == 0.0 && Convert.ToDouble(range.Maximum) == 1.0)
+                if (range != null && Convert.ToDouble(range.Minimum, CultureInfo.InvariantCulture) == 0.0 && Convert.ToDouble(range.Maximum, CultureInfo.InvariantCulture) == 1.0)
                 {
                     var slider = new Slider
                     {
@@ -450,8 +450,8 @@ namespace Clowd.UI.Config
                 var numeric = new NumericUpDown { Increment = 1, FormatString = "0.##" };
                 if (range != null)
                 {
-                    numeric.Minimum = Convert.ToDecimal(range.Minimum);
-                    numeric.Maximum = Convert.ToDecimal(range.Maximum);
+                    numeric.Minimum = Convert.ToDecimal(range.Minimum, CultureInfo.InvariantCulture);
+                    numeric.Maximum = Convert.ToDecimal(range.Maximum, CultureInfo.InvariantCulture);
                     if (numeric.Maximum - numeric.Minimum <= 2)
                         numeric.Increment = 0.05m;
                 }
@@ -593,7 +593,7 @@ namespace Clowd.UI.Config
                     }
                     else
                     {
-                        sb.Append(variableName[i].ToString(CultureInfo.InvariantCulture).ToLower());
+                        sb.Append(char.ToLowerInvariant(variableName[i])); // invariant: tr-TR would make "In" into "ın"
                     }
 
                     continue;
@@ -614,7 +614,7 @@ namespace Clowd.UI.Config
                 if (String.IsNullOrWhiteSpace(pattern))
                     pattern = SettingsCapture.DefaultFilenamePattern;
 
-                var name = DateTime.Now.ToString(System.IO.Path.GetFileNameWithoutExtension(pattern));
+                var name = DateTime.Now.ToString(System.IO.Path.GetFileNameWithoutExtension(pattern), CultureInfo.InvariantCulture);
                 if (name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
                     return "⚠ The pattern produces characters that are not allowed in file names.";
 

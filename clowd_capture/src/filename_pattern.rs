@@ -8,12 +8,15 @@
 //! so both routes have to produce the same name for the same setting: the rendering
 //! below mirrors those two, collision suffix and fallbacks included.
 //!
-//! Two deliberate divergences from `DateTime.ToString`, neither reachable by a
-//! pattern that can name a file:
+//! The shell renders the pattern with `CultureInfo.InvariantCulture` for exactly this
+//! reason, so both sides agree on the Gregorian calendar, literal `/` and `:`
+//! (never the culture's date and time separators), English month and day names
+//! (`MMM`, `dddd`) and `AM`/`PM` — none of which a user culture would preserve
+//! (th-TH writes the year 2569, de-DE turns `/` into `.`).
 //!
-//! * month and day names (`MMM`, `dddd`) are English, where .NET would use the
-//!   user's culture. Rendering those in every culture means shipping a locale
-//!   database for a specifier almost nobody puts in a filename.
+//! One deliberate divergence from `DateTime.ToString`, not reachable by a pattern
+//! that can name a file:
+//!
 //! * the timezone specifiers (`z`, `zz`, `zzz`, `K`) are copied out literally
 //!   rather than rendered. Their output contains `:` or nothing useful, so a
 //!   pattern using them cannot name a file anyway.

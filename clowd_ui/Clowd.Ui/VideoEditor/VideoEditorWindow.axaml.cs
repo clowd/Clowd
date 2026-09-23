@@ -2508,7 +2508,8 @@ namespace Clowd.UI.VideoEditor
 
             var parts = saved.Split(',');
             if (parts.Length != 4
-                || !Int32.TryParse(parts[0], out var x) || !Int32.TryParse(parts[1], out var y)
+                || !Int32.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var x)
+                || !Int32.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var y)
                 || !Double.TryParse(parts[2], CultureInfo.InvariantCulture, out var w)
                 || !Double.TryParse(parts[3], CultureInfo.InvariantCulture, out var h))
                 return;

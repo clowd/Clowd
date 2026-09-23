@@ -146,6 +146,7 @@ namespace Clowd.UI.Services
                 // path corrupts the `done <path>` line.
                 StandardOutputEncoding = new System.Text.UTF8Encoding(false),
                 StandardErrorEncoding = new System.Text.UTF8Encoding(false),
+                StandardInputEncoding = new System.Text.UTF8Encoding(false),
             };
 
             // The render tool self-locates FFmpeg (beside itself, then the dev walk-up), but in

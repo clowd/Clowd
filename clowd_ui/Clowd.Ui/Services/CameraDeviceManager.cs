@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -132,6 +133,10 @@ namespace Clowd.UI
                     WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(exePath)),
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    // UTF-8, like HelperProcess: a camera id is its localized friendly name, which the
+                    // console code page .NET would otherwise use cannot spell.
+                    StandardOutputEncoding = new UTF8Encoding(false),
+                    StandardErrorEncoding = new UTF8Encoding(false),
                 };
                 psi.ArgumentList.Add(ListCamerasFlag);
 

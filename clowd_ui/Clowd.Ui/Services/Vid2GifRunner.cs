@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -111,6 +112,7 @@ namespace Clowd.UI.Services
                     $"Could not find {BinaryFileName}. It ships alongside the recorder; set {EnvVarName} to its full path to override.",
                     BinaryFileName);
 
+            var utf8 = new UTF8Encoding(false); // no BOM: vid2gif reads stdin as lines of text
             var psi = new ProcessStartInfo(exePath)
             {
                 UseShellExecute = false,
@@ -121,6 +123,11 @@ namespace Clowd.UI.Services
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                // UTF-8 on every pipe, like HelperProcess: "done <path> <bytes>" carries a user path, which
+                // the console code page .NET would otherwise use cannot spell.
+                StandardInputEncoding = utf8,
+                StandardOutputEncoding = utf8,
+                StandardErrorEncoding = utf8,
             };
 
             psi.ArgumentList.Add(inputPath);

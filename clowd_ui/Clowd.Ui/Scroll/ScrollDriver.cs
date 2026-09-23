@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -93,6 +94,11 @@ namespace Clowd.UI
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                // UTF-8 on every pipe, like HelperProcess: the driver's status lines carry free text
+                // (paths in an error message), which the console code page cannot spell.
+                StandardInputEncoding = new UTF8Encoding(false),
+                StandardOutputEncoding = new UTF8Encoding(false),
+                StandardErrorEncoding = new UTF8Encoding(false),
             };
 
             var args = BuildArguments(sessionDir, region, point, targetHwnd, rewindToTop);

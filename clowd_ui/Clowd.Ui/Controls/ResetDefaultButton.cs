@@ -51,35 +51,15 @@ namespace Clowd.UI.Controls
                 EvaluateIsDefault();
         }
 
-        // The WPF equality cascade, with the first step upgraded from reference equality to
-        // Equals so a boxed value set from code compares by value: then string equality, then
-        // Convert.ToDouble equality (swallowing conversion failures). The string step only runs
-        // when a string is actually involved — two non-string values would both cast to null and
-        // compare "equal", permanently hiding the dot (bit every enum-valued binding).
+        // the comparison and the typed reset live in ResetDefaultValue (culture rules, tests)
         private void EvaluateIsDefault()
         {
-            bool isDefault = Equals(CurrentValue, DefaultValue);
-
-            if (!isDefault && (CurrentValue is string || DefaultValue is string))
-            {
-                isDefault = (CurrentValue as string) == (DefaultValue as string);
-            }
-
-            if (!isDefault)
-            {
-                try
-                {
-                    isDefault = Convert.ToDouble(CurrentValue) == Convert.ToDouble(DefaultValue);
-                }
-                catch { }
-            }
-
-            IsVisible = !isDefault;
+            IsVisible = !ResetDefaultValue.IsDefault(CurrentValue, DefaultValue);
         }
 
         private void ResetDefaultButton_PointerPressed(object sender, PointerPressedEventArgs e)
         {
-            SetCurrentValue(CurrentValueProperty, DefaultValue);
+            SetCurrentValue(CurrentValueProperty, ResetDefaultValue.ForReset(CurrentValue, DefaultValue));
         }
     }
 }

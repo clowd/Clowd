@@ -16,14 +16,14 @@ namespace Clowd.Drawing.Tools
         {
             var maxNum = canvas.GraphicsList
                 .OfType<GraphicCount>()
-                .Where(g => int.TryParse(g.Body, out _))
-                .Select(g => int.Parse(g.Body))
+                .Where(g => int.TryParse(g.Body, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _))
+                .Select(g => int.Parse(g.Body, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture))
                 .DefaultIfEmpty(0)
                 .Max();
 
             _currentArrow = new GraphicArrow(canvas.ObjectColor, canvas.LineWidth, pt, pt);
 
-            var o = new GraphicCount(canvas, pt, (maxNum + 1).ToString());
+            var o = new GraphicCount(canvas, pt, (maxNum + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
             o.Normalize();
             // we want count to be centered on point, not aligned to the top left
             o.Move(o.Bounds.Width / -2d, o.Bounds.Height / -2d);
