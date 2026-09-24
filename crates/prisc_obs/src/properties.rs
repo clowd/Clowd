@@ -25,6 +25,26 @@ pub fn source_list_property(source_id: &str, property: &str) -> Option<Vec<ListI
     }
 }
 
+/// Enumerates a string-list property from an encoder *type*'s properties
+/// (`obs_get_encoder_properties`, no instance needed). Same contract as
+/// [`source_list_property`]: `None` = unregistered id or missing property.
+/// Encoder plugins filter these lists by hardware capability (e.g. obs-qsv11
+/// only lists `ICQ` on Haswell or newer), so this is how OBS itself probes
+/// which rate controls an encoder supports before creating one.
+pub fn encoder_list_property(encoder_id: &str, property: &str) -> Option<Vec<ListItem>> {
+    let id_c = CString::new(encoder_id).ok()?;
+    let prop_c = CString::new(property).ok()?;
+    unsafe {
+        let props = obs_sys::obs_get_encoder_properties(id_c.as_ptr());
+        if props.is_null() {
+            return None;
+        }
+        let result = read_list_items(props, prop_c.as_ptr());
+        obs_sys::obs_properties_destroy(props);
+        result
+    }
+}
+
 /// Same as [`source_list_property`] but against a temporary source *instance*.
 ///
 /// Some plugins only fill their device list from a property's modified

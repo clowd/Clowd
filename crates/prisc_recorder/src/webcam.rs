@@ -161,7 +161,10 @@ pub fn create(device_id: &str, settings: &Settings) -> Result<Webcam, String> {
     })
 }
 
-/// x264 settings for the webcam track.
+/// x264 settings for the webcam track: `crf` is the same x264-style CRF the
+/// screen encoder receives (see `encoder_config::encoder_settings`), and
+/// since this track is always x264 `veryfast` it is passed through as-is —
+/// no `--low-cpu` preset switch, no hardware-encoder remapping.
 pub fn encoder_settings(crf: u16) -> ObsData {
     let s = ObsData::new();
     s.set_string("rate_control", "CRF");

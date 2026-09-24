@@ -38,6 +38,32 @@ impl ObsData {
         unsafe { obs_sys::obs_data_set_double(self.ptr, name_c.as_ptr(), val) };
     }
 
+    /// Reads a string value; an unset key yields `""` (libobs returns its
+    /// empty-string default, never NULL).
+    pub fn get_string(&self, name: &str) -> String {
+        let name_c = cstring_lossy(name);
+        unsafe {
+            let p = obs_sys::obs_data_get_string(self.ptr, name_c.as_ptr());
+            if p.is_null() {
+                String::new()
+            } else {
+                std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned()
+            }
+        }
+    }
+
+    /// Reads an integer value; an unset key yields 0.
+    pub fn get_int(&self, name: &str) -> i64 {
+        let name_c = cstring_lossy(name);
+        unsafe { obs_sys::obs_data_get_int(self.ptr, name_c.as_ptr()) as i64 }
+    }
+
+    /// Reads a boolean value; an unset key yields `false`.
+    pub fn get_bool(&self, name: &str) -> bool {
+        let name_c = cstring_lossy(name);
+        unsafe { obs_sys::obs_data_get_bool(self.ptr, name_c.as_ptr()) }
+    }
+
     pub fn as_ptr(&self) -> *mut obs_sys::obs_data_t {
         self.ptr
     }
