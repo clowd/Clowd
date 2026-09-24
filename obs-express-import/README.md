@@ -290,7 +290,7 @@ libobs is compiled from the `obs-studio` submodule (pinned to **32.1.2**), so a 
   tools/linux-build/run-in-image.sh cargo build --release --workspace --exclude clowd_share_region
   ```
 
-  A native build on another distribution also works, given the same tools and `-dev` packages; the Dockerfile is the list. Its output then needs that distribution's glibc or newer. Do **not** install the system FFmpeg development packages (`libav*-dev`). The build downloads a pinned FFmpeg 7.1 shared build (BtbN FFmpeg-Builds, SHA-256 verified), builds pinned x264 and Mbed TLS from source, and fetches a pinned SIMDe, all into `obs-studio/.deps`. The first build therefore needs access to github.com and code.videolan.org. libobs, every plugin and `vid2gif` share that one FFmpeg.
+  A native build on another distribution also works, given the same tools and `-dev` packages; the Dockerfile is the list. Its output then needs that distribution's glibc or newer. Do **not** install the system FFmpeg development packages (`libav*-dev`). The build downloads a pinned FFmpeg 7.1 shared build (BtbN FFmpeg-Builds, SHA-256 verified), builds pinned x264 and Mbed TLS from source, and fetches a pinned SIMDe, all into `obs-studio/.deps`. The first build therefore needs access to github.com. libobs, every plugin and `vid2gif` share that one FFmpeg.
 
 ### Steps
 

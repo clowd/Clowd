@@ -536,8 +536,11 @@ fn is_target_arch_bundle(name: &str) -> bool {
 /// this was pinned. A commit hash rather than a tarball because
 /// code.videolan.org generates archives on the fly and their bytes are not
 /// stable; the checked-out commit is verified against this hash, which pins
-/// the content as firmly as a SHA-256 of an archive would.
-const X264_REPO: &str = "https://code.videolan.org/videolan/x264.git";
+/// the content as firmly as a SHA-256 of an archive would. Fetched from
+/// GitHub's read-only mirror of code.videolan.org/videolan/x264: the pin makes
+/// the host irrelevant to what gets built, and code.videolan.org is not
+/// reliably reachable from CI runners.
+const X264_REPO: &str = "https://github.com/mirror/x264.git";
 const X264_COMMIT: &str = "b35605ace3ddf7c1a5d67a2eb553f034aef41d55";
 
 /// Mbed TLS source: the 3.6 LTS release tarball (a GitHub release asset, so its
