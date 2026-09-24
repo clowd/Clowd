@@ -1,10 +1,11 @@
 name: Build
 
-# Reusable build matrix: Windows and macOS, each for x64 and arm64. Called by
-# ci.yml (on push / PR) and release.yml (after the version bump). Every variant
-# uploads an `obs-express-<os>-<arch>` artifact containing the zipped bundle
-# (`obs-express-<os>-<arch>.zip`, members at the archive root) that the release
-# job attaches to the GitHub Release unchanged.
+# Reusable build matrix: Windows and macOS, each for x64 and arm64, plus Linux
+# x64. Called by ci.yml (on push / PR) and release.yml (after the version
+# bump). Every variant uploads an `obs-express-<os>-<arch>` artifact containing
+# the archived bundle (`obs-express-<os>-<arch>.zip` on Windows/macOS,
+# `obs-express-linux-<arch>.tar.gz` on Linux, members at the archive root) that
+# the release job attaches to the GitHub Release unchanged.
 on:
   workflow_call:
     inputs:
@@ -449,3 +450,287 @@ jobs:
           if-no-files-found: error
           # Already a zip; re-deflating it only costs time.
           compression-level: 0
+
+  # ---------------------------------------------------------------------------
+  # Linux (x64): built inside tools/linux-build/Dockerfile, a manylinux_2_34
+  # (AlmaLinux 9, glibc 2.34) image, so the bundle runs on any distro with
+  # glibc >= 2.34 (Ubuntu 22.04+, Debian 12+, Fedora / RHEL 9+) rather than
+  # only on the build machine's release. obs-sys downloads the pinned BtbN
+  # FFmpeg bundle (SHA-256 verified) and builds pinned x264 and Mbed TLS from
+  # source (both static, private inside their plugins) into obs-studio/.deps,
+  # then libobs + the Linux plugins into target/obs-x64. Everything else
+  # (X11/xcb, Wayland, EGL/GL, PipeWire, PulseAudio, v4l2, glib, ...) is linked
+  # from the image's -devel packages, whose SONAMEs are stable across distros.
+  #
+  # The job runs on a plain ubuntu runner and executes each build step in the
+  # image through tools/linux-build/run-in-image.sh (checkout bind-mounted at
+  # the same path), so actions/cache and the artifact actions work on the host
+  # as in the other jobs. Staging and the end-to-end checks live in scripts
+  # (stage-bundle.sh, verify-bundle.sh) that also run by hand in the image, and
+  # the linux-portability job re-runs verify-bundle.sh on stock Ubuntu runners
+  # with only runtime packages installed.
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Build (Linux ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each arch builds natively on its own runner (no cross toolchain or
+          # emulation): the manylinux base matches the runner's arch, and
+          # crates/build-support pins the BtbN FFmpeg archive per arch.
+          - arch: x64
+            runner: ubuntu-24.04
+            base: quay.io/pypa/manylinux_2_34_x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            base: quay.io/pypa/manylinux_2_34_aarch64
+    defaults:
+      run:
+        shell: bash
+    env:
+      IMAGE: obs-express-linux-${{ matrix.arch }}
+    steps:
+      - name: Checkout (recursive submodules)
+        uses: actions/checkout@v7
+        with:
+          # See the Windows job: disabled plugin submodule dirs must exist.
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - name: Record OBS submodule SHA
+        id: obs
+        run: |
+          sha=$(git -C obs-studio rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "OBS submodule SHA: $sha"
+
+      # See the Windows job: give the tagless CI submodule a lightweight tag on
+      # HEAD (the 32.1.2 release commit) so OBS's `git describe --tags` version
+      # discovery resolves to a valid MAJOR.MINOR.PATCH.
+      - name: Tag OBS submodule for versioning
+        run: git -C obs-studio tag -f 32.1.2
+
+      # The image is rebuilt from the Dockerfile every run, with its layers
+      # cached in the GitHub Actions cache, so a Dockerfile edit takes effect
+      # immediately and an unchanged one costs only the cache restore.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the Linux build image
+        uses: docker/build-push-action@v6
+        with:
+          context: tools/linux-build
+          build-args: BASE=${{ matrix.base }}
+          tags: ${{ env.IMAGE }}
+          load: true
+          cache-from: type=gha,scope=linux-build-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=linux-build-${{ matrix.arch }}
+
+      - name: Toolchain diagnostics
+        run: |
+          # shellcheck disable=SC2016 # expanded inside the image, not here
+          tools/linux-build/run-in-image.sh '
+            sed -n 1,2p /etc/os-release
+            ldd --version | sed -n 1p
+            gcc --version | sed -n 1p
+            cmake --version | sed -n 1p
+            echo "ninja $(ninja --version)"
+            nasm -v 2>/dev/null || echo "nasm: not installed (only needed on x86_64)"
+            patchelf --version
+            clang --version | sed -n 1p
+            rustc --version
+            cargo --version
+            pkg-config --modversion glib-2.0 libpipewire-0.3
+          '
+          echo "Target arch: ${{ matrix.arch }}"
+
+      # The native deps under obs-studio/.deps are keyed by their pins, not by
+      # a file hash: a pin bump extracts/builds into a new, versioned dir that
+      # OBS must then be reconfigured and relinked against, so every pin
+      # belongs in the OBS cache key. Read from the one place each is pinned.
+      # The Dockerfile and the CMake finder overrides are in the key too: a new
+      # base image or package set changes what OBS configures and links
+      # against.
+      - name: Resolve native dependency pins
+        id: pins
+        run: |
+          ffmpeg=$(grep -oP 'dir_name: "\K[^"]+' crates/build-support/src/linux.rs | sort | paste -sd+ || true)
+          x264=$(grep -oP 'const X264_COMMIT: &str = "\K[0-9a-f]+' crates/obs-sys/build.rs || true)
+          mbedtls=$(grep -oP 'const MBEDTLS_VERSION: &str = "\K[^"]+' crates/obs-sys/build.rs || true)
+          simde=$(grep -oP 'const SIMDE_COMMIT: &str = "\K[0-9a-f]+' crates/obs-sys/build.rs || true)
+          for pin in ffmpeg x264 mbedtls simde; do
+            test -n "${!pin}" || { echo "::error::$pin pin not found in crates/build-support or crates/obs-sys/build.rs"; exit 1; }
+          done
+          image=$(cat tools/linux-build/Dockerfile crates/obs-sys/cmake/* | sha256sum | cut -c1-12)
+          echo "key=$ffmpeg-x264-${x264:0:12}-mbedtls-$mbedtls-simde-${simde:0:12}-image-$image" >> "$GITHUB_OUTPUT"
+          echo "FFmpeg:  $ffmpeg"
+          echo "x264:    $x264"
+          echo "MbedTLS: $mbedtls"
+          echo "SIMDe:   $simde"
+          echo "Image:   $image"
+
+      - name: Cache cargo registry
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
+
+      # As on Windows, the OBS build (target/obs-<arch>, obs-sys's default
+      # build dir) and .deps (FFmpeg bundle, x264 / Mbed TLS prefixes, SIMDe)
+      # are cached together under one key so they can never evict
+      # independently. The build runs as root in the image; the cache step
+      # runs on the host and only needs to read those files.
+      - name: Cache OBS native build + FFmpeg/x264/Mbed TLS deps
+        uses: actions/cache@v6
+        with:
+          path: |
+            target/obs-${{ matrix.arch }}
+            obs-studio/.deps
+          key: ${{ runner.os }}-${{ matrix.arch }}-manylinux-obs-${{ steps.obs.outputs.sha }}-${{ steps.pins.outputs.key }}
+
+      # clowd_share_region is not built on Linux at all (no Linux UI; see the
+      # README), and cargo cannot drop a workspace member per target, so every
+      # Linux cargo invocation excludes it explicitly.
+      - name: Build (release)
+        run: tools/linux-build/run-in-image.sh cargo build --release --workspace --exclude clowd_share_region
+
+      - name: Test (release, unit tests only)
+        run: |
+          # No LD_LIBRARY_PATH needed (unlike Windows' PATH): every test
+          # executable in target/release/deps carries absolute RUNPATHs to the
+          # OBS build tree and the FFmpeg bundle, set by the crates' build
+          # scripts. vid2gif links the bundled FFmpeg directly; its integration
+          # tests are self-contained. ffmpeg-sys verifies linkage + ABI version.
+          # obs-express's smoke tests stay #[ignore]d here, as on the other
+          # platforms; verify-bundle.sh records for real below.
+          tools/linux-build/run-in-image.sh cargo test --release --workspace --exclude clowd_share_region
+
+      # Scene-item placement across a canvas reset, against real libobs (it
+      # needs a graphics context, hence Xvfb). This is the transform Wayland
+      # picker mode depends on, and portal capture itself cannot run in CI.
+      - name: Test canvas-reset placement (Xvfb)
+        run: tools/linux-build/run-in-image.sh xvfb-run -a -s "'-screen 0 1280x720x24'" cargo test --release -p obs-express --test canvas_reset -- --ignored
+
+      # Copies the runtime tree out of target/release, strips the build-tree
+      # RUNPATH entries, and enforces the relocation, glibc-ceiling and
+      # no-forbidden-library rules (see the script header).
+      - name: Stage artifact (self-contained bundle)
+        run: tools/linux-build/run-in-image.sh tools/linux-build/stage-bundle.sh target/release "dist/obs-express-linux-${{ matrix.arch }}"
+
+      # ldd -r of every ELF file, real X11 recordings under Xvfb through xshm
+      # capture, x264, AAC and both muxers, vid2gif on a recording, and the
+      # out-of-scope fail-fast checks, all from a copy outside the checkout.
+      # The ffprobe is the pinned FFmpeg archive's own (the image has no
+      # FFmpeg of its own).
+      - name: Verify relocated bundle (ldd + Xvfb smoke recording + vid2gif)
+        run: |
+          # shellcheck disable=SC2016 # expanded inside the image, not here
+          tools/linux-build/run-in-image.sh '
+            ffbin=(obs-studio/.deps/ffmpeg-*/bin)
+            tools/linux-build/verify-bundle.sh "dist/obs-express-linux-${{ matrix.arch }}" "${ffbin[0]}/ffprobe" /tmp/verify
+          '
+
+      # A tarball, not a zip: tar keeps the execute bits (upload-artifact
+      # drops them from a loose tree, as on macOS) and is what Linux users
+      # expect. Members sit at the archive root, matching the zips. Runs in the
+      # image because dist/ was created there, as root.
+      - name: Archive bundle
+        run: |
+          # shellcheck disable=SC2016 # expanded inside the image, not here
+          tools/linux-build/run-in-image.sh '
+            dist="dist/obs-express-linux-${{ matrix.arch }}"
+            tarball="$dist.tar.gz"
+            (cd "$dist" && tar --owner=0 --group=0 -czf "../$(basename "$tarball")" -- *)
+            listing=$(tar -tvzf "$tarball")
+            grep -E " (obs-express|vid2gif|obs-ffmpeg-mux)$" <<< "$listing"
+            grep -Eq "^-rwx.* obs-express$" <<< "$listing" || { echo "::error::archive lost the execute bit"; exit 1; }
+            ls -la "$tarball"
+            # Probe tool for the portability job, uploaded separately and never
+            # released: the ffprobe from the pinned FFmpeg archive runs against
+            # the FFmpeg libraries in the bundle, so test runners need no FFmpeg.
+            mkdir -p dist/test-tools
+            cp obs-studio/.deps/ffmpeg-*/bin/ffprobe dist/test-tools/
+          '
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: obs-express-linux-${{ matrix.arch }}
+          path: dist/obs-express-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          # Already gzip-compressed; re-deflating it only costs time.
+          compression-level: 0
+
+      - name: Upload test tools
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-test-tools-${{ matrix.arch }}
+          path: dist/test-tools/ffprobe
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Linux portability: the release tarball, unpacked on stock Ubuntu runners
+  # with only runtime packages installed (tools/linux-build/
+  # install-runtime-deps.sh, which is also the reference list for users), then
+  # checked with the same verify-bundle.sh as the build job. 22.04 (glibc
+  # 2.35, GLib 2.72, PipeWire 0.3.48) is the oldest supported LTS and the
+  # strictest test of the glibc 2.34 floor; 24.04 is current. `ldd -r` of
+  # every ELF file there catches a system library too old for a symbol we
+  # link against.
+  # ---------------------------------------------------------------------------
+  linux-portability:
+    name: Portability (Linux ${{ matrix.arch }}, ${{ matrix.runner }})
+    needs: linux
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: ubuntu-22.04 }
+          - { arch: x64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-22.04-arm }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Only the scripts are needed, not the submodules.
+      - name: Checkout (scripts only)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: tools/linux-build
+
+      - name: Download bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: obs-express-linux-${{ matrix.arch }}
+          path: artifact
+
+      - name: Download test tools
+        uses: actions/download-artifact@v8
+        with:
+          name: linux-test-tools-${{ matrix.arch }}
+          path: test-tools
+
+      - name: Install runtime packages only
+        run: sudo tools/linux-build/install-runtime-deps.sh
+
+      - name: Unpack and verify bundle
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/obs-express-linux-${{ matrix.arch }}"
+          rm -rf "$bundle"; mkdir -p "$bundle"
+          tar -xzf "artifact/obs-express-linux-${{ matrix.arch }}.tar.gz" -C "$bundle"
+          # upload-artifact drops execute bits from loose files.
+          chmod +x test-tools/ffprobe
+          tools/linux-build/verify-bundle.sh "$bundle" "$PWD/test-tools/ffprobe" "$RUNNER_TEMP/verify"

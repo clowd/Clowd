@@ -1,5 +1,6 @@
-//! Platform abstraction. Both platform modules expose identical public
-//! signatures (DESIGN §2.2); shared, platform-neutral types live here.
+//! Platform abstraction. Every platform module (Windows, macOS, Linux)
+//! exposes identical public signatures (DESIGN §2.2); shared,
+//! platform-neutral types live here.
 //!
 //! The monitor/paths/display-capture layer (`MonitorInfo`, `ObsPaths`,
 //! `enumerate_monitors`, `default_obs_paths`, ...) moved to the shared
@@ -18,10 +19,16 @@ mod macos;
 #[cfg(target_os = "macos")]
 pub use self::macos::*;
 
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use self::linux::*;
+
 pub use obs_platform::{
-    cursor_update_settings, default_obs_paths, display_capture_settings, enumerate_monitors,
-    exit_process, find_monitor, init_process, monitor_display_scale, region_adapter_index,
-    CaptureMethod, MonitorInfo, DISPLAY_CAPTURE_ID, GRAPHICS_MODULE, PLATFORM_NAME,
+    cursor_update_settings, default_obs_paths, display_capture_id, display_capture_mode,
+    display_capture_settings, enumerate_monitors, exit_process, find_monitor, init_process,
+    monitor_display_scale, region_adapter_index, CaptureMethod, DisplayCaptureMode, MonitorInfo,
+    GRAPHICS_MODULE, PLATFORM_NAME,
 };
 // Part of the compat surface (`crate::platform::ObsPaths`) but referenced
 // nowhere inside this bin crate by name — callers only consume it through

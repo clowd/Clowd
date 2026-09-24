@@ -24,13 +24,25 @@ use windows::Win32::UI::HiDpi::{
 use windows::Win32::UI::WindowsAndMessaging::{EDD_GET_DEVICE_INTERFACE_NAME, MONITORINFOF_PRIMARY};
 
 use super::region::{self, Rect, RegionPlan};
-use super::{CaptureMethod, MonitorInfo, ObsPaths};
+use super::{CaptureMethod, DisplayCaptureMode, MonitorInfo, ObsPaths};
 
 /// `platform` field of the input-capture header (wire contract).
 pub const PLATFORM_NAME: &str = "windows";
 
 pub const GRAPHICS_MODULE: &CStr = c"libobs-d3d11";
-pub const DISPLAY_CAPTURE_ID: &str = "monitor_capture";
+
+/// The display-capture source id. A function rather than a constant only
+/// because Linux decides between two sources at runtime (X11 vs Wayland
+/// session); here it is fixed.
+pub fn display_capture_id() -> &'static str {
+    "monitor_capture"
+}
+
+/// Always [`DisplayCaptureMode::Monitors`]: win-capture captures the monitor
+/// the caller names (see the enum for the Linux Wayland exception).
+pub fn display_capture_mode() -> DisplayCaptureMode {
+    DisplayCaptureMode::Monitors
+}
 
 /// Must run before any monitor enumeration so `EnumDisplayMonitors` rects are
 /// physical pixels (per-monitor-v2 DPI awareness).

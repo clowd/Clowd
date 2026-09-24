@@ -109,6 +109,58 @@ impl ObsSceneItem {
             )
         };
     }
+
+    /// Places the item at the canvas origin with an `OBS_BOUNDS_MAX_ONLY` box
+    /// of `w`x`h` anchored top-left: shown 1:1 when it fits, scaled down to
+    /// fit when larger.
+    ///
+    /// Call it only once the canvas has its final size. Since OBS 31 a scene
+    /// item stores its position and bounds *relative to the canvas as it was
+    /// when they were set* (scenes default to `AbsoluteCoordinates = false`,
+    /// libobs/obs-scene.c `pos_from_absolute` / `size_from_absolute`), and
+    /// converts them back against the current canvas on every transform
+    /// update. A later `obs_reset_video` to another base size therefore
+    /// silently moves and rescales the item: (0,0) set on a 1280x720 canvas
+    /// reads back as (-170.5, 0) on a 1024x768 one, and a 1024x768 box as
+    /// 1092x819. Re-applying everything here after the reset is the fix.
+    pub fn place_top_left_bounded(&self, w: f32, h: f32) {
+        self.set_pos(0.0, 0.0);
+        self.set_bounds_type(obs_sys::obs_bounds_type_OBS_BOUNDS_MAX_ONLY);
+        self.set_bounds_alignment(obs_sys::OBS_ALIGN_LEFT | obs_sys::OBS_ALIGN_TOP);
+        self.set_bounds(w, h);
+    }
+
+    /// Position in canvas pixels, converted against the current canvas (see
+    /// [`ObsSceneItem::place_top_left_bounded`]).
+    pub fn pos(&self) -> (f32, f32) {
+        // Same vec2 mirror as set_pos.
+        #[repr(C)]
+        struct Vec2 {
+            x: f32,
+            y: f32,
+        }
+        let mut v = Vec2 { x: 0.0, y: 0.0 };
+        unsafe {
+            obs_sys::obs_sceneitem_get_pos(self.ptr, &mut v as *mut Vec2 as *mut obs_sys::vec2)
+        };
+        (v.x, v.y)
+    }
+
+    /// Bounds box size in canvas pixels, converted against the current
+    /// canvas.
+    pub fn bounds(&self) -> (f32, f32) {
+        // Same vec2 mirror as set_pos.
+        #[repr(C)]
+        struct Vec2 {
+            x: f32,
+            y: f32,
+        }
+        let mut v = Vec2 { x: 0.0, y: 0.0 };
+        unsafe {
+            obs_sys::obs_sceneitem_get_bounds(self.ptr, &mut v as *mut Vec2 as *mut obs_sys::vec2)
+        };
+        (v.x, v.y)
+    }
 }
 
 impl Clone for ObsSceneItem {

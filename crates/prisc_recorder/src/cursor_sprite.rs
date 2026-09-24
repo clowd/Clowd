@@ -86,7 +86,9 @@ impl RawSprite {
 }
 
 /// Per-tick outcome of the platform's sprite capture, consumed by the writer
-/// thread (which owns all dedupe/id state).
+/// thread (which owns all dedupe/id state). Linux has no sprite capture
+/// (`--input-capture` is rejected there), so nothing constructs it on Linux.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 pub enum SpriteEvent {
     /// Same cursor as last tick — keep the current sprite id.
     Unchanged,

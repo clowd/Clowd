@@ -80,7 +80,8 @@ pub fn run(
 
 /// Formats an FFmpeg error code with `av_strerror`.
 fn averr(code: i32, what: &str) -> anyhow::Error {
-    let mut buf = [0i8; 256];
+    // c_char, not i8: it is unsigned on aarch64 Linux.
+    let mut buf = [0 as std::ffi::c_char; 256];
     let msg = unsafe {
         if ff::av_strerror(code, buf.as_mut_ptr(), buf.len()) == 0 {
             CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()

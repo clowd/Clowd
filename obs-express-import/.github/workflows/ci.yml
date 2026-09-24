@@ -1,8 +1,8 @@
 name: CI
 
-# Builds every variant (Windows x64/arm64, macOS x64/arm64) on every push to
-# master and on every pull request. The build matrix lives in the reusable
-# build.yml so release.yml can build the exact same way.
+# Builds every variant (Windows x64/arm64, macOS x64/arm64, Linux x64) on
+# every push to master and on every pull request. The build matrix lives in the
+# reusable build.yml so release.yml can build the exact same way.
 on:
   push:
     branches: [master]

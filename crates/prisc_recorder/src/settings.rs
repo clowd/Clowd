@@ -118,6 +118,18 @@ impl Settings {
         // Validated even with the tracker off, so a bad color is never
         // silently accepted.
         tracker::parse_color(&self.tracker_color)?;
+        // Linux: the click highlight needs global mouse-button state, which a
+        // Wayland client cannot read (see platform/linux.rs). Checked here
+        // rather than in `Cli::validate` because the tracker also arrives via
+        // `--settings` and every stdin `configure`, all of which funnel
+        // through this function.
+        #[cfg(target_os = "linux")]
+        if self.tracker {
+            return Err(
+                "the click tracker (--tracker / settings \"tracker\") is not supported on Linux"
+                    .to_string(),
+            );
+        }
         if self.speakers.len() + self.microphones.len() > MAX_AUDIO_SOURCES {
             return Err(format!(
                 "Too many audio sources: at most {MAX_AUDIO_SOURCES} total speakers/microphones \
@@ -188,7 +200,8 @@ mod tests {
         assert_eq!(s.microphones, vec!["mic-id".to_string()]);
         assert!(s.speaker_volume_compensation);
         assert_eq!(s.webcam_device, "Live Streamer CAM 313:\\\\?\\usb#vid");
-        assert!(s.validate().is_ok());
+        // "tracker": true is the one value here that Linux rejects.
+        assert_eq!(s.validate().is_ok(), !cfg!(target_os = "linux"));
     }
 
     #[test]

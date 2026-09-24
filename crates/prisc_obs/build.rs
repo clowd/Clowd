@@ -6,11 +6,15 @@ use std::path::{Path, PathBuf};
 // can launch on macOS — the harness links libobs.framework via obs-sys, whose
 // install name and FFmpeg/x264 references are all @rpath, and cargo does not
 // propagate `cargo:rustc-link-arg` from obs-sys to dependents. Same pattern as
-// obs-platform's build script.
+// obs-platform's build script. Linux needs the same for libobs.so.30 and the
+// FFmpeg bundle it references.
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os == "macos" {
         build_macos();
+    }
+    if target_os == "linux" {
+        build_linux();
     }
 }
 
@@ -44,4 +48,14 @@ fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// Linux: absolute RUNPATHs into the OBS build tree and the FFmpeg bundle so
+/// this crate's test harness can launch (the Linux twin of `build_macos`
+/// above; see obs-sys's `linux_emit_link_directives`).
+fn build_linux() {
+    let lib_dir = env::var("DEP_OBS_OBS_LIB_DIR").expect("DEP_OBS_OBS_LIB_DIR not set");
+    let deps_lib = env::var("DEP_OBS_DEPS_LIB").expect("DEP_OBS_DEPS_LIB not set");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{lib_dir}");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{deps_lib}");
 }

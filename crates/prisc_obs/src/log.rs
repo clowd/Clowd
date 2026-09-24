@@ -11,6 +11,8 @@
 
 use std::ffi::{c_char, c_int, c_void};
 use std::io::Write;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// `va_list` as passed by value on every ABI we target: a plain pointer on
 /// x86_64-msvc and aarch64-apple, and the decayed `__va_list_tag*` on
@@ -72,9 +74,12 @@ unsafe extern "C" fn log_handler(
         _ => "debug",
     };
     let msg = format_message(fmt, args);
-    let stderr = std::io::stderr();
-    let mut lock = stderr.lock();
-    let _ = writeln!(lock, "[obs {tag}] {msg}");
+    {
+        let stderr = std::io::stderr();
+        let mut lock = stderr.lock();
+        let _ = writeln!(lock, "[obs {tag}] {msg}");
+    }
+    notify_watches(&msg);
 }
 
 unsafe extern "C" fn crash_handler(fmt: *const c_char, args: va_list, _param: *mut c_void) {
@@ -111,5 +116,113 @@ pub fn install_handlers() {
     unsafe {
         base_set_log_handler(Some(log_handler), std::ptr::null_mut());
         base_set_crash_handler(Some(crash_handler), std::ptr::null_mut());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Log watches
+// ---------------------------------------------------------------------------
+
+/// A registration made by [`watch`]: every libobs log line containing one of
+/// `needles` is captured until the watch is dropped.
+///
+/// This exists because some plugins report an outcome *only* as a log line.
+/// The motivating case is linux-pipewire's portal source: when the user
+/// cancels or the portal refuses the screen-share dialog, the plugin logs
+/// "denied or cancelled by user" and simply stops — no signal, no state the
+/// host can query, the source just stays 0x0 forever
+/// (plugins/linux-pipewire/screencast-portal.c). Watching the log is the only
+/// way to tell "the user said no" from "the user has not answered yet".
+pub struct LogWatch {
+    id: usize,
+    hit: Arc<Mutex<Option<String>>>,
+}
+
+struct WatchEntry {
+    id: usize,
+    needles: &'static [&'static str],
+    hit: Arc<Mutex<Option<String>>>,
+}
+
+/// Registered watches. The count lets the log handler skip the lock entirely
+/// in the normal case of no watches.
+static WATCHES: OnceLock<Mutex<Vec<WatchEntry>>> = OnceLock::new();
+static WATCH_COUNT: AtomicUsize = AtomicUsize::new(0);
+static NEXT_WATCH_ID: AtomicUsize = AtomicUsize::new(0);
+
+fn watches() -> &'static Mutex<Vec<WatchEntry>> {
+    WATCHES.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// Starts capturing log lines that contain any of `needles` (plain substring
+/// match on the formatted message). Only the first match is kept. Register it
+/// before triggering whatever may log, since earlier lines are not replayed.
+pub fn watch(needles: &'static [&'static str]) -> LogWatch {
+    let id = NEXT_WATCH_ID.fetch_add(1, Ordering::Relaxed);
+    let hit = Arc::new(Mutex::new(None));
+    let mut list = watches().lock().unwrap_or_else(|e| e.into_inner());
+    list.push(WatchEntry {
+        id,
+        needles,
+        hit: hit.clone(),
+    });
+    WATCH_COUNT.store(list.len(), Ordering::Release);
+    LogWatch { id, hit }
+}
+
+impl LogWatch {
+    /// The first matching line seen so far, if any.
+    pub fn matched(&self) -> Option<String> {
+        self.hit.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+}
+
+impl Drop for LogWatch {
+    fn drop(&mut self) {
+        let mut list = watches().lock().unwrap_or_else(|e| e.into_inner());
+        list.retain(|w| w.id != self.id);
+        WATCH_COUNT.store(list.len(), Ordering::Release);
+    }
+}
+
+/// Called by the log handler after a line is written. Runs on whichever
+/// thread logged; never logs itself (that would re-enter the handler).
+fn notify_watches(msg: &str) {
+    if WATCH_COUNT.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    let list = watches().lock().unwrap_or_else(|e| e.into_inner());
+    for entry in list.iter() {
+        if entry.needles.iter().any(|n| msg.contains(n)) {
+            let mut hit = entry.hit.lock().unwrap_or_else(|e| e.into_inner());
+            if hit.is_none() {
+                *hit = Some(msg.to_string());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watches_capture_the_first_matching_line_until_dropped() {
+        static NEEDLES: &[&str] = &["cancelled by user", "Error selecting"];
+        let w = watch(NEEDLES);
+        notify_watches("[pipewire] Screencast session created");
+        assert_eq!(w.matched(), None);
+        notify_watches("[pipewire] Failed to start screencast, denied or cancelled by user");
+        notify_watches("[pipewire] Error selecting screencast source: x");
+        assert_eq!(
+            w.matched().as_deref(),
+            Some("[pipewire] Failed to start screencast, denied or cancelled by user")
+        );
+        drop(w);
+        assert!(watches()
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|e| e.needles.as_ptr() != NEEDLES.as_ptr()));
     }
 }

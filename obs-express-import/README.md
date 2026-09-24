@@ -7,16 +7,16 @@ This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-expre
 ## Features
 
 - **Region or monitor capture** — record an arbitrary `X,Y,W,H` rectangle (which may span multiple displays) or a whole monitor by id/index. Defaults to the primary monitor.
-- **Hardware or software H.264** — x264 by default; `--hw-accel` prefers a GPU encoder (NVENC → AMF → QSV on Windows, VideoToolbox on macOS) and transparently falls back to x264.
+- **Hardware or software H.264** — x264 by default; `--hw-accel` prefers a GPU encoder (NVENC → AMF → QSV on Windows, VideoToolbox on macOS; none yet on Linux) and transparently falls back to x264.
 - **Multi-device audio** — any number of speaker (output) and microphone (input) devices: up to 8 total mixed into one audio track, or up to 6 on separate tracks with `--multi-track`.
 - **Multi-track recording** — `--multi-track` writes every stream to its own track in one MP4: video track 0 = clean screen, video track 1 = webcam, and one audio track per capture device. A screen recording with a webcam, a speaker and a microphone is a 4-track file, ready for picture-in-picture compositing and per-source audio mixing at edit time.
-- **Webcam second track** — `--webcam <id>` (requires `--multi-track`) records a camera — DirectShow on Windows, AVFoundation on macOS — as video track 1; `--list-cameras` enumerates the available devices.
+- **Webcam second track** — `--webcam <id>` (requires `--multi-track`) records a camera — DirectShow on Windows, AVFoundation on macOS, V4L2 on Linux — as video track 1; `--list-cameras` enumerates the available devices.
 - **Programmatic control** — a parent process drives recording over stdin (`start` / `pause` / `quit`, per-device mute) and reads structured progress as one JSON object per line on stdout.
 - **Live reconfiguration** — all tunables (fps, quality, encoder, resolution cap, cursor, tracker, audio devices) can be supplied as a JSON file via `--settings` and re-applied at runtime with the stdin `configure` command — in `--pause` mode the whole pipeline is rebuilt in place, no process restart needed.
 - **Aspect-preserving downscale** — cap output resolution with `--max-width` / `--max-height` without distorting the picture (never upscales).
 - **Click highlight** — `--tracker` draws an expanding, fading circle at the pointer on every mouse click, in the recording only.
 - **Cursor toggle** and a **paused-start** mode for building the pipeline ahead of time and starting instantly on command.
-- **Cross-platform** — Windows (x64 / ARM64) and macOS (x64 / arm64).
+- **Cross-platform** — Windows (x64 / ARM64), macOS (x64 / arm64) and Linux (x64; X11 and Wayland, see [Linux](#linux) for what differs).
 
 ## Installation
 
@@ -26,6 +26,7 @@ Each release publishes a zipped, self-contained bundle for every supported targe
 
 - `obs-express-windows-x64`, `obs-express-windows-arm64`
 - `obs-express-macos-x64`, `obs-express-macos-arm64`
+- `obs-express-linux-x64`, `obs-express-linux-arm64` (a `.tar.gz`: `tar -xzf` keeps the execute bits)
 
 Unzip and run `obs-express` in place — the bundled OBS runtime (plugins, data, and the FFmpeg/x264 libraries) lives alongside the executable and is fully relocatable.
 
@@ -40,6 +41,30 @@ xattr -dr com.apple.quarantine <unzipped-directory>
 ### Build from source
 
 See [Building](#building) below.
+
+## Linux
+
+Linux (x64 and arm64) is supported on **X11** and **Wayland**. The session type is detected at startup (`XDG_SESSION_TYPE=wayland` or `WAYLAND_DISPLAY` means Wayland, otherwise `DISPLAY` / X11). An X11 session is never used from inside a Wayland session: XWayland only captures black.
+
+- **X11** — works like the other platforms: `--monitor` and `--region` use the XRandR monitor layout (a monitor is matched by connector name such as `DP-1`, or by 0-based index), and capture runs through OBS's XSHM source.
+- **Wayland** — the monitor or window is chosen in the desktop's own screen-share dialog (xdg-desktop-portal + PipeWire), so `--monitor` and `--region` are rejected (exit 2). The recorder builds the pipeline, waits for the pick (up to 120 s), sizes the canvas to what was picked, then prints `initialized`. Cancelling the dialog exits 1, and `quit` or a signal during the wait exits 0. The dialog appears on every run: portal restore tokens are not used.
+- **Audio** — PulseAudio sources (`pulse_output_capture` / `pulse_input_capture`), which also work on PipeWire through `pipewire-pulse`. `default` is the default sink's monitor or the default source. `--speaker-volume-compensation` is a no-op.
+- **Webcam** — V4L2 (`v4l2_input`). `--list-cameras` prints `/dev/videoN` paths as ids.
+- **Encoding** — x264 only. `--hw-accel` falls back to x264 with the usual message (no NVENC/VAAPI selection yet). `--capture-method` is ignored, as on macOS.
+- **Not supported** — `--input-capture`, `--window-capture` and `--tracker` fail at startup with a clear error (exit 2) rather than misbehaving.
+- **No `clowd_share_region`** — the share-region binary is not built on Linux and is not in the Linux bundle. Cargo cannot leave a workspace member out for one target, so a plain `cargo build` on Linux fails on that crate. Build the rest of the workspace instead:
+
+  ```sh
+  cargo build --release --workspace --exclude clowd_share_region
+  cargo test --release --workspace --exclude clowd_share_region
+  ```
+
+**Runtime requirements.** The bundle carries libobs, the OBS plugins and FFmpeg, with x264 and Mbed TLS linked statically into the plugins that use them. Everything else comes from the system, through libraries whose SONAMEs are stable across distributions:
+
+- **glibc ≥ 2.34**: Ubuntu 22.04 or newer, Debian 12 or newer, Fedora, RHEL / AlmaLinux / Rocky 9 or newer. The release is built in a manylinux_2_34 (AlmaLinux 9) image, and CI runs it on stock Ubuntu 22.04 and 24.04.
+- **Desktop libraries**: EGL/OpenGL (Mesa or a vendor driver), X11/xcb, xkbcommon, Wayland client, GLib ≥ 2.68, PipeWire, the PulseAudio client library, libv4l2, udev, libuuid, jansson, zlib, and libva/libpci/libdrm. OBS's FFmpeg plugin links the VAAPI libraries even though obs-express does not use them. On Debian/Ubuntu, `tools/linux-build/install-runtime-deps.sh` installs exactly this set; desktop installs already have it.
+- **Audio**: a PulseAudio server, or PipeWire with `pipewire-pulse`.
+- **Wayland capture**: a running `xdg-desktop-portal` with a backend for your desktop (GNOME, KDE, wlroots, ...) and PipeWire.
 
 ## Usage
 
@@ -78,7 +103,7 @@ obs-express --output clip.mp4 --multi-track --webcam "$(obs-express --list-camer
 | `--hw-accel` | off | Prefer a hardware H.264 encoder; falls back to x264 if none is available. |
 | `--low-cpu` | off | Use the x264 `ultrafast` preset instead of `veryfast`. |
 | `--no-cursor` | off | Do not capture the mouse cursor. |
-| `--capture-method <METHOD>` | `auto` | Windows only (ignored on macOS): which OS API backs display capture — `auto`, `dxgi` (desktop duplication) or `wgc` (Windows Graphics Capture). `auto` takes WGC on Windows 11 and newer — the yellow border Windows draws around a WGC-captured display can be suppressed there (`GraphicsCaptureSession::IsBorderRequired`, Windows 11+), and WGC captures monitors on any graphics adapter. On Windows 10 it leaves the choice to win-capture, which takes DXGI unless the monitor is off the current graphics adapter or the machine is a multi-GPU laptop on mains. That heuristic optimises for capture, not for the border — unsuppressable on Windows 10 — so pin `dxgi` there if a borderless capture matters. Session-fixed, so it is not part of the settings file. |
+| `--capture-method <METHOD>` | `auto` | Windows only (ignored on macOS and Linux): which OS API backs display capture — `auto`, `dxgi` (desktop duplication) or `wgc` (Windows Graphics Capture). `auto` takes WGC on Windows 11 and newer — the yellow border Windows draws around a WGC-captured display can be suppressed there (`GraphicsCaptureSession::IsBorderRequired`, Windows 11+), and WGC captures monitors on any graphics adapter. On Windows 10 it leaves the choice to win-capture, which takes DXGI unless the monitor is off the current graphics adapter or the machine is a multi-GPU laptop on mains. That heuristic optimises for capture, not for the border — unsuppressable on Windows 10 — so pin `dxgi` there if a borderless capture matters. Session-fixed, so it is not part of the settings file. |
 | `--tracker` | off | Highlight mouse clicks with an expanding, fading circle (see below). |
 | `--tracker-color <R,G,B>` | `255,0,0` | Color of the click highlight; each component 0-255. |
 | `--pause` | off | Build the pipeline, emit `initialized`, and wait for a stdin `start` before recording. |
@@ -86,8 +111,8 @@ obs-express --output clip.mp4 --multi-track --webcam "$(obs-express --list-camer
 | `--microphone <DEVICE>` | — | Input-capture (microphone) device id, or `default`. Repeatable. |
 | `--multi-track` | off | Give every stream its own track (OBS's hybrid MP4 output): video track 0 = screen, video track 1 = webcam, and one audio track per `--speaker` / `--microphone` device — speakers first, in the order given, at most 6 audio tracks. Without it the recording uses the single-track muxer: one video track and all audio mixed into one track, and `--webcam` is rejected. |
 | `--webcam <ID>` | — | Record the given camera as a second video track (track 0 = screen, track 1 = webcam, ≤ 1280x720, x264 CRF). Requires `--multi-track`. `ID` is a device id exactly as printed by `--list-cameras`. The camera's built-in microphone is never recorded — use `--microphone` for that. |
-| `--list-cameras` | — | Enumerate cameras (DirectShow on Windows, AVFoundation on macOS): prints exactly one JSON line `{"type":"cameras","cameras":[{"id":..,"name":..}]}` on stdout and exits 0 (`{"type":"error","message":..}` and exit 1 on failure). Mutually exclusive with all recording flags; `--output` is not required. |
-| `--speaker-volume-compensation` | off | Windows: boost speaker capture to undo the system master volume when the audio device applies it in software. On such devices (no hardware volume control — common for USB DACs) the loopback stream Windows hands to recorders is already attenuated by the volume slider, so recordings sound quieter than the played content did. Devices with hardware volume are detected and left untouched; no-op on macOS. Volume changes made while recording are tracked within ~100 ms; the boost is capped at +30 dB. |
+| `--list-cameras` | — | Enumerate cameras (DirectShow on Windows, AVFoundation on macOS, V4L2 on Linux): prints exactly one JSON line `{"type":"cameras","cameras":[{"id":..,"name":..}]}` on stdout and exits 0 (`{"type":"error","message":..}` and exit 1 on failure). Mutually exclusive with all recording flags; `--output` is not required. |
+| `--speaker-volume-compensation` | off | Windows: boost speaker capture to undo the system master volume when the audio device applies it in software. On such devices (no hardware volume control — common for USB DACs) the loopback stream Windows hands to recorders is already attenuated by the volume slider, so recordings sound quieter than the played content did. Devices with hardware volume are detected and left untouched; no-op on macOS and Linux. Volume changes made while recording are tracked within ~100 ms; the boost is capped at +30 dB. |
 | `--settings <FILE.json>` | — | Read the tunables from a JSON file instead of individual flags (see below). Conflicts with every flag it replaces: `--fps`, `--crf`, `--max-width`, `--max-height`, `--hw-accel`, `--low-cpu`, `--no-cursor`, `--tracker`, `--tracker-color`, `--speaker`, `--microphone`, `--speaker-volume-compensation`. |
 
 ### Graphics adapter
@@ -130,6 +155,7 @@ A `--region` is composited from every monitor it intersects, so a rectangle can 
 
 - **Windows** — physical pixels on the virtual desktop (`X`/`Y` can be negative for displays left of / above the primary).
 - **macOS** — CoreGraphics points.
+- **Linux (X11)** — X screen pixels (the XRandR layout). Under Wayland neither `--region` nor `--monitor` is accepted; see [Linux](#linux).
 
 A `--monitor` value is matched, in order, against the monitor's stable device id, its alternate id (Windows GDI name / macOS `CGDirectDisplayID`), and finally as a 0-based index.
 
@@ -257,6 +283,14 @@ libobs is compiled from the `obs-studio` submodule (pinned to **32.1.2**), so a 
 - `git`, `cmake` (≥ 3.28), and a recent **Rust** toolchain (`cargo`)
 - **Windows** — Visual Studio 2022 (the "Visual Studio 17 2022" generator) and LLVM/`libclang` (for `bindgen`; point `LIBCLANG_PATH` at it if not on `PATH`)
 - **macOS** — full **Xcode** (not just the Command Line Tools — the Metal renderer and Swift are required)
+- **Linux** (x86_64 and aarch64) — build in the reference image, `tools/linux-build/Dockerfile`. It is a manylinux_2_34 (AlmaLinux 9, glibc 2.34) base with clang/`libclang` (for `bindgen`), `ninja`, `nasm`, `patchelf`, Rust, and the development packages of the system libraries the bundle links. CI builds in the same image, and building there is what keeps the result portable to every glibc 2.34+ distribution:
+
+  ```sh
+  docker build -t obs-express-linux tools/linux-build
+  tools/linux-build/run-in-image.sh cargo build --release --workspace --exclude clowd_share_region
+  ```
+
+  A native build on another distribution also works, given the same tools and `-dev` packages; the Dockerfile is the list. Its output then needs that distribution's glibc or newer. Do **not** install the system FFmpeg development packages (`libav*-dev`). The build downloads a pinned FFmpeg 7.1 shared build (BtbN FFmpeg-Builds, SHA-256 verified), builds pinned x264 and Mbed TLS from source, and fetches a pinned SIMDe, all into `obs-studio/.deps`. The first build therefore needs access to github.com and code.videolan.org. libobs, every plugin and `vid2gif` share that one FFmpeg.
 
 ### Steps
 
@@ -266,7 +300,7 @@ cd obs-express
 ./build.sh          # inits submodules, then `cargo build --release`
 ```
 
-`build.sh` is a thin wrapper; you can also run the steps directly:
+`build.sh` is a thin wrapper for macOS; you can also run the steps directly. On Linux, use the `--workspace --exclude clowd_share_region` commands from the requirements above instead.
 
 ```sh
 git submodule update --init --recursive
@@ -276,6 +310,7 @@ cargo build --release
 The build script stages the runtime next to the binary:
 
 - **Windows** — `obs-express.exe` plus `obs.dll`, the graphics/plugin DLLs, the FFmpeg & x264 runtime DLLs, `obs-plugins/`, and `data/` are copied into `target/release/`.
+- **Linux** — like Windows: `libobs.so.30`, `libobs-opengl.so.30`, the FFmpeg `.so` files, `obs-ffmpeg-mux`, `obs-plugins/*.so` and `data/` are copied into `target/release/`, each with an `$ORIGIN`-relative RUNPATH. The executables also carry absolute RUNPATHs into the build tree, so cargo's test binaries resolve. `tools/linux-build/stage-bundle.sh` removes those for the release bundle and checks it, and `tools/linux-build/verify-bundle.sh` runs it end to end under Xvfb; CI runs both. Running the smoke tests needs an X server, e.g. `xvfb-run -a -s "-screen 0 1280x720x24 +extension RANDR" cargo test --release -p obs-express --test smoke -- --ignored` (on a blank Xvfb screen the recordings compress below the tests' size threshold, so put something moving on it, such as `glxgears`).
 - **macOS** — the binary links `libobs.framework`, the graphics modules, and the plugins straight out of the OBS build tree (absolute rpaths), and the FFmpeg/x264 dependency dylibs are copied into `target/release/` (symlinked aliases preserved, each given an `@loader_path` rpath and ad-hoc re-signed) so that, as on Windows, the profile dir holds a loadable FFmpeg runtime. The self-contained, relocatable bundle (framework + graphics modules + those dylibs + `.plugin` bundles, with `@executable_path/Frameworks` rpaths) is assembled by the CI Stage step in `.github/workflows/build.yml`.
 
 The resulting binary is `target/release/obs-express` (`.exe` on Windows).
@@ -305,7 +340,7 @@ The workspace is three crates:
 
 ## Releases & CI
 
-Every push and pull request builds all four variants (Windows x64/ARM64, macOS x64/arm64) through a reusable GitHub Actions workflow; each build job zips its bundle itself (macOS with `ditto`, so symlinks and execute bits survive — the artifact store would strip both) and uploads the zip as its artifact. The manually-dispatched release workflow bumps the version, rebuilds every variant, and attaches those zips unchanged as assets on a GitHub Release.
+Every push and pull request builds all five variants (Windows x64/ARM64, macOS x64/arm64, Linux x64) through a reusable GitHub Actions workflow; each build job archives its bundle itself (macOS with `ditto`, Linux as a `.tar.gz`, so symlinks and execute bits survive — the artifact store would strip both) and uploads the archive as its artifact. The Linux job builds inside the manylinux_2_34 image from `tools/linux-build`. It checks that no file needs a glibc newer than 2.34, then moves the bundle out of the checkout, proves every library and symbol resolves there (`ldd -r`), records under Xvfb and runs `vid2gif` on the result. A portability job repeats those checks on stock Ubuntu 22.04 and 24.04 runners that have only the runtime packages installed. The manually-dispatched release workflow bumps the version, rebuilds every variant, and attaches those archives unchanged as assets on a GitHub Release.
 
 ## License & credits
 
