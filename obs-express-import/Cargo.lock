@@ -566,7 +566,7 @@ version = "0.1.0"
 
 [[package]]
 name = "obs-express"
-version = "0.9.4"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "base64",
