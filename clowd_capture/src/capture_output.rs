@@ -256,8 +256,12 @@ pub fn save_to_file_with_peek(
     };
 
     let img: image::RgbaImage = image::ImageBuffer::from_raw(width, height, rgba).expect("buffer size matches");
+    let saved = match format {
+        image::ImageFormat::Jpeg => flatten_onto_black(&img).save_with_format(&path, format),
+        _ => img.save_with_format(&path, format),
+    };
 
-    if let Err(e) = img.save_with_format(&path, format) {
+    if let Err(e) = saved {
         log::error!("save: failed to write {:?}: {e}", path);
         ActionResult::Failed(format!("Failed to save file: {e}"))
     } else {
@@ -266,9 +270,73 @@ pub fn save_to_file_with_peek(
     }
 }
 
+/// JPEG has no alpha channel — image's encoder rejects RGBA outright — so
+/// the straight-alpha output is composited onto black: a picked window's
+/// cut-away corners come out black.
+///
+/// One pass over the raw bytes in u16 lanes, which LLVM vectorises: no
+/// per-pixel bounds checks and no division. `(t + (t >> 8)) >> 8` with
+/// `t = c * a + 128` is the exact rounded `c * a / 255` for every byte pair,
+/// and stays within u16 (at most 65407).
+fn flatten_onto_black(img: &image::RgbaImage) -> image::RgbImage {
+    let mut rgb = vec![0u8; img.width() as usize * img.height() as usize * 3];
+    for (dst, src) in rgb
+        .chunks_exact_mut(3)
+        .zip(img.as_raw().chunks_exact(4))
+    {
+        let a = src[3] as u16;
+        for c in 0..3 {
+            let t = src[c] as u16 * a + 128;
+            dst[c] = ((t + (t >> 8)) >> 8) as u8;
+        }
+    }
+    image::RgbImage::from_raw(img.width(), img.height(), rgb).expect("3 bytes per pixel")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Opaque pixels keep their colour, transparent ones turn black, and
+    /// partial alpha scales the colour down.
+    #[test]
+    fn flatten_onto_black_composites_straight_alpha() {
+        let img = image::RgbaImage::from_raw(3, 1, vec![10, 20, 30, 255, 10, 20, 30, 0, 200, 100, 50, 128]).unwrap();
+        let flat = flatten_onto_black(&img);
+        assert_eq!(flat.get_pixel(0, 0).0, [10, 20, 30]);
+        assert_eq!(flat.get_pixel(1, 0).0, [0, 0, 0]);
+        assert_eq!(flat.get_pixel(2, 0).0, [100, 50, 25]);
+    }
+
+    /// The shift trick matches exact rounded division for every byte pair.
+    #[test]
+    fn flatten_onto_black_rounds_exactly() {
+        let raw: Vec<u8> = (0..=255u8)
+            .flat_map(|a| (0..=255u8).flat_map(move |c| [c, c, c, a]))
+            .collect();
+        let img = image::RgbaImage::from_raw(256, 256, raw).unwrap();
+        let flat = flatten_onto_black(&img);
+        for (a, row) in flat.rows().enumerate() {
+            for (c, px) in row.enumerate() {
+                let want = ((c * a) as f64 / 255.0).round() as u8;
+                assert_eq!(px.0, [want; 3], "c={c} a={a}");
+            }
+        }
+    }
+
+    /// The bug this guards: an RGBA image handed to the JPEG encoder fails
+    /// with "unsupported color type", so every `.jpg` SAVE failed.
+    #[test]
+    fn flattened_image_encodes_as_jpeg() {
+        let img = image::RgbaImage::from_pixel(4, 4, image::Rgba([200, 100, 50, 128]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        assert!(img
+            .write_to(&mut out, image::ImageFormat::Jpeg)
+            .is_err());
+        flatten_onto_black(&img)
+            .write_to(&mut out, image::ImageFormat::Jpeg)
+            .expect("RGB encodes as JPEG");
+    }
     use std::cell::Cell;
 
     /// A write that never loses the race is attempted exactly once.
