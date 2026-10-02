@@ -241,7 +241,7 @@ impl StripMetrics {
             .collect();
         let body_along = match body {
             MeasuredBody::Readout(readout) => {
-                let galley = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(readout)));
+                let galley = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(readout.for_measure())));
                 thick.max(galley.size().x + 2.0 * tokens::READOUT_PAD_H)
             }
             MeasuredBody::Hint {
@@ -418,7 +418,7 @@ impl DoubleMetrics {
         let mut tail = bare.pop().unwrap_or_default();
         let funcs: Vec<MeasuredButton> = bare.concat();
 
-        let galley = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(readout)));
+        let galley = ctx.fonts_mut(|f| f.layout_job(widgets::readout_job(readout.for_measure())));
         let body_along = galley.size().x + 2.0 * tokens::READOUT_PAD_H;
         let head = tokens::EMBLEM_SLOT.max(body_along);
 
@@ -1127,7 +1127,7 @@ mod tests {
         }
     }
 
-    /// A styled, fonted context that runs the real panel. Real Cascadia
+    /// A styled, fonted context that runs the real panel. Real Inter
     /// faces are mandatory: `FontDefinitions::empty()` lays out zero-width
     /// glyphs and every size assertion would be wrong.
     struct Harness {
@@ -1532,8 +1532,10 @@ mod tests {
 
     /// The design, as a row: the emblem over the readout in one head
     /// column, the five accent actions on the first row with their labels
-    /// on, and on the second row the four hand-offs left and the two ways
-    /// out flush with the tray's right padding.
+    /// on, and on the second row the hand-offs left and the ways out flush
+    /// with the tray's right padding. In Inter the labelled run is the
+    /// shorter row, so the first way out is promoted onto it, flush right
+    /// above the other.
     #[test]
     fn capture_row_puts_labels_up_top_and_the_ways_out_bottom_right() {
         let mon = hd(1.0);
@@ -1563,16 +1565,23 @@ mod tests {
         let (top, bottom): (Vec<Rect>, Vec<Rect>) = rects
             .iter()
             .partition(|r| r.top() < area.center().y);
-        assert_eq!(top.len(), 4, "the accent row holds the four finishing actions");
-        assert_eq!(bottom.len(), 7, "the second row holds the five hand-offs and the two ways out");
+        assert_eq!(
+            top.len(),
+            5,
+            "the accent row holds the four finishing actions and the promoted way out"
+        );
+        assert_eq!(bottom.len(), 6, "the second row holds the five hand-offs and the last way out");
 
         // Every accent button is wider than a bare tile: it carries a
-        // label, not a letter. Every second-row button is a tile.
+        // label, not a letter. Every other button is a tile.
+        let (finishers, promoted) = top.split_at(4);
         assert!(
-            top.iter()
+            finishers
+                .iter()
                 .all(|r| r.width() > tokens::KEY_TILE + 0.5),
             "{top:?}"
         );
+        assert!((promoted[0].width() - tokens::KEY_TILE).abs() <= 0.5, "{top:?}");
         assert!(
             bottom
                 .iter()
@@ -1585,16 +1594,14 @@ mod tests {
         assert!((top[0].left() - bottom[0].left()).abs() <= 0.5, "{:?} {:?}", top[0], bottom[0]);
         let head = area.left() + tokens::PAD + tokens::EMBLEM_SLOT + tokens::GAP;
         assert!((top[0].left() - head).abs() <= 0.5, "{:?} in {area:?}", top[0]);
-        // The hand-offs are flush, then a hole, then the two ways out end
-        // on the tray's right padding.
-        let ways_out = &bottom[5..];
+        // The hand-offs are flush, then a hole, then the ways out end on
+        // the tray's right padding, one above the other.
+        let ways_out = [promoted[0], bottom[5]];
+        for r in ways_out {
+            assert!((r.right() - (area.right() - tokens::PAD)).abs() <= 0.5, "{r:?} in {area:?}");
+        }
         assert!(
-            (ways_out[1].right() - (area.right() - tokens::PAD)).abs() <= 0.5,
-            "{:?} in {area:?}",
-            ways_out[1]
-        );
-        assert!(
-            ways_out[0].left() - bottom[4].right() > tokens::GAP,
+            ways_out[1].left() - bottom[4].right() > tokens::GAP,
             "the ways out are pushed away from the hand-offs: {bottom:?}"
         );
         // UPLOAD leads the hand-offs, as a tile.

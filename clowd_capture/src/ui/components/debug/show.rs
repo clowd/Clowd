@@ -187,7 +187,7 @@ fn plot(ui: &mut egui::Ui, g: &MonitorPanelInputs, width: f32) {
             pos2(r.left() + 4.0, y - 1.0),
             Align2::LEFT_BOTTOM,
             format!("{:.0} fps", 1000.0 / budget_ms),
-            FontId::monospace(tokens::DEBUG_LABEL_FONT),
+            FontId::proportional(tokens::DEBUG_LABEL_FONT),
             tokens::FG,
         );
     }
@@ -207,7 +207,7 @@ fn legend(ui: &mut egui::Ui, width: f32) {
             pos2(x, r.top()),
             Align2::LEFT_TOP,
             label,
-            FontId::monospace(tokens::DEBUG_LABEL_FONT),
+            FontId::proportional(tokens::DEBUG_LABEL_FONT),
             tokens::FG,
         );
         x = text.right() + gap_item;

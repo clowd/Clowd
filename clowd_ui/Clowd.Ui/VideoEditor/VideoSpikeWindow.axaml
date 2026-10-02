@@ -21,7 +21,7 @@
             <!-- stats overlay -->
             <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"
                     Background="#B0000000" CornerRadius="6" Padding="10,8">
-                <TextBlock Name="StatsText" FontFamily="Consolas,Cascadia Mono,monospace"
+                <TextBlock Name="StatsText" FontFamily="{StaticResource MonoFontFamily}"
                            FontSize="12" Foreground="#E0FFFFFF" Text="opening…" />
             </Border>
         </Panel>
@@ -29,7 +29,7 @@
         <!-- transport: space = play/pause, click/drag the bar to seek -->
         <DockPanel Grid.Row="1" Margin="12,8" LastChildFill="True">
             <TextBlock Name="TimeText" DockPanel.Dock="Right" Margin="12,0,0,0"
-                       VerticalAlignment="Center" FontFamily="Consolas,Cascadia Mono,monospace"
+                       VerticalAlignment="Center" FontFamily="{StaticResource MonoFontFamily}"
                        FontSize="12" Text="0:00 / 0:00" />
             <Border Name="ProgressTrack" Height="18" CornerRadius="4"
                     Background="#33888888" VerticalAlignment="Center" Cursor="Hand">

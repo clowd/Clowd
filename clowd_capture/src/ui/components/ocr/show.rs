@@ -328,7 +328,7 @@ fn bubbles(p: &Painter, local: &Local, clip: ScreenRectF, region: ScreenRectF, d
         let lay = |px: f32| {
             p.layout_no_wrap(
                 line.text.clone(),
-                FontId::new(px / local.ppp, FontFamily::Monospace),
+                FontId::new(px / local.ppp, FontFamily::Proportional),
                 Color32::PLACEHOLDER,
             )
         };

@@ -112,7 +112,7 @@
                                        Grid.Row="0"
                                        Grid.Column="1"
                                        Text="{TemplateBinding Label}"
-                                       FontSize="11.5"
+                                       FontSize="12"
                                        FontWeight="SemiBold"
                                        FontFeatures="tnum"
                                        Foreground="{x:Static tray:TrayTokens.FgBrush}"

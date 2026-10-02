@@ -104,14 +104,14 @@ pub fn key_hint_button(def: &ButtonDef, id: Id, min_size: Vec2, base: Color32, v
 }
 
 /// How wide a [`key_hint_button`] wants to be with `pad_h` on either
-/// side: the icon, the gap and one accelerator glyph. Any glyph will do
-/// for the measurement — they are all uppercase ASCII in the bundled mono
-/// face, so they all have the same advance.
+/// side: the icon, the gap and one accelerator glyph. Measured on "W", the
+/// widest uppercase letter in Inter, so every key button shares one length
+/// whatever its letter.
 pub fn key_button_length(ctx: &egui::Context, pad_h: f32) -> f32 {
     let letter = ctx.fonts_mut(|f| {
         f.layout_no_wrap(
             "W".to_owned(),
-            egui::FontId::new(tokens::KEY_FONT, egui::FontFamily::Monospace),
+            egui::FontId::new(tokens::KEY_FONT, egui::FontFamily::Proportional),
             tokens::FG_80,
         )
     });
@@ -169,7 +169,7 @@ pub fn label_button_length(ctx: &egui::Context, def: &ButtonDef) -> f32 {
 pub fn tip_job(def: &ButtonDef) -> LayoutJob {
     LayoutJob::simple_singleline(
         def.tip.to_owned(),
-        egui::FontId::new(tokens::TIP_FONT, egui::FontFamily::Monospace),
+        egui::FontId::new(tokens::TIP_FONT, egui::FontFamily::Proportional),
         tokens::FG,
     )
 }
@@ -189,7 +189,7 @@ pub fn tip(painter: &egui::Painter, rect: egui::Rect, def: &ButtonDef) {
 /// underlines a whole run, not a substring. Labels are ASCII (a model
 /// test pins it), so the byte index is also the glyph index.
 pub fn underlined_label(def: &ButtonDef) -> LayoutJob {
-    let font = egui::FontId::new(tokens::LABEL_FONT, egui::FontFamily::Monospace);
+    let font = egui::FontId::new(tokens::LABEL_FONT, crate::ui::fonts::SEMIBOLD.clone());
     let plain = TextFormat {
         font_id: font,
         color: tokens::FG,
@@ -220,8 +220,8 @@ pub fn readout_job(readout: Readout) -> LayoutJob {
         line_height: Some(tokens::READOUT_LINE),
         ..Default::default()
     };
-    let bold = || f(crate::ui::fonts::MONO_BOLD.clone(), tokens::FG_85);
-    let dim = || f(egui::FontFamily::Monospace, tokens::FG_70);
+    let bold = || f(crate::ui::fonts::SEMIBOLD.clone(), tokens::FG_85);
+    let dim = || f(egui::FontFamily::Proportional, tokens::FG_70);
     let mut job = LayoutJob {
         halign: egui::Align::Center,
         ..Default::default()
@@ -250,7 +250,7 @@ pub fn hint_job(text: &str, wrap_width: f32) -> LayoutJob {
     let mut job = LayoutJob::single_section(
         text.to_owned(),
         TextFormat {
-            font_id: egui::FontId::new(tokens::HINT_FONT, egui::FontFamily::Monospace),
+            font_id: egui::FontId::new(tokens::HINT_FONT, egui::FontFamily::Proportional),
             color: tokens::FG_85,
             line_height: Some(tokens::HINT_LINE),
             ..Default::default()
@@ -275,7 +275,7 @@ pub fn hint(ui: &mut Ui, text: &str, wrap_width: f32, slot: Vec2) -> egui::Rect 
 }
 
 /// The readout in a dead slot, centred on its ink: the galley's box
-/// carries Cascadia's tall ascent above the digits, so centring the box
+/// carries Inter's ascent and line gap above the digits, so centring the box
 /// leaves the glyphs riding high, more so at every DPI step.
 /// `mesh_bounds` is the glyphs' own extent, relative to the galley's
 /// origin (`halign: Center` puts that origin on the block's centre line).

@@ -1808,9 +1808,9 @@ impl App {
                             }
                             // Hold the result until the fallback-font scan
                             // lands, but only for a page that actually needs
-                            // a face the bundled Cascadia lacks: publishing
+                            // a face the bundled Inter lacks: publishing
                             // sooner would let the reveal lay non-Latin lines
-                            // out against a Cascadia-only font set (tofu,
+                            // out against an Inter-only font set (tofu,
                             // cached for the request's lifetime), while an
                             // ASCII page has nothing to wait for. The scan
                             // started with this request and runs beside the

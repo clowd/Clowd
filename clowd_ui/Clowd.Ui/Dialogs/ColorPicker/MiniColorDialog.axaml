@@ -17,7 +17,7 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="#5A5A5A" />
             <Setter Property="CaretBrush" Value="White" />
-            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="TextAlignment" Value="Center" />
@@ -25,7 +25,7 @@
         <Style Selector="TextBlock.complbl">
             <Setter Property="Margin" Value="0,1,0,0" />
             <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
             <Setter Property="FontSize" Value="9" />
             <Setter Property="Foreground" Value="#9A9A9A" />
         </Style>
@@ -210,7 +210,7 @@
                         BorderBrush="#5A5A5A"
                         Click="ButtonTextFormatClicked"
                         DockPanel.Dock="Right"
-                        FontFamily="Consolas"
+                        FontFamily="{StaticResource MonoFontFamily}"
                         FontSize="11"
                         Foreground="White"
                         ToolTip.Tip="Switch between HEX, RGB and HSL" />

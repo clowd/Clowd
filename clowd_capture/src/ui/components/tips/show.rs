@@ -7,7 +7,9 @@
 //! because the bottom-right/bottom-left corner rule needs the panel's own
 //! size and an `Area` only learns its rect one pass late.
 
-use egui::{pos2, vec2, Color32, FontFamily, FontId, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2};
+use std::sync::Arc;
+
+use egui::{pos2, vec2, Color32, FontFamily, FontId, Galley, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2};
 
 use crate::ui::components::tips::model;
 use crate::ui::components::{InputCtx, Local};
@@ -18,9 +20,10 @@ use crate::ui::shared::UiMonitor;
 /// so the pass only has to measure and paint.
 #[derive(Clone, PartialEq)]
 pub struct TipsInputs {
-    /// The four rows above the colour sampler, `"<hotkey><gap><text>"`.
+    /// The descriptions of the four rows above the colour sampler. Their
+    /// hotkeys are static and come from [`model::TIPS_TOP`].
     pub top: [String; 4],
-    /// The four rows below it.
+    /// The descriptions of the four rows below it ([`model::TIPS_BOTTOM`]).
     pub bottom: [String; 4],
     /// `"#RRGGBB"`, or `"#------"` when there is no pixel under the cursor.
     pub hex: String,
@@ -51,12 +54,16 @@ pub const MIN_PANEL_WIDTH: f32 = 400.0;
 pub const OPACITY: f32 = 0.70;
 /// The hard-edged drop shadow, black at the old 0.30.
 pub const SHADOW: Color32 = Color32::from_black_alpha(77);
+/// How far the description column sits right of the hotkey column: the
+/// 1.75 row heights the old monospace "<hotkey>   " prefix came to, which
+/// clears the widest hotkey ("W") with room to spare.
+pub const DESC_INDENT: f32 = ROW_H * 1.75;
 /// One body row's height — the old `body_row_height` of `font * 1.4`.
 pub const ROW_H: f32 = BODY_PT * 1.4;
 /// Cap height of the title, which is what the title bar is sized around.
-/// The old code fed swash's `measure_line("Hg").height` here; for Cascadia
-/// that is about 0.7 x the font size.
-pub const TITLE_H: f32 = TITLE_PT * 0.7;
+/// The old code fed swash's `measure_line("Hg").height` here; Inter's cap
+/// height is 0.73 x the font size.
+pub const TITLE_H: f32 = TITLE_PT * 0.73;
 
 /// Whether this monitor draws the panel, and what it draws.
 ///
@@ -69,14 +76,7 @@ pub fn inputs(index: usize, monitor: &UiMonitor, c: &InputCtx<'_>) -> Option<Tip
     if !shown || c.cursor_index != Some(index) {
         return None;
     }
-    let row = |r: &model::TipRow| {
-        format!(
-            "{}{}{}",
-            r.hotkey,
-            model::HOTKEY_GAP,
-            model::render_description(r.description_template, c.hovered_window_title, c.hovered_monitor_name)
-        )
-    };
+    let row = |r: &model::TipRow| model::render_description(r.description_template, c.hovered_window_title, c.hovered_monitor_name);
     let (hex, rgb, swatch) = match c.hovered_pixel_bgra {
         Some([b, g, r, _]) => (
             format!("#{r:02X}{g:02X}{b:02X}"),
@@ -104,6 +104,7 @@ pub struct TipsLayout {
     pub panel: Rect,
     pub title_bar: Rect,
     pub col_hotkey_x: f32,
+    pub col_desc_x: f32,
     pub top_block_y: f32,
     pub color_row_y: f32,
     pub bottom_block_y: f32,
@@ -116,9 +117,10 @@ pub struct TipsLayout {
 /// works in points and rounds to pixels itself.
 ///
 /// `longest_body` is the widest measured body row (the colour row
-/// included) and `title_w` the measured title, both in points.
+/// included), measured from the description column, and `title_w` the
+/// measured title, both in points.
 pub fn compute_layout(screen: Rect, cursor: Pos2, longest_body: f32, title_w: f32) -> TipsLayout {
-    let panel_w = (longest_body.max(title_w) + 2.0 * PADDING).max(MIN_PANEL_WIDTH);
+    let panel_w = ((longest_body + DESC_INDENT).max(title_w) + 2.0 * PADDING).max(MIN_PANEL_WIDTH);
     // Breathing room above and below the two-line colour row, so the
     // swatch does not butt up against the text rows either side of it.
     let gap = PADDING_HALF * 0.4;
@@ -138,10 +140,7 @@ pub fn compute_layout(screen: Rect, cursor: Pos2, longest_body: f32, title_w: f3
     };
     let panel = Rect::from_min_size(pos2(left, top), vec2(panel_w, panel_h));
 
-    // The description column lines up with where the description text
-    // starts in the monospace rows: the hotkey plus the three-space gap
-    // is about 1.75 row heights at Cascadia 12 pt.
-    let col_desc_x = PADDING + ROW_H * 1.75;
+    let col_desc_x = PADDING + DESC_INDENT;
     let top_block_y = title_h + PADDING;
     let color_row_y = top_block_y + ROW_H * 4.0 + gap;
     let bottom_block_y = color_row_y + ROW_H * 2.0 + gap;
@@ -150,6 +149,7 @@ pub fn compute_layout(screen: Rect, cursor: Pos2, longest_body: f32, title_w: f3
         panel,
         title_bar: Rect::from_min_size(panel.min, vec2(panel_w, title_h)),
         col_hotkey_x: PADDING,
+        col_desc_x,
         top_block_y,
         color_row_y,
         bottom_block_y,
@@ -160,10 +160,10 @@ pub fn compute_layout(screen: Rect, cursor: Pos2, longest_body: f32, title_w: f3
 }
 
 pub fn show(p: &Painter, t: &TipsInputs, screen: Rect) {
-    let body = |s: &str| p.layout_no_wrap(s.to_owned(), FontId::new(BODY_PT, FontFamily::Monospace), Color32::BLACK);
+    let body = |s: &str| p.layout_no_wrap(s.to_owned(), FontId::new(BODY_PT, FontFamily::Proportional), Color32::BLACK);
     let title = p.layout_no_wrap(
         model::TITLE.to_owned(),
-        FontId::new(TITLE_PT, fonts::MONO_BOLD.clone()),
+        FontId::new(TITLE_PT, fonts::SEMIBOLD.clone()),
         Color32::WHITE,
     );
     let rows: Vec<_> = t
@@ -173,15 +173,19 @@ pub fn show(p: &Painter, t: &TipsInputs, screen: Rect) {
         .map(|s| body(s))
         .collect();
     let (hotkey, hex, rgb) = (body(model::COLOR_ROW_HOTKEY), body(&t.hex), t.rgb.as_deref().map(body));
-    // The colour row has to fit too: its hotkey column, the swatch, and
-    // the wider of the two colour lines.
-    let colour_row_w = hotkey.size().x
-        + BODY_PT * 2.4
+    let keys: Vec<_> = model::TIPS_TOP
+        .iter()
+        .chain(model::TIPS_BOTTOM.iter())
+        .map(|r| body(r.hotkey))
+        .collect();
+    // The colour row has to fit too: the swatch, its gap, and the wider of
+    // the two colour lines, all right of the description column.
+    let colour_row_w = ROW_H * 2.0
+        + PADDING_HALF
         + hex
             .size()
             .x
-            .max(rgb.as_ref().map_or(0.0, |g| g.size().x))
-        + BODY_PT * 0.5;
+            .max(rgb.as_ref().map_or(0.0, |g| g.size().x));
     let longest = rows
         .iter()
         .map(|g| g.size().x)
@@ -212,8 +216,13 @@ pub fn show(p: &Painter, t: &TipsInputs, screen: Rect) {
     p.galley(l.title_bar.center() - title.size() / 2.0, title, Color32::WHITE);
 
     let x = pr.left() + l.col_hotkey_x;
-    for (k, g) in rows.iter().take(4).enumerate() {
-        p.galley(pos2(x, pr.top() + l.top_block_y + k as f32 * ROW_H), g.clone(), Color32::BLACK);
+    let dx = pr.left() + l.col_desc_x;
+    let row = |y: f32, key: &Arc<Galley>, desc: &Arc<Galley>| {
+        p.galley(pos2(x, pr.top() + y), key.clone(), Color32::BLACK);
+        p.galley(pos2(dx, pr.top() + y), desc.clone(), Color32::BLACK);
+    };
+    for k in 0..4 {
+        row(l.top_block_y + k as f32 * ROW_H, &keys[k], &rows[k]);
     }
     p.galley(pos2(x, pr.top() + l.color_row_y), hotkey, Color32::BLACK);
     p.rect(l.swatch, 0u8, t.swatch, Stroke::new(1.0, Color32::BLACK), StrokeKind::Inside);
@@ -221,8 +230,8 @@ pub fn show(p: &Painter, t: &TipsInputs, screen: Rect) {
     if let Some(g) = rgb {
         p.galley(l.rgb_pos, g, Color32::BLACK);
     }
-    for (k, g) in rows.iter().skip(4).enumerate() {
-        p.galley(pos2(x, pr.top() + l.bottom_block_y + k as f32 * ROW_H), g.clone(), Color32::BLACK);
+    for k in 0..4 {
+        row(l.bottom_block_y + k as f32 * ROW_H, &keys[4 + k], &rows[4 + k]);
     }
 }
 
@@ -314,7 +323,7 @@ mod tests {
     }
 
     /// Short rows never shrink the panel below the floor; long ones grow
-    /// it by the padding on both sides.
+    /// it by the hotkey column and the padding on both sides.
     #[test]
     fn layout_width_is_at_least_the_minimum() {
         let s = screen();
@@ -327,7 +336,7 @@ mod tests {
         let wide = compute_layout(s, Pos2::ZERO, 600.0, 100.0)
             .panel
             .width();
-        assert_eq!(wide, 600.0 + 2.0 * PADDING);
+        assert_eq!(wide, 600.0 + DESC_INDENT + 2.0 * PADDING);
         // The title can be the widest thing on the panel.
         let by_title = compute_layout(s, Pos2::ZERO, 100.0, 700.0)
             .panel

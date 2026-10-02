@@ -192,7 +192,7 @@
                     MinWidth="34"
                     Margin="0,1,0,0"
                     VerticalAlignment="Center"
-                    FontFamily="Consolas,Cascadia Mono,monospace"
+                    FontFamily="{StaticResource MonoFontFamily}"
                     Foreground="#F0F0F0"
                     Text="0:00" />
 

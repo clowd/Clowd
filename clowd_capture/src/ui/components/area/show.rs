@@ -80,7 +80,7 @@ pub fn pill_rect(clipped: Rect, text_size: Vec2, zoom: f32, cursor: Pos2, screen
 pub fn show(p: &Painter, a: &AreaInputs, screen: Rect) {
     let galley = p.layout_no_wrap(
         format!("{} \u{00D7} {}", a.size.0, a.size.1),
-        FontId::new(FONT_PT, fonts::MONO_BOLD.clone()),
+        FontId::new(FONT_PT, fonts::SEMIBOLD.clone()),
         Color32::BLACK,
     );
     let Some(rect) = pill_rect(a.clipped, galley.size(), a.zoom, a.cursor, screen) else {

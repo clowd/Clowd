@@ -12,6 +12,11 @@
             <Color x:Key="ClowdStarColor">#F5B31B</Color>
             <SolidColorBrush x:Key="ClowdStarBrush" Color="#F5B31B" />
 
+            <!-- The one monospace face the app's own UI uses (colour values, timecodes). Embedded
+                 rather than named, because Consolas only exists on Windows. Mono rather than
+                 Code: Code's ligatures would rewrite sequences like "->" and "==". -->
+            <FontFamily x:Key="MonoFontFamily">avares://Clowd.Ui/Assets/Fonts#Cascadia Mono</FontFamily>
+
             <!--  The font preview button of the image editor and the video editor's inspector — the
                   dark-chrome tool surfaces, whatever the app theme. Same chrome idiom as
                   CompactSpinner: #454545 fill with a #666666 1px border, and the interactive surface
