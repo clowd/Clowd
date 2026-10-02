@@ -106,7 +106,8 @@ pub mod tokens {
     pub const BELOW_HEIGHT: f32 = 48.0;
     pub const BELOW_PAD_H: f32 = 8.0;
     pub const BELOW_GAP: f32 = 4.0;
-    /// 12 pt button label in the `below` button style.
+    /// Button label size: 12 pt SemiBold, the C# tray's primary-button
+    /// label (`TrayPrimaryButton.axaml`), so the two read the same.
     pub const LABEL_FONT: f32 = 12.0;
 
     /// `label` style — the capture strip's primary row: the icon beside
@@ -212,12 +213,12 @@ pub fn apply_style(ctx: &egui::Context) {
     // `Default::default()` binding.
     let mut s = egui::Style {
         text_styles: [
-            (TextStyle::Small, FontId::new(KEY_FONT, FontFamily::Monospace)),
-            (TextStyle::Body, FontId::new(LABEL_FONT, FontFamily::Monospace)),
-            (TextStyle::Button, FontId::new(LABEL_FONT, FontFamily::Monospace)),
-            (TextStyle::Heading, FontId::new(LABEL_FONT, FontFamily::Monospace)),
-            (TextStyle::Monospace, FontId::new(DEBUG_FONT, FontFamily::Monospace)),
-            (readout_style(), FontId::new(READOUT_FONT, FontFamily::Monospace)),
+            (TextStyle::Small, FontId::new(KEY_FONT, FontFamily::Proportional)),
+            (TextStyle::Body, FontId::new(LABEL_FONT, FontFamily::Proportional)),
+            (TextStyle::Button, FontId::new(LABEL_FONT, FontFamily::Proportional)),
+            (TextStyle::Heading, FontId::new(LABEL_FONT, FontFamily::Proportional)),
+            (TextStyle::Monospace, FontId::new(DEBUG_FONT, FontFamily::Proportional)),
+            (readout_style(), FontId::new(READOUT_FONT, FontFamily::Proportional)),
         ]
         .into(),
         ..Default::default()
@@ -335,7 +336,7 @@ mod tests {
             readout_style(),
         ] {
             let font = s.resolve(&style);
-            assert_eq!(font.family, FontFamily::Monospace, "{s:?}");
+            assert_eq!(font.family, FontFamily::Proportional, "{s:?}");
         }
     }
 

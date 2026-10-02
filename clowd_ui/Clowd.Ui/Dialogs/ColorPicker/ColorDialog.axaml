@@ -13,12 +13,12 @@
 
     <Window.Styles>
         <!-- labels and value readouts are monospaced (channel data aligns nicely); the grid is
-             sized generously so Consolas at theme size never clips -->
+             sized generously so Cascadia Mono at theme size never clips -->
         <Style Selector="TextBlock.lbl">
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
         </Style>
         <Style Selector="cp|ColorSlider">
             <Setter Property="CornerRadius" Value="4" />
@@ -35,7 +35,7 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="TextAlignment" Value="Center" />
-            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
         </Style>
         <Style Selector="Button.copy">
             <Setter Property="Margin" Value="10,0,0,0" />
@@ -184,13 +184,13 @@
 
             <!-- widest readout in the dialog, so this MinWidth sets the column width. The
                  longest string the formatter can produce is "hsla(360, 100%, 100%, 0.55)" —
-                 27 Consolas chars, ~208px at the theme's 14px — and reserving it here keeps
+                 27 Cascadia Mono chars, ~222px at the theme's 14px — and reserving it here keeps
                  the window a constant size instead of resizing as the alpha slider moves. -->
             <TextBlock Classes="lbl"
                        Grid.Row="8"
                        Grid.Column="1"
                        HorizontalAlignment="Left"
-                       MinWidth="220"
+                       MinWidth="230"
                        Text="{Binding TextHsl}" />
             <controls:AcceleratedButton x:Name="btnCopyHsl"
                                         Grid.Row="8"

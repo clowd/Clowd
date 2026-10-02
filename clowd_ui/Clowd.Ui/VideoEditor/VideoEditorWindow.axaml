@@ -1076,7 +1076,7 @@
                         x:Name="txtPosition"
                         Margin="10,2,6,0"
                         VerticalAlignment="Center"
-                        FontFamily="Consolas,Cascadia Mono,monospace"
+                        FontFamily="{StaticResource MonoFontFamily}"
                         Text="00:00.0 / 00:00.0" />
 
                     <Button

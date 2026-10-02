@@ -234,6 +234,17 @@ impl Readout {
     pub fn words_in(text: &str) -> Self {
         Self::Words(text.split_whitespace().count())
     }
+
+    /// The readout a slot is sized from. A word count reserves five
+    /// digits — digits are tabular, so every count up to 99 999 lays out
+    /// the same width — and the strip does not grow and shrink as the
+    /// count changes. A size is measured as it is.
+    pub fn for_measure(self) -> Self {
+        match self {
+            Self::Words(n) => Self::Words(n.max(99_999)),
+            size => size,
+        }
+    }
 }
 
 /// Which fill a group of buttons sits on.
@@ -278,10 +289,9 @@ pub struct ButtonDef {
     /// Command this button emits on click.
     pub command: Command,
     /// Display label: Title case, ASCII, no whitespace. ASCII is a hard
-    /// requirement: `show` measures labels in a mono font by `chars()`,
-    /// `widgets::underlined_label` splits them by byte index and
-    /// `accel_key` reads that index as a char index, so bytes, glyphs and
-    /// advance columns must all agree. `labels_are_title_case_ascii_and_underline_index_is_in_range`
+    /// requirement: `widgets::underlined_label` splits them by byte index
+    /// and `accel_key` reads that index as a char index, so bytes and
+    /// glyphs must agree. `labels_are_title_case_ascii_and_underline_index_is_in_range`
     /// pins it.
     pub label: &'static str,
     /// BYTE index into `label` of the accelerator glyph:
@@ -789,8 +799,7 @@ mod tests {
     }
 
     /// The label text is geometry: the `below` style sizes every button
-    /// from its laid-out label, the bundled mono face makes each glyph the
-    /// same advance, and `underlined_label` splits the job by BYTE index
+    /// from its laid-out label, and `underlined_label` splits the job by BYTE index
     /// while `accel_key` reads a `chars()` index. All of that holds only
     /// for ASCII, whitespace-free labels whose `underline_idx` is inside
     /// the string and names the accelerator glyph.

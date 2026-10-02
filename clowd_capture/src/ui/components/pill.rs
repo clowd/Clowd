@@ -51,12 +51,12 @@ pub const SWATCH_GAP: f32 = 6.0;
 pub const DASH: f32 = 6.0;
 
 pub fn font() -> FontId {
-    FontId::new(FONT_PT, FontFamily::Monospace)
+    FontId::new(FONT_PT, FontFamily::Proportional)
 }
 
 /// The keycap letter, a shade larger than the label beside it.
 pub fn key_font() -> FontId {
-    FontId::new(FONT_PT * 1.15, FontFamily::Monospace)
+    FontId::new(FONT_PT * 1.15, FontFamily::Proportional)
 }
 
 /// The chip's shadow: its rect moved down-right and grown, with no blur —

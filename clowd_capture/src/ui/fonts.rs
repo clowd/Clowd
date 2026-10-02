@@ -1,12 +1,16 @@
 //! Every font the overlay draws with, and the background scan that finds the
 //! system faces the bundled ones do not cover.
 //!
-//! Two things live here. The bundled Cascadia Mono faces and the
-//! [`egui::FontDefinitions`] built from them — Mono rather than Code because
-//! Code ships `calt` ligatures, which would turn "->" in a label into an
-//! arrow and corrupt recognised OCR text. And the one process-wide scan of
-//! the machine's own fonts, which supplies the faces egui falls back to for
-//! scripts Cascadia lacks (CJK, kana, Hangul, Indic, Thai, symbols, emoji).
+//! Two things live here. The bundled Inter faces and the
+//! [`egui::FontDefinitions`] built from them — the same Inter the C# UI draws
+//! with, so the overlay and the app's own windows read as one product. The
+//! files are not stock Inter: `tools/capture-fonts/build.py` freezes tabular
+//! figures into them (live readouts must not shuffle as digits change) and
+//! strips `calt`, whose arrows and multiplication signs would corrupt
+//! recognised OCR text — egui shapes with default features and cannot turn
+//! either off. And the one process-wide scan of the machine's own fonts,
+//! which supplies the faces egui falls back to for scripts Inter lacks
+//! (Arabic, Hebrew, CJK, kana, Hangul, Indic, Thai, symbols, emoji).
 //!
 //! The scan is deliberately late and deliberately cheap. It starts at the
 //! first OCR press, on a background-priority thread, because this overlay is
@@ -24,15 +28,16 @@ use egui::FontFamily;
 
 use crate::sync::Latch;
 
-pub const MONO_REGULAR: &[u8] = include_bytes!("../../assets/fonts/CascadiaMono-Regular.ttf");
-pub const MONO_BOLD_BYTES: &[u8] = include_bytes!("../../assets/fonts/CascadiaMono-Bold.ttf");
+pub const UI_REGULAR: &[u8] = include_bytes!("../../assets/fonts/Inter-Regular.ttf");
+pub const UI_SEMIBOLD_BYTES: &[u8] = include_bytes!("../../assets/fonts/Inter-SemiBold.ttf");
 
-/// Key of the regular Cascadia Mono face in [`egui::FontDefinitions::font_data`].
-pub const MONO_REGULAR_NAME: &str = "CascadiaMono";
-/// Family key for the bold Cascadia Mono face. egui picks a face per family,
-/// not per weight, so bold is a family of its own.
-pub const MONO_BOLD_NAME: &str = "CascadiaMonoBold";
-pub static MONO_BOLD: LazyLock<FontFamily> = LazyLock::new(|| FontFamily::Name(Arc::from(MONO_BOLD_NAME)));
+/// Key of the regular Inter face in [`egui::FontDefinitions::font_data`].
+pub const UI_REGULAR_NAME: &str = "Inter";
+/// Family key for the semibold Inter face, the weight the C# tray uses for
+/// its readouts. egui picks a face per family, not per weight, so semibold is
+/// a family of its own.
+pub const UI_SEMIBOLD_NAME: &str = "InterSemiBold";
+pub static SEMIBOLD: LazyLock<FontFamily> = LazyLock::new(|| FontFamily::Name(Arc::from(UI_SEMIBOLD_NAME)));
 
 /// One curated system face: the key it gets in egui's font table, and its
 /// bytes. The bytes are a leaked memory map, so the `Arc<FontData>` is shared
@@ -44,17 +49,17 @@ pub struct SystemFace {
 
 pub type SystemFaces = Arc<Vec<SystemFace>>;
 
-/// The bundled Cascadia Mono faces, with `extra` appended to every family as
-/// per-glyph fallback. ASCII therefore always comes out of Cascadia and the
+/// The bundled Inter faces, with `extra` appended to every family as
+/// per-glyph fallback. Latin therefore always comes out of Inter and the
 /// system faces are reached only for what it lacks; the order of `extra` is
 /// the whole fallback policy, because egui takes the first family in the list
 /// that has the glyph.
 pub fn font_definitions(extra: &[SystemFace]) -> egui::FontDefinitions {
     let mut d = egui::FontDefinitions::empty();
     d.font_data
-        .insert(MONO_REGULAR_NAME.into(), Arc::new(egui::FontData::from_static(MONO_REGULAR)));
+        .insert(UI_REGULAR_NAME.into(), Arc::new(egui::FontData::from_static(UI_REGULAR)));
     d.font_data
-        .insert(MONO_BOLD_NAME.into(), Arc::new(egui::FontData::from_static(MONO_BOLD_BYTES)));
+        .insert(UI_SEMIBOLD_NAME.into(), Arc::new(egui::FontData::from_static(UI_SEMIBOLD_BYTES)));
     for face in extra {
         d.font_data
             .insert(face.name.clone(), face.data.clone());
@@ -66,22 +71,23 @@ pub fn font_definitions(extra: &[SystemFace]) -> egui::FontDefinitions {
         names
     };
     d.families
-        .insert(FontFamily::Monospace, chain(MONO_REGULAR_NAME));
-    // Both built-in family keys must exist even though we only draw mono:
-    // egui resolves Proportional for anything it lays out itself.
+        .insert(FontFamily::Proportional, chain(UI_REGULAR_NAME));
+    // Both built-in family keys must exist. Nothing in the overlay is
+    // monospace, so anything egui lays out as Monospace on its own still
+    // comes out in Inter.
     d.families
-        .insert(FontFamily::Proportional, chain(MONO_REGULAR_NAME));
+        .insert(FontFamily::Monospace, chain(UI_REGULAR_NAME));
     d.families
-        .insert(MONO_BOLD.clone(), chain(MONO_BOLD_NAME));
+        .insert(SEMIBOLD.clone(), chain(UI_SEMIBOLD_NAME));
     d
 }
 
-/// Windows family names that cover the scripts Cascadia Mono does not.
-/// Cascadia already carries Latin, Greek, Cyrillic, Arabic and Hebrew
-/// letters, so no general UI face is needed here; the order is the fallback
-/// policy.
+/// Windows family names that cover the scripts Inter does not. Inter carries
+/// Latin, Greek and Cyrillic only, so Segoe UI comes first for Arabic, Hebrew
+/// and the other alphabetic scripts; the order is the fallback policy.
 #[cfg(windows)]
 const FALLBACK_FAMILIES: &[&str] = &[
+    "Segoe UI",
     "Microsoft YaHei UI",
     "Yu Gothic UI",
     "Malgun Gothic",
@@ -96,6 +102,8 @@ const FALLBACK_FAMILIES: &[&str] = &[
 /// case is the tofu the old path would also have shown.
 #[cfg(target_os = "macos")]
 const FALLBACK_FAMILIES: &[&str] = &[
+    "Geeza Pro",
+    "Arial Hebrew",
     "PingFang SC",
     "Hiragino Sans",
     "Apple SD Gothic Neo",
@@ -197,7 +205,7 @@ pub fn begin_system_font_scan() {
 /// Block until the scan lands, or `timeout`. For the OCR worker thread only,
 /// and only for a page that actually needs a fallback face: it holds the
 /// recognition result back so the reveal never lays non-Latin lines out
-/// against a Cascadia-only font set. The app thread and the render threads
+/// against an Inter-only font set. The app thread and the render threads
 /// must never call this.
 pub fn wait_for_system_font_scan(timeout: Duration) {
     if latch().wait_timeout(timeout).is_none() {
@@ -211,7 +219,7 @@ pub fn system_faces() -> Option<SystemFaces> {
 }
 
 /// Whether any non-whitespace character of `lines` is missing from the bundled
-/// Cascadia Mono.
+/// Inter.
 ///
 /// Reads the embedded bytes with skrifa, so it answers on any thread with no
 /// egui context in sight — which is what lets the OCR worker decide whether to
@@ -220,7 +228,7 @@ pub fn system_faces() -> Option<SystemFaces> {
 /// that is the safe direction.
 pub fn needs_fallback<'a>(lines: impl IntoIterator<Item = &'a str>) -> bool {
     use skrifa::MetadataProvider;
-    let Ok(font) = skrifa::FontRef::new(MONO_REGULAR) else {
+    let Ok(font) = skrifa::FontRef::new(UI_REGULAR) else {
         return true;
     };
     let cmap = font.charmap();
@@ -235,37 +243,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn definitions_bind_monospace_proportional_and_bold() {
+    fn definitions_bind_proportional_monospace_and_semibold() {
         let d = font_definitions(&[]);
-        assert!(d.font_data.contains_key(MONO_REGULAR_NAME));
-        assert!(d.font_data.contains_key(MONO_BOLD_NAME));
-        assert_eq!(d.families[&FontFamily::Monospace], vec![MONO_REGULAR_NAME.to_owned()]);
-        assert_eq!(d.families[&FontFamily::Proportional], vec![MONO_REGULAR_NAME.to_owned()]);
-        assert_eq!(d.families[&MONO_BOLD.clone()], vec![MONO_BOLD_NAME.to_owned()]);
+        assert!(d.font_data.contains_key(UI_REGULAR_NAME));
+        assert!(d.font_data.contains_key(UI_SEMIBOLD_NAME));
+        assert_eq!(d.families[&FontFamily::Monospace], vec![UI_REGULAR_NAME.to_owned()]);
+        assert_eq!(d.families[&FontFamily::Proportional], vec![UI_REGULAR_NAME.to_owned()]);
+        assert_eq!(d.families[&SEMIBOLD.clone()], vec![UI_SEMIBOLD_NAME.to_owned()]);
     }
 
     /// The bundled face stays first in every family and the extras follow in
     /// the order the scan chose: that order is the fallback policy.
     #[test]
-    fn extra_faces_are_appended_after_cascadia_in_order() {
+    fn extra_faces_are_appended_after_inter_in_order() {
         let extra = vec![
             SystemFace {
                 name: "sys:First".to_owned(),
-                data: Arc::new(egui::FontData::from_static(MONO_REGULAR)),
+                data: Arc::new(egui::FontData::from_static(UI_REGULAR)),
             },
             SystemFace {
                 name: "sys:Second".to_owned(),
-                data: Arc::new(egui::FontData::from_static(MONO_BOLD_BYTES)),
+                data: Arc::new(egui::FontData::from_static(UI_SEMIBOLD_BYTES)),
             },
         ];
         let d = font_definitions(&extra);
         assert_eq!(
             d.families[&FontFamily::Monospace],
-            vec!["CascadiaMono".to_owned(), "sys:First".to_owned(), "sys:Second".to_owned()]
+            vec!["Inter".to_owned(), "sys:First".to_owned(), "sys:Second".to_owned()]
         );
         assert_eq!(
-            d.families[&MONO_BOLD.clone()],
-            vec![MONO_BOLD_NAME.to_owned(), "sys:First".to_owned(), "sys:Second".to_owned()]
+            d.families[&SEMIBOLD.clone()],
+            vec![UI_SEMIBOLD_NAME.to_owned(), "sys:First".to_owned(), "sys:Second".to_owned()]
         );
         assert!(d.font_data.contains_key("sys:First"));
         assert!(d.font_data.contains_key("sys:Second"));
@@ -283,8 +291,34 @@ mod tests {
     /// testing.
     #[test]
     fn the_bundled_face_parses_with_skrifa() {
-        assert!(skrifa::FontRef::new(MONO_REGULAR).is_ok());
-        assert!(skrifa::FontRef::new(MONO_BOLD_BYTES).is_ok());
+        assert!(skrifa::FontRef::new(UI_REGULAR).is_ok());
+        assert!(skrifa::FontRef::new(UI_SEMIBOLD_BYTES).is_ok());
+    }
+
+    /// The two edits `tools/capture-fonts/build.py` bakes in, observed through
+    /// egui's own shaper: every digit has one advance, and "->" and "1x1" come
+    /// out glyph for glyph rather than as an arrow and a multiplication sign.
+    /// A stock Inter dropped in by hand fails both.
+    #[test]
+    fn bundled_faces_have_tabular_digits_and_no_contextual_alternates() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(font_definitions(&[]));
+        let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
+        out.textures_delta.clear();
+        for family in [FontFamily::Proportional, SEMIBOLD.clone()] {
+            let font = egui::FontId::new(20.0, family.clone());
+            let layout = |s: &str| ctx.fonts_mut(|f| f.layout_no_wrap(s.to_owned(), font.clone(), egui::Color32::WHITE));
+            let ones = layout("1111").size().x;
+            // Within 0.2 pt, not exact: Inter 3.19 SemiBold's tabular 4 is
+            // 1885 units wide against 1888 for the others, 0.03 pt a digit
+            // here. A proportional 1 is about 6 pt narrower than a 4.
+            for digits in ["0000", "2222", "4444", "7777", "8888"] {
+                assert!((layout(digits).size().x - ones).abs() < 0.2, "{family:?}: {digits} vs 1111");
+            }
+            for text in ["a->b", "1x1"] {
+                assert_eq!(layout(text).rows[0].glyphs.len(), text.len(), "{family:?}: {text} was substituted");
+            }
+        }
     }
 
     /// Perf probe, kept as the record of why the scan lives on a background

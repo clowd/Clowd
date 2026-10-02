@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Skia;
 using Clowd.Config;
 using Clowd.UI;
@@ -134,6 +135,11 @@ namespace Clowd
             => AppBuilder.Configure<App>()
                          .UsePlatformDetect()
                          .WithInterFont()
+                         // WithInterFont only registers the family; this makes it what every
+                         // control without its own FontFamily draws in, on every OS. The Rust
+                         // capture overlay bundles the same Inter (clowd_capture/assets/fonts),
+                         // so its button panel reads like the C# strips.
+                         .With(new FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
                          // tray-resident: launch without a dock icon; MacDockIcon flips the
                          // activation policy to Regular whenever a real window opens.
                          .With(new MacOSPlatformOptions { ShowInDock = false })

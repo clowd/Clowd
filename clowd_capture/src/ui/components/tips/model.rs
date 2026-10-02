@@ -9,9 +9,7 @@
 pub const TITLE: &str = "Tips & Hotkeys";
 
 /// A single body row: a one-character hotkey label followed by the
-/// description text. Rendered as "<hotkey>   <description>" with three
-/// spaces between, matching the mono-font column layout from
-/// `DxScreenCapture.cpp:746-752`.
+/// description text, each in its own column (`DxScreenCapture.cpp:746-752`).
 pub struct TipRow {
     pub hotkey: &'static str,
     /// `{window}` is substituted with `AppContext.hovered_window_title`,
@@ -50,11 +48,6 @@ pub const TIPS_BOTTOM: &[TipRow] = &[
 /// Hotkey label for the color-sampler row. The description is computed
 /// from `AppContext.hovered_pixel_bgra` at bake time.
 pub const COLOR_ROW_HOTKEY: &str = "H";
-
-/// Number of spaces between hotkey and description (matches the visual
-/// column from the old panel, where `paddingHalf = 10px` created roughly
-/// 3 space-widths in Consolas at 12px).
-pub const HOTKEY_GAP: &str = "   ";
 
 /// Fallback string when no window / monitor is under the cursor, matching
 /// `DxScreenCapture.cpp` which uses the string "n/a" in the same case.

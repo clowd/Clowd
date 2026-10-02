@@ -95,7 +95,7 @@ pub const ALL: &[&Svg] = &[
 
 /// Load every mark at the tray's icon size once per pass — a cache hit
 /// after the first — so a broken asset is logged instead of painted as
-/// egui's "⚠" placeholder, which Cascadia has no glyph for. Logged once
+/// egui's "⚠" placeholder, which Inter has no glyph for. Logged once
 /// per process: a mark that fails once fails every pass.
 pub fn preload(ctx: &egui::Context) {
     static LOGGED: std::sync::Once = std::sync::Once::new();

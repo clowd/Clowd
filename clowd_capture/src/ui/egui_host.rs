@@ -517,7 +517,7 @@ impl EguiHosts {
 
     /// Push the curated system faces onto every host and force one pass on
     /// each, so the atlas rebuild happens now rather than on whichever frame
-    /// first asks for a glyph Cascadia lacks.
+    /// first asks for a glyph Inter lacks.
     ///
     /// Every host, not just the one showing the region: an OCR bubble can
     /// straddle a seam, so both monitors have to be able to draw the same
@@ -545,7 +545,7 @@ impl EguiHosts {
 
     /// True once no host still owes the pass that applies a `set_fonts`. The
     /// OCR release waits on this so the reveal never lands on a frame whose
-    /// atlas is still the Cascadia-only one.
+    /// atlas is still the Inter-only one.
     pub fn fonts_settled(&self) -> bool {
         !self.monitors.iter().any(|h| h.fonts_dirty)
     }
