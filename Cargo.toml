@@ -72,7 +72,7 @@ egui_extras = { version = "0.36", default-features = false, features = ["svg"] }
 egui_plot = "0.37"
 arboard = "3.6"
 rfd = { version = "0.17", default-features = false }
-xdialog = "3.1"
+xdialog = "4.1"
 # clowd_capture's X11 system layer (monitors, root capture, cursor, pointer). Extension
 # features (randr, xfixes) are enabled per crate; the default RustConnection needs no libxcb.
 x11rb = "0.13"

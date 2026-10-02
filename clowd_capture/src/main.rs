@@ -53,6 +53,8 @@ fn main() -> anyhow::Result<()> {
     let _sentry = clowd_rust_core::telemetry::init("clowd_capture");
     system::SystemInterop::init();
     let mut event_loop = build_event_loop()?;
+    // Once per process: xdialog's runtime outlives every run of the loop.
+    let mut dialog_host = ui::dialogs::install(&event_loop);
 
     // Linux is one-shot only in this pass: no warm capturer, no hotkey hook
     // (handy-keys' evdev listener wants input-group access the shell cannot
@@ -82,7 +84,7 @@ fn main() -> anyhow::Result<()> {
             ..Prologue::default()
         };
         prologue.sentry_ready = process_start.elapsed();
-        let result = run_cycle(args, process_start, prologue, &mut event_loop);
+        let result = run_cycle(args, process_start, prologue, &mut event_loop, dialog_host.as_mut());
         if let Err(err) = &result {
             clowd_rust_core::telemetry::capture_error(err);
         }
@@ -101,7 +103,7 @@ fn main() -> anyhow::Result<()> {
             .clone()
             .expect("standby creates a session");
         logger.begin_session(&session_dir);
-        let result = run_cycle(args.clone(), t_start, Prologue::default(), &mut event_loop);
+        let result = run_cycle(args.clone(), t_start, Prologue::default(), &mut event_loop, dialog_host.as_mut());
         if let Err(err) = result {
             clowd_rust_core::telemetry::capture_error(&err);
             logger.end_session();
@@ -121,6 +123,7 @@ fn run_cycle(
     t_start: Instant,
     mut prologue: Prologue,
     event_loop: &mut winit::event_loop::EventLoop<()>,
+    dialog_host: Option<&mut xdialog::host::XDialogHost>,
 ) -> anyhow::Result<()> {
     // Before any window exists, so the cycle cannot end without knowing who to
     // hand foreground rights back to.
@@ -168,7 +171,11 @@ fn run_cycle(
     let mut app = session.into_app();
     timings.mark_run_app_entered();
     use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
-    event_loop.run_app_on_demand(&mut app)?;
+    // Wrapped so the cycle's retry prompts can be drawn in this run.
+    match dialog_host {
+        Some(host) => event_loop.run_app_on_demand(&mut host.wrap(&mut app))?,
+        None => event_loop.run_app_on_demand(&mut app)?,
+    }
     // A failure detected inside the event loop (the screenshot deadline)
     // exits the loop cleanly and parks its error here — surface it so the
     // shell still sees a non-zero exit, as it did when the wait was a

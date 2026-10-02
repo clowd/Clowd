@@ -371,12 +371,10 @@ impl SystemInterop {
     }
 
     /// One-time platform init. Must be called early in `main()` before
-    /// any other `SystemInterop` methods. Initializes COM and the
-    /// native dialog subsystem.
+    /// any other `SystemInterop` methods. Initializes COM.
     pub fn init() {
         use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
         let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-        xdialog::init_win32_direct();
     }
 
     /// Enumerate visible top-level windows on the current virtual desktop.
@@ -404,10 +402,10 @@ pub use mac::walker::WindowWalker;
 
 #[cfg(target_os = "macos")]
 impl SystemInterop {
-    /// One-time platform init. Must be called early in `main()`.
-    pub fn init() {
-        xdialog::init_maccf_direct();
-    }
+    /// One-time platform init. Must be called early in `main()`. Nothing
+    /// to do on macOS (xdialog is installed with the event loop, see
+    /// `ui::dialogs::install`).
+    pub fn init() {}
 
     pub fn has_screen_recording_permission() -> bool {
         mac::capture::has_screen_recording_permission()

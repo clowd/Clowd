@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{Key, NamedKey};
 #[cfg(windows)]
 use winit::platform::windows::WindowAttributesExtWindows;
@@ -70,6 +70,17 @@ pub struct App {
     /// to `main` after the loop exits, preserving the non-zero exit code
     /// (and the sentry capture) the old blocking-wait `?` produced.
     fatal: Option<anyhow::Error>,
+    /// A failed action's retry/cancel prompt, while it is open. The overlay
+    /// is hidden meanwhile and commands are ignored; `about_to_wait` polls
+    /// the answer (see `ui::dialogs`).
+    retry_prompt: Option<PendingRetry>,
+}
+
+/// See [`App::retry_prompt`].
+struct PendingRetry {
+    prompt: dialogs::RetryPrompt,
+    /// Retry must clear `CaptureCycle::share_dispatched` (the SHARE arm).
+    unlatch_share: bool,
 }
 
 /// All state for the single capture this process serves. Built in
@@ -763,6 +774,7 @@ impl App {
             worker_failed,
             cycle: Some(cycle),
             fatal: None,
+            retry_prompt: None,
         }
     }
 
@@ -834,6 +846,46 @@ impl App {
         };
         let effects = InteractionController::apply_zoom_factor(&mut cycle.input, factor);
         self.apply_interaction_effects(effects, None);
+    }
+
+    /// Raise the retry/cancel prompt for a failed action. The caller has
+    /// already hidden the overlay; the answer is acted on in
+    /// [`Self::poll_retry_prompt`].
+    fn ask_retry(&mut self, title: &str, msg: &str, unlatch_share: bool) {
+        self.retry_prompt = Some(PendingRetry {
+            prompt: dialogs::ask_retry_cancel(title, msg),
+            unlatch_share,
+        });
+    }
+
+    /// Act on the retry prompt's answer once there is one: RETRY re-shows
+    /// the overlay as it was, CANCEL ends the cycle. While it is open the
+    /// loop waits instead of polling — nothing on screen needs frames, and
+    /// xdialog wakes the loop for its own frames and for the answer.
+    fn poll_retry_prompt(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(pending) = &self.retry_prompt else {
+            return;
+        };
+        let Some(retry) = pending.prompt.answer() else {
+            event_loop.set_control_flow(ControlFlow::Wait);
+            return;
+        };
+        let unlatch_share = pending.unlatch_share;
+        self.retry_prompt = None;
+        // Back to the cycle's Poll before anything else: on Windows an
+        // `exit()` from `about_to_wait` under `Wait` is only observed once
+        // another message arrives.
+        event_loop.set_control_flow(ControlFlow::Poll);
+        if !retry {
+            self.finish_cycle(event_loop, CycleAction::Canceled);
+            return;
+        }
+        if unlatch_share {
+            if let Some(c) = self.cycle.as_mut() {
+                c.share_dispatched = false;
+            }
+        }
+        self.show_all_windows();
     }
 
     fn show_all_windows(&self) {
@@ -1372,6 +1424,10 @@ impl App {
     /// wheel inside the region it is going to stitch, and re-clicking is a
     /// friendlier correction than dropping the user back to the panel.
     fn dispatch_scroll_pick(&mut self, event_loop: &ActiveEventLoop) {
+        if self.retry_prompt.is_some() {
+            log::info!("scroll pick ignored: a retry prompt is open");
+            return;
+        }
         let Some(cycle) = self.cycle.as_mut() else {
             return;
         };
@@ -1429,17 +1485,17 @@ impl App {
             ActionResult::Failed(msg) => {
                 // Retry re-shows the overlay still in pick mode, so the
                 // user lands back on the crosshair, not on the panel.
-                if dialogs::show_retry_cancel("Scrolling Capture Failed", &msg) {
-                    self.show_all_windows();
-                } else {
-                    self.finish_cycle(event_loop, CycleAction::Canceled);
-                }
+                self.ask_retry("Scrolling Capture Failed", &msg, false);
             }
         }
     }
 
     fn dispatch_command(&mut self, command: Command, event_loop: &ActiveEventLoop, window_id: WindowId) {
         log::info!("dispatch command: {:?}", command);
+        if self.retry_prompt.is_some() {
+            log::info!("command {:?} ignored: a retry prompt is open", command);
+            return;
+        }
 
         self.ensure_peek_images();
         let Some(cycle) = self.cycle.as_mut() else {
@@ -1471,11 +1527,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Copy),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Copy to Clipboard Failed", &msg) {
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        self.ask_retry("Copy to Clipboard Failed", &msg, false);
                     }
                 }
             }
@@ -1500,11 +1552,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Save),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Save Failed", &msg) {
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        self.ask_retry("Save Failed", &msg, false);
                     }
                 }
             }
@@ -1540,11 +1588,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, cycle_action),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Session Capture Failed", &msg) {
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        self.ask_retry("Session Capture Failed", &msg, false);
                     }
                 }
             }
@@ -1575,11 +1619,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SearchImage),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Image Search Failed", &msg) {
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        self.ask_retry("Image Search Failed", &msg, false);
                     }
                 }
             }
@@ -1605,11 +1645,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SelectColor),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Color Capture Failed", &msg) {
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        self.ask_retry("Color Capture Failed", &msg, false);
                     }
                 }
             }
@@ -1637,11 +1673,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Video),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Video Capture Failed", &msg) {
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        self.ask_retry("Video Capture Failed", &msg, false);
                     }
                 }
             }
@@ -1666,19 +1698,12 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Share),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Share Region Failed", &msg) {
-                            // Unlatch before re-showing, which VIDEO does not have to do: its
-                            // retry can go back through the panel's VIDEO button, while SHARE is
-                            // auto-dispatch only (no panel button, by design). Leaving the
-                            // one-shot guard set would make Retry a dead end — the overlay comes
-                            // back and no re-selection can ever dispatch Share again.
-                            if let Some(c) = self.cycle.as_mut() {
-                                c.share_dispatched = false;
-                            }
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        // Retry unlatches before re-showing, which VIDEO does not have to do: its
+                        // retry can go back through the panel's VIDEO button, while SHARE is
+                        // auto-dispatch only (no panel button, by design). Leaving the
+                        // one-shot guard set would make Retry a dead end — the overlay comes
+                        // back and no re-selection can ever dispatch Share again.
+                        self.ask_retry("Share Region Failed", &msg, true);
                     }
                 }
             }
@@ -1872,11 +1897,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrCopy),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Copy to Clipboard Failed", &msg) {
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        self.ask_retry("Copy to Clipboard Failed", &msg, false);
                     }
                 }
             }
@@ -1954,11 +1975,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrUpload),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if dialogs::show_retry_cancel("Text Upload Failed", &msg) {
-                            self.show_all_windows();
-                        } else {
-                            self.finish_cycle(event_loop, CycleAction::Canceled);
-                        }
+                        self.ask_retry("Text Upload Failed", &msg, false);
                     }
                 }
             }
@@ -2123,6 +2140,10 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.poll_retry_prompt(event_loop);
+        if event_loop.exiting() {
+            return; // CANCEL ended the cycle
+        }
         if let Some(ref m) = self.pinch_monitor {
             let delta = m.drain();
             if delta != 0.0
