@@ -43,7 +43,9 @@ namespace Clowd.Config
             set => Set(ref _captureFullscreenShortcut, Normalize(value));
         }
 
+        // The Linux overlay has no window preselection, so the shell leaves this gesture unbound there.
         [DisplayName("Capture Active Window")]
+        [HiddenOnLinux]
         public SimpleKeyGesture CaptureActiveShortcut
         {
             get => _captureActiveShortcut;
@@ -58,7 +60,9 @@ namespace Clowd.Config
             set => Set(ref _startStopRecordingShortcut, Normalize(value));
         }
 
+        // clowd_share_region is not built for Linux.
         [DisplayName("Share Region")]
+        [HiddenOnLinux]
         [VisibleWhen(nameof(SettingsShareRegion.Mode), ShareRegionMode.On, Section = nameof(SettingsRoot.ShareRegion))]
         public SimpleKeyGesture ShareRegionShortcut
         {

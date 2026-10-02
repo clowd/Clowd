@@ -3,6 +3,7 @@ using System.Globalization;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using Clowd.Config;
@@ -21,6 +22,10 @@ namespace Clowd.UI
     /// single-instance via <see cref="ActiveInstance"/> (UI thread only). Every async void entry
     /// point wraps its awaits in try/catch routing to the CriticalError path — an unhandled
     /// exception in async void kills the process.
+    /// <para>A session normally records the region the capture overlay picked; one opened through
+    /// <see cref="OpenWithoutRegion"/> has no region at all, and the recorder chooses the source
+    /// itself — the system screen-share picker on Wayland (while the session sits in WAIT), the
+    /// primary monitor on X11. Such a session shows no border, only the toolbar.</para>
     /// </summary>
     internal sealed class VideoCapturePage : IVideoCapturePage
     {
@@ -103,6 +108,29 @@ namespace Clowd.UI
         private string _savedPath;
         private TimeSpan _lastStatusElapsed;
 
+        /// <summary>Starts a recording with no region: the recorder picks the source (see the class
+        /// remarks). Creates the session directory the overlay would otherwise have created — the
+        /// same two calls ScreenCaptureService makes before launching it.</summary>
+        public void OpenWithoutRegion()
+        {
+            Dispatcher.UIThread.VerifyAccess();
+
+            if (ActiveInstance != null)
+            {
+                // checked before the directory exists, so unlike Open there is nothing to clean up.
+                Debug.WriteLine("A recording session is already active; ignoring new recording.");
+                RaiseClosed();
+                return;
+            }
+
+            var sessionDir = SessionManager.Current.GetNextSessionDirectory();
+            Directory.CreateDirectory(sessionDir);
+            Open(null, 0, sessionDir);
+        }
+
+        /// <summary>Starts a recording session in <paramref name="sessionDir"/>. A null
+        /// <paramref name="region"/> means the recorder chooses the source itself (see
+        /// <see cref="OpenWithoutRegion"/>).</summary>
         public async void Open(ScreenRect region, double cornerRadius, string sessionDir)
         {
             try
@@ -152,9 +180,14 @@ namespace Clowd.UI
                 Debug.WriteLine("Resolved recording binary: " + binary);
                 _binaryPath = binary;
 
-                _border = new BorderWindow(region);
-                _border.SetOverlayText("WAIT…");
-                _border.Show();
+                // without a region there is nothing to frame — and on X11 the BorderWindow would
+                // swallow clicks, because click-through exists only on Windows and macOS.
+                if (region != null)
+                {
+                    _border = new BorderWindow(region);
+                    _border.SetOverlayText("WAIT…");
+                    _border.Show();
+                }
 
                 _toolbar = new RecordingFloatingButtons();
                 _toolbar.StartClicked += (s, e) => StartRecording();
@@ -167,12 +200,22 @@ namespace Clowd.UI
                 _toolbar.SpeakerToggled += (s, enabled) => _obs?.SetSpeakerMute(!enabled);
                 _toolbar.WebcamToggled += (s, enabled) => OnWebcamToggled(enabled);
                 _toolbar.SetWaiting(true);
-                _toolbar.ShowNear(region);
+                _toolbar.ShowNear(region ?? SourcePickerPlacement());
 
                 // subscribed before the first spawn so a change made during WAIT is not lost.
                 _settings.PropertyChanged += OnRecordingSettingChanged;
 
                 await InitializeCapturerAsync();
+            }
+            catch (ObsPickerCancelledException ex)
+            {
+                await OnPickerDismissedAsync(ex);
+            }
+            catch (Exception ex) when (_closing && _region == null)
+            {
+                // the user canceled from the toolbar while the system picker was still open — the
+                // shutdown faults the pending initialize; that is not a failure worth reporting.
+                Debug.WriteLine("Recording session canceled during the source picker: " + ex.Message);
             }
             catch (Exception ex)
             {
@@ -180,6 +223,46 @@ namespace Clowd.UI
                 SentryConfig.CaptureHandled(ex, "video.open");
                 if (!_closing)
                     OnCriticalError(this, ex.Message);
+            }
+        }
+
+        /// <summary>Where the toolbar goes when there is no region to sit beside: the primary
+        /// monitor's full bounds, which lands the strip's placement cascade on "inside, near the
+        /// bottom" of it. Linux has no capture exclusion, so the strip can appear in the recording
+        /// if that monitor is the one chosen; accepted for now. With no border, the WAIT / PRESS
+        /// START wording lives only in the toolbar's button labels.
+        /// (<see cref="Controls.Tray.FloatingTrayWindow.ShowNear"/> throws on null, hence this.)</summary>
+        private ScreenRect SourcePickerPlacement()
+        {
+            var screen = DesktopScreens.Primary(_toolbar) ?? DesktopScreens.All(_toolbar).FirstOrDefault();
+            if (screen == null)
+                return new ScreenRect(0, 0, 1280, 720);
+
+            var b = screen.Bounds;
+            return new ScreenRect(b.X, b.Y, b.Width, b.Height);
+        }
+
+        /// <summary>The system screen-share picker ended without a source (see
+        /// <see cref="ObsPickerCancelledException"/>): close the session as if the user had pressed
+        /// Cancel — no error dialog, no Sentry report — and only explain it when the recorder gave
+        /// up waiting, since a cancel the user made needs no explanation.</summary>
+        private async Task OnPickerDismissedAsync(ObsPickerCancelledException ex)
+        {
+            Debug.WriteLine("The screen-share picker was dismissed; closing the recording session.");
+            if (!_closing)
+                Cancel();
+            if (!ex.TimedOut)
+                return;
+
+            // awaited from the catch blocks of async void entry points, so it must not throw.
+            try
+            {
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information,
+                    "No screen or window was chosen in time, so the recording was canceled.", "Recording canceled");
+            }
+            catch (Exception noticeEx)
+            {
+                Debug.WriteLine("Failed to show the picker timeout notice: " + noticeEx.Message);
             }
         }
 
@@ -224,7 +307,9 @@ namespace Clowd.UI
                 // …and whether this build of the recorder can write the window sidecar at all.
                 // Probed once per binary and cached; a recorder that cannot records exactly as
                 // before, and the editor's crop then offers Manual only.
+                // (the --help probe still lists the flag on Linux, where the recorder rejects it.)
                 _appliedWindowCapture = _appliedMultiTrack
+                    && ClowdPlatform.SupportsRecordingSidecars
                     && await ObsCapabilities.SupportsWindowCaptureAsync(_binaryPath);
 
                 // …and whether it can write Matroska, which decides the extension of --output.
@@ -247,9 +332,13 @@ namespace Clowd.UI
                 _obs.StatusReceived += OnStatusReceived;
                 _obs.LevelsReceived += OnLevelsReceived;
 
+                // a session without a region on Wayland opens the system screen-share picker
+                // before the recorder reports initialized, which needs the longer budget and the
+                // quiet cancel (ObsPickerCancelledException).
                 await _obs.InitializeAsync(
                     ObsArguments.Build(_region, _outputFile, _settingsPath, _settings, _appliedWindowCapture),
-                    _binaryPath);
+                    _binaryPath,
+                    sourcePicker: _region == null && ClowdPlatform.RecorderShowsSourcePicker);
             }
             finally
             {
@@ -290,7 +379,7 @@ namespace Clowd.UI
 
                 // clear the overlay BEFORE writing "start": started_recording means frames are
                 // already flowing — text cleared after would be captured in the first frames.
-                _border.SetOverlayText(null);
+                _border?.SetOverlayText(null);
 
                 await _obs.StartAsync();
 
@@ -767,6 +856,16 @@ namespace Clowd.UI
                         return;
                 }
             }
+            catch (ObsPickerCancelledException ex)
+            {
+                // the respawn reopened the system picker (Wayland) and the user dismissed it.
+                await OnPickerDismissedAsync(ex);
+            }
+            catch (Exception ex) when (_closing && _region == null)
+            {
+                // canceled from the toolbar while the respawn's picker was still open; see Open.
+                Debug.WriteLine("Recording session canceled during the source picker: " + ex.Message);
+            }
             catch (Exception ex)
             {
                 // in practice the respawn above failing: there is no recorder left to record with,
@@ -791,7 +890,11 @@ namespace Clowd.UI
         /// <summary>
         /// Replaces the capturer in place after it failed to accept new settings. The old process
         /// is detached before disposal: its exit must not reach the page's critical-error path,
-        /// and its statuses must never drive the replacement's UI.
+        /// and its statuses must never drive the replacement's UI. On Wayland a session without a
+        /// region has no source the replacement could be told to reuse (--region is rejected
+        /// there), so the respawn opens the system picker again and the user chooses once more —
+        /// accepted, since only a spawn-time setting changed during WAIT (or a failed configure)
+        /// gets here.
         /// </summary>
         private async Task RespawnCapturerAsync()
         {
@@ -821,7 +924,13 @@ namespace Clowd.UI
         /// against <c>_appliedCaptureMethod</c> to decide whether a configure has to become a
         /// respawn.</summary>
         private ScreenCaptureMethod WantedCaptureMethod()
-            => _settings?.CaptureMethod ?? ScreenCaptureMethod.Auto;
+        {
+            // never on the command line where the recorder ignores it (Linux), so the setting
+            // hidden there must not be able to trigger a respawn either.
+            if (!ObsRecorderFeatures.Current.CaptureMethod)
+                return ScreenCaptureMethod.Auto;
+            return _settings?.CaptureMethod ?? ScreenCaptureMethod.Auto;
+        }
 
         /// <summary>The container the current settings ask for, narrowed to what can actually be
         /// written: a multi-track recording is the hybrid MP4 whatever the setting says (the
@@ -1018,8 +1127,9 @@ namespace Clowd.UI
 
         /// <summary>Creates the recents session for the finished (or partially recorded)
         /// video (§4.5). The poster frame (cropped.png) was written by the capture overlay at
-        /// region-confirm time (§4.1). Returns the session so the caller can act on it (the
-        /// webcam auto-open in <see cref="FinishRecording"/>).</summary>
+        /// region-confirm time (§4.1) — when there was an overlay, i.e. a region. Returns the
+        /// session so the caller can act on it (the webcam auto-open in
+        /// <see cref="FinishRecording"/>).</summary>
         private SessionInfo CreateSession()
         {
             var session = SessionManager.Current.CreateSessionInDirectory(_sessionDir);
@@ -1033,7 +1143,11 @@ namespace Clowd.UI
             // theirs. A composition recording stays put; see MoveToOutputFolderAsync.
             session.VideoPath = _savedPath;
             session.DurationMs = (long)_lastStatusElapsed.TotalMilliseconds;
-            session.PreviewImgPath = Path.Combine(_sessionDir, "cropped.png");
+            // the overlay writes the poster frame; a session without a region never went through
+            // it, so nobody did — and every reader already copes with no preview image.
+            var poster = Path.Combine(_sessionDir, "cropped.png");
+            if (_region != null || File.Exists(poster))
+                session.PreviewImgPath = poster;
             session.OriginalBounds = _region;
             session.CornerRadius = _cornerRadius;
             session.WebcamTrack = ResolveWebcamTrack();

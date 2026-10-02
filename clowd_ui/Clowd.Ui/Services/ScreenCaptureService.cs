@@ -18,7 +18,8 @@ namespace Clowd.UI
     /// <summary>
     /// Locates the external Rust capture binaries (see CAPTURE_PROTOCOL.md): the capture overlay
     /// <c>clowd_capture</c> and, beside it, the scrolling-capture driver
-    /// <c>clowd_scroll_driver</c>.
+    /// <c>clowd_scroll_driver</c>, and the Wayland screenshot binary <c>clowd_capture_wayland</c>
+    /// (Linux only), which is spawned in place of the overlay where no overlay can run.
     /// Probe order: the <c>CLOWD_CAPTURE_PATH</c> environment variable, then alongside the Clowd.Ui
     /// executable (release layout), then walking up from the app base directory to a cargo workspace
     /// root and taking the more recently built of <c>target/debug</c> and <c>target/release</c>
@@ -35,11 +36,52 @@ namespace Clowd.UI
         /// Windows-only: the overlay's SCROLL button is compiled out elsewhere.</summary>
         public static string ScrollDriverFileName => Executable("clowd_scroll_driver");
 
+        /// <summary>The Wayland screenshot binary — Linux only. A Wayland session gives no process
+        /// the screen, so it is spawned instead of the overlay there
+        /// (<see cref="ClowdPlatform.SupportsCaptureOverlay"/> false) and takes the screenshot
+        /// through the desktop's own screenshot UI (xdg-desktop-portal).</summary>
+        public static string WaylandFileName => Executable("clowd_capture_wayland");
+
         private static string Executable(string stem) =>
             OperatingSystem.IsWindows() ? stem + ".exe" : stem;
 
         public static string Resolve() =>
-            Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory);
+            ForSpawn(Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory));
+
+        /// <summary>
+        /// Locates the Wayland screenshot binary, ready to spawn. It ships in the same directory as
+        /// the overlay in every layout, so the overlay's resolved path (which honours the
+        /// <c>CLOWD_CAPTURE_PATH</c> override) is tried first, exactly as
+        /// <see cref="ResolveScrollDriver()"/> does. Returns null when it cannot be found.
+        /// </summary>
+        public static string ResolveWayland() => ForSpawn(ResolveWayland(Resolve(), AppContext.BaseDirectory));
+
+        /// <summary>Testable overload. <paramref name="capturePath"/> is the overlay binary's
+        /// resolved path (null when it could not be found). Unlike the scroll driver, the Wayland
+        /// binary does not need the overlay beside it: a Wayland-only dev build may have run just
+        /// <c>cargo build -p clowd_capture_wayland</c>, so a miss there falls back to probing the
+        /// same layouts <see cref="Resolve(string, string)"/> does.</summary>
+        public static string ResolveWayland(string capturePath, string baseDirectory)
+        {
+            // (a) beside the overlay, so the CLOWD_CAPTURE_PATH override keeps pointing both
+            // binaries at the same build.
+            var dir = String.IsNullOrEmpty(capturePath) ? null : Path.GetDirectoryName(capturePath);
+            if (!String.IsNullOrEmpty(dir))
+            {
+                var sibling = Path.Combine(dir, WaylandFileName);
+                if (File.Exists(sibling))
+                    return Path.GetFullPath(sibling);
+            }
+
+            // (b) the overlay's own layouts, for a build where this is the only binary.
+            return ProbeLayouts(baseDirectory, WaylandFileName);
+        }
+
+        /// <summary>A tar/zip payload can lose the execute bit on the way to a user's disk (see
+        /// <see cref="HelperBinary.EnsureExecutable"/>). Linux only, so Windows and macOS resolve
+        /// exactly as they always have.</summary>
+        private static string ForSpawn(string path) =>
+            OperatingSystem.IsLinux() ? HelperBinary.EnsureExecutable(path) : path;
 
         /// <summary>
         /// Locates the scrolling-capture driver, which ships in the same directory as the overlay
@@ -69,8 +111,16 @@ namespace Clowd.UI
             if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
                 return Path.GetFullPath(envVarValue);
 
+            return ProbeLayouts(baseDirectory, BinaryFileName);
+        }
+
+        /// <summary>The layout probes of <see cref="Resolve(string, string)"/> that follow its
+        /// override, for any binary that ships beside the overlay. Returns null when it is in
+        /// none of them.</summary>
+        private static string ProbeLayouts(string baseDirectory, string fileName)
+        {
             // (b) next to the Clowd.Ui executable (release layout copies the binary alongside)
-            var local = Path.Combine(baseDirectory, BinaryFileName);
+            var local = Path.Combine(baseDirectory, fileName);
             if (File.Exists(local))
                 return Path.GetFullPath(local);
 
@@ -86,8 +136,8 @@ namespace Clowd.UI
                     // Preferring debug unconditionally (the old behavior) made a just-built
                     // --release binary unreachable for anyone with a stale target/debug lying
                     // around, which is everybody who has ever run a plain `cargo build`.
-                    var debug = Path.Combine(dir.FullName, "target", "debug", BinaryFileName);
-                    var release = Path.Combine(dir.FullName, "target", "release", BinaryFileName);
+                    var debug = Path.Combine(dir.FullName, "target", "debug", fileName);
+                    var release = Path.Combine(dir.FullName, "target", "release", fileName);
                     var debugBuilt = LastWriteUtcOrNull(debug);
                     var releaseBuilt = LastWriteUtcOrNull(release);
 
@@ -166,6 +216,12 @@ namespace Clowd.UI
         /// </summary>
         internal const int ExitCodeNoScreenPermission = 3;
 
+        /// <summary><c>CAPTURE_FAILED</c> in clowd_rust_core/src/exit.rs. From clowd_capture_wayland
+        /// it is a reported failure — no portal backend installed, or the portal refused or failed —
+        /// not a crash, so it gets a plain dialog and no Sentry report: the Rust side has already
+        /// reported whatever it should.</summary>
+        internal const int ExitCodeCaptureFailed = 4;
+
         public async void Open(CaptureMode mode, RegionIntent intent = RegionIntent.Capture)
         {
             if (!Dispatcher.UIThread.CheckAccess())
@@ -173,6 +229,25 @@ namespace Clowd.UI
                 Dispatcher.UIThread.Post(() => Open(mode, intent));
                 return;
             }
+
+            // Linux routes the intents its capturers cannot serve before anything is spawned.
+            if (intent == RegionIntent.Video && !ClowdPlatform.OverlayPicksRecordingRegion)
+            {
+                // the overlay cannot pick a recording region on Linux (clowd_capture forces --video
+                // off), so the recorder chooses the source itself: the system screen-share picker
+                // on Wayland, the primary monitor on X11.
+                PageManager.Current.GetVideoCapturePage().OpenWithoutRegion();
+                return;
+            }
+            if (intent == RegionIntent.Share && !ClowdPlatform.SupportsShareRegion)
+            {
+                Debug.WriteLine("Region sharing is not available on this platform; ignoring share request.");
+                return;
+            }
+
+            // Wayland only: clowd_capture_wayland stands in for the overlay. The desktop's own
+            // screenshot UI decides what is captured, so `mode` has no meaning on this path.
+            bool portal = !ClowdPlatform.SupportsCaptureOverlay;
 
             // Never launch either capturer until the shell has established that screen capture is
             // permitted. Normal screenshots then wake the supervised standby process; when it
@@ -205,7 +280,15 @@ namespace Clowd.UI
 
             try
             {
-                var binary = CaptureBinaryLocator.Resolve();
+                var binary = portal ? CaptureBinaryLocator.ResolveWayland() : CaptureBinaryLocator.Resolve();
+                if (binary == null && portal)
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
+                        $"The screenshot binary ({CaptureBinaryLocator.WaylandFileName}) could not be found. " +
+                        "Build it with 'cargo build -p clowd_capture_wayland', or place it next to clowd_capture.",
+                        "Screen capture unavailable");
+                    return;
+                }
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
@@ -232,8 +315,14 @@ namespace Clowd.UI
                     StandardErrorEncoding = Encoding.UTF8,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
-                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current, mode, intent,
-                                                          SettingsRoot.Current.General.LastSavePath))
+                // the portal binary takes --session-dir and nothing else (any overlay flag is a clap
+                // error). It lives as long as the desktop's screenshot UI is open, so — like the
+                // overlay — it is never timed out.
+                var args = portal
+                    ? CaptureArguments.BuildWayland(sessionDir)
+                    : CaptureArguments.Build(sessionDir, SettingsRoot.Current, mode, intent,
+                                             SettingsRoot.Current.General.LastSavePath);
+                foreach (var arg in args)
                     psi.ArgumentList.Add(arg);
 
                 using var process = Process.Start(psi);
@@ -266,6 +355,17 @@ namespace Clowd.UI
                     var captureLog = TryReadCaptureLog(sessionDir);
                     CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
 
+                    // the portal binary's CAPTURE_FAILED: no portal backend, or the portal refused or
+                    // failed. Its one-line reason is the last thing it logged, and it has already
+                    // reported anything worth reporting — so a plain dialog, and no Sentry event.
+                    if (portal && process.ExitCode == ExitCodeCaptureFailed)
+                    {
+                        await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
+                            "Clowd could not take a screenshot with your desktop's screenshot tool.\n\n" + SummarizeDiagnostics(stderr, captureLog),
+                            "Screenshot unavailable");
+                        return;
+                    }
+
                     // permission revoked between our preflight and the capturer's own check, or the
                     // capturer's TCC verdict differs from ours — either way it is not a crash.
                     if (process.ExitCode == ExitCodeNoScreenPermission)
@@ -296,7 +396,19 @@ namespace Clowd.UI
                     return;
                 }
 
-                await DispatchCaptureResultAsync(CaptureSessionDispatcher.ProcessFinishedSession(sessionDir));
+                // exit 0 is done or cancelled for both binaries, and session.json tells them apart.
+                // The portal binary never writes an action.txt, so its captures always open the editor.
+                var result = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
+                if (portal && result?.Action == CaptureAction.Edit && result.Session != null)
+                {
+                    // the portal writes 0,0,W,H in its own pixels, not a place on the desktop, and
+                    // EditorWindow.ShowSession places the window over any non-empty OriginalBounds —
+                    // so drop it and let the editor centre itself. SessionInfo is a FileSyncObject,
+                    // so this also rewrites session.json, as ProcessFinishedSession does for Name.
+                    result.Session.OriginalBounds = null;
+                }
+
+                await DispatchCaptureResultAsync(result);
             }
             catch (Exception ex)
             {
@@ -489,6 +601,10 @@ namespace Clowd.UI
             var settings = root.Capture;
             var general = root.General;
 
+            // On Linux the overlay applies its own platform limits (settings.rs
+            // apply_platform_limits), so the ClowdPlatform terms below only keep the two sides in
+            // step. Every one of them is true off Linux, leaving the command line unchanged there.
+
             // the accent follows the OS (or the user's pick) and is contrast-corrected for the white
             // text drawn on it — see SettingsGeneral.GetEffectiveAccentColor, issue #48. It lives on
             // General rather than Capture because the recording toolbar and border wear it too.
@@ -538,7 +654,8 @@ namespace Clowd.UI
             // The overlay's optional buttons (SettingsCapture "Optional features"). All on by
             // default, so these only ever appear when the user has switched something off. UPLOAD
             // also goes with uploads as a whole (Uploads page, Off).
-            if (!settings.UploadButtonVisible || !root.Uploads.IsEnabled)
+            bool uploadVisible = settings.UploadButtonVisible && root.Uploads.IsEnabled;
+            if (!uploadVisible)
                 args.Add("--no-upload");
 
             // Hides the SHARE button, and nothing more: a share started from the tray item or the
@@ -548,7 +665,7 @@ namespace Clowd.UI
             if (!settings.ShareRegionEnabled || !root.ShareRegion.IsEnabled)
                 args.Add("--no-share");
 
-            if (!settings.ScrollingCaptureEnabled)
+            if (!settings.ScrollingCaptureEnabled || !ClowdPlatform.SupportsScrollCapture)
                 args.Add("--no-scroll-capture");
 
             // VIDEO has no switch of its own on the Capture page: it goes with recording itself,
@@ -561,14 +678,17 @@ namespace Clowd.UI
             // OCR runs in the clowd_ai binary, which only exists where ONNX Runtime has a
             // build: not on Intel Macs (the same gate as SelectedItemViewModel.AiEffectsSupported),
             // so the overlay must not offer a button whose spawn can only ever fail.
+            // Where the lifted-text strip has no COPY/SEARCH (Linux), UPLOAD is all it can do with
+            // the text, so without it the button would lead to a strip with nothing but BACK.
             bool ocrAvailable = !OperatingSystem.IsMacOS()
                 || RuntimeInformation.OSArchitecture == Architecture.Arm64;
-            if (!settings.OcrEnabled || !ocrAvailable)
+            bool ocrUsable = ClowdPlatform.SupportsOcrCopy || uploadVisible;
+            if (!settings.OcrEnabled || !ocrAvailable || !ocrUsable)
                 args.Add("--no-ocr");
 
             // SEARCH hands the cropped image to the browser to look up; unlike SHARE and VIDEO
             // there is no mode and no tray item behind it, so this switch is the whole feature.
-            if (!settings.ImageSearchEnabled)
+            if (!settings.ImageSearchEnabled || !ClowdPlatform.SupportsImageSearch)
                 args.Add("--no-image-search");
 
             // The SAVE button writes the file inside the capturer, so the naming the editor's
@@ -593,18 +713,25 @@ namespace Clowd.UI
             // overlay's usual buttons (DESIGN §3.1). The two flags are mutually exclusive on the
             // capturer's own command line (clap `conflicts_with`), which is exactly why the intent
             // arrives here as one enum and not as two independent booleans.
+            // Both are guarded because the overlay ignores them on Linux, and Open routes those
+            // intents elsewhere before a capturer is ever spawned there.
             switch (intent)
             {
-                case RegionIntent.Video:
+                case RegionIntent.Video when ClowdPlatform.OverlayPicksRecordingRegion:
                     args.Add("--video");
                     break;
-                case RegionIntent.Share:
+                case RegionIntent.Share when ClowdPlatform.SupportsShareRegion:
                     args.Add("--share");
                     break;
             }
 
             return args;
         }
+
+        /// <summary>The command line for clowd_capture_wayland (Linux, Wayland session). It accepts
+        /// <c>--session-dir</c> and nothing else — any other flag is a clap error, exit 2 — so the
+        /// overlay's command line must never be forwarded to it.</summary>
+        public static IReadOnlyList<string> BuildWayland(string sessionDir) => new[] { "--session-dir", sessionDir };
 
         public static IReadOnlyList<string> BuildStandby(string sessionRoot, SettingsRoot root, string lastSavePath = null)
         {

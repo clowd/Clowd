@@ -343,7 +343,8 @@ namespace Clowd.Shared.Tests
         {
             var loaded = SettingsService.Load(_path);
             Assert.Equal(ShareRegionMode.On, loaded.ShareRegion.Mode);
-            Assert.True(loaded.ShareRegion.IsEnabled);
+            // the share helper is not built for Linux, so IsEnabled is false there whatever Mode says.
+            Assert.Equal(ClowdPlatform.SupportsShareRegion, loaded.ShareRegion.IsEnabled);
 
             var original = new SettingsRoot();
             original.ShareRegion.Mode = ShareRegionMode.Off;

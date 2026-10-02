@@ -216,7 +216,12 @@ namespace Clowd
                 // it is rebuilt in place whenever the UI culture changes.
                 Loc.CultureChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
 
-                SetupGlobalHotkeys();
+                // A Wayland session gives no process a global keyboard hook, so no hook host is
+                // created at all: screenshots and recordings start from the main window's buttons,
+                // the tray and the shortcut click actions instead, and MainWindow hides the Hotkeys
+                // page. _hotkeys stays null, which every consumer tolerates.
+                if (ClowdPlatform.SupportsGlobalHotkeys)
+                    SetupGlobalHotkeys();
 
                 // macOS: Finder right-click → "Upload with Clowd" (NSServices) delivers the
                 // selection here in-process — background handoff, same as forwarded CLI args.
@@ -386,9 +391,13 @@ namespace Clowd
             // Shortcuts are surfaced as separate, right-aligned menu text — Avalonia binds
             // NativeMenuItem.Gesture → MenuItem.InputGesture on the Windows managed tray menu (the
             // Semi theme renders it in muted, right-aligned gesture text) and to the native key
-            // equivalent on macOS. Only assign when a gesture is actually set.
+            // equivalent on macOS. Only assign when a gesture is actually set. On Wayland no
+            // gesture is ever registered, so shortcut text beside an item would promise a key
+            // that does nothing.
             static void ApplyGesture(NativeMenuItem item, SimpleKeyGesture gesture)
             {
+                if (!ClowdPlatform.SupportsGlobalHotkeys)
+                    return;
                 if (gesture != null && !String.IsNullOrEmpty(gesture.ToString()))
                     item.Gesture = gesture.ToKeyGesture();
             }
@@ -498,12 +507,25 @@ namespace Clowd
         /// active recording session, or launches the capture overlay in video mode to pick a
         /// recording region. Toggle() during the WAIT state is a no-op (§4.2), and so is the
         /// whole action while recording is switched off — the hotkey row stays on the Hotkeys
-        /// page, but a gesture bound to a feature the user turned off must not start it.</summary>
+        /// page, but a gesture bound to a feature the user turned off must not start it. On Linux
+        /// the Video intent starts the recorder without an overlay region (ScreenCapturePage
+        /// routes it), and obs-express picks the source itself.</summary>
         public void ToggleRecording()
         {
             if (VideoCapturePage.ActiveInstance is { } page)
                 page.Toggle();
             else if (SettingsRoot.Current.Recording.IsEnabled)
+                StartCapture(CaptureMode.Region, RegionIntent.Video);
+        }
+
+        /// <summary>Starts a new recording — the main window's "Start recording" button (Wayland,
+        /// where it stands in for the hotkey). Unlike <see cref="ToggleRecording"/> it never stops one: a
+        /// session that is already open is left alone, and so is a request while recording is off.</summary>
+        public void StartRecording()
+        {
+            if (VideoCapturePage.ActiveInstance != null)
+                return;
+            if (SettingsRoot.Current.Recording.IsEnabled)
                 StartCapture(CaptureMode.Region, RegionIntent.Video);
         }
 
@@ -608,7 +630,9 @@ namespace Clowd
             if (_hotkeys == null)
                 return; // shutdown already ran; nothing left to (re)wire
 
-            bool warm = SettingsRoot.Current.Capture.KeepCapturerWarm && !_captureWarmFaulted && !_exiting;
+            // clowd_capture refuses --standby on Linux (exit 4), which the supervisor cannot tell
+            // from a crash, so it is never created there and the setting is hidden.
+            bool warm = ClowdPlatform.SupportsWarmCapturer && SettingsRoot.Current.Capture.KeepCapturerWarm && !_captureWarmFaulted && !_exiting;
             lock (_captureStandbyLock)
             {
                 if (warm && _captureStandby == null)
@@ -621,7 +645,10 @@ namespace Clowd
             }
             _hotkeys.SetAction(HotkeyId.CaptureRegion, warm ? null : () => StartCapture(CaptureMode.Region));
             _hotkeys.SetAction(HotkeyId.CaptureFullscreen, warm ? null : () => StartCapture(CaptureMode.Screen));
-            _hotkeys.SetAction(HotkeyId.CaptureActive, warm ? null : () => StartCapture(CaptureMode.Window));
+            // The Linux overlay has no window preselection (window mode becomes a plain region
+            // selection), so the gesture is left unbound rather than doing something other than
+            // its name says; its row is hidden on Linux too.
+            _hotkeys.SetAction(HotkeyId.CaptureActive, warm || !ClowdPlatform.SupportsActiveWindowCapture ? null : () => StartCapture(CaptureMode.Window));
         }
 
         /// <summary>The supervisor's give-up signal (missing permission/binary, repeated

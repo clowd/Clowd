@@ -59,6 +59,12 @@ namespace Clowd.UI.Config
                 if (!OperatingSystem.IsMacOS() && GetFirstAttributeOrDefault<HiddenOnWindowsAttribute>(pd) != null)
                     continue;
 
+                if (ClowdPlatform.IsLinux && GetFirstAttributeOrDefault<HiddenOnLinuxAttribute>(pd) != null)
+                    continue;
+
+                if (ClowdPlatform.IsWayland && GetFirstAttributeOrDefault<HiddenOnWaylandAttribute>(pd) != null)
+                    continue;
+
                 if (pd.IsReadOnly && GetFirstAttributeOrDefault<FlattenSettingsObjectAttribute>(pd) == null)
                     continue;
 

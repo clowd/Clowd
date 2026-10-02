@@ -37,6 +37,8 @@ namespace Clowd.Config
         /// The trick is one-shot per rename, and it resets a deliberate choice along with an
         /// untouched default, so it is only for a default worth moving everyone to.
         /// </summary>
+        // Wayland has no capture overlay: screenshots go from the desktop's screenshot tool straight to the editor.
+        [HiddenOnWayland]
         [Category("Optional features")]
         [DisplayName("Upload")]
         [Description("Show the UPLOAD button in the capture window, which uploads the capture and " +
@@ -55,6 +57,8 @@ namespace Clowd.Config
         /// <see cref="UploadButtonVisible"/>, which hides the strip's UPLOAD while the shell's
         /// "Upload File…" tray item stays (clowd_capture PanelFeatures, over <c>--no-share</c>).
         /// </summary>
+        // clowd_share_region is not built for Linux, and the overlay forces SHARE off there.
+        [HiddenOnLinux]
         [Category("Optional features")]
         [DisplayName("Share region")]
         [Description("Show the SHARE button in the capture window, which mirrors the selected region " +
@@ -71,6 +75,8 @@ namespace Clowd.Config
         /// (<c>clowd_scroll_driver</c>) has a Win32 and a macOS backend, and the overlay shows the
         /// button wherever this is on.
         /// </summary>
+        // The Linux overlay forces SCROLL off; clowd_scroll_driver is not built for Linux.
+        [HiddenOnLinux]
         [Category("Optional features")]
         [DisplayName("Scrolling capture")]
         [Description("Show the SCROLL button in the capture window, which captures a whole scrolling " +
@@ -86,6 +92,8 @@ namespace Clowd.Config
         /// unreachable — the OCR button is the only way into the mode that raises the
         /// UPLOAD/SEARCH/COPY strip.
         /// </summary>
+        // OCR lives in the overlay, which Wayland never shows; it stays on X11.
+        [HiddenOnWayland]
         [Category("Optional features")]
         [DisplayName("Text recognition (OCR)")]
         [Description("Show the OCR button in the capture window, which lifts the text out of the " +
@@ -103,6 +111,8 @@ namespace Clowd.Config
         /// removes the feature rather than just trimming a button (clowd_capture PanelFeatures,
         /// over <c>--no-image-search</c>).
         /// </summary>
+        // The Linux overlay forces SEARCH off.
+        [HiddenOnLinux]
         [Category("Optional features")]
         [DisplayName("Reverse image search")]
         [Description("Show the SEARCH button in the capture window, which looks the selected image " +
@@ -122,6 +132,8 @@ namespace Clowd.Config
         /// registers the screenshot hotkeys itself and spawns a one-shot capturer
         /// per capture, exactly as before this setting existed.
         /// </summary>
+        // clowd_capture refuses --standby on Linux, so the shell never starts a standby capturer there.
+        [HiddenOnLinux]
         [Category("Behavior")]
         [DisplayName("Keep capturer warm")]
         [Description("Keep the capture overlay ready in the background so it opens with the lowest " +
@@ -133,6 +145,8 @@ namespace Clowd.Config
             set => Set(ref _keepCapturerWarm, value);
         }
 
+        // An overlay option; on Wayland the desktop's screenshot tool decides.
+        [HiddenOnWayland]
         [Category("Behavior")]
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]
@@ -150,6 +164,8 @@ namespace Clowd.Config
             set => Set(ref _detectWindows, value);
         }
 
+        // An overlay option, and Wayland has no overlay.
+        [HiddenOnWayland]
         [Category("Behavior")]
         [DisplayName("Tips overlay")]
         [Description("Which tips/hints overlay the capture window shows at startup (cycled at runtime with T)")]
@@ -167,6 +183,8 @@ namespace Clowd.Config
         /// window. Dragged selections stay square either way (clowd_capture
         /// <c>--no-rounded-corners</c>). On by default: it is what the screen actually shows.
         /// </summary>
+        // The Linux overlay has no window selections, so there are no corners to match.
+        [HiddenOnLinux]
         [Category("Behavior")]
         [DisplayName("Rounded window corners")]
         [Description("When a window is selected, match its rounded corners: the selection border " +
@@ -178,6 +196,8 @@ namespace Clowd.Config
             set => Set(ref _roundedWindowCorners, value);
         }
 
+        // The Linux overlay forces peek off and has no window selections to threshold.
+        [HiddenOnLinux]
         [Category("Behavior")]
         [DisplayName("Obscured window peek")]
         [Description("Capture obstructed windows and show a peek-through composite when hovering them")]
@@ -187,6 +207,7 @@ namespace Clowd.Config
             set => Set(ref _obscuredWindowPeek, value);
         }
 
+        [HiddenOnLinux]
         [Category("Behavior")]
         [DisplayName("Obscured window threshold")]
         [Description("How much of a window may be covered by other windows before it can no longer be selected")]
@@ -209,6 +230,8 @@ namespace Clowd.Config
         /// [DisabledWhen] still grays it out across the two groups, since with scrolling capture
         /// off there is no scrolling capture for it to describe.
         /// </summary>
+        // Scrolling capture is off on Linux (see ScrollingCaptureEnabled).
+        [HiddenOnLinux]
         [Category("Behavior")]
         [DisplayName("Scroll to top first")]
         [Description("Before a scrolling capture starts, wind the page back to the top so the whole " +

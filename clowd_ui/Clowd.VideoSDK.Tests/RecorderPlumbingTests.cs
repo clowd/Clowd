@@ -205,6 +205,63 @@ namespace Clowd.VideoSDK.Tests
             Assert.NotEqual(input, window);
         }
 
+        /// <summary>What obs-express accepts on Linux: neither sidecar, no click tracker, and no
+        /// --capture-method. Always passed explicitly so these tests read the same on every OS.</summary>
+        private static readonly ObsRecorderFeatures LinuxFeatures = new(Sidecars: false, CaptureMethod: false, ClickTracker: false);
+
+        /// <summary>No region means the recorder picks the source (the screen-share picker on
+        /// Wayland, which rejects --region outright; the primary monitor on X11) — everything else
+        /// the spawn needs is still there.</summary>
+        [Fact]
+        public void A_recording_without_a_region_leaves_the_source_to_the_recorder()
+        {
+            var args = ObsArguments.Build(null, TestPath.Native(@"C:\out\video.mp4"), TestPath.Native(@"C:\out\obs.json"),
+                Settings(), features: LinuxFeatures).ToArray();
+
+            Assert.DoesNotContain("--region", args);
+            Assert.Equal(TestPath.Native(@"C:\out\video.mp4"), args[Array.IndexOf(args, "--output") + 1]);
+            Assert.Equal(TestPath.Native(@"C:\out\obs.json"), args[Array.IndexOf(args, "--settings") + 1]);
+            Assert.Contains("--pause", args);
+        }
+
+        /// <summary>The Linux recorder rejects both sidecar flags with exit 2 (and ignores the
+        /// capture method), so a Studio recording there keeps its track layout but asks for none
+        /// of them — even when the --help probe claimed window capture.</summary>
+        [Fact]
+        public void The_linux_recorder_is_never_given_the_flags_it_rejects()
+        {
+            var args = ObsArguments.Build(new ScreenRect(10, 20, 640, 480), TestPath.Native(@"C:\out\video.mp4"),
+                TestPath.Native(@"C:\out\obs.json"), Settings(), windowCapture: true, features: LinuxFeatures).ToArray();
+
+            Assert.Contains("--multi-track", args);
+            Assert.DoesNotContain("--input-capture", args);
+            Assert.DoesNotContain("--window-capture", args);
+            Assert.DoesNotContain("--capture-method", args);
+        }
+
+        /// <summary>Everything accepted is exactly the command line Windows and macOS have always
+        /// had; the explicit features must not change a byte of it.</summary>
+        [Fact]
+        public void Full_features_build_the_command_line_every_other_platform_gets()
+        {
+            if (OperatingSystem.IsLinux())
+                return; // Current is the Linux set there; the equivalence only holds elsewhere
+
+            var region = new ScreenRect(10, 20, 640, 480);
+            var output = TestPath.Native(@"C:\out\video.mp4");
+            var settingsPath = TestPath.Native(@"C:\out\obs.json");
+
+            foreach (var composition in new[] { false, true })
+            {
+                foreach (var windowCapture in new[] { false, true })
+                {
+                    Assert.Equal(
+                        ObsArguments.Build(region, output, settingsPath, Settings(composition), windowCapture),
+                        ObsArguments.Build(region, output, settingsPath, Settings(composition), windowCapture, ObsRecorderFeatures.All));
+                }
+            }
+        }
+
         // ------------------------------------------------------------------ settings file
 
         private static JsonDocument WriteSettings(SettingsRecording settings)
@@ -279,6 +336,36 @@ namespace Clowd.VideoSDK.Tests
             settings.LowCpuUsage = true;
             using var on = WriteSettings(settings);
             Assert.True(on.RootElement.GetProperty("low_cpu").GetBoolean());
+        }
+
+        private static JsonDocument WriteSettings(SettingsRecording settings, ObsRecorderFeatures features)
+        {
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "clowd-obs-settings-" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                ObsArguments.WriteSettingsFile(path, settings, features);
+                return JsonDocument.Parse(System.IO.File.ReadAllText(path));
+            }
+            finally
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+
+        /// <summary>Without a sidecar (Linux) nothing but the frames can carry the pointer, so a
+        /// Studio recording bakes the cursor in whatever the (Studio-hidden) ShowMouseCursor says —
+        /// and never asks for the click tracker, which that recorder rejects outright.</summary>
+        [Fact]
+        public void Without_sidecars_studio_bakes_the_cursor_and_skips_the_tracker()
+        {
+            var settings = Settings();
+            settings.ShowMouseCursor = false;
+            settings.HighlightClicks = true;
+
+            using var file = WriteSettings(settings, LinuxFeatures);
+            Assert.True(file.RootElement.GetProperty("cursor").GetBoolean());
+            Assert.False(file.RootElement.GetProperty("tracker").GetBoolean());
         }
 
         // ------------------------------------------------------------------ tracks report
@@ -431,6 +518,57 @@ namespace Clowd.VideoSDK.Tests
             Assert.Same(previous, Parse("""{"tracks":null}""", previous));
             Assert.Same(previous, Parse("""{"tracks":{}}""", previous)); // no screen track: unusable
             Assert.Null(Parse("""{"type":"stopped_recording"}""", null));
+        }
+
+        // ------------------------------------------------------------------ screen-share picker
+
+        /// <summary>obs-express's own Fatal lines (recorder.rs wait_for_picker), as they land in the
+        /// stderr log among libobs's chatter.</summary>
+        private const string PickerCancelledLog =
+            "info: [pipewire] Screencast session created\n" +
+            "Fatal: the screen-share dialog was cancelled or failed; nothing to record (denied or cancelled by user)\n" +
+            "info: obs shutdown";
+
+        private const string PickerTimedOutLog =
+            "Waiting for a screen or window to be chosen in the screen-share dialog (up to 120 s)...\n" +
+            "Fatal: no screen or window was chosen in the screen-share dialog within 120 s\n";
+
+        private const string PortalMissingLog =
+            "Fatal: org.freedesktop.portal.ScreenCast is not registered — the screen-share portal is unavailable\n";
+
+        private const string PickerPipeWireErrorLog =
+            "error: [pipewire] Error creating screencast session: GDBus.Error:org.freedesktop.DBus.Error.Failed\n" +
+            "Fatal: the screen-share dialog was cancelled or failed; nothing to record ([pipewire] Error creating screencast session: GDBus.Error:org.freedesktop.DBus.Error.Failed)\n";
+
+        [Fact]
+        public void A_dismissed_or_expired_picker_is_recognized_in_the_log()
+        {
+            Assert.True(ObsCapturer.IsPickerDismissal(PickerCancelledLog));
+            Assert.True(ObsCapturer.IsPickerDismissal(PickerTimedOutLog));
+        }
+
+        /// <summary>A missing portal or a PipeWire/portal error behind the shared "cancelled or
+        /// failed" Fatal line is a real failure the user has to hear about, and the
+        /// "Waiting for …" progress line alone says nothing about how the picker ended.</summary>
+        [Fact]
+        public void Anything_else_is_not_a_picker_dismissal()
+        {
+            Assert.False(ObsCapturer.IsPickerDismissal(PortalMissingLog));
+            Assert.False(ObsCapturer.IsPickerDismissal(PickerPipeWireErrorLog));
+            Assert.False(ObsCapturer.IsPickerDismissal(
+                "Waiting for a screen or window to be chosen in the screen-share dialog (up to 120 s)...\n"));
+            Assert.False(ObsCapturer.IsPickerDismissal(null));
+            Assert.False(ObsCapturer.IsPickerDismissal(""));
+        }
+
+        [Fact]
+        public void Only_the_120_s_line_is_a_picker_timeout()
+        {
+            Assert.True(ObsCapturer.IsPickerTimeout(PickerTimedOutLog));
+            Assert.False(ObsCapturer.IsPickerTimeout(PickerCancelledLog));
+            Assert.False(ObsCapturer.IsPickerTimeout(PortalMissingLog));
+            Assert.False(ObsCapturer.IsPickerTimeout(null));
+            Assert.False(ObsCapturer.IsPickerTimeout(""));
         }
 
         // ------------------------------------------------------------------ labels

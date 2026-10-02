@@ -62,6 +62,11 @@ namespace Clowd.UI
         {
             get
             {
+                // no hook host on Wayland, so a saved gesture would name a key that does nothing;
+                // point at the main window's button instead (many Wayland desktops show no tray icon).
+                if (!ClowdPlatform.SupportsGlobalHotkeys)
+                    return "Use Start screenshot to take your first screenshot — it will show up here.";
+
                 var gesture = Clowd.Config.SettingsRoot.Current?.Hotkeys?.CaptureRegionShortcut?.ToString();
                 return String.IsNullOrEmpty(gesture)
                     ? "Use the tray icon to take your first screenshot — it will show up here."

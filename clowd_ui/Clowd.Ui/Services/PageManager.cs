@@ -78,7 +78,17 @@ namespace Clowd
 
     public interface IVideoCapturePage : IPage
     {
+        /// <summary>Starts a recording of the region the capture overlay picked. <paramref name="region"/>
+        /// is non-null here, and <paramref name="sessionDir"/> is the directory the overlay already
+        /// created (and wrote the poster frame into).</summary>
         void Open(ScreenRect region, double cornerRadius, string sessionDir);
+
+        /// <summary>Starts a recording without a region from the capture overlay (or without the
+        /// overlay at all): the recorder
+        /// chooses the source itself (the system screen-share picker on Wayland, the primary monitor
+        /// on X11 — see ClowdPlatform.OverlayPicksRecordingRegion). Creates its own session directory;
+        /// a no-op while a recording session is already open.</summary>
+        void OpenWithoutRegion();
     }
 }
 

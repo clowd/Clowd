@@ -70,6 +70,14 @@ namespace Clowd.UI.Pages
                                       Mode = BindingMode.TwoWay,
                                   });
 
+            // Linux: there is no file-manager entry yet, and the branch below describes macOS
+            // Finder Services, so the whole row goes.
+            if (OperatingSystem.IsLinux())
+            {
+                ContextMenuSetting.IsVisible = false;
+                return;
+            }
+
             if (!ExplorerContextMenuManager.IsSupported)
             {
                 // macOS: the Finder service is declared in Info.plist and enabled by the OS by

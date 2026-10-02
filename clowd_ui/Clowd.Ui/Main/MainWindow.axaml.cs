@@ -31,6 +31,8 @@ namespace Clowd.UI
             SettingsRoot.Current.Hotkeys.PropertyChanged += OnHotkeyPropertyChanged;
             SettingsRoot.Current.General.PropertyChanged += OnGeneralPropertyChanged;
             BindRecordingMode();
+            BindCaptureButtons();
+            ApplyPlatformNavigation();
             NavList.SelectionChanged += OnNavSelectionChanged;
             NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => !i.IsSeparator);
 
@@ -91,6 +93,16 @@ namespace Clowd.UI
             Clowd.App.Current.StartCapture();
         }
 
+        private void StartScreenshot_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Clowd.App.Current.StartCapture();
+        }
+
+        private void StartRecording_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Clowd.App.Current.StartRecording();
+        }
+
         private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (NavList.SelectedItem is not NavMenuItem item || item.Tag is not string tag)
@@ -137,6 +149,9 @@ namespace Clowd.UI
 
         private static string GetCaptureIntroText()
         {
+            if (!ClowdPlatform.SupportsCaptureOverlay)
+                return "Screenshots use your desktop's own screenshot tool, opened with Start screenshot, and then open in the Clowd editor. These settings apply to how captures are saved.";
+
             var gesture = SettingsRoot.Current.Hotkeys.CaptureRegionShortcut?.ToString();
             return String.IsNullOrEmpty(gesture)
                 ? "These settings apply to the live capture opened from Clowd's tray menu. No Capture Region shortcut is currently assigned; you can add one on the Hotkeys page."
@@ -156,6 +171,46 @@ namespace Clowd.UI
                 Source = recording,
                 Converter = new FuncValueConverter<bool, int>(enabled => enabled ? 1 : 3),
             });
+        }
+
+        /// <summary>A Wayland session has no capture overlay, so "Start Capture" gives way to
+        /// "Start screenshot" (the desktop's screenshot tool via the portal). Separately, wherever
+        /// the overlay cannot pick a recording region (all of Linux today, X11 included, whose
+        /// overlay has no VIDEO button) "Start recording" is the main window's way into a
+        /// recording: obs-express starts with no region (on Wayland it shows the system
+        /// screen-share picker). The recording button follows Recording Off the same way
+        /// BindRecordingMode's buttons do, and for the same reason it is a binding. Everywhere
+        /// else the XAML defaults stand.</summary>
+        private void BindCaptureButtons()
+        {
+            if (!ClowdPlatform.SupportsCaptureOverlay)
+            {
+                NewCaptureButton.IsVisible = false;
+                StartScreenshotButton.IsVisible = true;
+            }
+
+            if (!ClowdPlatform.OverlayPicksRecordingRegion)
+                StartRecordingButton.Bind(IsVisibleProperty, new Binding(nameof(SettingsRecording.IsEnabled)) { Source = SettingsRoot.Current.Recording });
+        }
+
+        /// <summary>A Wayland session has no global hotkeys, so the Hotkeys page would only offer
+        /// shortcuts that can never fire, and Shared Region's helper is not built for Linux.
+        /// Removing the items (rather than hiding them) keeps keyboard navigation and selection
+        /// from ever landing on them; SelectTab ignores a tag that is no longer listed.</summary>
+        private void ApplyPlatformNavigation()
+        {
+            if (!ClowdPlatform.SupportsGlobalHotkeys)
+                RemoveNavItem(nameof(SettingsPageTab.SettingsHotkeys));
+
+            if (!ClowdPlatform.SupportsShareRegion)
+                RemoveNavItem(nameof(SettingsPageTab.SettingsShareRegion));
+        }
+
+        private void RemoveNavItem(string tag)
+        {
+            var item = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => i.Tag as string == tag);
+            if (item != null)
+                NavList.Items.Remove(item);
         }
 
         private void OnHotkeyPropertyChanged(object sender, PropertyChangedEventArgs e)

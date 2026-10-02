@@ -120,7 +120,7 @@
                              unregisters the verb at the same time (SettingsRoot.ShouldRegisterExplorerContextMenu).
                              Bound in code-behind — the checkbox reads SettingsGeneral, not this page's
                              DataContext. -->
-                        <StackPanel Classes="Setting">
+                        <StackPanel x:Name="ContextMenuSetting" Classes="Setting">
                             <CheckBox x:Name="ContextMenuCheck">
                                 <TextBlock Text="Add 'Upload with Clowd' to the Explorer context menu" TextWrapping="Wrap" />
                             </CheckBox>

@@ -86,6 +86,37 @@
                     </StackPanel>
                 </Button>
 
+                <!-- A Wayland session has no capture overlay and no global hotkeys, so the one
+                     Start Capture button becomes these two, each handing off to the desktop's own
+                     picker; on X11 Start recording also joins Start Capture, whose overlay has no
+                     VIDEO button there (MainWindow.BindCaptureButtons). Stacked rather than split
+                     into a row so the labels never truncate in this narrow column. -->
+                <Button x:Name="StartScreenshotButton"
+                        IsVisible="False"
+                        Classes="Primary"
+                        Theme="{StaticResource SolidButton}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Click="StartScreenshot_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavCapture}" />
+                        <TextBlock Text="Start screenshot" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="StartRecordingButton"
+                        IsVisible="False"
+                        Classes="Primary"
+                        Theme="{StaticResource SolidButton}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Click="StartRecording_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavRecording}" />
+                        <TextBlock Text="Start recording" />
+                    </StackPanel>
+                </Button>
+
                 <!-- "New Editor" split in two: the image editor and the video editor open blank
                      documents of their own, and nothing about one implies the other. The video
                      half is hidden while recording is switched off (MainWindow.ApplyRecordingMode),

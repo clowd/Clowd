@@ -24,10 +24,32 @@ namespace Clowd.Config
     /// <summary>
     /// The mirror of <see cref="HiddenOnMacOSAttribute"/>: hides a settings row everywhere except
     /// macOS. For a row whose subject only exists there, so leaving it visible would offer a
-    /// switch that changes nothing.
+    /// switch that changes nothing. It means "everywhere except macOS", so it hides the row on
+    /// Linux too.
     /// </summary>
     [AttributeUsage(AttributeTargets.Property)]
     public class HiddenOnWindowsAttribute : Attribute
+    {
+    }
+
+    /// <summary>
+    /// Hides a settings row on Linux (X11 and Wayland alike), for a feature Linux cannot provide —
+    /// the overlay forces it off there, or the helper behind it is not built for Linux. The value
+    /// still persists, so a settings file shared with another OS keeps it.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property)]
+    public class HiddenOnLinuxAttribute : Attribute
+    {
+    }
+
+    /// <summary>
+    /// Hides a settings row only in a Linux Wayland session, for things that exist on X11 but not
+    /// on Wayland: the capture overlay's own options (screenshots come from the desktop's
+    /// screenshot tool there, see <see cref="ClowdPlatform.IsWayland"/>) and anything driven by
+    /// the global keyboard hook, which never starts on Wayland. The value still persists.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property)]
+    public class HiddenOnWaylandAttribute : Attribute
     {
     }
 

@@ -63,12 +63,26 @@ namespace Clowd.UI
         public string WebcamDevice { get; set; }
     }
 
+    /// <summary>What the recorder on this platform accepts beyond the common flags (obs-express
+    /// rejects the sidecars and the click tracker on Linux, and ignores --capture-method there).
+    /// A parameter rather than an OperatingSystem check inside Build so the Linux command line is
+    /// testable on any OS.</summary>
+    public readonly record struct ObsRecorderFeatures(bool Sidecars, bool CaptureMethod, bool ClickTracker)
+    {
+        /// <summary>Everything, which is what Windows and macOS accept.</summary>
+        public static ObsRecorderFeatures All => new(true, true, true);
+
+        /// <summary>What the recorder on the platform this process runs on accepts.</summary>
+        public static ObsRecorderFeatures Current => new(ClowdPlatform.SupportsRecordingSidecars, !ClowdPlatform.IsLinux, ClowdPlatform.SupportsClickTracker);
+    }
+
     /// <summary>
     /// Maps Clowd.Ui recording state onto obs-express (DESIGN §1.1 / §4.2): the session-fixed
     /// parameters go on the clap CLI, everything tunable goes into the settings file
     /// (<see cref="WriteSettingsFile"/>), which the recorder re-reads on every stdin
     /// <c>configure</c>. The region is emitted verbatim in the platform capture coordinate space
-    /// the overlay wrote it in (physical px on Windows, CG points on macOS). <c>--pause</c> is
+    /// the overlay wrote it in (physical px on Windows, CG points on macOS), or left off when there
+    /// is none and the recorder picks the source itself (Linux). <c>--pause</c> is
     /// always passed: the pipeline is built up-front and recording only starts on the stdin
     /// <c>start</c> command. Factored out of the page so it is testable without a process.
     /// </summary>
@@ -112,7 +126,9 @@ namespace Clowd.UI
         private const string WindowCaptureArg = "--window-capture";
 
         /// <summary>Recorder flag choosing the OS API that backs display capture. Windows only —
-        /// the recorder ignores it on macOS, so it is passed unconditionally.</summary>
+        /// the recorder ignores it on macOS, so it is passed there unconditionally; on Linux it is
+        /// ignored too but left off (<see cref="ObsRecorderFeatures.CaptureMethod"/>), since the
+        /// setting behind it is hidden there.</summary>
         private const string CaptureMethodArg = "--capture-method";
 
         /// <summary>libobs carries at most six audio tracks (its mixer/encoder limit), and the
@@ -126,22 +142,38 @@ namespace Clowd.UI
         /// extension is how the recorder picks the container (.mp4 or .mkv, the latter accepted for
         /// single-track recordings only), so the caller decides it — see
         /// <see cref="VideoContainer"/> and VideoCapturePage's WantedContainer.
+        /// <paramref name="region"/> may be null (see below), and <paramref name="features"/>
+        /// defaults to <see cref="ObsRecorderFeatures.Current"/>.
         /// </summary>
         public static IReadOnlyList<string> Build(ScreenRect region, string outputPath, string settingsPath,
-            SettingsRecording settings, bool windowCapture = false)
+            SettingsRecording settings, bool windowCapture = false, ObsRecorderFeatures? features = null)
         {
-            var args = new List<string>
+            var f = features ?? ObsRecorderFeatures.Current;
+            var args = new List<string>();
+
+            // null means the recorder picks the source: on Wayland that is the system screen-share
+            // picker (which rejects --region outright, exit 2), and on X11 the primary monitor.
+            if (region != null)
             {
-                "--region", FormattableString.Invariant($"{region.X},{region.Y},{region.Width},{region.Height}"),
-                "--output", outputPath,
-                "--settings", settingsPath,
-                "--pause",
-                // the capture source is built during bootstrap, so like --multi-track this is a
-                // spawn-time choice the settings file cannot carry; a change costs a respawn
-                // (VideoCapturePage). Always passed, so the recorder's own default never silently
-                // overrides what the settings page shows.
-                CaptureMethodArg, settings?.CaptureMethod.ToCliValue() ?? ScreenCaptureMethod.Auto.ToCliValue(),
-            };
+                args.Add("--region");
+                args.Add(FormattableString.Invariant($"{region.X},{region.Y},{region.Width},{region.Height}"));
+            }
+
+            args.Add("--output");
+            args.Add(outputPath);
+            args.Add("--settings");
+            args.Add(settingsPath);
+            args.Add("--pause");
+
+            // the capture source is built during bootstrap, so like --multi-track this is a
+            // spawn-time choice the settings file cannot carry; a change costs a respawn
+            // (VideoCapturePage). Always passed where the recorder reads it, so its own default
+            // never silently overrides what the settings page shows.
+            if (f.CaptureMethod)
+            {
+                args.Add(CaptureMethodArg);
+                args.Add(settings?.CaptureMethod.ToCliValue() ?? ScreenCaptureMethod.Auto.ToCliValue());
+            }
 
             // …and the one setting that cannot live in the settings file: the track layout picks the
             // libobs output object itself, which is built once when the process starts, so the
@@ -154,18 +186,23 @@ namespace Clowd.UI
                 // input capture rides with multi-track: the jsonl (and the 512x512 cursor box
                 // track the recorder adds alongside it) only mean anything to the editor, which a
                 // single-track recording never reaches. Session-fixed like --output, so it is a
-                // CLI argument rather than a settings-file key.
-                args.Add(InputCaptureArg);
-                args.Add(GetInputCapturePath(Path.GetDirectoryName(outputPath)));
-
-                // window capture rides with input capture for the same reason (only the editor
-                // reads it) and shares its timebase, so the editor can line the two up with no
-                // cross-referencing. Gated separately because it is younger than the recorders in
-                // the field.
-                if (windowCapture)
+                // CLI argument rather than a settings-file key. Neither sidecar exists on Linux
+                // (the recorder rejects both flags there, exit 2); the recording is still
+                // multi-track, and WriteSettingsFile bakes the cursor in instead.
+                if (f.Sidecars)
                 {
-                    args.Add(WindowCaptureArg);
-                    args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputPath)));
+                    args.Add(InputCaptureArg);
+                    args.Add(GetInputCapturePath(Path.GetDirectoryName(outputPath)));
+
+                    // window capture rides with input capture for the same reason (only the editor
+                    // reads it) and shares its timebase, so the editor can line the two up with no
+                    // cross-referencing. Gated separately because it is younger than the recorders in
+                    // the field.
+                    if (windowCapture)
+                    {
+                        args.Add(WindowCaptureArg);
+                        args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputPath)));
+                    }
                 }
             }
 
@@ -223,16 +260,24 @@ namespace Clowd.UI
         /// <summary>
         /// Writes the settings file at <paramref name="path"/> in full. Must run before the
         /// process is spawned (the recorder reads the file during CLI validation) and again
-        /// before every <c>configure</c>.
+        /// before every <c>configure</c>. <paramref name="features"/> defaults to
+        /// <see cref="ObsRecorderFeatures.Current"/>, like <see cref="Build"/>'s.
         /// </summary>
-        public static void WriteSettingsFile(string path, SettingsRecording settings)
+        public static void WriteSettingsFile(string path, SettingsRecording settings, ObsRecorderFeatures? features = null)
         {
+            var f = features ?? ObsRecorderFeatures.Current;
+
             // input capture (which rides with multi-track, see Build) hands both cursor and click
             // highlighting to the editor: the jsonl carries the pointer positions and the cursor
             // sprites alongside the clicks, so baking either into the screen frames would double
             // them up in the composed output. Single-track recordings keep the legacy behavior —
             // the flattened file is all the user ever gets, so the settings apply directly.
-            var inputCapture = UsesMultiTrack(settings);
+            // Without a sidecar (Linux) a Studio recording has nothing else to carry the pointer,
+            // and ShowMouseCursor is hidden in Studio (VisibleWhen Instant), so the cursor is baked
+            // into the frames whatever it says; on Windows and macOS multi-track always means input
+            // capture, so the cursor rule there is unchanged. The click tracker is never asked for
+            // where the recorder has none (obs-express rejects "tracker": true on Linux).
+            var inputCapture = UsesMultiTrack(settings) && f.Sidecars;
 
             var model = new ObsSettingsJson
             {
@@ -244,8 +289,8 @@ namespace Clowd.UI
                 MaxHeight = settings.MaxResolutionHeight,
                 HwAccel = settings.HardwareAccelerated,
                 LowCpu = settings.LowCpuUsage,
-                Cursor = !inputCapture && settings.ShowMouseCursor,
-                Tracker = !inputCapture && settings.HighlightClicks,
+                Cursor = !inputCapture && (settings.ShowMouseCursor || UsesMultiTrack(settings)),
+                Tracker = f.ClickTracker && !inputCapture && settings.HighlightClicks,
                 TrackerColor = TrackerColor,
                 // The devices are listed regardless of the CaptureSpeaker/CaptureMicrophone
                 // toggles — those are runtime mutes applied over stdin; omitting the device would

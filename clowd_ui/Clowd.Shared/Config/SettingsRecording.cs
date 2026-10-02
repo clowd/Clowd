@@ -297,9 +297,11 @@ namespace Clowd.Config
             set => Set(ref _maxResolutionHeight, value);
         }
 
+        // obs-express has no hardware encoder on Linux; it always falls back to x264 there.
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Hardware acceleration")]
+        [HiddenOnLinux]
         [Description("Prefer a hardware H.264 encoder (NVENC/AMF/QSV) when available, falling back to software x264")]
         public bool HardwareAccelerated
         {
@@ -317,11 +319,13 @@ namespace Clowd.Config
             set => Set(ref _lowCpuUsage, value);
         }
 
+        // DXGI and WGC are Windows APIs; Linux captures through xshm (X11) or the portal (Wayland).
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Capture method")]
         [Description("Which Windows API captures the screen. DXGI avoids the yellow capture border on Windows 10; WGC works where DXGI records black frames.")]
         [HiddenOnMacOS]
+        [HiddenOnLinux]
         public ScreenCaptureMethod CaptureMethod
         {
             get => _captureMethod;
@@ -338,9 +342,11 @@ namespace Clowd.Config
             set => Set(ref _showMouseCursor, value);
         }
 
+        // obs-express rejects the click tracker on Linux.
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Instant)]
         [DisplayName("Highlight mouse clicks")]
+        [HiddenOnLinux]
         [Description("Show an expanding highlight at the pointer on every click — visible only in the recording, not on your screen")]
         public bool HighlightClicks
         {
@@ -370,11 +376,13 @@ namespace Clowd.Config
             set => Set(ref _speakerDeviceId, value);
         }
 
+        // obs-express has no speaker-volume compensation on Linux.
         [Category("Audio")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Compensate for speaker volume")]
         [Description("Boost captured speaker audio to undo the system volume slider on devices that apply it in software (common for USB audio), so recordings are not quieter than what you heard. Devices with hardware volume control are left untouched.")]
         [HiddenOnMacOS]
+        [HiddenOnLinux]
         public bool SpeakerVolumeCompensation
         {
             get => _speakerVolumeCompensation;
@@ -423,9 +431,11 @@ namespace Clowd.Config
             set => Set(ref _webcamDeviceId, value);
         }
 
+        // Media keys arrive through the SharpHook global hook, which is never started on Wayland.
         [Category("Editor")]
         [VisibleWhen(nameof(Mode), Studio)]
         [DisplayName("Capture media keys in video editor")]
+        [HiddenOnWayland]
         [Description("Let the keyboard's media keys drive the video editor while its window is focused: play/pause toggles playback, next track steps one frame forward and previous track one frame back. Those keys are swallowed while the editor is focused, so nothing else playing on the machine reacts to them; in every other window they keep doing what they always did.")]
         public bool CaptureMediaKeys
         {

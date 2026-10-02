@@ -48,6 +48,16 @@ namespace Clowd.UI
 /// pipeline may match neither the old nor the new settings.</summary>
 public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, string Message, bool Fatal);
 
+    /// <summary>The user dismissed the system screen-share picker (or it failed, or timed out)
+    /// before recording could start. Not an error: the page closes the session quietly.</summary>
+    internal sealed class ObsPickerCancelledException : Exception
+    {
+        public ObsPickerCancelledException(string message, bool timedOut) : base(message) { TimedOut = timedOut; }
+
+        /// <summary>obs-express gave up after 120 s with nothing chosen (vs. a cancel/portal failure).</summary>
+        public bool TimedOut { get; }
+    }
+
     /// <summary>
     /// Hosts the obs-express recording process and speaks its protocol (DESIGN §1): plain-text
     /// commands on stdin, line-delimited JSON on stdout, free-form libobs chatter on stderr.
@@ -64,6 +74,10 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
     internal sealed class ObsCapturer : IDisposable
     {
         private static readonly TimeSpan InitializeTimeout = TimeSpan.FromSeconds(30);
+        // obs-express waits up to 120 s for the screen-share picker before it even builds the
+        // pipeline, so the 30 s budget above would fire while the user is still choosing. This
+        // leaves the recorder's own picker deadline room to report first, plus the usual init.
+        private static readonly TimeSpan PickerInitializeTimeout = TimeSpan.FromSeconds(180);
         private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(10);
         // a configure only re-reads a small file and touches the (not yet running) pipeline; if it
         // has not been acked by now the child is wedged and the page respawns it.
@@ -119,14 +133,23 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         private volatile bool _disposed;
         private readonly object _disposeLock = new();
         private Task _shutdownTask;
+        // the recorder opens the system screen-share picker before "initialized" (Wayland, no
+        // region); see InitializeAsync. Written once before the pumps start.
+        private bool _sourcePicker;
 
         /// <summary>Starts the obs-express process and resolves when the pipeline is fully built
         /// (<c>{"type":"initialized"}</c>). Throws <see cref="TimeoutException"/> after 30 s
-        /// (first-run OBS init can be slow, but not that slow).</summary>
-        public async Task InitializeAsync(IReadOnlyList<string> args, string exePath)
+        /// (first-run OBS init can be slow, but not that slow). With
+        /// <paramref name="sourcePicker"/> the recorder first waits (up to 120 s) for the user to
+        /// choose a screen or window in the system picker, so the budget is 180 s instead, and a
+        /// picker the user dismissed (or that failed, or timed out) surfaces as
+        /// <see cref="ObsPickerCancelledException"/> with no <see cref="CriticalError"/>.</summary>
+        public async Task InitializeAsync(IReadOnlyList<string> args, string exePath, bool sourcePicker = false)
         {
             if (_proc != null)
                 throw new InvalidOperationException("InitializeAsync may only be called once per ObsCapturer.");
+
+            _sourcePicker = sourcePicker;
 
             // The shared spawn, not a hand-rolled ProcessStartInfo: same redirection of all three
             // streams, same CreateNoWindow, same working directory (the binary's own folder, where
@@ -147,7 +170,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             _stdoutPump = Task.Run(PumpStdoutAsync);
             _stderrPump = Task.Run(PumpStderrAsync);
 
-            await WaitForAckAsync(_initTcs.Task, InitializeTimeout, "initialized");
+            await WaitForAckAsync(_initTcs.Task, sourcePicker ? PickerInitializeTimeout : InitializeTimeout, "initialized");
         }
 
         /// <summary>Starts (or would resume) the recording; resolves on <c>started_recording</c>,
@@ -410,6 +433,29 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
 
             var died = AttachProcessLog(new InvalidOperationException(
                 "The recording process has exited unexpectedly" + (exitCode == null ? "" : " with code " + exitCode) + "."));
+
+            // an exit before "initialized" while the system picker was up is usually the user
+            // dismissing it, which obs-express reports only as a stderr Fatal line and exit 1 —
+            // not a failure to report or log. This runs ON the stdout pump, so only the stderr pump
+            // is waited for (briefly: the Fatal line may still be in flight on it).
+            if (_sourcePicker && !_initTcs.Task.IsCompleted)
+            {
+                await Task.WhenAny(_stderrPump ?? Task.CompletedTask, Task.Delay(TimeSpan.FromSeconds(1)));
+                var log = _log.GetLog();
+                if (IsPickerDismissal(log))
+                {
+                    Debug.WriteLine("Screen-share picker dismissed:\n" + _log.GetLogTail(20));
+                    var dismissed = new ObsPickerCancelledException("The screen-share picker was dismissed.", IsPickerTimeout(log));
+                    FailObserved(_initTcs, dismissed);
+                    FailObserved(_startTcs, died);
+                    FailObserved(_configureTcs, died);
+                    FailObserved(_pauseTcs, died);
+                    // deliberately no RaiseCriticalError: the page closes the session quietly.
+                    _stopTcs.TrySetResult(false);
+                    return;
+                }
+            }
+
             FailObserved(_initTcs, died);
             FailObserved(_startTcs, died);
             FailObserved(_configureTcs, died);
@@ -417,6 +463,39 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             if (_stopTcs.TrySetResult(false) && !_disposed)
                 RaiseCriticalError("The recording process has exited unexpectedly.");
         }
+
+        // obs-express's own Fatal lines for a picker that produced no source (recorder.rs
+        // wait_for_picker). "cancelled or failed" is shared by a user cancel and a PipeWire/portal
+        // error; the Fatal line quotes the matched libobs line in parentheses, and only the
+        // plugin's cancel wording is a quiet dismissal. There is no dedicated exit code or event
+        // for either yet; matching stderr is a stopgap to replace once obs-express has one.
+        private const string PickerDismissedFatal = "screen-share dialog was cancelled or failed";
+        private const string PickerTimedOutFatal = "no screen or window was chosen in the screen-share dialog";
+        private const string PortalCancelledByUser = "denied or cancelled by user";
+
+        /// <summary>True when the recorder's log says the screen-share picker ended without a
+        /// source because the user cancelled it or nothing was chosen in time. A portal or
+        /// PipeWire error (same Fatal prefix, different quoted cause) and a missing ScreenCast
+        /// portal stay real errors.</summary>
+        internal static bool IsPickerDismissal(string log)
+        {
+            if (log == null)
+                return false;
+            if (log.Contains(PickerTimedOutFatal, StringComparison.Ordinal))
+                return true;
+            foreach (var line in log.Split('\n'))
+            {
+                if (line.Contains(PickerDismissedFatal, StringComparison.Ordinal)
+                    && line.Contains(PortalCancelledByUser, StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>True when the recorder gave up on the picker after its 120 s deadline with
+        /// nothing chosen (a subset of <see cref="IsPickerDismissal"/>).</summary>
+        internal static bool IsPickerTimeout(string log)
+            => log != null && log.Contains(PickerTimedOutFatal, StringComparison.Ordinal);
 
         /// <summary>Faults a lifecycle TCS whose task may never be awaited — canceling during WAIT
         /// leaves <c>_startTcs</c> untouched, and a caller whose <c>WaitAsync</c> already timed out

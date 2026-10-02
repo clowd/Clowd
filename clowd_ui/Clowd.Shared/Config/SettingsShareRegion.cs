@@ -43,9 +43,11 @@ namespace Clowd.Config
         }
 
         /// <summary>Whether region sharing is offered anywhere: the one question every share entry
-        /// point asks (<see cref="Mode"/> is On).</summary>
+        /// point asks — the tray item, the hotkey, ToggleShareRegion and the overlay's --no-share
+        /// (<see cref="Mode"/> is On). The share helper (clowd_share_region) is not built for Linux,
+        /// so region sharing is off there whatever Mode says.</summary>
         [Browsable(false), JsonIgnore]
-        public bool IsEnabled => Mode == ShareRegionMode.On;
+        public bool IsEnabled => Mode == ShareRegionMode.On && ClowdPlatform.SupportsShareRegion;
 
         /// <summary>
         /// Canvas frame rate of the mirror window, handed to <c>clowd_share_region --fps</c>.
