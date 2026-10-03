@@ -129,6 +129,12 @@ namespace Clowd.Drawing.Tools
             {
                 if (handleNumber > 0)
                 {
+                    // an arrowless step badge has nothing for its badge handle to pivot around, so
+                    // either handle pulls an arrow out; latched here so the drag keeps doing that
+                    // once the arrow exists
+                    if (graphic is GraphicCount { HasArrow: false } && handleNumber == GraphicCount.BadgeHandle)
+                        handleNumber = GraphicCount.ArrowHandle;
+
                     _selectMode = SelectionMode.HandleDrag;
                     _handleGrabbedObject = graphic;
                     _handleGrabbed = handleNumber;

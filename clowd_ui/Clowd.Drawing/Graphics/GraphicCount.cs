@@ -21,7 +21,8 @@ namespace Clowd.Drawing.Graphics
     ///
     /// Two handles, like a line's two ends: <see cref="ArrowHandle"/> at the arrow tip, and
     /// <see cref="BadgeHandle"/> on the rim point facing away from it, which drags the badge while
-    /// the tip stays put. Without an arrow they sit on the right and left of the rim.
+    /// the tip stays put. Without an arrow they sit on the right and left of the rim, and the
+    /// pointer tool treats a drag of either as pulling the arrow out.
     ///
     /// Cache slots: Geometry = badge outline (hit-testing and the "inside the badge" tests),
     /// SecondaryGeometry = arrow head, TertiaryGeometry = arrow shaft. Text = the number.
