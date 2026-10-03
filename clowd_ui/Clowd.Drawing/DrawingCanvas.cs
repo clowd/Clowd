@@ -37,7 +37,7 @@ namespace Clowd.Drawing
             AvaloniaProperty.Register<DrawingCanvas, Color>(nameof(ArtworkBackground));
 
         public static readonly StyledProperty<double> LineWidthProperty =
-            AvaloniaProperty.Register<DrawingCanvas, double>(nameof(LineWidth), 2d, defaultBindingMode: BindingMode.TwoWay);
+            AvaloniaProperty.Register<DrawingCanvas, double>(nameof(LineWidth), 3d, defaultBindingMode: BindingMode.TwoWay);
 
         public static readonly StyledProperty<Color> ObjectColorProperty =
             AvaloniaProperty.Register<DrawingCanvas, Color>(nameof(ObjectColor), defaultBindingMode: BindingMode.TwoWay);
@@ -55,7 +55,7 @@ namespace Clowd.Drawing
             AvaloniaProperty.Register<DrawingCanvas, Color>(nameof(HandleColor));
 
         public static readonly StyledProperty<string> TextFontFamilyNameProperty =
-            AvaloniaProperty.Register<DrawingCanvas, string>(nameof(TextFontFamilyName), "Tahoma", defaultBindingMode: BindingMode.TwoWay);
+            AvaloniaProperty.Register<DrawingCanvas, string>(nameof(TextFontFamilyName), EditorFonts.Text, defaultBindingMode: BindingMode.TwoWay);
 
         public static readonly StyledProperty<FontStyle> TextFontStyleProperty =
             AvaloniaProperty.Register<DrawingCanvas, FontStyle>(nameof(TextFontStyle), FontStyle.Normal, defaultBindingMode: BindingMode.TwoWay);
@@ -68,7 +68,7 @@ namespace Clowd.Drawing
                                                                   defaultBindingMode: BindingMode.TwoWay);
 
         public static readonly StyledProperty<double> TextFontSizeProperty =
-            AvaloniaProperty.Register<DrawingCanvas, double>(nameof(TextFontSize), 12d, defaultBindingMode: BindingMode.TwoWay);
+            AvaloniaProperty.Register<DrawingCanvas, double>(nameof(TextFontSize), EditorFonts.TextSize, defaultBindingMode: BindingMode.TwoWay);
 
         public static readonly StyledProperty<double> BlurRadiusProperty =
             AvaloniaProperty.Register<DrawingCanvas, double>(nameof(BlurRadius), 8d, defaultBindingMode: BindingMode.TwoWay);

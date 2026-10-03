@@ -46,8 +46,10 @@ namespace Clowd.UI.Dialogs
 
             // a third-party font with broken metadata can carry a name Avalonia's typeface
             // parser rejects at render time (CLOWD-10) — drop those rather than list them
+            // the fonts the app embeds are listed alongside the installed ones
             _allFamilies = FontManager.Current.SystemFonts
                                       .Select(f => f.Name?.Trim())
+                                      .Concat(FontUtil.EmbeddedFamilyNames)
                                       .Where(FontUtil.IsSafeFamilyName)
                                       .Distinct(StringComparer.OrdinalIgnoreCase)
                                       .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)

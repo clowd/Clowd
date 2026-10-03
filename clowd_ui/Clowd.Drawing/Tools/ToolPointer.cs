@@ -219,7 +219,9 @@ namespace Clowd.Drawing.Tools
                         // if should maintain aspect ratio of a rectangle
                         var shiftPressed = (s.Modifiers & KeyModifiers.Shift) != 0;
                         var lineGraphic = _handleGrabbedObject as GraphicLine;
-                        var rotatableGraphic = _handleGrabbedObject as GraphicRectangle;
+                        // text and step badges number their handles differently (rotation / arrow
+                        // tip), so the rectangle's corner-resize aspect lock must not apply to them
+                        var rotatableGraphic = _handleGrabbedObject is GraphicText ? null : _handleGrabbedObject as GraphicRectangle;
                         var rotatableDestRect = GetTransformedRect(
                             rotatableGraphic?.UnrotatedBounds,
                             _handleGrabbed,
@@ -240,6 +242,15 @@ namespace Clowd.Drawing.Tools
                         else if (shiftPressed && lineGraphic != null && _handleGrabbed <= 2)
                         {
                             var anchor = _handleGrabbed == 1 ? lineGraphic.LineEnd : lineGraphic.LineStart;
+                            wpfPt = HelperFunctions.SnapPointToCommonAngle(anchor, wpfPt, false);
+                            _handleGrabbedObject.MoveHandleTo(wpfPt, _handleGrabbed);
+                        }
+                        // a step badge behaves like a line: the arrow tip pivots around the badge
+                        // center, and the badge handle pivots around the anchored tip
+                        else if (shiftPressed && _handleGrabbedObject is GraphicCount count
+                                 && (_handleGrabbed == GraphicCount.ArrowHandle || count.HasArrow))
+                        {
+                            var anchor = _handleGrabbed == GraphicCount.ArrowHandle ? count.Center : count.ArrowTip;
                             wpfPt = HelperFunctions.SnapPointToCommonAngle(anchor, wpfPt, false);
                             _handleGrabbedObject.MoveHandleTo(wpfPt, _handleGrabbed);
                         }

@@ -59,7 +59,8 @@ namespace Clowd.Drawing.Graphics
         /// the drawn width/height. Persisted — defaults to 0 (square corners), which is what an old
         /// document loads as. Pre-existing documents were drawn with LineWidth as the corner radius
         /// (a ~2px rounding at the default stroke); that quirk is dropped rather than baked in as a
-        /// default, so the radius reads literally and 0 really means square.
+        /// default, so the radius reads literally and 0 really means square. (New rectangles get
+        /// their radius from the Rectangle tool's settings, whose default is rounded.)
         /// </summary>
         public double CornerRadius
         {

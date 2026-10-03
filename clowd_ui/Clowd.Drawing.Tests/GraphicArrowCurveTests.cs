@@ -74,7 +74,7 @@ namespace Clowd.Drawing.Tests
         {
             var straight = Horizontal();
             Assert.False(straight.Contains(new Point(50, 30)));
-            Assert.True(straight.Bounds.Height < 20);
+            Assert.True(straight.Bounds.Bottom < 29, $"bounds {straight.Bounds} should not reach the bow line"); // the head's barbs alone stay well short of it
 
             var curved = Horizontal();
             curved.CurveOffset = 30;
@@ -118,18 +118,17 @@ namespace Clowd.Drawing.Tests
 
             // the head trails BACK along the tangent at t=1, which for this bow leaves the end
             // heading up and to the right — so the barbs hang well below a chord-aligned head
-            // (which could only reach sin(15°) * tipLength ≈ 12 units off the chord)
+            // (whose barbs could only reach its half-width ≈ 19 units off the chord)
             var tip = g.RenderCache.SecondaryGeometry;
             Assert.NotNull(tip);
             Assert.True(tip.Bounds.Bottom > 30, $"tip bounds {tip.Bounds} are not rotated onto the curve tangent");
 
-            // the drawn shaft is the sub-curve that stops half a head-length short, so nothing pokes
-            // through the head (the full-curve geometry used for hit-testing still reaches the end)
+            // the drawn (filled, tapered) shaft is the sub-curve that ends inside the head, so nothing
+            // pokes through the tip (the full-curve hit corridor still reaches the end)
             var shaft = g.RenderCache.TertiaryGeometry;
             Assert.NotNull(shaft);
-            var pen = new Pen(Brushes.Black, 6);
-            Assert.False(shaft.StrokeContains(pen, g.LineEnd));
-            Assert.True(g.RenderCache.Geometry.StrokeContains(pen, g.LineEnd));
+            Assert.False(shaft.FillContains(g.LineEnd));
+            Assert.True(g.Contains(g.LineEnd));
         }
     }
 }

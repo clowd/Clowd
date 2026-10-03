@@ -1,13 +1,18 @@
+using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Clowd.Drawing.Graphics;
 
 namespace Clowd.Drawing.Tools
 {
+    /// <summary>
+    /// Places the next numbered step badge centered on the press point; dragging before release
+    /// pulls its arrow out to the pointer (a release inside the badge leaves it arrowless). The
+    /// number then opens for editing, like a new text note.
+    /// </summary>
     internal class ToolCount : ToolText
     {
-        private GraphicArrow _currentArrow;
-        private GraphicCount _currentCount;
+        private GraphicCount _current;
 
         public ToolCount() : base(() => CursorResources.Numerical, SnapMode.All)
         { }
@@ -16,60 +21,36 @@ namespace Clowd.Drawing.Tools
         {
             var maxNum = canvas.GraphicsList
                 .OfType<GraphicCount>()
-                .Where(g => int.TryParse(g.Body, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _))
-                .Select(g => int.Parse(g.Body, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture))
+                .Select(g => int.TryParse(g.Body, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 0)
                 .DefaultIfEmpty(0)
                 .Max();
 
-            _currentArrow = new GraphicArrow(canvas.ObjectColor, canvas.LineWidth, pt, pt);
-
-            var o = new GraphicCount(canvas, pt, (maxNum + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
-            o.Normalize();
-            // we want count to be centered on point, not aligned to the top left
-            o.Move(o.Bounds.Width / -2d, o.Bounds.Height / -2d);
-            _currentCount = o;
-
-            canvas.GraphicsList.Add(_currentArrow);
-            canvas.GraphicsList.Add(o);
+            _current = new GraphicCount(canvas, pt, (maxNum + 1).ToString(CultureInfo.InvariantCulture));
+            canvas.GraphicsList.Add(_current);
         }
 
         protected override void OnMouseMoveImpl(DrawingCanvas canvas, Point pt)
         {
-            if (_currentArrow != null)
-            {
-                _currentArrow.LineEnd = pt;
-            }
+            _current?.MoveHandleTo(pt, GraphicCount.ArrowHandle);
         }
 
         protected override void OnMouseUpImpl(DrawingCanvas canvas)
         {
-            if (_currentArrow != null && _currentCount != null)
+            if (_current != null)
             {
-                if (_currentCount.Contains(_currentArrow.LineStart) && _currentCount.Contains(_currentArrow.LineEnd))
-                {
-                    canvas.GraphicsList.Remove(_currentArrow);
-                }
-
                 // CreateTextBox adds command history etc.
-                CreateTextBox(_currentCount, canvas, true);
+                CreateTextBox(_current, canvas, true);
             }
 
-            _currentArrow = null;
-            _currentCount = null;
+            _current = null;
         }
 
         public override void AbortOperation(DrawingCanvas canvas)
         {
-            if (_currentArrow != null)
+            if (_current != null)
             {
-                canvas.GraphicsList.Remove(_currentArrow);
-                _currentArrow = null;
-            }
-
-            if (_currentCount != null)
-            {
-                canvas.GraphicsList.Remove(_currentCount);
-                _currentCount = null;
+                canvas.GraphicsList.Remove(_current);
+                _current = null;
             }
 
             base.AbortOperation(canvas);

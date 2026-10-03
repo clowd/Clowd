@@ -20,19 +20,19 @@ namespace Clowd.Config
 
         public double LineWidth
         {
-            get => _lineWidth ?? 2d;
+            get => _lineWidth ?? 3d;
             set => Set(ref _lineWidth, value);
         }
 
         public string FontFamily
         {
-            get => _fontFamily ?? "Segoe UI";
+            get => _fontFamily ?? EditorFonts.Text;
             set => Set(ref _fontFamily, value);
         }
 
         public double FontSize
         {
-            get => _fontSize ?? 12d;
+            get => _fontSize ?? EditorFonts.TextSize;
             set => Set(ref _fontSize, value);
         }
 
@@ -76,6 +76,27 @@ namespace Clowd.Config
         {
             get => _obscureMode ?? ObscureMode.Mosaic;
             set => Set(ref _obscureMode, value);
+        }
+
+        /// <summary>Soft corners for new outlined rectangles (≈ 4× the default stroke).</summary>
+        public const double DefaultRectangleCornerRadius = 12;
+
+        /// <summary>A fresh settings entry for <paramref name="tool"/>: the shared defaults, plus the
+        /// few tools whose defaults differ.</summary>
+        public static SavedToolSettings CreateDefault(ToolType tool)
+        {
+            var settings = new SavedToolSettings();
+            if (tool == ToolType.Rectangle)
+                settings._cornerRadius = DefaultRectangleCornerRadius;
+
+            if (tool == ToolType.Count)
+            {
+                settings._fontFamily = EditorFonts.Numeric;
+                settings._fontSize = EditorFonts.NumericSize;
+                settings._fontWeight = EditorFonts.NumericWeight;
+            }
+
+            return settings;
         }
 
         private FontStretch? _fontStretch;
@@ -167,7 +188,7 @@ namespace Clowd.Config
         public SavedToolSettings GetToolSettings(ToolType tool)
         {
             if (!_tools.TryGetValue(tool, out var settings) || settings == null)
-                _tools[tool] = settings = new SavedToolSettings();
+                _tools[tool] = settings = SavedToolSettings.CreateDefault(tool);
             return settings;
         }
 

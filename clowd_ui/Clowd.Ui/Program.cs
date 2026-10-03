@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Skia;
 using Clowd.Config;
+using Clowd.Drawing;
 using Clowd.UI;
 using Velopack;
 
@@ -104,6 +105,11 @@ namespace Clowd
                 SparsePackageManager.ReportProcessIdentity();
 
             args = ConsumeStartupFlags(args);
+
+            // the editor stores fonts by plain family name; these two ship with the app, so
+            // resolve their names to the embedded faces instead of whatever the OS has installed
+            FontUtil.RegisterEmbeddedFamily(EditorFonts.Text, "fonts:Inter#Inter");
+            FontUtil.RegisterEmbeddedFamily(EditorFonts.Numeric, "avares://Clowd.Ui/Assets/Fonts#Cascadia Mono");
 
             // single-instance enforcement (MutexArgsForwarder) and argument forwarding happens
             // in App.OnFrameworkInitializationCompleted (NiceDialog needs the Avalonia platform

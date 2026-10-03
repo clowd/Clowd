@@ -12,6 +12,9 @@ namespace Clowd.Drawing.Graphics
     {
         public const int TextPadding = 15;
 
+        // notes are soft cards rather than square sticky-note slips
+        private const double NoteCornerRadius = 8;
+
         public bool Editing
         {
             get => _editing;
@@ -62,11 +65,10 @@ namespace Clowd.Drawing.Graphics
         private FontStretch _fontStretch = FontStretch.Normal;
         [Transient] private bool _editing; // not persisted by GraphicsSerializer
 
-        private static Random _rnd = new Random();
-
+        // auto-color notes cycle through soft pastels (butter, rose, mint, sky)
         private static Color[] _colors = new Color[]
         {
-            Color.FromRgb(255, 255, 203), Color.FromRgb(229, 203, 228), Color.FromRgb(203, 228, 222),
+            Color.FromRgb(0xFF, 0xF1, 0xB8), Color.FromRgb(0xFB, 0xD5, 0xE2), Color.FromRgb(0xCD, 0xEF, 0xDF), Color.FromRgb(0xD3, 0xE6, 0xFD),
         };
 
         private static int _nextColor = 0;
@@ -75,7 +77,7 @@ namespace Clowd.Drawing.Graphics
         { }
 
         public GraphicText(DrawingCanvas canvas, Point point)
-            : this(_colors[_nextColor], canvas.LineWidth, point, _rnd.NextDouble() * 8 - 4)
+            : this(_colors[_nextColor], canvas.LineWidth, point)
         {
             _nextColor = (_nextColor + 1) % _colors.Length;
             if (!canvas.ObjectColorAuto)
@@ -153,10 +155,14 @@ namespace Clowd.Drawing.Graphics
                 DrawObjectImpl(context, true);
         }
 
+        /// <summary>Color the body text is drawn in: near-black or white, whichever reads better on
+        /// the fill. Also used by the in-place editor so typing looks like the committed text.</summary>
+        internal virtual Color TextColor => RenderResources.GetContrastingText(ObjectColor);
+
         protected virtual void DrawObjectImpl(DrawingContext context, bool showText)
         {
             // NOTE: unlike WPF, the rotation transform is pushed by the callers (Draw/DrawObject), not here.
-            context.DrawRectangle(RenderResources.GetBrush(ObjectColor), null, UnrotatedBounds);
+            context.DrawRectangle(RenderResources.GetBrush(ObjectColor), null, UnrotatedBounds, NoteCornerRadius, NoteCornerRadius);
             if (showText)
             {
                 var form = CreateFormattedText();
@@ -192,11 +198,13 @@ namespace Clowd.Drawing.Graphics
 
             // PORT NOTE (Text cache): shaping is the expensive step and Normalize()+Draw both call
             // this per keystroke — cache the FormattedText in RenderCache keyed by the full shaping
-            // input (the effective text incl. the editing suffix, plus the font 5-tuple). Normalize
-            // and Draw thus share the ONE instance, so their measurements are identical by
-            // construction. The key guards correctness even for aspects not cleared by the map
-            // (e.g. transient Editing toggles); the Text aspect clear is the fast common path.
-            var key = (txt, FontName, FontSize, FontStyle, FontWeight, FontStretch);
+            // input (the effective text incl. the editing suffix, the font 5-tuple and the text
+            // color). Normalize and Draw thus share the ONE instance, so their measurements are
+            // identical by construction. The key guards correctness even for aspects not cleared by
+            // the map (e.g. transient Editing toggles, or an ObjectColor change flipping the text
+            // color); the Text aspect clear is the fast common path.
+            var textColor = TextColor;
+            var key = (txt, FontName, FontSize, FontStyle, FontWeight, FontStretch, textColor);
             if (RenderCache.Text is { } cached && key.Equals(RenderCache.TextKey))
                 return cached;
 
@@ -207,7 +215,7 @@ namespace Clowd.Drawing.Graphics
                 FlowDirection.LeftToRight,
                 new Typeface(FontUtil.CreateSafe(FontName), FontStyle, FontWeight, FontStretch),
                 FontSize,
-                RenderResources.GetBrush(Color.FromArgb(255, 0, 0, 0)));
+                RenderResources.GetBrush(textColor));
             RenderCache.Text = form;
             RenderCache.TextKey = key;
             return form;

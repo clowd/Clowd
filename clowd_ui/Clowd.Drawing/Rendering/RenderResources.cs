@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
@@ -65,21 +66,51 @@ namespace Clowd.Drawing.Rendering
         /// <summary>
         /// The cap default matches Pen/ImmutablePen (flat) so existing callers are unaffected;
         /// line-shaped ink (line/arrow/pencil) passes Round, and the matching BOUNDS pen must pass
-        /// the same cap — round caps extend half the stroke width past each endpoint.
+        /// the same cap — round caps extend half the stroke width past each endpoint. The join
+        /// defaults to Miter for the same reason; the arrow head passes Round to soften its corners.
         /// </summary>
         public static ImmutablePen GetPen(Color color, double thickness, ImmutableDashStyle dashStyle = null,
-                                          PenLineCap lineCap = PenLineCap.Flat)
+                                          PenLineCap lineCap = PenLineCap.Flat, PenLineJoin lineJoin = PenLineJoin.Miter)
         {
-            var key = new PenKey(color.ToUInt32(), thickness, dashStyle, lineCap);
+            var key = new PenKey(color.ToUInt32(), thickness, dashStyle, lineCap, lineJoin);
             if (_pens.TryGetValue(key, out var pen))
                 return pen;
 
             if (_pens.Count >= SoftCap)
                 _pens.Clear();
 
-            return _pens.GetOrAdd(key, static k => new ImmutablePen(GetBrush(Color.FromUInt32(k.Color)), k.Thickness, k.Dash, k.Cap));
+            return _pens.GetOrAdd(key, static k => new ImmutablePen(GetBrush(Color.FromUInt32(k.Color)), k.Thickness, k.Dash, k.Cap, k.Join));
         }
 
-        private readonly record struct PenKey(uint Color, double Thickness, ImmutableDashStyle Dash, PenLineCap Cap);
+        private static readonly Color DarkText = Color.FromRgb(0x1F, 0x1F, 0x1F);
+
+        // fills darker than this get white text: keeps white on red/blue/green (L≈0.2–0.35) and
+        // switches to dark on orange/yellow/pastels (L≳0.45)
+        private const double WhiteTextMaxLuminance = 0.4;
+
+        /// <summary>
+        /// Near-black or white, whichever reads better on <paramref name="background"/> — for
+        /// text drawn on an object-colored fill (notes, step badges, measure labels), where the
+        /// user picks the fill. Judged on WCAG relative luminance, but biased toward white: the
+        /// pure contrast-ratio crossover (~0.18) puts dark text on saturated mid tones such as a
+        /// stock blue or green, where white is what reads as intended. Translucent fills are judged
+        /// as if over white, which is what most screenshots are.
+        /// </summary>
+        public static Color GetContrastingText(Color background)
+        {
+            static double Channel(byte v, byte a)
+            {
+                var c = (v * a + 255 * (255 - a)) / (255.0 * 255.0); // composite over white
+                return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+            }
+
+            var l = 0.2126 * Channel(background.R, background.A)
+                    + 0.7152 * Channel(background.G, background.A)
+                    + 0.0722 * Channel(background.B, background.A);
+
+            return l < WhiteTextMaxLuminance ? Colors.White : DarkText;
+        }
+
+        private readonly record struct PenKey(uint Color, double Thickness, ImmutableDashStyle Dash, PenLineCap Cap, PenLineJoin Join);
     }
 }

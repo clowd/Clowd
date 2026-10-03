@@ -8,25 +8,26 @@ using Clowd.Drawing.Rendering;
 namespace Clowd.Drawing.Graphics
 {
     /// <summary>
-    /// A dimension line: the inherited line stroked in the object color, capped with perpendicular
-    /// ticks at both ends, plus a fixed-size label pill at the midpoint reading the length in canvas
-    /// pixels and the angle from horizontal. Adds no persisted field — the endpoints ARE the state,
-    /// everything drawn is derived from them.
+    /// A dimension line: the inherited line stroked in the object color with round caps, capped with
+    /// perpendicular ticks at both ends, plus a fixed-size capsule label at the midpoint — slightly
+    /// translucent white with a faint 1px outline and black text — reading the length in canvas pixels and the angle from horizontal. Adds no
+    /// persisted field — the endpoints ARE the state, everything drawn is derived from them.
     /// </summary>
     [GraphicDesc("Measure", Skills = Skill.Stroke | Skill.Color)]
     public class GraphicMeasure : GraphicLine
     {
         // the label is a readout, not ink: it stays legible at any stroke weight, so its font,
         // padding and corner radius are constants and never scale with LineWidth.
-        private const string LabelFontName = "Segoe UI";
-        private const double LabelFontSize = 11;
-        private const double LabelPaddingX = 5;
-        private const double LabelPaddingY = 2;
-        private const double LabelCornerRadius = 4;
-        private const double LabelGap = 4;
+        private const string LabelFontName = EditorFonts.Text;
+        private const double LabelFontSize = 12;
+        private const double LabelPaddingX = 8;
+        private const double LabelPaddingY = 3;
+        private const double LabelGap = 5;
 
-        private static readonly Color LabelBackColor = Color.FromArgb(0xCC, 0, 0, 0);
-        private static readonly Color LabelTextColor = Colors.White;
+        private static readonly Color LabelBackColor = Color.FromArgb(0xE0, 0xFF, 0xFF, 0xFF);
+        private static readonly Color LabelBorderColor = Color.FromArgb(0x40, 0, 0, 0);
+        private static readonly Color LabelTextColor = Colors.Black;
+        private const double LabelBorderWidth = 1;
 
         protected GraphicMeasure()
         { }
@@ -59,7 +60,7 @@ namespace Clowd.Drawing.Graphics
         // pill is an unstroked fill and the ticks are an open figure; see GraphicArrow decision #26).
         protected override Rect ComputeBounds()
         {
-            var pen = RenderResources.GetPen(default, LineWidth);
+            var pen = RenderResources.GetPen(default, LineWidth, lineCap: PenLineCap.Round);
             var bounds = GetLineGeometry().GetRenderBounds(pen).Union(GetTickGeometry().GetRenderBounds(pen));
             ComputeLabel(out _, out var pill);
             return bounds.Union(pill);
@@ -67,12 +68,16 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawObject(DrawingContext ctx)
         {
-            var pen = RenderResources.GetPen(ObjectColor, LineWidth);
+            var pen = RenderResources.GetPen(ObjectColor, LineWidth, lineCap: PenLineCap.Round);
             ctx.DrawLine(pen, LineStart, LineEnd);
             ctx.DrawGeometry(null, pen, GetTickGeometry());
 
             ComputeLabel(out var text, out var pill);
-            ctx.DrawRectangle(RenderResources.GetBrush(LabelBackColor), null, pill, LabelCornerRadius, LabelCornerRadius);
+            // the outline is inset half its width so it stays inside the pill (and the bounds)
+            var outline = pill.Deflate(LabelBorderWidth / 2);
+            var radius = outline.Height / 2; // a capsule
+            ctx.DrawRectangle(RenderResources.GetBrush(LabelBackColor), RenderResources.GetPen(LabelBorderColor, LabelBorderWidth),
+                              outline, radius, radius);
             ctx.DrawText(text, new Point(pill.X + LabelPaddingX, pill.Y + LabelPaddingY));
         }
 
@@ -156,8 +161,9 @@ namespace Clowd.Drawing.Graphics
         }
 
         // The FormattedText (RenderCache.Text) is keyed on the label string alone — the font 5-tuple
-        // is constant for this type, so the string is the whole shaping input. ComputeBounds fills
-        // this slot too, which is a permitted sidecar write; it must never raise PropertyChanged.
+        // and colors are constant for this type, so the string is the whole shaping input.
+        // ComputeBounds fills this slot too, which is a permitted sidecar write; it must never raise
+        // PropertyChanged.
         private FormattedText GetLabelText(string label)
         {
             if (RenderCache.Text is { } cached && string.Equals(label, RenderCache.TextKey as string, StringComparison.Ordinal))
@@ -167,7 +173,7 @@ namespace Clowd.Drawing.Graphics
                 label,
                 CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
-                new Typeface(new FontFamily(LabelFontName)),
+                new Typeface(FontUtil.CreateSafe(LabelFontName), FontStyle.Normal, FontWeight.SemiBold),
                 LabelFontSize,
                 RenderResources.GetBrush(LabelTextColor));
 

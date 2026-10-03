@@ -88,20 +88,35 @@ namespace Clowd.Drawing.Tools
             _txtBox.Tag = graphicsText;
             _txtBox.AcceptsReturn = true;
 
-            var finalTransform = new TransformGroup();
-            finalTransform.Children.Add(new TranslateTransform(GraphicText.TextPadding + TEXTBOX_ALIGN_X, GraphicText.TextPadding));
-            finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2,
-                (graphicsText.Bottom - graphicsText.Top) / 2));
-            _txtBox.RenderTransform = finalTransform;
-            // decision #15: Avalonia defaults to center; WPF rotated around the top-left implicitly
-            _txtBox.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
+            // type in the color the committed text will be drawn in (it contrasts with the fill)
+            var textBrush = new SolidColorBrush(graphicsText.TextColor);
+            _txtBox.Foreground = textBrush;
+            _txtBox.CaretBrush = textBrush;
 
             _oldText = newGraphic ? "" : graphicsText.Body;
 
             drawingCanvas.Children.Add(_txtBox);
 
-            Canvas.SetLeft(_txtBox, graphicsText.Left);
-            Canvas.SetTop(_txtBox, graphicsText.Top);
+            if (graphicsText is GraphicCount count)
+            {
+                // a step badge centers its number and re-centers itself as it grows, so the editor
+                // spans the badge, centers its text, and follows the badge on every keystroke
+                _txtBox.TextAlignment = TextAlignment.Center;
+                PlaceOverBadge(count);
+            }
+            else
+            {
+                var finalTransform = new TransformGroup();
+                finalTransform.Children.Add(new TranslateTransform(GraphicText.TextPadding + TEXTBOX_ALIGN_X, GraphicText.TextPadding));
+                finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2,
+                    (graphicsText.Bottom - graphicsText.Top) / 2));
+                _txtBox.RenderTransform = finalTransform;
+                // decision #15: Avalonia defaults to center; WPF rotated around the top-left implicitly
+                _txtBox.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
+
+                Canvas.SetLeft(_txtBox, graphicsText.Left);
+                Canvas.SetTop(_txtBox, graphicsText.Top);
+            }
 
             Dispatcher.UIThread.Post(() =>
             {
@@ -141,6 +156,8 @@ namespace Clowd.Drawing.Tools
             _txtBox.TextChanged += (sender, e) =>
             {
                 graphicsText.Body = ((TextBox)sender).Text ?? "";
+                if (graphicsText is GraphicCount badge && ReferenceEquals(sender, _txtBox))
+                    PlaceOverBadge(badge);
             };
 
             // Notes:
@@ -156,6 +173,14 @@ namespace Clowd.Drawing.Tools
             // showing context menu.
             _txtBox.ContextFlyout = null;
             _txtBox.ContextMenu = null;
+        }
+
+        private void PlaceOverBadge(GraphicCount count)
+        {
+            var bounds = count.BadgeRect;
+            _txtBox.Width = bounds.Width;
+            Canvas.SetLeft(_txtBox, bounds.Left);
+            Canvas.SetTop(_txtBox, count.TextRect.Top);
         }
 
         public override void AbortOperation(DrawingCanvas canvas)

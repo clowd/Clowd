@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using Avalonia.Media;
 
 namespace Clowd.Drawing
@@ -12,6 +15,20 @@ namespace Clowd.Drawing
     /// </summary>
     public static class FontUtil
     {
+        // plain family name → font source (e.g. "Cascadia Mono" → "avares://…/Fonts#Cascadia Mono")
+        private static readonly ConcurrentDictionary<string, string> _embedded =
+            new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Makes a font the app embeds addressable by its plain family name. Persisted documents and
+        /// tool settings store only the plain name, so they stay readable (and fall back to the system
+        /// font of that name, or the default) wherever the embedding host is absent, e.g. in tests.
+        /// </summary>
+        public static void RegisterEmbeddedFamily(string familyName, string source) => _embedded[familyName] = source;
+
+        /// <summary>Plain names of every registered embedded family, for font pickers.</summary>
+        public static IEnumerable<string> EmbeddedFamilyNames => _embedded.Keys;
+
         /// <summary>Whether <paramref name="familyName"/> survives the same parse the renderer
         /// will run. False for names that would throw mid-render (a missing font is fine — the
         /// renderer substitutes the default typeface for those).</summary>
@@ -19,6 +36,9 @@ namespace Clowd.Drawing
         {
             if (string.IsNullOrWhiteSpace(familyName))
                 return false;
+
+            if (_embedded.ContainsKey(familyName))
+                return true;
 
             try
             {
@@ -36,6 +56,8 @@ namespace Clowd.Drawing
         public static FontFamily CreateSafe(string familyName)
         {
             var trimmed = familyName?.Trim();
+            if (trimmed != null && _embedded.TryGetValue(trimmed, out var source))
+                return FontFamily.Parse(source);
             return IsSafeFamilyName(trimmed) ? new FontFamily(trimmed) : FontFamily.Default;
         }
     }

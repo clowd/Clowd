@@ -63,8 +63,9 @@ namespace Clowd.Drawing.Tests
             var g = Make(0, 0, 100, 0);
             var bounds = g.Bounds;
 
-            // ticks: 8px total (4 x LineWidth clamped up to the 8px floor) centered on each endpoint
-            Assert.Equal(4, bounds.Bottom, 6);
+            // ticks: 8px total (4 x LineWidth clamped up to the 8px floor) centered on each endpoint,
+            // plus the round cap's half stroke past the tick end
+            Assert.Equal(5, bounds.Bottom, 6);
             // the shaft's own render bounds only reach ±1 (half the 2px stroke)
             Assert.Equal(-1, bounds.Left, 6);
             Assert.Equal(101, bounds.Right, 6);
@@ -78,9 +79,9 @@ namespace Clowd.Drawing.Tests
         [InlineData(8, 8)] // clamps down to the 16px ceiling -> ±8
         public void TickLength_TracksStrokeWidth_WithinItsClamp(double lineWidth, double expectedHalfTick)
         {
-            // a horizontal line's flat caps add nothing vertically, so the bottom edge IS the tick reach
+            // the bottom edge is the tick reach plus the round cap's half stroke past the tick end
             var bounds = Make(0, 0, 100, 0, lineWidth).Bounds;
-            Assert.Equal(expectedHalfTick, bounds.Bottom, 6);
+            Assert.Equal(expectedHalfTick + lineWidth / 2, bounds.Bottom, 6);
         }
 
         [AvaloniaFact]

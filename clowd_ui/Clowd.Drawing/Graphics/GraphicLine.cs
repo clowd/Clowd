@@ -55,7 +55,7 @@ namespace Clowd.Drawing.Graphics
 
         // segments used to walk the curve when converting between arc length and the bezier
         // parameter (only runs when the cached geometries are refilled, never per pointer event)
-        protected const int CurveSampleCount = 32;
+        internal const int CurveSampleCount = 32;
 
         protected GraphicLine()
         { }
@@ -219,7 +219,7 @@ namespace Clowd.Drawing.Graphics
             return true;
         }
 
-        protected static Geometry BuildQuadratic(Point start, Point control, Point end)
+        internal static Geometry BuildQuadratic(Point start, Point control, Point end)
         {
             var geometry = new StreamGeometry();
             using (var gctx = geometry.Open())
@@ -233,7 +233,7 @@ namespace Clowd.Drawing.Graphics
         }
 
         /// <summary>Bezier parameter at <paramref name="length"/> along the sampled polyline.</summary>
-        protected static double ParameterAtLength(ReadOnlySpan<double> cumulative, double length)
+        internal static double ParameterAtLength(ReadOnlySpan<double> cumulative, double length)
         {
             int segments = cumulative.Length - 1;
             for (int i = 1; i <= segments; i++)
@@ -249,7 +249,7 @@ namespace Clowd.Drawing.Graphics
             return 1;
         }
 
-        protected static Point EvalQuadratic(Point start, Point control, Point end, double t)
+        internal static Point EvalQuadratic(Point start, Point control, Point end, double t)
         {
             var mt = 1 - t;
             var a = mt * mt;
@@ -259,10 +259,10 @@ namespace Clowd.Drawing.Graphics
                              a * start.Y + b * control.Y + c * end.Y);
         }
 
-        protected static Point Lerp(Point from, Point to, double t) =>
+        internal static Point Lerp(Point from, Point to, double t) =>
             new Point(from.X + (to.X - from.X) * t, from.Y + (to.Y - from.Y) * t);
 
-        protected static double Distance(Point a, Point b)
+        internal static double Distance(Point a, Point b)
         {
             var dx = b.X - a.X;
             var dy = b.Y - a.Y;

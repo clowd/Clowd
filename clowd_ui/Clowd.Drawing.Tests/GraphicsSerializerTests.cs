@@ -144,10 +144,11 @@ namespace Clowd.Drawing.Tests
         [AvaloniaFact]
         public void Count_RoundTrips()
         {
-            var g = new GraphicCount(Colors.Red, 2, new Point(10, 10), "7");
+            var g = new GraphicCount(Colors.Red, 2, new Point(10, 10), "7") { ArrowOffset = new Point(60, -25) };
             var r = RoundTrip(g);
             AssertRectangleState(g, r);
             Assert.Equal("7", r.Body);
+            Assert.Equal(new Point(60, -25), r.ArrowOffset);
         }
 
         [AvaloniaFact]
