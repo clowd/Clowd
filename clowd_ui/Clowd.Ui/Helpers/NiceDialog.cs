@@ -134,6 +134,14 @@ namespace Clowd.UI.Helpers
             return result == true ? dialog.SelectedFont : null;
         }
 
+        /// <summary>Picks a font face alone (no size or style); null when cancelled.</summary>
+        public static async Task<string> ShowFontFamilyDialogAsync(Visual parent, string family)
+        {
+            var dialog = new FontDialog(family, familyOnly: true);
+            var result = await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.SelectedFont != null);
+            return result == true ? dialog.SelectedFont.TextFontFamilyName : null;
+        }
+
         public class SelectedFont
         {
             public string TextFontFamilyName { get; init; }

@@ -709,7 +709,8 @@ namespace Clowd.UI
                 Key.M => ToolType.Measure,
                 Key.P => ToolType.PolyLine,
                 Key.T => ToolType.Text,
-                Key.N => ToolType.Count,
+                Key.N => ToolType.StickyNote,
+                Key.C => ToolType.Count,
                 Key.O => ToolType.Pixelate,
                 _ => null,
             };
@@ -772,8 +773,9 @@ namespace Clowd.UI
             new ToolRegistryEntry { Tool = ToolType.Arrow, DisplayName = "Arrow", IconKey = "IconToolArrow", Tooltip = "Arrow (A)" },
             new ToolRegistryEntry { Tool = ToolType.Measure, DisplayName = "Measure", IconKey = "IconToolMeasure", Tooltip = "Measure (M)" },
             new ToolRegistryEntry { Tool = ToolType.PolyLine, DisplayName = "Pencil", IconKey = "IconToolPolyLine", Tooltip = "Pencil (P)" },
-            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", IconKey = "IconToolNumericCount", Tooltip = "Numerical Step Count (N)", IconClasses = "tight" },
+            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", IconKey = "IconToolNumericCount", Tooltip = "Step Count (C)", IconClasses = "tight" },
             new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", IconKey = "IconToolText", Tooltip = "Text (T)", IconClasses = "tight" },
+            new ToolRegistryEntry { Tool = ToolType.StickyNote, DisplayName = "Sticky Note", IconKey = "IconToolStickyNote", Tooltip = "Sticky Note (N)", IconClasses = "tight" },
             new ToolRegistryEntry { Tool = ToolType.Pixelate, DisplayName = "Obscure", IconKey = "IconToolPixelate", Tooltip = "Obscure (O)" },
         };
 
@@ -1486,6 +1488,11 @@ namespace Clowd.UI
             OpenObjectColorPicker();
         }
 
+        private void objectFill_Click(object sender, PointerPressedEventArgs e)
+        {
+            OpenObjectFillPicker();
+        }
+
         private void backgroundColor_Click(object sender, PointerPressedEventArgs e)
         {
             OpenBackgroundColorPicker();
@@ -1503,6 +1510,15 @@ namespace Clowd.UI
             OpenObjectColorPicker();
         }
 
+        private void objectFill_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            e.Handled = true;
+            OpenObjectFillPicker();
+        }
+
         private void backgroundColor_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key != Key.Enter)
@@ -1517,6 +1533,14 @@ namespace Clowd.UI
             _colorSwatchToRefocus = objectColorSwatch;
             miniColorPopup.PlacementTarget = objectColorSwatch;
             miniColor.Reset(drawingCanvas.ObjectColor, (c) => drawingCanvas.ObjectColor = c);
+            miniColorPopup.IsOpen = true;
+        }
+
+        private void OpenObjectFillPicker()
+        {
+            _colorSwatchToRefocus = objectFillSwatch;
+            miniColorPopup.PlacementTarget = objectFillSwatch;
+            miniColor.Reset(drawingCanvas.ObjectFill, (c) => drawingCanvas.ObjectFill = c);
             miniColorPopup.IsOpen = true;
         }
 
@@ -1543,6 +1567,14 @@ namespace Clowd.UI
                 drawingCanvas.TextFontStyle = result.TextFontStyle;
                 drawingCanvas.TextFontWeight = result.TextFontWeight;
             }
+        }
+
+        // sticky notes size and weight their own text, so only the face is theirs to pick
+        private async void fontFamily_Click(object sender, RoutedEventArgs e)
+        {
+            var family = await NiceDialog.ShowFontFamilyDialogAsync(this, drawingCanvas.TextFontFamilyName);
+            if (family != null)
+                drawingCanvas.TextFontFamilyName = family;
         }
     }
 }

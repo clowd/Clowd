@@ -21,6 +21,7 @@ namespace Clowd.Config
             ToolType.PolyLine,
             ToolType.Count,
             ToolType.Text,
+            ToolType.StickyNote,
             ToolType.Pixelate,
         };
 

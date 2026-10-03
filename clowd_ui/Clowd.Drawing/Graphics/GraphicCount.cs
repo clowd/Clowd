@@ -26,7 +26,7 @@ namespace Clowd.Drawing.Graphics
     /// Cache slots: Geometry = badge outline (hit-testing and the "inside the badge" tests),
     /// SecondaryGeometry = arrow head, TertiaryGeometry = arrow shaft. Text = the number.
     /// </summary>
-    [GraphicDesc("Numeric Step", Skills = Skill.Stroke | Skill.Color | Skill.Font)]
+    [GraphicDesc("Step Count", Skills = Skill.Stroke | Skill.Color | Skill.Font)]
     public class GraphicCount : GraphicText
     {
         /// <summary>The arrow tip (or, with no arrow, the rim point an arrow is pulled out from).</summary>
@@ -95,6 +95,12 @@ namespace Clowd.Drawing.Graphics
         internal bool HasArrow => _arrowOffset != default;
 
         internal Point ArrowTip => Center + new Vector(_arrowOffset.X, _arrowOffset.Y);
+
+        // the badge always casts its shadow, whatever the ring color
+        internal override bool HasShadowSurface => true;
+
+        // the color swatch edits the ring, not the number
+        internal override string ColorPropertyName => nameof(ObjectColor);
 
         // the number is always black on the white badge, whatever the ring color
         internal override Color TextColor => Colors.Black;

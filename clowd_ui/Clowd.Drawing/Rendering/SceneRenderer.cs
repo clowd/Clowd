@@ -71,11 +71,11 @@ namespace Clowd.Drawing.Rendering
                 if (g.Hidden)
                     continue; // hidden graphics neither render nor export, and their shadow is not blitted
 
-                // while a text graphic is being edited the screen pass hides its text (pastel rect
-                // only) but the sprite was baked from the committed text — blitting it would show
+                // while a text graphic is being edited the screen pass hides its text, but a sprite
+                // cast by the text (ShadowIncludesText) was baked from the committed text — blitting it would show
                 // a ghost shadow of the OLD body. Skip on the chrome (screen) path only; export
                 // draws the full text, and undo/commit resets Editing.
-                bool hideEditingTextShadow = o.DrawChrome && g is GraphicText { Editing: true };
+                bool hideEditingTextShadow = o.DrawChrome && g is GraphicText { Editing: true, ShadowIncludesText: true };
 
                 if (!hideEditingTextShadow && g.DropShadowEffect && shadows != null && shadows.TryGet(g, out var sprite))
                     ctx.DrawImage(sprite.Bitmap, sprite.GetDestRect(g)); // canvas-space blit under the ink

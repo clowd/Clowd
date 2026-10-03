@@ -82,21 +82,9 @@ namespace Clowd.Drawing.Rendering
             return _pens.GetOrAdd(key, static k => new ImmutablePen(GetBrush(Color.FromUInt32(k.Color)), k.Thickness, k.Dash, k.Cap, k.Join));
         }
 
-        private static readonly Color DarkText = Color.FromRgb(0x1F, 0x1F, 0x1F);
-
-        // fills darker than this get white text: keeps white on red/blue/green (L≈0.2–0.35) and
-        // switches to dark on orange/yellow/pastels (L≳0.45)
-        private const double WhiteTextMaxLuminance = 0.4;
-
-        /// <summary>
-        /// Near-black or white, whichever reads better on <paramref name="background"/> — for
-        /// text drawn on an object-colored fill (notes, step badges, measure labels), where the
-        /// user picks the fill. Judged on WCAG relative luminance, but biased toward white: the
-        /// pure contrast-ratio crossover (~0.18) puts dark text on saturated mid tones such as a
-        /// stock blue or green, where white is what reads as intended. Translucent fills are judged
-        /// as if over white, which is what most screenshots are.
-        /// </summary>
-        public static Color GetContrastingText(Color background)
+        /// <summary>WCAG relative luminance (0 black – 1 white); translucent colors are judged
+        /// as if over white.</summary>
+        public static double GetLuminance(Color color)
         {
             static double Channel(byte v, byte a)
             {
@@ -104,11 +92,17 @@ namespace Clowd.Drawing.Rendering
                 return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
             }
 
-            var l = 0.2126 * Channel(background.R, background.A)
-                    + 0.7152 * Channel(background.G, background.A)
-                    + 0.0722 * Channel(background.B, background.A);
+            return 0.2126 * Channel(color.R, color.A)
+                   + 0.7152 * Channel(color.G, color.A)
+                   + 0.0722 * Channel(color.B, color.A);
+        }
 
-            return l < WhiteTextMaxLuminance ? Colors.White : DarkText;
+        /// <summary>WCAG contrast ratio between two colors, 1 (none) to 21 (black on white).</summary>
+        public static double GetContrastRatio(Color a, Color b)
+        {
+            var la = GetLuminance(a);
+            var lb = GetLuminance(b);
+            return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
         }
 
         private readonly record struct PenKey(uint Color, double Thickness, ImmutableDashStyle Dash, PenLineCap Cap, PenLineJoin Join);

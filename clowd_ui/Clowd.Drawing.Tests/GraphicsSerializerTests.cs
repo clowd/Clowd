@@ -142,6 +142,19 @@ namespace Clowd.Drawing.Tests
         }
 
         [AvaloniaFact]
+        public void StickyNote_RoundTrips()
+        {
+            var g = new GraphicStickyNote(Colors.Pink, new Point(50, 60), 1.5, 3, "Arial", "Ship it") { Editing = true };
+            var r = RoundTrip(g);
+            AssertRectangleState(g, r);
+            Assert.Equal(g.Body, r.Body);
+            Assert.Equal(1.5, r.Scale);
+            Assert.Equal(3, r.LiftStyle);
+            Assert.Equal("Arial", r.FontName);
+            Assert.False(r.Editing);
+        }
+
+        [AvaloniaFact]
         public void Count_RoundTrips()
         {
             var g = new GraphicCount(Colors.Red, 2, new Point(10, 10), "7") { ArrowOffset = new Point(60, -25) };
@@ -256,7 +269,7 @@ namespace Clowd.Drawing.Tests
             {
                 "GraphicArrow", "GraphicCount", "GraphicEllipse", "GraphicFilledRectangle",
                 "GraphicImage", "GraphicLine", "GraphicMeasure", "GraphicPolyLine", "GraphicRectangle",
-                "GraphicText",
+                "GraphicStickyNote", "GraphicText",
             }, concrete);
         }
     }

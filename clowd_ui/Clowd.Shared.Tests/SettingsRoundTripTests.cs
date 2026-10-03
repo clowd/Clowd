@@ -78,7 +78,7 @@ namespace Clowd.Shared.Tests
             // Tools dictionary entry (enum key) with Color + font enums
             var tool = original.Editor.GetToolSettings(ToolType.Text);
             tool.ObjectColor = Colors.Lime;
-            tool.AutoColor = false;
+            tool.Scale = 1.7;
             tool.LineWidth = 7.5;
             tool.FontWeight = FontWeight.Bold;
             tool.FontStyle = FontStyle.Italic;
@@ -118,7 +118,7 @@ namespace Clowd.Shared.Tests
 
             var loadedTool = Assert.Contains(ToolType.Text, (System.Collections.Generic.IDictionary<ToolType, SavedToolSettings>)loaded.Editor.Tools);
             Assert.Equal(Colors.Lime, loadedTool.ObjectColor);
-            Assert.False(loadedTool.AutoColor);
+            Assert.Equal(1.7, loadedTool.Scale);
             Assert.Equal(7.5, loadedTool.LineWidth);
             Assert.Equal(FontWeight.Bold, loadedTool.FontWeight);
             Assert.Equal(FontStyle.Italic, loadedTool.FontStyle);

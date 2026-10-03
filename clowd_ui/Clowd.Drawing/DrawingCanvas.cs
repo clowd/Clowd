@@ -45,8 +45,11 @@ namespace Clowd.Drawing
         public static readonly StyledProperty<double> ObjectAngleProperty =
             AvaloniaProperty.Register<DrawingCanvas, double>(nameof(ObjectAngle), defaultBindingMode: BindingMode.TwoWay);
 
-        public static readonly StyledProperty<bool> ObjectColorAutoProperty =
-            AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(ObjectColorAuto), defaultBindingMode: BindingMode.TwoWay);
+        public static readonly StyledProperty<Color> ObjectFillProperty =
+            AvaloniaProperty.Register<DrawingCanvas, Color>(nameof(ObjectFill), defaultBindingMode: BindingMode.TwoWay);
+
+        public static readonly StyledProperty<double> ObjectScaleProperty =
+            AvaloniaProperty.Register<DrawingCanvas, double>(nameof(ObjectScale), 1d, defaultBindingMode: BindingMode.TwoWay);
 
         public static readonly StyledProperty<bool> ObjectCursorVisibleProperty =
             AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(ObjectCursorVisible), defaultBindingMode: BindingMode.TwoWay);
@@ -138,10 +141,16 @@ namespace Clowd.Drawing
             set => SetValue(ObjectAngleProperty, value);
         }
 
-        public bool ObjectColorAuto
+        public Color ObjectFill
         {
-            get => GetValue(ObjectColorAutoProperty);
-            set => SetValue(ObjectColorAutoProperty, value);
+            get => GetValue(ObjectFillProperty);
+            set => SetValue(ObjectFillProperty, value);
+        }
+
+        public double ObjectScale
+        {
+            get => GetValue(ObjectScaleProperty);
+            set => SetValue(ObjectScaleProperty, value);
         }
 
         public bool ObjectCursorVisible
@@ -468,8 +477,9 @@ namespace Clowd.Drawing
             _toolStore[ToolType.Line] = new ToolDesc("Line", toolLine, ObjectType: typeof(GraphicLine));
             _toolStore[ToolType.Arrow] = new ToolDesc("Arrow", toolArrow, ObjectType: typeof(GraphicArrow));
             _toolStore[ToolType.PolyLine] = new ToolDesc("Pencil", new ToolPolyLine(), ObjectType: typeof(GraphicPolyLine));
-            _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText), Skills: Skill.AutoColor);
-            _toolStore[ToolType.Count] = new ToolDesc("Numeric Step", new ToolCount(), ObjectType: typeof(GraphicCount));
+            _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText));
+            _toolStore[ToolType.StickyNote] = new ToolDesc("Sticky Note", new ToolStickyNote(), ObjectType: typeof(GraphicStickyNote));
+            _toolStore[ToolType.Count] = new ToolDesc("Step Count", new ToolCount(), ObjectType: typeof(GraphicCount));
             _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate(), Skills: Skill.BlurRadius | Skill.ObscureMode);
             _toolStore[ToolType.Measure] = new ToolDesc("Measure", toolMeasure, ObjectType: typeof(GraphicMeasure));
 
@@ -1289,14 +1299,16 @@ namespace Clowd.Drawing
                         }
                     }
 
-                    AddSettingBinding(Skill.AutoColor, ObjectColorAutoProperty, nameof(SavedToolSettings.AutoColor));
                     AddSettingBinding(Skill.Color, ObjectColorProperty, nameof(SavedToolSettings.ObjectColor));
+                    AddSettingBinding(Skill.Fill, ObjectFillProperty, nameof(SavedToolSettings.FillColor));
                     AddSettingBinding(Skill.Stroke, LineWidthProperty, nameof(SavedToolSettings.LineWidth));
                     AddSettingBinding(Skill.Font, TextFontFamilyNameProperty, nameof(SavedToolSettings.FontFamily));
                     AddSettingBinding(Skill.Font, TextFontWeightProperty, nameof(SavedToolSettings.FontWeight));
                     AddSettingBinding(Skill.Font, TextFontStretchProperty, nameof(SavedToolSettings.FontStretch));
                     AddSettingBinding(Skill.Font, TextFontSizeProperty, nameof(SavedToolSettings.FontSize));
                     AddSettingBinding(Skill.Font, TextFontStyleProperty, nameof(SavedToolSettings.FontStyle));
+                    AddSettingBinding(Skill.FontFamily, TextFontFamilyNameProperty, nameof(SavedToolSettings.FontFamily));
+                    AddSettingBinding(Skill.Scale, ObjectScaleProperty, nameof(SavedToolSettings.Scale));
                     AddSettingBinding(Skill.BlurRadius, BlurRadiusProperty, nameof(SavedToolSettings.BlurRadius));
                     AddSettingBinding(Skill.Radius, CornerRadiusProperty, nameof(SavedToolSettings.CornerRadius));
                     AddSettingBinding(Skill.DashStyle, DashStyleProperty, nameof(SavedToolSettings.DashStyle));
@@ -1326,7 +1338,8 @@ namespace Clowd.Drawing
                         }
                     }
 
-                    AddObjectBinding<GraphicBase>(Skill.Color, ObjectColorProperty, x => nameof(x.ObjectColor));
+                    AddObjectBinding<GraphicBase>(Skill.Color, ObjectColorProperty, x => x.ColorPropertyName);
+                    AddObjectBinding<GraphicText>(Skill.Fill, ObjectFillProperty, x => nameof(x.ObjectColor));
                     AddObjectBinding<GraphicBase>(Skill.Stroke, LineWidthProperty, x => nameof(x.LineWidth));
                     AddObjectBinding<GraphicRectangle>(Skill.Angle, ObjectAngleProperty, x => nameof(x.Angle));
                     AddObjectBinding<GraphicRectangle>(Skill.Radius, CornerRadiusProperty, x => nameof(x.CornerRadius));
@@ -1336,6 +1349,8 @@ namespace Clowd.Drawing
                     AddObjectBinding<GraphicText>(Skill.Font, TextFontStretchProperty, x => nameof(x.FontStretch));
                     AddObjectBinding<GraphicText>(Skill.Font, TextFontSizeProperty, x => nameof(x.FontSize));
                     AddObjectBinding<GraphicText>(Skill.Font, TextFontStyleProperty, x => nameof(x.FontStyle));
+                    AddObjectBinding<GraphicText>(Skill.FontFamily, TextFontFamilyNameProperty, x => nameof(x.FontName));
+                    AddObjectBinding<GraphicStickyNote>(Skill.Scale, ObjectScaleProperty, x => nameof(x.Scale));
                     AddObjectBinding<GraphicImage>(Skill.Cursor, ObjectCursorVisibleProperty, x => nameof(x.CursorVisible));
 
                     if (_boundGraphicProps.Count > 0)

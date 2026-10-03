@@ -107,7 +107,7 @@ namespace Clowd.Drawing
             host.Draw = ctx =>
             {
                 using (ctx.PushTransform(transform))
-                    graphic.DrawObject(ctx);
+                    graphic.DrawShadowSilhouette(ctx);
             };
             host.Width = w;
             host.Height = h;

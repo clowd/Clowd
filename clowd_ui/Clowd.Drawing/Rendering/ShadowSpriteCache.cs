@@ -162,7 +162,7 @@ namespace Clowd.Drawing.Rendering
                 var g = graphics[i];
                 if (!g.DropShadowEffect)
                     continue;
-                if (g is GraphicText { Editing: true })
+                if (g is GraphicText { Editing: true, ShadowIncludesText: true })
                     continue; // never bake mid-edit text (SceneRenderer hides its shadow too); the Editing=false raise re-bakes at commit
                 if (_byId.TryGetValue(g.Id, out var sprite) && IsCurrent(sprite, g, bucket, isToolDragActive))
                     continue;

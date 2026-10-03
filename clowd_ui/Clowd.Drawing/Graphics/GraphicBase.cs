@@ -305,6 +305,14 @@ namespace Clowd.Drawing.Graphics
         internal virtual void DrawObject(DrawingContext ctx)
         { }
 
+        /// <summary>The property the property bar's color swatch edits.</summary>
+        internal virtual string ColorPropertyName => nameof(ObjectColor);
+
+        /// <summary>What casts the drop shadow, rasterized alone and blurred by
+        /// <see cref="ShadowRenderer"/>. The object itself, unless it draws soft shading of its own
+        /// that must not cast a second shadow.</summary>
+        internal virtual void DrawShadowSilhouette(DrawingContext ctx) => DrawObject(ctx);
+
         protected virtual void DrawDashedBorder(DrawingContext ctx, Rect rect, double lineWidth = 2)
         {
             ctx.DrawRectangle(null, RenderResources.GetPen(Color.FromArgb(127, 255, 255, 255), lineWidth), rect);

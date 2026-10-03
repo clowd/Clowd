@@ -16,5 +16,6 @@ namespace Clowd
         // members are persisted BY NAME (SettingsEditor.ToolbarOrder/HiddenTools), so new tools
         // append here — reordering would silently remap saved toolbar configurations.
         Measure,
+        StickyNote,
     };
 }

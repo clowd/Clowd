@@ -7,7 +7,6 @@ namespace Clowd.Drawing
     {
         None = 0,
         Color = 1 << 0,
-        AutoColor = 1 << 1,
         Stroke = 1 << 2,
         Font = 1 << 3,
         Angle = 1 << 4,
@@ -18,6 +17,15 @@ namespace Clowd.Drawing
         Radius = 1 << 9,
         DashStyle = 1 << 10,
         ObscureMode = 1 << 12,
+
+        /// <summary>The font face alone, for graphics that size their own text.</summary>
+        FontFamily = 1 << 13,
+
+        /// <summary>A uniform size multiplier (sticky notes).</summary>
+        Scale = 1 << 14,
+
+        /// <summary>A background fill color, separate from the (foreground) color.</summary>
+        Fill = 1 << 15,
     }
 
     /// <summary>

@@ -7,13 +7,67 @@ using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
-    [GraphicDesc("Text", Skills = Skill.Color | Skill.Font | Skill.Angle)]
+    /// <summary>
+    /// Free-form text: the body drawn in <see cref="Foreground"/> on an optional background fill,
+    /// the object color — transparent by default. (Sticky notes are <see cref="GraphicStickyNote"/>.)
+    ///
+    /// The object color is the fill, not the text color, because that is what it has always been:
+    /// text was once a note card filled with it, with black text. Documents saved then have no
+    /// foreground field and load with its black default, so they render exactly as they did.
+    /// </summary>
+    [GraphicDesc("Text", Skills = Skill.Color | Skill.Fill | Skill.Font | Skill.Angle)]
     public class GraphicText : GraphicRectangle
     {
+        /// <summary>Inset of the body from the bounds of text with a visible fill.</summary>
         public const int TextPadding = 15;
 
-        // notes are soft cards rather than square sticky-note slips
-        private const double NoteCornerRadius = 8;
+        /// <summary>Inset of the body from the bounds of text with no fill: just enough that the
+        /// selection border does not touch the glyphs.</summary>
+        public const int PlainTextPadding = 4;
+
+        /// <summary>The text color.</summary>
+        public Color Foreground
+        {
+            get => _foreground;
+            set
+            {
+                // as for ObjectColor: only the alpha feeds the shadow silhouette (the text casts it)
+                if (_foreground != value && _foreground.A != value.A)
+                    RenderCache.Clear(InvalidationAspects.Shadow);
+                Set(ref _foreground, value);
+            }
+        }
+
+        /// <summary>The background fill; fully transparent for none.</summary>
+        public override Color ObjectColor
+        {
+            get => base.ObjectColor;
+            set
+            {
+                // a visible fill gets the roomier padding, so showing or hiding it resizes the box
+                // (not during construction: the base sets the color before there is a body)
+                var hadFill = HasFill;
+                base.ObjectColor = value;
+                if (_body != null && HasFill != hadFill)
+                    Normalize();
+            }
+        }
+
+        internal bool HasFill => ObjectColor.A > 0;
+
+        /// <summary>Text casts a drop shadow only from a visible fill: a shadow under bare
+        /// letters on the page just looks smudged. (The fill's alpha toggling this re-bakes the
+        /// shadow by itself; see <see cref="GraphicBase.ObjectColor"/>.)</summary>
+        public override bool DropShadowEffect
+        {
+            get => base.DropShadowEffect && HasShadowSurface;
+            set => base.DropShadowEffect = value;
+        }
+
+        /// <summary>Whether there is something besides bare letters to cast the drop shadow.</summary>
+        internal virtual bool HasShadowSurface => HasFill;
+
+        internal override string ColorPropertyName => nameof(Foreground);
 
         public bool Editing
         {
@@ -64,24 +118,15 @@ namespace Clowd.Drawing.Graphics
         private FontWeight _fontWeight = FontWeight.Normal;
         private FontStretch _fontStretch = FontStretch.Normal;
         [Transient] private bool _editing; // not persisted by GraphicsSerializer
-
-        // auto-color notes cycle through soft pastels (butter, rose, mint, sky)
-        private static Color[] _colors = new Color[]
-        {
-            Color.FromRgb(0xFF, 0xF1, 0xB8), Color.FromRgb(0xFB, 0xD5, 0xE2), Color.FromRgb(0xCD, 0xEF, 0xDF), Color.FromRgb(0xD3, 0xE6, 0xFD),
-        };
-
-        private static int _nextColor = 0;
+        private Color _foreground = Colors.Black; // absent from documents saved before it existed
 
         protected GraphicText()
         { }
 
         public GraphicText(DrawingCanvas canvas, Point point)
-            : this(_colors[_nextColor], canvas.LineWidth, point)
+            : this(canvas.ObjectFill, canvas.LineWidth, point)
         {
-            _nextColor = (_nextColor + 1) % _colors.Length;
-            if (!canvas.ObjectColorAuto)
-                ObjectColor = canvas.ObjectColor;
+            Foreground = canvas.ObjectColor;
             FontName = canvas.TextFontFamilyName;
             FontSize = canvas.TextFontSize;
             FontStretch = canvas.TextFontStretch;
@@ -89,6 +134,8 @@ namespace Clowd.Drawing.Graphics
             FontWeight = canvas.TextFontWeight;
         }
 
+        /// <param name="objectColor">The background fill (transparent for none); the text is
+        /// <see cref="Foreground"/>, black unless set.</param>
         public GraphicText(Color objectColor, double lineWidth, Point point, double angle = 0, string body = null)
             : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)), angle)
         {
@@ -110,6 +157,7 @@ namespace Clowd.Drawing.Graphics
             map[nameof(FontStyle)] = text;
             map[nameof(FontWeight)] = text;
             map[nameof(FontStretch)] = text;
+            map[nameof(Foreground)] = InvalidationAspects.Text; // the setter clears Shadow itself when alpha changes
         }
 
         internal override int HandleCount => 1;
@@ -155,18 +203,26 @@ namespace Clowd.Drawing.Graphics
                 DrawObjectImpl(context, true);
         }
 
-        /// <summary>Color the body text is drawn in: near-black or white, whichever reads better on
-        /// the fill. Also used by the in-place editor so typing looks like the committed text.</summary>
-        internal virtual Color TextColor => RenderResources.GetContrastingText(ObjectColor);
+        /// <summary>Color the body text is drawn in. Also used by the in-place editor so typing
+        /// looks like the committed text.</summary>
+        internal virtual Color TextColor => Foreground;
+
+        /// <summary>Whether the drop shadow is cast by the body text. Such a shadow goes stale as
+        /// soon as editing starts, so it is hidden (and not re-baked) until the edit commits.</summary>
+        internal virtual bool ShadowIncludesText => true;
+
+        /// <summary>Inset of the body from the bounds, where the in-place editor sits.</summary>
+        internal double Padding => HasFill ? TextPadding : PlainTextPadding;
 
         protected virtual void DrawObjectImpl(DrawingContext context, bool showText)
         {
             // NOTE: unlike WPF, the rotation transform is pushed by the callers (Draw/DrawObject), not here.
-            context.DrawRectangle(RenderResources.GetBrush(ObjectColor), null, UnrotatedBounds, NoteCornerRadius, NoteCornerRadius);
+            if (HasFill)
+                context.DrawRectangle(RenderResources.GetBrush(ObjectColor), null, UnrotatedBounds);
             if (showText)
             {
                 var form = CreateFormattedText();
-                context.DrawText(form, new Point(Left + TextPadding, Top + TextPadding));
+                context.DrawText(form, new Point(Left + Padding, Top + Padding));
             }
         }
 
@@ -177,24 +233,41 @@ namespace Clowd.Drawing.Graphics
 
         internal override void Normalize()
         {
+            // size first, so the base re-centers the rotation on the new bounds (keeping a rotated
+            // text's top-left corner in place as it grows)
+            var size = MeasureBox();
+            Right = Left + size.Width;
+            Bottom = Top + size.Height;
             base.Normalize();
+        }
+
+        /// <summary>The bounds size the current body needs.</summary>
+        protected virtual Size MeasureBox()
+        {
             var form = CreateFormattedText();
-            Right = Left + form.Width + (TextPadding * 2);
-            Bottom = Top + form.Height + (TextPadding * 2);
+            return new Size(form.Width + Padding * 2, form.Height + Padding * 2);
+        }
+
+        /// <summary>The body as laid out: never empty (so Ctrl+A, Bksp still measures a line), and
+        /// while editing a trailing newline gets a '_' — trailing whitespace is dropped from height
+        /// measurements, and the bounds must already include the caret's new line. The '_' is
+        /// never drawn: the in-place editor shows the text while Editing.</summary>
+        protected string LayoutText
+        {
+            get
+            {
+                string txt = Body;
+                if (String.IsNullOrEmpty(txt))
+                    txt = " ";
+                if (Editing && (txt.EndsWith('\r') || txt.EndsWith('\n')))
+                    txt += "_";
+                return txt;
+            }
         }
 
         protected virtual FormattedText CreateFormattedText()
         {
-            // trailing whitespace is truncated from height measurements.
-            // this '_' won't get rendered while Editing=true, but it will allow us to calculate the correct rectangle bounds
-            string txt = Body;
-
-            // we should still be able to measure if you've just done Ctrl+A, Bksp
-            if (String.IsNullOrEmpty(txt))
-                txt = " ";
-
-            if (Editing && (Body.EndsWith('\r') || Body.EndsWith('\n')))
-                txt += "_";
+            var txt = LayoutText;
 
             // PORT NOTE (Text cache): shaping is the expensive step and Normalize()+Draw both call
             // this per keystroke — cache the FormattedText in RenderCache keyed by the full shaping

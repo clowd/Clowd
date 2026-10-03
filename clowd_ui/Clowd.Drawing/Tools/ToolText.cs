@@ -36,9 +36,20 @@ namespace Clowd.Drawing.Tools
         public ToolText(Func<Cursor> cursorFn = null, SnapMode snapMode = SnapMode.None) : base(cursorFn ?? (() => CursorResources.Text), snapMode)
         { }
 
+        /// <summary>The graphic a press creates.</summary>
+        protected virtual GraphicText CreateGraphic(DrawingCanvas canvas, Point pt) => new GraphicText(canvas, pt);
+
+        /// <summary>Places the new graphic at the pointer while the press drags it around.</summary>
+        protected virtual void PlaceGraphic(GraphicText graphic, Point pt)
+        {
+            graphic.Left = pt.X;
+            graphic.Top = pt.Y;
+            graphic.Normalize();
+        }
+
         protected override void OnMouseDownImpl(DrawingCanvas canvas, Point pt)
         {
-            _newText = new GraphicText(canvas, pt);
+            _newText = CreateGraphic(canvas, pt);
             _newText.IsSelected = true;
             canvas.GraphicsList.Add(_newText);
             OnMouseMoveImpl(canvas, pt);
@@ -47,11 +58,7 @@ namespace Clowd.Drawing.Tools
         protected override void OnMouseMoveImpl(DrawingCanvas canvas, Point pt)
         {
             if (_newText != null)
-            {
-                _newText.Left = pt.X;
-                _newText.Top = pt.Y;
-                _newText.Normalize();
-            }
+                PlaceGraphic(_newText, pt);
         }
 
         protected override void OnMouseUpImpl(DrawingCanvas canvas)
@@ -104,10 +111,19 @@ namespace Clowd.Drawing.Tools
                 _txtBox.TextAlignment = TextAlignment.Center;
                 PlaceOverBadge(count);
             }
+            else if (graphicsText is GraphicStickyNote note)
+            {
+                // a sticky note centers and wraps its text, refits the font size and grows as it
+                // fills up, so the editor does the same and follows the note on every keystroke
+                _txtBox.TextAlignment = TextAlignment.Center;
+                _txtBox.TextWrapping = TextWrapping.Wrap;
+                _txtBox.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
+                PlaceOverNote(note);
+            }
             else
             {
                 var finalTransform = new TransformGroup();
-                finalTransform.Children.Add(new TranslateTransform(GraphicText.TextPadding + TEXTBOX_ALIGN_X, GraphicText.TextPadding));
+                finalTransform.Children.Add(new TranslateTransform(graphicsText.Padding + TEXTBOX_ALIGN_X, graphicsText.Padding));
                 finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2,
                     (graphicsText.Bottom - graphicsText.Top) / 2));
                 _txtBox.RenderTransform = finalTransform;
@@ -156,8 +172,12 @@ namespace Clowd.Drawing.Tools
             _txtBox.TextChanged += (sender, e) =>
             {
                 graphicsText.Body = ((TextBox)sender).Text ?? "";
-                if (graphicsText is GraphicCount badge && ReferenceEquals(sender, _txtBox))
+                if (!ReferenceEquals(sender, _txtBox))
+                    return;
+                if (graphicsText is GraphicCount badge)
                     PlaceOverBadge(badge);
+                else if (graphicsText is GraphicStickyNote stickyNote)
+                    PlaceOverNote(stickyNote);
             };
 
             // Notes:
@@ -181,6 +201,19 @@ namespace Clowd.Drawing.Tools
             _txtBox.Width = bounds.Width;
             Canvas.SetLeft(_txtBox, bounds.Left);
             Canvas.SetTop(_txtBox, count.TextRect.Top);
+        }
+
+        private void PlaceOverNote(GraphicStickyNote note)
+        {
+            var bounds = note.TextRect;
+            _txtBox.FontSize = note.FittedFontSize;
+            _txtBox.Width = bounds.Width;
+            Canvas.SetLeft(_txtBox, bounds.Left);
+            Canvas.SetTop(_txtBox, bounds.Top);
+
+            // rotate with the note, around its center (the editor's origin is its top-left)
+            var center = note.CenterOfRotation;
+            _txtBox.RenderTransform = new RotateTransform(note.Angle, center.X - bounds.Left, center.Y - bounds.Top);
         }
 
         public override void AbortOperation(DrawingCanvas canvas)
@@ -279,6 +312,10 @@ namespace Clowd.Drawing.Tools
             theme.Setters.Add(new Setter(TemplatedControl.ForegroundProperty, Brushes.Black));
             theme.Setters.Add(new Setter(Layoutable.MinWidthProperty, 0d));
             theme.Setters.Add(new Setter(Layoutable.MinHeightProperty, 0d));
+            // bound through to the template's ScrollViewer: TextBox coerces it to Disabled while
+            // wrapping (a sticky note's editor), which hands the text the editor's width to wrap at —
+            // a fixed Hidden would keep measuring it unbounded, all on one line
+            theme.Setters.Add(new Setter(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Hidden));
             theme.Setters.Add(new Setter(TextBox.CaretBrushProperty, Brushes.Black));
             theme.Setters.Add(new Setter(TextBox.SelectionBrushProperty, new SolidColorBrush(Color.FromArgb(0x80, 0x33, 0x99, 0xFF))));
             theme.Setters.Add(new Setter(TemplatedControl.TemplateProperty, new FuncControlTemplate<TextBox>((tb, ns) =>
@@ -302,7 +339,7 @@ namespace Clowd.Drawing.Tools
                 var scrollViewer = new ScrollViewer
                 {
                     Name = "PART_ScrollViewer",
-                    HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+                    [!ScrollViewer.HorizontalScrollBarVisibilityProperty] = new TemplateBinding(ScrollViewer.HorizontalScrollBarVisibilityProperty),
                     VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
                     Content = presenter,
                 };

@@ -6,12 +6,6 @@ namespace Clowd.Config
 {
     public class SavedToolSettings : SimpleNotifyObject
     {
-        public bool AutoColor
-        {
-            get => _autoColor ?? true;
-            set => Set(ref _autoColor, value);
-        }
-
         public Color ObjectColor
         {
             get => _objectColor ?? Colors.Red;
@@ -78,6 +72,21 @@ namespace Clowd.Config
             set => Set(ref _obscureMode, value);
         }
 
+        /// <summary>Background fill of new text. Transparent by default: the old note-card yellow
+        /// at zero alpha, so raising the alpha brings back a card.</summary>
+        public Color FillColor
+        {
+            get => _fillColor ?? Color.FromArgb(0, 0xFF, 0xFF, 0xCB);
+            set => Set(ref _fillColor, value);
+        }
+
+        /// <summary>Uniform size multiplier of new sticky notes (paper, text and limits alike).</summary>
+        public double Scale
+        {
+            get => _scale ?? 1d;
+            set => Set(ref _scale, value);
+        }
+
         /// <summary>Soft corners for new outlined rectangles (≈ 4× the default stroke).</summary>
         public const double DefaultRectangleCornerRadius = 12;
 
@@ -106,11 +115,12 @@ namespace Clowd.Config
         private string _fontFamily;
         private double? _lineWidth;
         private Color? _objectColor;
-        private bool? _autoColor;
         private double? _blurRadius;
         private double? _cornerRadius;
         private LineDashStyle? _dashStyle;
         private ObscureMode? _obscureMode;
+        private double? _scale;
+        private Color? _fillColor;
     }
 
     public class SettingsEditor : SimpleNotifyObject
