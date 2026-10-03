@@ -13,7 +13,10 @@ namespace Clowd.Drawing.Rendering
     /// position, and are keyed on (Id, ShadowRev, zoomBucket): bumping ShadowRev (any
     /// Shadow-aspect property change) or crossing a zoom bucket simply makes the stored sprite
     /// stop matching — it keeps DRAWING, stretched to the current bounds (invisible for a soft
-    /// r=5 shadow), until the frame validator re-bakes it, at most one bake per tick.
+    /// r=5 shadow), until the frame validator re-bakes it, at most one bake per tick. A graphic
+    /// whose ink grows at one end during a drag (<see cref="IIncrementalShadow"/>, the brush) is
+    /// baked in place instead — an anchored sprite that is extended rather than re-baked and
+    /// never stretched — and gets a clean full bake at rest like any capped sprite.
     ///
     /// Sprites are NOT evicted when a graphic leaves the collection: the history engine retains
     /// deleted instances and re-inserts them on undo, and §B.4 counts the shadow sprite among
@@ -64,6 +67,13 @@ namespace Clowd.Drawing.Rendering
             /// counts as stale once the drag ends (re-baked full-res at rest).</summary>
             public bool InteractiveCapped;
 
+            /// <summary>Baked in place by an <see cref="IIncrementalShadow"/> graphic while its ink
+            /// grows: <see cref="Origin"/> is relative to the graphic's
+            /// <see cref="GraphicBase.ShadowAnchor"/> rather than its bounds, and the sprite is
+            /// never stretched — the ink it covers has not moved, only grown, so stretching would
+            /// be wrong where it is right.</summary>
+            public bool Anchored;
+
             public long Bytes;
             internal string Id;
             internal LinkedListNode<Sprite> LruNode;
@@ -72,14 +82,20 @@ namespace Clowd.Drawing.Rendering
             /// Canvas-space rect to blit the sprite into for the graphic's CURRENT bounds. For a
             /// current sprite this is exact (Bounds.TopLeft + Origin, pixels ÷ BakeScale); a
             /// stale sprite is stretched proportionally so the shadow follows a resize until the
-            /// re-bake lands.
+            /// re-bake lands. An anchored sprite sits at ShadowAnchor + Origin, unstretched.
             /// </summary>
             public Rect GetDestRect(GraphicBase graphic)
             {
+                var px = Bitmap.PixelSize;
+                if (Anchored)
+                {
+                    var anchor = graphic.ShadowAnchor;
+                    return new Rect(anchor.X + Origin.X, anchor.Y + Origin.Y, px.Width / BakeScale, px.Height / BakeScale);
+                }
+
                 var bounds = graphic.Bounds;
                 var sx = BakedBoundsSize.Width > 0 ? bounds.Width / BakedBoundsSize.Width : 1.0;
                 var sy = BakedBoundsSize.Height > 0 ? bounds.Height / BakedBoundsSize.Height : 1.0;
-                var px = Bitmap.PixelSize;
                 return new Rect(bounds.Left + Origin.X * sx,
                                 bounds.Top + Origin.Y * sy,
                                 px.Width / BakeScale * sx,
@@ -217,20 +233,37 @@ namespace Clowd.Drawing.Rendering
 
         private Sprite Bake(GraphicBase graphic, double bucket, bool isToolDragActive)
         {
-            // memory-pressure valve (class doc): while over budget, new bakes cap at the
-            // interactive dimension. This feeds restScale (NOT the InteractiveCapped flag), so a
-            // pressure-capped sprite counts as current at rest — no perpetual re-bake churn; it
-            // refreshes full-res on its next natural invalidation once pressure recedes.
-            var effectiveMax = _totalBytes > MaxBytes ? InteractiveMaxDimension : MaxDimension;
-            var restScale = ShadowRenderer.ClampBakeScale(graphic, bucket, effectiveMax);
-            var scale = isToolDragActive
-                ? ShadowRenderer.ClampBakeScale(graphic, restScale, InteractiveMaxDimension)
-                : restScale;
-
             var rev = graphic.ShadowRev; // read before the (pure) bake for key consistency
-            var bitmap = ShadowRenderer.Render(graphic, scale, out var origin);
+            WriteableBitmap bitmap;
+            Vector origin;
+            double scale;
+            bool anchored = false, capped;
 
-            Remove(graphic.Id); // release any previous sprite for this graphic
+            if (isToolDragActive && graphic is IIncrementalShadow incremental && incremental.CanBakeShadowIncrementally)
+            {
+                // the ink is growing at one end: the graphic extends its own sprite in place for
+                // the cost of the growth, not the whole stroke. Always flagged capped, so the
+                // drag-end validation replaces it with a clean full bake at rest.
+                bitmap = incremental.BakeShadowIncrementally(bucket, InteractiveMaxDimension, out origin, out scale);
+                anchored = true;
+                capped = true;
+            }
+            else
+            {
+                // memory-pressure valve (class doc): while over budget, new bakes cap at the
+                // interactive dimension. This feeds restScale (NOT the InteractiveCapped flag), so a
+                // pressure-capped sprite counts as current at rest — no perpetual re-bake churn; it
+                // refreshes full-res on its next natural invalidation once pressure recedes.
+                var effectiveMax = _totalBytes > MaxBytes ? InteractiveMaxDimension : MaxDimension;
+                var restScale = ShadowRenderer.ClampBakeScale(graphic, bucket, effectiveMax);
+                scale = isToolDragActive
+                    ? ShadowRenderer.ClampBakeScale(graphic, restScale, InteractiveMaxDimension)
+                    : restScale;
+                bitmap = ShadowRenderer.Render(graphic, scale, out origin);
+                capped = scale < restScale;
+            }
+
+            Remove(graphic.Id); // release any previous sprite for this graphic (an in-place bake reuses its bitmap)
 
             var sprite = new Sprite
             {
@@ -241,7 +274,8 @@ namespace Clowd.Drawing.Rendering
                 BakedBoundsSize = graphic.Bounds.Size,
                 ShadowRev = rev,
                 ZoomBucket = bucket,
-                InteractiveCapped = scale < restScale,
+                InteractiveCapped = capped,
+                Anchored = anchored,
                 Bytes = (long)bitmap.PixelSize.Width * bitmap.PixelSize.Height * 4,
             };
             sprite.LruNode = _lru.AddFirst(sprite);

@@ -165,6 +165,50 @@ namespace Clowd.Drawing.Tests
         }
 
         [AvaloniaFact]
+        public void Path_RoundTrips_AnchorsAndClosed()
+        {
+            var g = new GraphicPath(Colors.Navy, 3, new Point(0, 0));
+            g.AppendAnchor(new PathAnchor(new Point(50, 10), new Point(-12.5, -3), new Point(12.5, 3), true));
+            g.AppendAnchor(PathAnchor.Corner(new Point(80, 60)));
+            g.Closed = true;
+            g.DashStyle = LineDashStyle.Dashed;
+            g.IsSelected = true;
+            g.SetActiveAnchor(2);
+            g.PreviewPoint = new Point(1, 1);
+
+            var r = RoundTrip(g);
+            AssertBaseState(g, r);
+            Assert.Equal(g.Anchors, r.Anchors);
+            Assert.True(r.Closed);
+            Assert.Equal(LineDashStyle.Dashed, r.DashStyle);
+
+            // the editing chrome is transient
+            Assert.Equal(-1, r.ActiveAnchor);
+            Assert.Null(r.PreviewPoint);
+        }
+
+        [AvaloniaFact]
+        public void Brush_RoundTrips_OriginAndSamples()
+        {
+            var g = new GraphicBrush(Colors.Navy, 3, new Point(40, 30));
+            g.AddSample(new Point(50, 30), 16, 0.5);
+            g.AddSample(new Point(60, 35.5), 33, 0.5);
+            g.AddSample(new Point(70, 41), 50, 0.5);
+            g.EndStroke();
+            g.IsSelected = true;
+
+            var r = RoundTrip(g);
+            AssertBaseState(g, r);
+            Assert.Equal(new Point(40, 30), r.Origin);
+            Assert.Equal(g.Samples, r.Samples);
+            Assert.Equal(new GraphicBrush.Sample(new Point(20, 5.5), 33), r.Samples[2]);
+
+            // the collecting list is transient
+            var buildingField = typeof(GraphicBrush).GetField("_building", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.Null(buildingField.GetValue(r));
+        }
+
+        [AvaloniaFact]
         public void PolyLine_RoundTrips_Points()
         {
             var g = new GraphicPolyLine(Colors.Navy, 3, new Point(0, 0));
@@ -267,8 +311,8 @@ namespace Clowd.Drawing.Tests
 
             Assert.Equal(new[]
             {
-                "GraphicArrow", "GraphicCount", "GraphicEllipse", "GraphicFilledRectangle",
-                "GraphicImage", "GraphicLine", "GraphicMeasure", "GraphicPolyLine", "GraphicRectangle",
+                "GraphicArrow", "GraphicBrush", "GraphicCount", "GraphicEllipse", "GraphicFilledRectangle",
+                "GraphicImage", "GraphicLine", "GraphicMeasure", "GraphicPath", "GraphicPolyLine", "GraphicRectangle",
                 "GraphicStickyNote", "GraphicText",
             }, concrete);
         }

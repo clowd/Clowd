@@ -9,7 +9,7 @@ namespace Clowd
         Ellipse,
         Line,
         Arrow,
-        PolyLine,
+        PolyLine, // legacy pencil: the graphic still loads, the tool is gone; kept so saved toolbar orders parse
         Text,
         Count,
         Pixelate,
@@ -17,5 +17,7 @@ namespace Clowd
         // append here — reordering would silently remap saved toolbar configurations.
         Measure,
         StickyNote,
+        Pen,   // bezier path tool (replaces the pencil, which lives on as PolyLine above)
+        Brush, // freehand ink
     };
 }

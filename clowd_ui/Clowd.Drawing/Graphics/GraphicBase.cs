@@ -106,12 +106,19 @@ namespace Clowd.Drawing.Graphics
         /// PORT NOTE (_translating fast path): Move() implementations set this to true around
         /// their field mutations + raises (try/finally), call
         /// <c>RenderCache.TranslateCachedBounds(dx, dy)</c> once, then the usual bare
-        /// OnPropertyChanged(). While true, each raise clears only the Geometry aspect — bounds
-        /// are offset instead of recomputed and shadow/text caches survive — so the drag hot path
-        /// does zero geometry and zero shadow work per pointer event (final-design §A.4).
-        /// See GraphicRectangle.Move for the exemplar.
+        /// OnPropertyChanged(). While true, each raise clears only <see cref="TranslationAspects"/>
+        /// (the Geometry aspect by default) — bounds are offset instead of recomputed and
+        /// shadow/text caches survive — so the drag hot path does zero geometry and zero shadow
+        /// work per pointer event (final-design §A.4). See GraphicRectangle.Move for the exemplar.
         /// </summary>
         [Transient] protected bool _translating;
+
+        /// <summary>
+        /// What a raise made while <see cref="_translating"/> clears. Geometry by default, since
+        /// most types build theirs in canvas space, so a translation stales it; a type whose
+        /// geometry is local to a moving origin (the brush stroke) keeps everything.
+        /// </summary>
+        internal virtual InvalidationAspects TranslationAspects => InvalidationAspects.Geometry;
 
         // the resolved per-type property→aspect map (see DeclarePropertyEffects), cached on the
         // instance so the per-raise lookup is one field read + one dictionary probe
@@ -239,7 +246,7 @@ namespace Clowd.Drawing.Graphics
             // apply the aspect map to our own cache BEFORE raising, so subscribers (the
             // collection invalidation funnel) always observe consistent state
             if (_translating)
-                RenderCache.Clear(InvalidationAspects.Geometry); // Move() already offset CachedBounds; shadow/text survive a pure translation
+                RenderCache.Clear(TranslationAspects); // Move() already offset CachedBounds; shadow/text survive a pure translation
             else
                 RenderCache.Clear(GetPropertyEffects(args.PropertyName));
 
@@ -272,6 +279,9 @@ namespace Clowd.Drawing.Graphics
         }
 
         internal virtual void Activate(DrawingCanvas canvas) { }
+
+        /// <summary>Double-click entry point with the click position; the default ignores the point.</summary>
+        internal virtual void Activate(DrawingCanvas canvas, Point point) => Activate(canvas);
 
         internal virtual void Normalize() { }
 
@@ -312,6 +322,11 @@ namespace Clowd.Drawing.Graphics
         /// <see cref="ShadowRenderer"/>. The object itself, unless it draws soft shading of its own
         /// that must not cast a second shadow.</summary>
         internal virtual void DrawShadowSilhouette(DrawingContext ctx) => DrawObject(ctx);
+
+        /// <summary>The canvas point an anchored shadow sprite (<see cref="ShadowSpriteCache.Sprite.Anchored"/>)
+        /// is positioned from: a point of the ink that a pure translation moves and nothing else
+        /// does. Only <see cref="IIncrementalShadow"/> graphics produce such sprites.</summary>
+        internal virtual Point ShadowAnchor => Bounds.TopLeft;
 
         protected virtual void DrawDashedBorder(DrawingContext ctx, Rect rect, double lineWidth = 2)
         {

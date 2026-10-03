@@ -23,6 +23,10 @@ namespace Clowd.Drawing.Rendering
     ///                      inherited GraphicLine full-line Contains corridor
     ///   GraphicEllipse   → Geometry (EllipseGeometry for Contains)
     ///   GraphicPolyLine  → GeometryBounds (fitted render bounds) + GeometryTransform (mapping)
+    ///   GraphicPath      → Geometry (open/closed cubic path shared by Bounds/Contains/DrawObject)
+    ///   GraphicBrush     → Geometry (the outline's tail figure) + SecondaryGeometry (the settled
+    ///                      chunks, one NonZero group), both local to Origin, so Move keeps them;
+    ///                      the incremental builder that fills them lives on the graphic
     ///   GraphicText/Count→ Text (FormattedText) + TextKey (its input tuple); Count also uses
     ///                      Geometry for its ellipse hit geometry
     /// Fill slots lazily inside Bounds/Contains/DrawObject; NEVER raise PropertyChanged while

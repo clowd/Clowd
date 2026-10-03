@@ -76,7 +76,8 @@ internal class Program
         DrawSizes(sizes, "Measure", DrawBaseCursor, DrawRuler);
         DrawSizes(sizes, "Text", DrawBaseCursor, DrawT);
         DrawSizes(sizes, "Numerical", DrawBaseCursor, DrawHash);
-        DrawSizes(sizes, "Pen", DrawBaseCursor, DrawPen);
+        DrawSizes(sizes, "Pen", DrawBaseCursor, DrawNib);
+        DrawSizes(sizes, "StickyNote", DrawBaseCursor, DrawStickyNote);
         DrawSizes(sizes, "Rotate", DrawRotate);
         DrawSizes(sizes, "Obscure", DrawBaseCursor, DrawObscure);
         DrawSizes(sizes, "Move", DrawBaseCursor, DrawResizeCursorSmall);
@@ -661,37 +662,209 @@ internal class Program
             g.DrawRectangle(p, initial.X - 0.5f, initial.Y - 0.5f, size * 3 + 1, size * 3 + 1);
     }
 
-    private static void DrawPen(float scale, int lineWidth, Graphics g)
+    /// <summary>Fountain-pen nib for the bezier pen tool, the cursor twin of IconToolPen: a
+    /// nib pointing down-left with the slit and round vent hole, and a collar line where the
+    /// nib meets the holder. Built on the pixel grid instead of rotating a path like the old
+    /// pencil did — the tip is a right angle so its two edges are axis aligned, the sides and
+    /// the back run at exactly 45 degrees, and every vertex is an integer offset from the tip,
+    /// so the stroke sits on pixel centers (odd widths) or pixel edges (even widths) at every
+    /// size. Everything else is derived from the tip, so rounding the five inputs is enough.</summary>
+    /// <summary>Fountain-pen nib for the bezier pen tool, the cursor twin of IconToolPen: a
+    /// nib pointing down-left with the slit and round vent hole, and a collar line where the
+    /// nib meets the holder. The tip edges run in the lattice directions (1,-2) and (2,-1) — a
+    /// 37 degree tip, the narrowest slope whose stair pattern (2px runs) still reads as a
+    /// straight edge at 32px — and the sides run parallel to the 45 degree axis to the back.
+    /// Every vertex is an integer offset from the tip, so the whole thing stays on the grid.
+    /// Up to a 2px stroke it is hand rasterized as pixel art, each outline pixel stamped as a
+    /// stroke-sized block; from 4px up GDI+ anti-aliasing is fine, the grey fringe being a
+    /// quarter of the stroke or less.</summary>
+    private static void DrawNib(float scale, int lineWidth, Graphics g)
     {
-        PointF translate(float x, float y) => new PointF(x, y);
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-        using GraphicsPath gp = new GraphicsPath();
-        gp.AddRectangle(new RectangleF(0, 0, 3, 2));
-        gp.CloseFigure();
-        gp.AddRectangle(new RectangleF(0, 3, 3, 1));
-        gp.CloseFigure();
+        if (lineWidth <= 2)
+        {
+            DrawNibPixelArt(g, NibGeometry(scale, 1), lineWidth);
+            return;
+        }
 
-        gp.AddPolygon(new PointF[] {
-            translate(0, 5),
-            translate(0, 17),
-            translate(1.5f, 18.5f),
-            translate(3, 17),
-            translate(3, 5),
+        var n = NibGeometry(scale, lineWidth);
+
+        // even stroke widths sit on pixel edges, so integer coordinates are already aligned
+        PointF P(Point p) => new PointF(p.X, p.Y);
+
+        using var path = new GraphicsPath();
+        path.AddPolygon(n.Body.Select(P).ToArray());
+
+        using var pen = new Pen(Stroke, lineWidth);
+        pen.LineJoin = LineJoin.Miter;
+
+        g.FillPath(Fill, path);
+        g.DrawPath(pen, path);
+        g.DrawLine(pen, P(n.CollarL), P(n.CollarR));
+        g.DrawLine(pen, P(n.Body[0]), P(n.Hole));
+
+        var inner = n.Dia - lineWidth * 2;
+        g.FillEllipse(Stroke, n.Hole.X - n.Dia / 2f, n.Hole.Y - n.Dia / 2f, n.Dia, n.Dia);
+        g.FillEllipse(Fill, n.Hole.X - inner / 2f, n.Hole.Y - inner / 2f, inner, inner);
+    }
+
+    private record Nib(Point[] Body, Point CollarL, Point CollarR, Point Hole, int Dia);
+
+    /// <summary>Nib geometry in 32-space scaled by <paramref name="scale"/>, in whole pixels.
+    /// Body is tip, left shoulder, back left, back right, right shoulder.</summary>
+    private static Nib NibGeometry(float scale, int strokeParity)
+    {
+        var tipX = (int)round(8 * scale);
+        var tipY = (int)round(27 * scale);
+        var k = (int)round(5 * scale);            // tip edges are k*(1,-2) and k*(2,-1): the nib is k*sqrt2 wide
+        var side = (int)round(4 * scale);         // shoulder to back, in diagonal steps
+        var collar = (int)round(1 * scale);       // shoulder to collar line, in diagonal steps
+        var hole = (int)round(6.5f * scale);      // tip to vent hole center, in diagonal steps
+
+        // vent hole diameter shares the stroke's parity so the circle is centered on the grid;
+        // 3px (a pixel-art plus) until a 5px ring has a pixel of clearance from the sides
+        var dia = scale < 1.5f ? 3 : (int)round(3.25f * scale);
+        if ((dia % 2) != (strokeParity % 2))
+            dia++;
+
+        var tip = new Point(tipX, tipY);
+        var shoulderL = new Point(tipX + k, tipY - k * 2);
+        var shoulderR = new Point(tipX + k * 2, tipY - k);
+        var backL = new Point(shoulderL.X + side, shoulderL.Y - side);
+        var backR = new Point(shoulderR.X + side, shoulderR.Y - side);
+
+        return new Nib(
+            new[] { tip, shoulderL, backL, backR, shoulderR },
+            new Point(shoulderL.X + collar, shoulderL.Y - collar),
+            new Point(shoulderR.X + collar, shoulderR.Y - collar),
+            new Point(tipX + hole, tipY - hole),
+            dia);
+    }
+
+    /// <summary>The nib rasterized by hand: GDI+ anti-aliasing turns a thin edge of slope 2
+    /// into a grey staircase and loses the white interior near the tip, so instead the
+    /// outline is a Bresenham chain of whole pixels, the interior the pixels inside the
+    /// polygon, and the vent hole a pixel-art ring (a plus shape at 3px, a rounded square at
+    /// 5px). Every pixel is painted as a stamp-sized square on the grid, so nothing is
+    /// anti-aliased; stamp is the stroke width, so a 2px stroke is a Bresenham chain of 2x2
+    /// blocks, which measures 2px across at 45 degrees and 2-3px on the slope-2 tip edges.</summary>
+    private static void DrawNibPixelArt(Graphics g, Nib n, int stamp)
+    {
+        var body = n.Body;
+        var black = new HashSet<Point>();
+        var white = new HashSet<Point>();
+
+        for (int i = 0; i < body.Length; i++)
+            foreach (var p in Bresenham(body[i], body[(i + 1) % body.Length]))
+                black.Add(p);
+
+        var minX = body.Min(p => p.X);
+        var maxX = body.Max(p => p.X);
+        var minY = body.Min(p => p.Y);
+        var maxY = body.Max(p => p.Y);
+        for (int y = minY; y <= maxY; y++)
+            for (int x = minX; x <= maxX; x++)
+            {
+                var p = new Point(x, y);
+                if (!black.Contains(p) && InsidePolygon(x + 0.5f, y + 0.5f, body))
+                    white.Add(p);
+            }
+
+        foreach (var p in Bresenham(n.CollarL, n.CollarR))
+            black.Add(p);
+        foreach (var p in Bresenham(body[0], n.Hole))
+            black.Add(p);
+
+        var r = (n.Dia - 1) / 2;
+        for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++)
+            {
+                var d = Math.Sqrt(dx * dx + dy * dy);
+                var p = new Point(n.Hole.X + dx, n.Hole.Y + dy);
+                if (d > r - 0.5 && d <= r + 0.3)
+                    black.Add(p);
+                else if (d <= r - 0.5)
+                    black.Remove(p);
+            }
+
+        foreach (var p in white.Where(p => !black.Contains(p)))
+            g.FillRectangle(Fill, p.X, p.Y, stamp, stamp);
+        foreach (var p in black)
+            g.FillRectangle(Stroke, p.X, p.Y, stamp, stamp);
+    }
+
+    private static IEnumerable<Point> Bresenham(Point p0, Point p1)
+    {
+        int x0 = p0.X, y0 = p0.Y, x1 = p1.X, y1 = p1.Y;
+        int dx = Math.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+        int dy = -Math.Abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+        int err = dx + dy;
+        while (true)
+        {
+            yield return new Point(x0, y0);
+            if (x0 == x1 && y0 == y1)
+                yield break;
+            int e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+    }
+
+    /// <summary>Even-odd test of (x, y) against a polygon whose vertices are pixel centers.</summary>
+    private static bool InsidePolygon(float x, float y, Point[] poly)
+    {
+        bool inside = false;
+        for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++)
+        {
+            float xi = poly[i].X + 0.5f, yi = poly[i].Y + 0.5f;
+            float xj = poly[j].X + 0.5f, yj = poly[j].Y + 0.5f;
+            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+                inside = !inside;
+        }
+        return inside;
+    }
+
+    /// <summary>Square note with a dog-eared bottom-right corner, the cursor twin of
+    /// IconToolStickyNote. Axis aligned apart from the 45 degree fold, so it is snapped the
+    /// way DrawRect is: every coordinate rounded, stroke on pixel centers or edges by parity.</summary>
+    private static void DrawStickyNote(float scale, int lineWidth, Graphics g)
+    {
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+        float off = (lineWidth % 2) == 0 ? 0 : 0.5f;
+
+        var left = round(8 * scale) + off;
+        var top = round(16 * scale) + off;
+        var size = round(11 * scale);
+        var fold = round(4 * scale);
+        var right = left + size;
+        var bottom = top + size;
+
+        using var body = new GraphicsPath();
+        body.AddPolygon(new[]
+        {
+            mkpt(left, top),
+            mkpt(right, top),
+            mkpt(right, bottom - fold),
+            mkpt(right - fold, bottom),
+            mkpt(left, bottom),
         });
 
-        gp.Transform(new Matrix());
+        using var outline = new Pen(Stroke, lineWidth);
+        outline.LineJoin = LineJoin.Miter;
 
-        Matrix myMatrix = new Matrix();
-        myMatrix.RotateAt(45, translate(2.5f * scale, 9 * scale));
-        myMatrix.Translate(17 * scale, 0 * scale);
-        myMatrix.Scale(scale, scale);
+        g.FillPath(Fill, body);
+        g.DrawPath(outline, body);
 
-        gp.Transform(myMatrix);
-
-        using var p1 = new Pen(Stroke, lineWidth * 2);
-        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-        g.DrawPath(p1, gp);
-        g.FillPath(Fill, gp);
+        // the folded flap: the two inner edges of the corner triangle
+        using var line = new Pen(Stroke, lineWidth);
+        g.DrawLines(line, new[]
+        {
+            mkpt(right - fold, bottom),
+            mkpt(right - fold, bottom - fold),
+            mkpt(right, bottom - fold),
+        });
     }
 
     private static void DrawResizeCursorSmall(float scale, int lineWidth, Graphics g) => DrawResizeCursorSmall(scale, lineWidth, g, 0, true);

@@ -328,6 +328,8 @@ namespace Clowd.Drawing
 
         internal ToolPointer ToolPointer { get; }
         internal ToolText ToolText { get; }
+        internal ToolPen ToolPen { get; }
+        internal ToolBrush ToolBrush { get; }
 
         private ToolDesc CurrentTool;
 
@@ -412,6 +414,8 @@ namespace Clowd.Drawing
             // create array of drawing tools
             ToolPointer = new ToolPointer();
             ToolText = new ToolText();
+            ToolPen = new ToolPen();
+            ToolBrush = new ToolBrush();
 
             // the create lambdas close over this canvas, so a new graphic starts out with the
             // property-bar values for every skill its type declares
@@ -476,7 +480,10 @@ namespace Clowd.Drawing
             _toolStore[ToolType.Ellipse] = new ToolDesc("Ellipse", toolEllipse, ObjectType: typeof(GraphicEllipse));
             _toolStore[ToolType.Line] = new ToolDesc("Line", toolLine, ObjectType: typeof(GraphicLine));
             _toolStore[ToolType.Arrow] = new ToolDesc("Arrow", toolArrow, ObjectType: typeof(GraphicArrow));
-            _toolStore[ToolType.PolyLine] = new ToolDesc("Pencil", new ToolPolyLine(), ObjectType: typeof(GraphicPolyLine));
+            // no entry for ToolType.PolyLine: the legacy pencil graphic still loads and edits, but
+            // nothing creates one any more (the pen and the brush replaced it)
+            _toolStore[ToolType.Pen] = new ToolDesc("Pen", ToolPen, ObjectType: typeof(GraphicPath));
+            _toolStore[ToolType.Brush] = new ToolDesc("Brush", ToolBrush, ObjectType: typeof(GraphicBrush));
             _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText));
             _toolStore[ToolType.StickyNote] = new ToolDesc("Sticky Note", new ToolStickyNote(), ObjectType: typeof(GraphicStickyNote));
             _toolStore[ToolType.Count] = new ToolDesc("Step Count", new ToolCount(), ObjectType: typeof(GraphicCount));
@@ -648,6 +655,11 @@ namespace Clowd.Drawing
                 OnArtworkBackgroundChanged();
             else if (change.Property == ContentScaleProperty)
                 OnContentScaleChanged();
+
+            // the brush cursor is drawn at the stroke's on-screen size
+            if ((change.Property == ContentScaleProperty || change.Property == LineWidthProperty)
+                && Tool == ToolType.Brush && _toolStore != null)
+                CurrentTool.Instance.SetCursor(this);
             else if (change.Property == ContentOffsetProperty)
                 OnContentOffsetChanged(change.GetNewValue<Point>());
         }
@@ -666,7 +678,22 @@ namespace Clowd.Drawing
                 GraphicsList?.RequestValidation();
             }
 
-            CurrentTool = _toolStore[newValue];
+            // a persisted name that no longer has a tool (the legacy pencil) falls back to the
+            // pointer — through the property, so Tool and CurrentTool never disagree
+            if (!_toolStore.TryGetValue(newValue, out var desc))
+            {
+                Tool = ToolType.Pointer;
+                return;
+            }
+
+            // the outgoing tool finalizes anything it holds between gestures (a pen path still
+            // being extended) so the switch never leaves a half-built graphic behind. Its commit
+            // may already have run SyncObjectState against the new Tool value with the OLD
+            // CurrentTool, so the resync below is forced rather than early-outing on it.
+            CurrentTool.Instance?.CommitPending(this);
+            _syncStateForced = true;
+
+            CurrentTool = desc;
             CurrentTool.Instance.SetCursor(this);
 
             SyncObjectState();
@@ -805,9 +832,18 @@ namespace Clowd.Drawing
 
         public void SetBackgroundColor(Color clr)
         {
+            CommitPendingToolWork();
             ArtworkBackground = clr;
             AddCommandToHistory(true);
         }
+
+        /// <summary>
+        /// The commands that commit a step of their own while a tool may be holding a multi-gesture
+        /// edit between pointer events (a pen path still being extended) let the tool finish that
+        /// edit as its own step first — the same order Undo/Redo use — so the command's step never
+        /// swallows a half-built graphic, and undoing it never leaves a partial path behind.
+        /// </summary>
+        private void CommitPendingToolWork() => CurrentTool.Instance?.CommitPending(this);
 
         public void SelectAll()
         {
@@ -838,6 +874,8 @@ namespace Clowd.Drawing
             if (g == null || !GraphicsList.Contains(g))
                 return;
 
+            CommitPendingToolWork();
+
             if (!g.Hidden && g.IsSelected)
                 g.IsSelected = false; // becoming hidden: drop it from the canvas selection first
 
@@ -853,6 +891,7 @@ namespace Clowd.Drawing
             if (g == null || !GraphicsList.Contains(g))
                 return;
 
+            CommitPendingToolWork();
             g.Locked = !g.Locked;
             AddCommandToHistory(false);
             GraphicsList.RequestValidation();
@@ -898,6 +937,7 @@ namespace Clowd.Drawing
             if (newIndex == currentIndex)
                 return;
 
+            CommitPendingToolWork();
             GraphicsList.RemoveAt(currentIndex);
             if (newIndex > GraphicsList.Count)
                 GraphicsList.Add(g);
@@ -979,6 +1019,7 @@ namespace Clowd.Drawing
         {
             if (SelectedCount > 0 && (offsetX != 0 || offsetY != 0))
             {
+                CommitPendingToolWork();
                 foreach (var obj in GraphicsList.SelectedItems)
                 {
                     obj.Move(offsetX, offsetY);
@@ -1019,6 +1060,8 @@ namespace Clowd.Drawing
 
         private void MoveToIndex(int idx)
         {
+            CommitPendingToolWork();
+
             List<GraphicBase> list = new List<GraphicBase>();
 
             for (int i = Count - 1; i >= 0; i--)
@@ -1065,6 +1108,10 @@ namespace Clowd.Drawing
 
         public void Undo()
         {
+            // a pen path still being extended becomes its own step first, so this undo takes
+            // that path back rather than whatever came before it
+            CurrentTool.Instance.CommitPending(this);
+
             // the delta apply writes fields directly (bypassing property setters), so the
             // property bar must rebind even when the selection/tool inputs look unchanged
             _syncStateForced = true;
@@ -1083,6 +1130,8 @@ namespace Clowd.Drawing
 
         public void Redo()
         {
+            CurrentTool.Instance.CommitPending(this);
+
             _syncStateForced = true;
 
             var prev = _syncingState;
@@ -1274,8 +1323,14 @@ namespace Clowd.Drawing
                     return;
                 }
 
-                // if we are not using the pointer, or if there are no objects selected, use tool skills
-                if (selected.Length == 0 || Tool != ToolType.Pointer)
+                // the pen stays active with the path it just drew (or is still extending) selected,
+                // and the bar then describes that path, as it would under the pointer — otherwise
+                // a color or width change would land in the pen's settings and never reach it
+                var editsSelection = Tool == ToolType.Pointer
+                                     || (Tool == ToolType.Pen && selected.Length == 1 && selected[0] is GraphicPath);
+
+                // if we are not editing the selection, or if there are no objects selected, use tool skills
+                if (selected.Length == 0 || !editsSelection)
                 {
                     Skill skills = CurrentTool.Skills;
                     if (CurrentTool.ObjectType != null)
@@ -1319,7 +1374,7 @@ namespace Clowd.Drawing
                     SubjectSkill = skills;
                 }
                 // if there is precisely 1 object selected, use the object skills
-                else if (selected.Length == 1 && Tool == ToolType.Pointer)
+                else if (selected.Length == 1)
                 {
                     var obj = selected[0];
                     var attr = obj.GetType().GetCustomAttribute<GraphicDescAttribute>();
@@ -1391,8 +1446,18 @@ namespace Clowd.Drawing
             // property was written through (or alongside) the binding, so add a mergable undo step.
             if (_syncingState)
                 return;
-            if (e.PropertyName != null && _boundGraphicProps.Contains(e.PropertyName))
-                AddCommandToHistory(true);
+            if (e.PropertyName == null || !_boundGraphicProps.Contains(e.PropertyName))
+                return;
+
+            // a path the pen is still extending is not committed yet: the edit rides along in the
+            // path's own step rather than committing the half-built path now
+            if (sender is GraphicPath path && ToolPen.IsExtending(path))
+            {
+                ToolPen.MarkEdited();
+                return;
+            }
+
+            AddCommandToHistory(true);
         }
 
         private void UndoManagerStateChanged(object sender, StateChangedEventArgs e)
@@ -1437,7 +1502,7 @@ namespace Clowd.Drawing
                     Point point = s.Position;
                     var clicked = ToolPointer.MakeHitTest(this, point, out var handleNum);
                     if (clicked != null)
-                        clicked.Activate(this);
+                        clicked.Activate(this, point);
                 }
                 else
                 {
@@ -1646,7 +1711,9 @@ namespace Clowd.Drawing
             // point was cached — see _lastPointerRoot
             var position = _lastPointerRoot is { } root ? RootToCanvas(root) : last.Position;
 
-            var synthetic = new PointerState(position, modifiers, last.LeftPressed, last.MiddlePressed, last.RightPressed, null);
+            // null Pointer and Args ⇔ synthetic: no capture change, no new input sample to read
+            var synthetic = new PointerState(position, modifiers, last.LeftPressed, last.MiddlePressed, last.RightPressed,
+                                             null, last.Timestamp, null);
             _lastPointerState = synthetic;
 
             if (!synthetic.MiddlePressed && !synthetic.RightPressed)
@@ -1687,6 +1754,23 @@ namespace Clowd.Drawing
             this.ReleaseMouseCapture();
             this.Cursor = HelperFunctions.DefaultCursor;
             UnselectAll();
+        }
+
+        /// <summary>Bare-key dispatch for the editor's tunnel handler: the tool first, then
+        /// single-anchor deletion on a selected path. True when the key was consumed.</summary>
+        public bool HandleToolKey(Key key)
+        {
+            if (CurrentTool.Instance.OnKeyDown(this, key))
+                return true;
+
+            if ((key == Key.Delete || key == Key.Back) && SelectedCount == 1
+                && GraphicsList.SelectedItems[0] is GraphicPath path && path.TryRemoveActiveAnchor())
+            {
+                AddCommandToHistory(false);
+                return true;
+            }
+
+            return false;
         }
 
         internal void AddCommandToHistory(bool mergable)

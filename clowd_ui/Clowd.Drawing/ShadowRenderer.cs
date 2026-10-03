@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Clowd.Drawing.Graphics;
@@ -34,6 +35,26 @@ namespace Clowd.Drawing
         // skia's blur-radius → gaussian sigma conversion, matching what the compositor
         // DropShadowEffect used to do on screen
         private static double RadiusToSigma(double radius) => radius > 0 ? 0.57735 * radius + 0.5 : 0;
+
+        /// <summary>The blur's sigma in sprite pixels at a bake scale.</summary>
+        internal static double SigmaPx(double bakeScale) => RadiusToSigma(ShadowBlurRadius) * bakeScale;
+
+        /// <summary>The pad around the ink, in canvas units, that covers the blur falloff plus any
+        /// stroke drawn outside Bounds (the exact original formula, see <see cref="SpriteDims"/>).</summary>
+        internal static int Pad(double lineWidth) => (int)Math.Ceiling(RadiusToSigma(ShadowBlurRadius) * 3 + lineWidth + 2);
+
+        /// <summary>
+        /// How far, in pixels, a source pixel reaches through the three box passes of
+        /// <see cref="BoxBlur3"/> at this sigma: the sum of the box radii. A window re-blurred
+        /// from a source padded by this much is exact inside the window.
+        /// </summary>
+        internal static int BlurReach(double sigmaPx)
+        {
+            int reach = 0;
+            foreach (var size in BoxesForGauss(sigmaPx, 3))
+                reach += Math.Max(0, (size - 1) / 2);
+            return reach;
+        }
 
         // one reusable bake host (UI-thread only — bakes run on the dispatcher)
         [ThreadStatic] private static DrawDelegateVisual _bakeHost;
@@ -70,12 +91,11 @@ namespace Clowd.Drawing
         private static (int w, int h, int padPx) SpriteDims(GraphicBase graphic, double bakeScale)
         {
             var bounds = graphic.Bounds;
-            var sigma = RadiusToSigma(ShadowBlurRadius);
 
             // padding must cover the blur falloff plus any stroke drawn outside Bounds. The pad
             // is computed in canvas units with the exact original formula (so bakeScale = 1
             // reproduces the original bake byte-for-byte), then converted to pixels.
-            var pad = (int)Math.Ceiling(sigma * 3 + graphic.LineWidth + 2);
+            var pad = Pad(graphic.LineWidth);
             var padPx = (int)Math.Ceiling(pad * bakeScale);
             var w = (int)Math.Ceiling(bounds.Width * bakeScale) + padPx * 2;
             var h = (int)Math.Ceiling(bounds.Height * bakeScale) + padPx * 2;
@@ -103,59 +123,79 @@ namespace Clowd.Drawing
                             * Matrix.CreateScale(bakeScale, bakeScale)
                             * Matrix.CreateTranslation(padPx, padPx);
 
-            var host = _bakeHost ??= new DrawDelegateVisual();
-            host.Draw = ctx =>
-            {
-                using (ctx.PushTransform(transform))
-                    graphic.DrawShadowSilhouette(ctx);
-            };
-            host.Width = w;
-            host.Height = h;
-            host.Measure(new Size(w, h));
-            host.Arrange(new Rect(0, 0, w, h));
-
-            // read back the silhouette alpha. the alpha byte sits at offset 3 in both BGRA8888
-            // and RGBA8888, so no per-platform branching is needed here.
             var alpha = new byte[w * h];
             using (var rtb = new RenderTargetBitmap(new PixelSize(w, h), new Vector(96, 96)))
             {
-                rtb.Render(host);
-
-                var stride = w * 4;
-                var buf = new byte[stride * h];
-                var handle = GCHandle.Alloc(buf, GCHandleType.Pinned);
-                try
+                RasterAlpha(rtb, new PixelRect(0, 0, w, h), ctx =>
                 {
-                    rtb.CopyPixels(new PixelRect(0, 0, w, h), handle.AddrOfPinnedObject(), buf.Length, stride);
-                }
-                finally
-                {
-                    handle.Free();
-                }
-
-                for (int i = 0; i < alpha.Length; i++)
-                    alpha[i] = buf[i * 4 + 3];
+                    using (ctx.PushTransform(transform))
+                        graphic.DrawShadowSilhouette(ctx);
+                }, alpha);
             }
 
-            host.Draw = null; // drop the graphic reference held by the closure
-
             // blur in pixel space: sigma scales with the bake (geometry and blur stay in step)
-            BoxBlur3(alpha, w, h, RadiusToSigma(ShadowBlurRadius) * bakeScale);
+            BoxBlur3(alpha, w, h, SigmaPx(bakeScale));
 
             // tint with the (premultiplied) shadow color: black at ShadowAlpha opacity → B=G=R=0
             var shadow = new WriteableBitmap(new PixelSize(w, h), new Vector(96, 96), PixelFormats.Bgra8888, AlphaFormat.Premul);
             using (var fb = shadow.Lock())
-            {
-                var row = new byte[w * 4]; // BGR stay 0 (premultiplied black)
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                        row[x * 4 + 3] = (byte)(alpha[y * w + x] * ShadowAlpha / 255);
-                    Marshal.Copy(row, 0, fb.Address + y * fb.RowBytes, row.Length);
-                }
-            }
+                Tint(alpha, w, new PixelRect(0, 0, w, h), fb);
 
             return shadow;
+        }
+
+        /// <summary>
+        /// Rasterizes <paramref name="draw"/> (object only, no chrome, no effect) into
+        /// <paramref name="rtb"/>, which is cleared first and may be larger than the
+        /// <paramref name="rect"/> read back, and writes that rect's alpha plane — row-major,
+        /// rect.Width per row — into <paramref name="alpha"/>. The alpha byte sits at offset 3 in
+        /// both BGRA8888 and RGBA8888, so no per-platform branching is needed here.
+        /// </summary>
+        internal static void RasterAlpha(RenderTargetBitmap rtb, PixelRect rect, Action<DrawingContext> draw, byte[] alpha)
+        {
+            var size = rtb.PixelSize;
+            var host = _bakeHost ??= new DrawDelegateVisual();
+            host.Draw = draw;
+            host.Width = size.Width;
+            host.Height = size.Height;
+            host.Measure(new Size(size.Width, size.Height));
+            host.Arrange(new Rect(0, 0, size.Width, size.Height));
+            rtb.Render(host);
+            host.Draw = null; // drop the graphic reference held by the closure
+
+            int w = rect.Width, h = rect.Height;
+            var stride = w * 4;
+            var buf = new byte[stride * h];
+            var handle = GCHandle.Alloc(buf, GCHandleType.Pinned);
+            try
+            {
+                rtb.CopyPixels(rect, handle.AddrOfPinnedObject(), buf.Length, stride);
+            }
+            finally
+            {
+                handle.Free();
+            }
+
+            for (int i = 0; i < w * h; i++)
+                alpha[i] = buf[i * 4 + 3];
+        }
+
+        /// <summary>
+        /// Writes the <paramref name="rect"/> of a blurred alpha plane (<paramref name="planeWidth"/>
+        /// per row) into the same rect of a locked premultiplied BGRA sprite as the shadow color:
+        /// black at ShadowAlpha opacity → B=G=R=0, A = alpha·ShadowAlpha/255. An
+        /// <paramref name="inkAlpha"/> below 255 scales it further, for a plane whose silhouette
+        /// was drawn opaque on behalf of translucent ink.
+        /// </summary>
+        internal static void Tint(byte[] alpha, int planeWidth, PixelRect rect, ILockedFramebuffer fb, int inkAlpha = 255)
+        {
+            var row = new byte[rect.Width * 4]; // BGR stay 0 (premultiplied black)
+            for (int y = rect.Y; y < rect.Bottom; y++)
+            {
+                for (int x = 0; x < rect.Width; x++)
+                    row[x * 4 + 3] = (byte)(alpha[y * planeWidth + rect.X + x] * inkAlpha / 255 * ShadowAlpha / 255);
+                Marshal.Copy(row, 0, fb.Address + y * fb.RowBytes + rect.X * 4, row.Length);
+            }
         }
 
         /// <summary>

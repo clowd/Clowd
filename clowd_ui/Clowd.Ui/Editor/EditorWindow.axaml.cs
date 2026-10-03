@@ -678,6 +678,12 @@ namespace Clowd.UI
             if (e.KeyModifiers != KeyModifiers.None)
                 return;
 
+            // tools get first refusal on bare keys (the pen finishes on Enter, drops anchors on Backspace)
+            if (drawingCanvas.HandleToolKey(e.Key)) {
+                e.Handled = true;
+                return;
+            }
+
             switch (e.Key) {
             case Key.Escape:
                 drawingCanvas.CancelCurrentOperation();
@@ -707,7 +713,8 @@ namespace Clowd.UI
                 Key.L => ToolType.Line,
                 Key.A => ToolType.Arrow,
                 Key.M => ToolType.Measure,
-                Key.P => ToolType.PolyLine,
+                Key.P => ToolType.Pen,
+                Key.B => ToolType.Brush,
                 Key.T => ToolType.Text,
                 Key.N => ToolType.StickyNote,
                 Key.C => ToolType.Count,
@@ -772,7 +779,8 @@ namespace Clowd.UI
             new ToolRegistryEntry { Tool = ToolType.Line, DisplayName = "Line", IconKey = "IconToolLine", Tooltip = "Line (L)" },
             new ToolRegistryEntry { Tool = ToolType.Arrow, DisplayName = "Arrow", IconKey = "IconToolArrow", Tooltip = "Arrow (A)" },
             new ToolRegistryEntry { Tool = ToolType.Measure, DisplayName = "Measure", IconKey = "IconToolMeasure", Tooltip = "Measure (M)" },
-            new ToolRegistryEntry { Tool = ToolType.PolyLine, DisplayName = "Pencil", IconKey = "IconToolPolyLine", Tooltip = "Pencil (P)" },
+            new ToolRegistryEntry { Tool = ToolType.Pen, DisplayName = "Pen", IconKey = "IconToolPen", Tooltip = "Pen (P)\nClick to place corners, drag to pull curves.\nEnter, Escape or double-click finishes the path." },
+            new ToolRegistryEntry { Tool = ToolType.Brush, DisplayName = "Brush", IconKey = "IconToolBrush", Tooltip = "Brush (B)" },
             new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", IconKey = "IconToolNumericCount", Tooltip = "Step Count (C)", IconClasses = "tight" },
             new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", IconKey = "IconToolText", Tooltip = "Text (T)", IconClasses = "tight" },
             new ToolRegistryEntry { Tool = ToolType.StickyNote, DisplayName = "Sticky Note", IconKey = "IconToolStickyNote", Tooltip = "Sticky Note (N)", IconClasses = "tight" },

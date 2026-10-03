@@ -9,7 +9,7 @@ namespace Clowd.Drawing.Tools
     /// </summary>
     internal class ToolStickyNote : ToolText
     {
-        public ToolStickyNote() : base(() => CursorResources.Text)
+        public ToolStickyNote() : base(() => CursorResources.StickyNote)
         { }
 
         protected override GraphicText CreateGraphic(DrawingCanvas canvas, Point pt) => new GraphicStickyNote(canvas, pt);

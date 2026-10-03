@@ -14,7 +14,8 @@ namespace Clowd.Drawing.Tools
     /// <summary>
     /// Carries everything tools need from a pointer event. DrawingCanvas caches the last PointerState so
     /// Shift up/down can replay a synthetic move (replaces WPF's synthesized MouseMove); DrawingCanvas
-    /// updates Modifiers on key events. Pointer is null for synthetic replays (capture state unchanged then).
+    /// updates Modifiers on key events. Pointer and Args are null for synthetic replays (capture state
+    /// unchanged then, and no new input sample to read). Timestamp is the event's millisecond clock.
     /// </summary>
     internal readonly record struct PointerState(
         Point Position,
@@ -22,7 +23,9 @@ namespace Clowd.Drawing.Tools
         bool LeftPressed,
         bool MiddlePressed,
         bool RightPressed,
-        IPointer Pointer)
+        IPointer Pointer,
+        ulong Timestamp,
+        PointerEventArgs Args)
     {
         public static PointerState From(PointerEventArgs e, Visual relativeTo)
         {
@@ -33,7 +36,9 @@ namespace Clowd.Drawing.Tools
                 pp.Properties.IsLeftButtonPressed,
                 pp.Properties.IsMiddleButtonPressed,
                 pp.Properties.IsRightButtonPressed,
-                e.Pointer);
+                e.Pointer,
+                e.Timestamp,
+                e);
         }
     }
 
@@ -110,6 +115,15 @@ namespace Clowd.Drawing.Tools
 
         public virtual void AbortOperation(DrawingCanvas canvas)
         { }
+
+        /// <summary>Finalizes any multi-gesture edit the tool is holding (a pen path still being
+        /// extended) so that history, a tool switch or an undo never sees a half-built graphic.
+        /// Called by DrawingCanvas for the outgoing tool in OnToolChanged and before Undo/Redo.</summary>
+        public virtual void CommitPending(DrawingCanvas canvas) { }
+
+        /// <summary>A bare key (no modifiers) routed from the editor's tunnel handler. Return true
+        /// to swallow it; false lets the editor's own Escape/Delete/tool-letter handling run.</summary>
+        public virtual bool OnKeyDown(DrawingCanvas canvas, Key key) => false;
 
         public virtual void SetCursor(DrawingCanvas canvas)
         {

@@ -44,6 +44,8 @@ namespace Clowd.Drawing.History
         private static readonly IFieldCodec _rect = new RectCodec();
         private static readonly IFieldCodec _pointList = new PointListCodec();
         private static readonly IFieldCodec _obscuredShapes = new ObscuredShapeArrayCodec();
+        private static readonly IFieldCodec _pathAnchors = new PathAnchorArrayCodec();
+        private static readonly IFieldCodec _brushSamples = new BrushSampleArrayCodec();
 
         public static IFieldCodec ForType(Type fieldType)
         {
@@ -53,6 +55,8 @@ namespace Clowd.Drawing.History
             if (fieldType == typeof(Rect)) return _rect;
             if (fieldType == typeof(List<Point>)) return _pointList;
             if (fieldType == typeof(GraphicImage.ObscuredShape[])) return _obscuredShapes;
+            if (fieldType == typeof(PathAnchor[])) return _pathAnchors;
+            if (fieldType == typeof(GraphicBrush.Sample[])) return _brushSamples;
 
             // every remaining persisted field type today (string, bool, int, Color, PixelRect,
             // font enums) serializes to a single leaf and has value/ordinal equality semantics.
@@ -154,7 +158,8 @@ namespace Clowd.Drawing.History
         }
 
         /// <summary>
-        /// GraphicPolyLine._points. Serializes as a JSON array of "x,y" string leaves, which
+        /// GraphicPolyLine._points (the legacy pencil — no tool creates these any more, but saved
+        /// strokes still load and edit). Serializes as a JSON array of "x,y" string leaves, which
         /// DiffChildren keys positionally: per-element changes are "prefix/item.N"; a length
         /// change reports one "item.N" per index present on only one side; a null↔instance
         /// transition is a structure change reported as the bare field path.
@@ -249,6 +254,107 @@ namespace Clowd.Drawing.History
             private static bool ShapeEquals(in GraphicImage.ObscuredShape x, in GraphicImage.ObscuredShape y) =>
                 PointEquals(x.P0, y.P0) && PointEquals(x.P1, y.P1) && PointEquals(x.P2, y.P2) &&
                 PointEquals(x.P3, y.P3) && DoubleEquals(x.BlurRadius, y.BlurRadius) && x.Mode == y.Mode;
+        }
+
+        /// <summary>
+        /// GraphicPath._anchors. Same shape as the obscured shapes: each element is an object with
+        /// no "id", so DiffChildren keys it positionally and recurses into P/In/Out ("x,y" leaves)
+        /// and Smooth (a bool leaf).
+        /// </summary>
+        private sealed class PathAnchorArrayCodec : IFieldCodec
+        {
+            public object Capture(object value) =>
+                value == null ? null : (PathAnchor[])((PathAnchor[])value).Clone();
+
+            public bool AreEqual(object before, object after)
+            {
+                var b = (PathAnchor[])before;
+                var a = (PathAnchor[])after;
+                if (b == null || a == null) return ReferenceEquals(b, a);
+                if (b.Length != a.Length) return false;
+                for (int i = 0; i < b.Length; i++)
+                    if (!AnchorEquals(b[i], a[i]))
+                        return false;
+                return true;
+            }
+
+            public void EmitPaths(string prefix, object before, object after, SortedSet<string> changes)
+            {
+                var b = (PathAnchor[])before;
+                var a = (PathAnchor[])after;
+                if (b == null || a == null)
+                {
+                    if (!ReferenceEquals(b, a))
+                        changes.Add(prefix);
+                    return;
+                }
+
+                int min = Math.Min(b.Length, a.Length);
+                int max = Math.Max(b.Length, a.Length);
+                for (int i = 0; i < min; i++)
+                {
+                    var itemPrefix = prefix + "/item." + i;
+                    if (!PointEquals(b[i].P, a[i].P)) changes.Add(itemPrefix + "/P");
+                    if (!PointEquals(b[i].In, a[i].In)) changes.Add(itemPrefix + "/In");
+                    if (!PointEquals(b[i].Out, a[i].Out)) changes.Add(itemPrefix + "/Out");
+                    if (b[i].Smooth != a[i].Smooth) changes.Add(itemPrefix + "/Smooth");
+                }
+
+                for (int i = min; i < max; i++)
+                    changes.Add(prefix + "/item." + i);
+            }
+
+            private static bool AnchorEquals(in PathAnchor x, in PathAnchor y) =>
+                PointEquals(x.P, y.P) && PointEquals(x.In, y.In) && PointEquals(x.Out, y.Out) && x.Smooth == y.Smooth;
+        }
+
+        /// <summary>
+        /// GraphicBrush._samples. Each element is an object with no "id", keyed positionally,
+        /// with P (an "x,y" leaf) and T (a double leaf).
+        /// </summary>
+        private sealed class BrushSampleArrayCodec : IFieldCodec
+        {
+            public object Capture(object value) =>
+                value == null ? null : (GraphicBrush.Sample[])((GraphicBrush.Sample[])value).Clone();
+
+            public bool AreEqual(object before, object after)
+            {
+                var b = (GraphicBrush.Sample[])before;
+                var a = (GraphicBrush.Sample[])after;
+                if (b == null || a == null) return ReferenceEquals(b, a);
+                if (b.Length != a.Length) return false;
+                for (int i = 0; i < b.Length; i++)
+                    if (!SampleEquals(b[i], a[i]))
+                        return false;
+                return true;
+            }
+
+            public void EmitPaths(string prefix, object before, object after, SortedSet<string> changes)
+            {
+                var b = (GraphicBrush.Sample[])before;
+                var a = (GraphicBrush.Sample[])after;
+                if (b == null || a == null)
+                {
+                    if (!ReferenceEquals(b, a))
+                        changes.Add(prefix);
+                    return;
+                }
+
+                int min = Math.Min(b.Length, a.Length);
+                int max = Math.Max(b.Length, a.Length);
+                for (int i = 0; i < min; i++)
+                {
+                    var itemPrefix = prefix + "/item." + i;
+                    if (!PointEquals(b[i].P, a[i].P)) changes.Add(itemPrefix + "/P");
+                    if (!DoubleEquals(b[i].T, a[i].T)) changes.Add(itemPrefix + "/T");
+                }
+
+                for (int i = min; i < max; i++)
+                    changes.Add(prefix + "/item." + i);
+            }
+
+            private static bool SampleEquals(in GraphicBrush.Sample x, in GraphicBrush.Sample y) =>
+                PointEquals(x.P, y.P) && DoubleEquals(x.T, y.T);
         }
     }
 }

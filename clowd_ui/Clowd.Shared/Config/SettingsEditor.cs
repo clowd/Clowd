@@ -90,6 +90,9 @@ namespace Clowd.Config
         /// <summary>Soft corners for new outlined rectangles (≈ 4× the default stroke).</summary>
         public const double DefaultRectangleCornerRadius = 12;
 
+        /// <summary>New brush strokes: twice the shared default width.</summary>
+        public const double DefaultBrushLineWidth = 6;
+
         /// <summary>A fresh settings entry for <paramref name="tool"/>: the shared defaults, plus the
         /// few tools whose defaults differ.</summary>
         public static SavedToolSettings CreateDefault(ToolType tool)
@@ -104,6 +107,10 @@ namespace Clowd.Config
                 settings._fontSize = EditorFonts.NumericSize;
                 settings._fontWeight = EditorFonts.NumericWeight;
             }
+
+            // freehand ink reads thin at the shared default
+            if (tool == ToolType.Brush)
+                settings._lineWidth = DefaultBrushLineWidth;
 
             return settings;
         }

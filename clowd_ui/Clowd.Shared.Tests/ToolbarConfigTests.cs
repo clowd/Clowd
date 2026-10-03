@@ -51,14 +51,40 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void ResolveToolbarOrder_StaleRasterEraNames_DroppedAsUnknown()
         {
-            // "Brush"/"Eraser" were ToolType members in the removed raster v1 build and may
-            // linger in persisted settings; they no longer parse and must drop silently
-            var editor = new SettingsEditor { ToolbarOrder = new List<string> { "Brush", "Eraser", "Rectangle" } };
+            // "Raster"/"Eraser" stand in for ToolType members of the removed raster v1 build that may
+            // linger in persisted settings; they no longer parse and must drop silently (the raster
+            // era's "Brush" is a live name again — the vector brush tool — so it is not one of them)
+            var editor = new SettingsEditor { ToolbarOrder = new List<string> { "Raster", "Eraser", "Rectangle" } };
             var resolved = ToolbarConfig.ResolveToolbarOrder(editor);
 
             var expected = new List<ToolType> { ToolType.Rectangle };
             expected.AddRange(ToolbarConfig.DefaultOrder.Where(t => t != ToolType.Rectangle));
             Assert.Equal(expected, resolved);
+        }
+
+        [Fact]
+        public void ResolveToolbarOrder_LegacyPencilName_StillParses_EditorDropsIt()
+        {
+            // ToolType.PolyLine stays in the enum (names are persisted) although no tool backs it
+            // any more; the resolver keeps it and the EDITOR's registry lookup is what drops it
+            var editor = new SettingsEditor { ToolbarOrder = new List<string> { "PolyLine", "Pen", "Pointer" } };
+            var resolved = ToolbarConfig.ResolveToolbarOrder(editor).ToList();
+
+            Assert.Equal(ToolType.PolyLine, resolved[0]);
+            Assert.Equal(ToolType.Pen, resolved[1]);
+            Assert.Equal(ToolType.Pointer, resolved[2]);
+        }
+
+        [Fact]
+        public void DefaultOrder_HasThePenAndTheBrush_NotTheLegacyPencil()
+        {
+            Assert.Contains(ToolType.Pen, ToolbarConfig.DefaultOrder);
+            Assert.Contains(ToolType.Brush, ToolbarConfig.DefaultOrder);
+            Assert.DoesNotContain(ToolType.PolyLine, ToolbarConfig.DefaultOrder);
+
+            // the two take the pencil's one slot, in that order
+            var order = ToolbarConfig.DefaultOrder.ToList();
+            Assert.Equal(order.IndexOf(ToolType.Pen) + 1, order.IndexOf(ToolType.Brush));
         }
 
         [Fact]
@@ -82,7 +108,7 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void ResolveHiddenTools_StaleRasterEraNames_DroppedAsUnknown()
         {
-            var editor = new SettingsEditor { HiddenTools = new List<string> { "Brush", "Eraser" } };
+            var editor = new SettingsEditor { HiddenTools = new List<string> { "Raster", "Eraser" } };
             Assert.Empty(ToolbarConfig.ResolveHiddenTools(editor));
         }
     }
