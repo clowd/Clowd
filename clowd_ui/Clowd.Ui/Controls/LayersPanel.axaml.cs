@@ -11,6 +11,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
 using Clowd.UI.Helpers;
@@ -56,12 +57,23 @@ namespace Clowd.UI.Controls
         private readonly List<GraphicBase> _rowGraphics = new List<GraphicBase>();
         private readonly RowReorderDrag _drag;
 
+        /// <summary>Where a shift-click range starts: the row last clicked without Shift. Held as
+        /// the graphic rather than a row index so it survives rebuilds and reorders; a graphic
+        /// that has since left the canvas just means there is no anchor.</summary>
+        private GraphicBase _selectionAnchor;
+
+        /// <summary>The selection as it stood right after the anchor click. A shift-click selects
+        /// this plus the range, so earlier ctrl-picks survive and a second shift-click that shrinks
+        /// the range drops the rows the first one added.</summary>
+        private GraphicBase[] _anchorSelection = Array.Empty<GraphicBase>();
+
         public LayersPanel()
         {
             DataContext = this;
             InitializeComponent();
             dropIndicator.Background = new SolidColorBrush(AppStyles.AccentColor);
             _drag = new RowReorderDrag(this, rowsHost, dropIndicator, this);
+            panelRoot.PointerPressed += OnEmptyAreaPressed;
 
             // The modern row brushes are theme resources resolved at build time, so a variant
             // change has to rebuild the rows rather than just repaint them.
@@ -260,9 +272,12 @@ namespace Clowd.UI.Controls
                 TextTrimming = TextTrimming.CharacterEllipsis,
             };
 
-            var left = new StackPanel
+            // DockPanel, not a horizontal StackPanel: a StackPanel measures its children with
+            // unbounded width, so the name never trims and a long text body runs under the row
+            // buttons. Docked left in turn, each child gets only what the ones before it left over.
+            var left = new DockPanel
             {
-                Orientation = Orientation.Horizontal,
+                LastChildFill = false,
                 VerticalAlignment = VerticalAlignment.Center,
                 Opacity = g.Hidden ? 0.55 : 1.0, // hidden rows are dimmed
             };
@@ -323,12 +338,57 @@ namespace Clowd.UI.Controls
                 if (!e.GetCurrentPoint(row).Properties.IsLeftButtonPressed)
                     return;
 
-                canvas.SetPanelSelection(g, additive: e.KeyModifiers.HasFlag(KeyModifiers.Control));
+                bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+                // a range click leaves the anchor put, so successive shift-clicks pivot around it
+                if (!e.KeyModifiers.HasFlag(KeyModifiers.Shift) || !SelectRange(canvas, g, additive: ctrl))
+                {
+                    canvas.SetPanelSelection(g, additive: ctrl);
+                    _selectionAnchor = g;
+                    _anchorSelection = [.. canvas.GraphicsList.SelectedItems];
+                }
                 // reveal the row's graphic if the click just selected something off screen
                 canvas.EnsureVisible(g);
             };
             row.ContextMenu = BuildContextMenu(g);
             return row;
+        }
+
+        /// <summary>A left click on the panel outside every row clears the selection, as a click on
+        /// empty canvas does. Row presses bubble up here too (the row handler leaves them unhandled),
+        /// so anything under a row is ignored.</summary>
+        private void OnEmptyAreaPressed(object sender, PointerPressedEventArgs e)
+        {
+            if (_canvas == null || e.Handled || !e.GetCurrentPoint(panelRoot).Properties.IsLeftButtonPressed)
+                return;
+
+            for (var v = e.Source as Visual; v != null && v != panelRoot; v = v.GetVisualParent())
+            {
+                if (v is Border b && b.Classes.Contains("layerRow"))
+                    return;
+            }
+
+            _canvas.UnselectAll();
+            _selectionAnchor = null;
+            _anchorSelection = Array.Empty<GraphicBase>();
+        }
+
+        /// <summary>Shift-click: selects every row between the anchor and <paramref name="target"/>,
+        /// inclusive, in panel order, on top of the selection the anchor click left
+        /// (<see cref="_anchorSelection"/>); Ctrl+Shift also keeps anything selected since. Returns
+        /// false when there is no usable anchor, so the click falls back to an ordinary one.</summary>
+        private bool SelectRange(DrawingCanvas canvas, GraphicBase target, bool additive)
+        {
+            int from = _selectionAnchor == null ? -1 : _rowGraphics.IndexOf(_selectionAnchor);
+            int to = _rowGraphics.IndexOf(target);
+            if (from < 0 || to < 0)
+                return false;
+
+            var range = _rowGraphics.GetRange(Math.Min(from, to), Math.Abs(to - from) + 1).ToArray();
+            if (!additive)
+                canvas.UnselectAllExcept([.. range, .. _anchorSelection]);
+            foreach (var g in range)
+                g.IsSelected = true;
+            return true;
         }
 
         // ====================================================================
