@@ -52,6 +52,12 @@ namespace Clowd.UI
         private readonly string _historyPath;
 
         private DispatcherTimer _sessionInfoDebounce;
+
+        // the recent list draws PreviewImgPath, which is otherwise only re-flattened on close/save/
+        // copy/upload — so a still-open editor would leave its row showing the bare capture. Set on
+        // every canvas commit, consumed when the window loses focus (see SchedulePreviewRefresh).
+        private bool _previewStale;
+        private DispatcherTimer _previewDebounce;
         private readonly bool _openedEmpty; // no graphics on the canvas when the window opened (see Closing)
 
         // the ActiveUpload currently forwarding its Progress into btnUpload's ring, or null. Tracked
@@ -134,6 +140,8 @@ namespace Clowd.UI
             // a blank "new document" window (no capture, no restored graphics) that is still
             // blank when it closes is discarded rather than persisted to the recent list
             _openedEmpty = drawingCanvas.GraphicsList.Count == 0;
+            // a restored editor (app restart) may hold edits whose preview was never flattened
+            _previewStale = !_openedEmpty;
 
             // Modifier-carrying command gestures become Window.KeyBindings (§2.4). Bare gestures
             // (Escape/Delete/Home/End and the tool letters) are routed exclusively by the tunnel
@@ -185,6 +193,7 @@ namespace Clowd.UI
                     _panPreviousTool = null;
                 }
                 UpdateSessionInfo();
+                SchedulePreviewRefresh();
             };
             PositionChanged += (_, _) => {
                 TrackNormalBounds();
@@ -311,6 +320,26 @@ namespace Clowd.UI
             _sessionInfoDebounce.Start();
         }
 
+        /// <summary>
+        /// Re-flattens the preview once the editor is in the background — the moment the user can
+        /// look at the recent list — rather than on every commit, which would put a full render and
+        /// PNG encode on the UI thread mid-edit. Debounced so a commit that lands just after
+        /// deactivation (an in-place text edit finishes on focus loss) folds into the same refresh.
+        /// </summary>
+        private void SchedulePreviewRefresh()
+        {
+            if (!_previewStale)
+                return;
+
+            _previewDebounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => {
+                _previewDebounce.Stop();
+                if (_session != null && _previewStale && !IsActive)
+                    UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
+            });
+            _previewDebounce.Stop();
+            _previewDebounce.Start();
+        }
+
         private void UpdateSessionInfo()
         {
             if (_session != null) {
@@ -353,6 +382,7 @@ namespace Clowd.UI
         private void EditorWindow_Closing(object sender, WindowClosingEventArgs e)
         {
             _sessionInfoDebounce?.Stop();
+            _previewDebounce?.Stop();
 
             SettingsRoot.Current.Uploads.PropertyChanged -= Uploads_PropertyChanged;
 
@@ -1131,6 +1161,10 @@ namespace Clowd.UI
             if (e.State == null)
                 return; // never enqueue empty bytes — a truncated graphics.json silently loses the whole session
 
+            _previewStale = true;
+            if (!IsActive)
+                SchedulePreviewRefresh();
+
             // serialize in memory on the UI thread (cheap), then hand the bytes to a latest-wins
             // background writer — undo/redo and merged drag steps fire this on every step, and a
             // synchronous File.Create here stalls the canvas for the duration of the disk write.
@@ -1171,6 +1205,8 @@ namespace Clowd.UI
         {
             if (bitmap == null || drawingCanvas.GraphicsList.Count == 0)
                 return;
+
+            _previewStale = false;
 
             // save new preview image to file
             var newpreview = SaveImageToSessionDir(bitmap);
