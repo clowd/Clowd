@@ -1,0 +1,143 @@
+<UserControl
+    x:Class="Clowd.UI.Controls.ToolTipCard"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls">
+
+    <!--  Dark chrome on purpose, whatever the app theme. The chrome around the tip is dark in
+          both editors: the video editor's always is (the #535353 root, the #1e1e1e preview), and
+          in the image editor the tip is a dark flyout by design, so it reads the same next to the
+          light modern strip as it does next to the compact one. A tip that followed the system
+          theme would read as a light island next to the strip it explains.  -->
+    <Border
+        Width="280"
+        Background="#2A2A2D"
+        BorderBrush="#3C3C40"
+        BorderThickness="1"
+        CornerRadius="8">
+        <StackPanel>
+            <!--  Header row: the tool's name, and its keyboard shortcut as a keycap on the right,
+                  outside the demo so it is the first thing read and trivially changed (it is the
+                  registry's Shortcut, not a letter baked into a GIF). Its colours are tied to
+                  this card's own dark chrome (see the note above), which is the same in both app
+                  themes.
+
+                  The keycap is a mechanical key seen from slightly above: a dark outline with a drop
+                  shadow, the skirt (the sloped sides, lit from above, so it is lighter at the top
+                  and shows more at the bottom), and the face on top of it, a little dished: a
+                  lighter top rim, a soft gradient, a bold letter.
+
+                  Vertical alignment: the face, not the whole key, is centred on the header's text
+                  (Inter's line box is symmetric about its cap middle, so that is the row's centre).
+                  The skirt shows 2px above the face and 5px below it, so the face sits 1.5px above
+                  the key's centre; a 3px top margin moves it onto the row's centre.  -->
+            <Grid Margin="14,8,14,0" ColumnDefinitions="*,Auto">
+                <TextBlock
+                    x:Name="txtHeader"
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    FontWeight="SemiBold"
+                    Foreground="#F0F0F0"
+                    TextWrapping="Wrap" />
+                <Border
+                    x:Name="keycap"
+                    Grid.Column="1"
+                    Margin="12,3,0,0"
+                    Padding="3,2,3,5"
+                    VerticalAlignment="Center"
+                    BorderBrush="#0B0B0E"
+                    BorderThickness="1"
+                    BoxShadow="0 2 3 0 #99000000"
+                    CornerRadius="6"
+                    IsVisible="False">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                            <GradientStop Offset="0" Color="#4C4F59" />
+                            <GradientStop Offset="0.55" Color="#2E3037" />
+                            <GradientStop Offset="1" Color="#1C1D22" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Border
+                        MinWidth="22"
+                        Height="20"
+                        Padding="6,0"
+                        BorderThickness="1"
+                        BoxShadow="inset 0 -2 3 0 #33000000"
+                        CornerRadius="4">
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                <GradientStop Offset="0" Color="#8A8E99" />
+                                <GradientStop Offset="1" Color="#4A4D56" />
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                        <Border.Background>
+                            <RadialGradientBrush Center="50%,35%" GradientOrigin="50%,30%" RadiusX="70%" RadiusY="80%">
+                                <GradientStop Offset="0" Color="#676B77" />
+                                <GradientStop Offset="1" Color="#4B4E58" />
+                            </RadialGradientBrush>
+                        </Border.Background>
+                        <TextBlock
+                            x:Name="txtShortcut"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="12"
+                            FontWeight="Bold"
+                            Foreground="#F6F6F8"
+                            LineHeight="15"
+                            TextAlignment="Center" />
+                    </Border>
+                </Border>
+            </Grid>
+            <TextBlock
+                x:Name="txtDescription"
+                Margin="14,0,14,10"
+                FontSize="12"
+                Foreground="#B8B8BC"
+                LineHeight="17"
+                TextWrapping="Wrap" />
+
+            <!--  the demo. The player measures to nothing when its asset is missing, and the
+                  border wraps it, so a tip without a GIF collapses to header + description
+                  instead of showing an empty frame.  -->
+            <Border
+                x:Name="demoFrame"
+                Margin="14,0,14,12"
+                HorizontalAlignment="Left"
+                ClipToBounds="True"
+                CornerRadius="6">
+                <controls:AnimatedGifImage
+                    x:Name="demo"
+                    Width="252"
+                    Height="144" />
+            </Border>
+
+            <!--  why the button is disabled right now; only present when it is  -->
+            <Border
+                x:Name="disabledFooter"
+                Padding="14,8"
+                Background="#33F05252"
+                BorderBrush="#55F05252"
+                BorderThickness="0,1,0,0"
+                CornerRadius="0,0,8,8"
+                IsVisible="False">
+                <DockPanel>
+                    <Path
+                        Width="12"
+                        Height="12"
+                        Margin="0,2,8,0"
+                        VerticalAlignment="Top"
+                        DockPanel.Dock="Left"
+                        Data="F0 M8,1 L15,14 L1,14 Z M7.25,6 L8.75,6 L8.75,10.5 L7.25,10.5 Z M7.25,11.5 L8.75,11.5 L8.75,13 L7.25,13 Z"
+                        Fill="#FFB4B4"
+                        Stretch="Uniform" />
+                    <TextBlock
+                        x:Name="txtDisabled"
+                        FontSize="12"
+                        Foreground="#FFC8C8"
+                        LineHeight="17"
+                        TextWrapping="Wrap" />
+                </DockPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

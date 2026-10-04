@@ -258,22 +258,6 @@
             </Style>
         </ControlTheme>
 
-        <!--  The add-track tips are rich panels (ve:TrackTip) rather than a line of text, and they
-              draw their own dark chrome, so the ToolTip around them is a bare presenter: no
-              theme padding, background or border to double up on the panel's.  -->
-        <ControlTheme x:Key="TrackTipToolTipTheme" TargetType="ToolTip">
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Template">
-                <ControlTemplate>
-                    <ContentPresenter
-                        Padding="{TemplateBinding Padding}"
-                        Content="{TemplateBinding Content}"
-                        ContentTemplate="{TemplateBinding ContentTemplate}" />
-                </ControlTemplate>
-            </Setter>
-        </ControlTheme>
     </Window.Resources>
 
     <!--  Classes selects the editor chrome and ApplyChrome sets it from General.EditorLayout,
@@ -664,10 +648,11 @@
                 <!--  Each add button carries a rich tip (ve:TrackTip: header, description, demo
                       GIF, and a reason when the button is disabled) in place of a line of text.
                       The Tip is a ToolTip instance, which the tooltip service uses as-is, so it can
-                      wear the bare TrackTipToolTipTheme. Placed to the right of the strip, and
-                      shown on disabled buttons too: the speed and input-overlay buttons set the
-                      tip's DisabledReason from code-behind (RefreshAddSpeedButton,
-                      RefreshInputOverlayButtons) to say why.  -->
+                      wear the bare RichTipToolTipTheme (AppResources.axaml, shared with the image
+                      editor's tool tips). Placed to the right of the strip, and shown on disabled
+                      buttons too: the speed and input-overlay buttons set the tip's DisabledReason
+                      from code-behind (RefreshAddSpeedButton, RefreshInputOverlayButtons) to say
+                      why.  -->
                 <controls:ToolButton
                     x:Name="btnImportMedia"
                     Classes="wide"
@@ -677,7 +662,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipImportMedia"
                                 DemoName="video"
@@ -696,7 +681,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipImportAudio"
                                 DemoName="audio"
@@ -715,7 +700,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipAddImage"
                                 DemoName="image"
@@ -733,7 +718,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipAddText"
                                 DemoName="text"
@@ -752,7 +737,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipAddZoom"
                                 DemoName="zoom"
@@ -771,7 +756,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipAddSpeed"
                                 DemoName="speed"
@@ -790,7 +775,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipAddCursor"
                                 DemoName="cursor"
@@ -809,7 +794,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipAddKeyboard"
                                 DemoName="keyboard"
@@ -833,7 +818,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipVoice"
                                 DemoName="voice"
@@ -852,7 +837,7 @@
                     ToolTip.Placement="Right"
                     ToolTip.ShowOnDisabled="True">
                     <ToolTip.Tip>
-                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipAddBackground"
                                 DemoName="background"

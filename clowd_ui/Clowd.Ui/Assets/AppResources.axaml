@@ -73,6 +73,26 @@
                     <Setter Property="Background" Value="#66FFFFFF" />
                 </Style>
             </ControlTheme>
+
+            <!--  The editors' tool-strip tips are rich panels (controls:ToolTipCard: header,
+                  description, demo GIF) rather than a line of text, and they draw their own dark
+                  chrome, so the ToolTip around them is a bare presenter: no theme padding,
+                  background or border to double up on the panel's. App-wide because both the
+                  video editor (ve:TrackTip in VideoEditorWindow.axaml) and the image editor
+                  (EditorWindow.CreateToolButton) wear it.  -->
+            <ControlTheme x:Key="RichTipToolTipTheme" TargetType="ToolTip">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <ContentPresenter
+                            Padding="{TemplateBinding Padding}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
             <ResourceDictionary.ThemeDictionaries>
                 <!-- WPFUI exact theme colors replaced by hardcoded Light #FAFAFA / Dark #202020 (§6). -->
                 <ResourceDictionary x:Key="Light">

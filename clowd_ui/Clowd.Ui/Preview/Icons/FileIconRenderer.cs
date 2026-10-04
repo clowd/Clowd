@@ -140,7 +140,7 @@ namespace Clowd.UI.Preview.Icons
             {
                 // Everything AssetLoader-shaped stays inside the try, the Uri construction included:
                 // AssetLoader.Exists throws on a malformed URI rather than returning false (the
-                // TrackTip.axaml.cs:88-105 precedent), and Open throws for an asset that is simply absent.
+                // Controls/ToolTipCard.axaml.cs AssetExists precedent), and Open throws for an asset that is simply absent.
                 using var stream = AssetLoader.Open(new Uri(FileIconCatalog.AssetUriForSlug(slug)));
                 document = MiniSvg.Parse(stream);
             }

@@ -14,7 +14,8 @@ commit both the script and the regenerated GIFs.
 | --- | --- |
 | Generator (this script) | `tools/track-tips/generate.py` |
 | Output GIFs, embedded as Avalonia resources | `clowd_ui/Clowd.Ui/Assets/TrackTips/track-*.gif` |
-| The flyout control (header, description, demo, disabled footer) | `clowd_ui/Clowd.Ui/VideoEditor/TrackTip.axaml(.cs)` |
+| The flyout control (header, description, demo, disabled footer) | `clowd_ui/Clowd.Ui/Controls/ToolTipCard.axaml(.cs)`, shared with the image editor's tool tips (`tools/tool-tips/`); `VideoEditor/TrackTip.cs` is the thin subclass that resolves `DemoName` |
+| The bare ToolTip theme the card sits in | `RichTipToolTipTheme` in `clowd_ui/Clowd.Ui/Assets/AppResources.axaml` |
 | The GIF player (streams frames through SkiaSharp `SKCodec`) | `clowd_ui/Clowd.Ui/Controls/AnimatedGifImage.cs` |
 | Where the tips are attached to the buttons | `clowd_ui/Clowd.Ui/VideoEditor/VideoEditorWindow.axaml` (the `ToolBar` strip) |
 | Disabled reasons driven from code | `VideoEditorWindow.axaml.cs`: `RefreshAddSpeedButton`, `RefreshInputOverlayButtons` |
@@ -52,7 +53,7 @@ file just hides the demo area, so the app builds and runs with or without the GI
 3. In `VideoEditorWindow.axaml`, give the new `ToolButton` the same attached properties as its
    neighbours (`ToolTip.HorizontalOffset="6"`, `ToolTip.Placement="Right"`,
    `ToolTip.ShowOnDisabled="True"`) and a `<ToolTip.Tip>` holding
-   `<ToolTip Theme="{StaticResource TrackTipToolTipTheme}"><ve:TrackTip x:Name="tipXxx"
+   `<ToolTip Theme="{StaticResource RichTipToolTipTheme}"><ve:TrackTip x:Name="tipXxx"
    DemoName="<name>" Header="Add Xxx Track" Description="..." /></ToolTip>`.
 4. If the button can be disabled, set `tipXxx.DisabledReason` from the code-behind wherever its
    command's CanExecute is refreshed (null when enabled), as `RefreshAddSpeedButton` does.

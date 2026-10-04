@@ -22,6 +22,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.Drawing;
@@ -703,28 +704,11 @@ namespace Clowd.UI
                 return;
             }
 
-            // bare tool letters (replaces the WPF BareKeyBindings, decision table #36)
-            ToolType? tool = e.Key switch {
-                Key.D => ToolType.None,
-                Key.S => ToolType.Pointer,
-                Key.R => ToolType.Rectangle,
-                Key.F => ToolType.FilledRectangle,
-                Key.E => ToolType.Ellipse,
-                Key.L => ToolType.Line,
-                Key.A => ToolType.Arrow,
-                Key.M => ToolType.Measure,
-                Key.P => ToolType.Pen,
-                Key.B => ToolType.Brush,
-                Key.T => ToolType.Text,
-                Key.N => ToolType.StickyNote,
-                Key.C => ToolType.Count,
-                Key.O => ToolType.Pixelate,
-                _ => null,
-            };
-
-            if (tool != null) {
+            // bare tool letters (replaces the WPF BareKeyBindings, decision table #36). The map is
+            // built from ToolRegistry's Shortcut field, the same value the flyout keycap shows.
+            if (ToolShortcuts.TryGetValue(e.Key, out var tool)) {
                 e.Handled = true;
-                SelectToolExecuted(tool.Value.ToString());
+                SelectToolExecuted(tool.ToString());
             }
         }
 
@@ -757,7 +741,21 @@ namespace Clowd.UI
             public ToolType Tool;
             public string DisplayName;
             public string IconKey;
-            public string Tooltip;
+
+            /// <summary>The bare key that selects the tool (OnTunnelKeyDown reads it through
+            /// <see cref="ToolShortcuts"/>) and the label of the keycap beside the flyout's header.
+            /// One place on purpose: change it here and both the key and the tip follow. Must be
+            /// unique across the registry (asserted when the map is built).</summary>
+            public Key Shortcut;
+
+            /// <summary>The flyout copy under the header (the header is <see cref="DisplayName"/>):
+            /// two or three sentences on how the tool works, including its modifiers. Never the
+            /// shortcut letter: the keycap shows it.</summary>
+            public string Description;
+
+            /// <summary>The demo's file stem under Assets/ToolTips without the "tool-" prefix:
+            /// "pen" shows tool-pen.gif. A missing GIF collapses the flyout to header + text.</summary>
+            public string DemoName;
 
             /// <summary>Space-separated style classes for the button's icon: its weight
             /// ("tight" for a glyph that needs more inset than the default) and any optical
@@ -767,25 +765,63 @@ namespace Clowd.UI
             public string IconClasses;
         }
 
-        // Rows mirror the original static XAML 1:1 (icons, tooltips and the Count/Text
-        // tighter-inset overrides).
+        // Rows mirror the original static XAML 1:1 (icons and the Count/Text tighter-inset
+        // overrides). The shortcut, the flyout copy and the demo names live here; the GIFs come
+        // from tools/tool-tips/generate.py (README there). The shortcut is not in the copy and not
+        // in the GIF: the card draws it as a keycap beside the header from Shortcut.
         private static readonly ToolRegistryEntry[] ToolRegistry =
         {
-            new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", IconKey = "IconToolNone", Tooltip = "Pan Tool (D)\nCan also hold SPACE to enter Pan Mode." },
-            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", IconKey = "IconToolPointer", Tooltip = "Selection Tool (S or ESC)", IconClasses = "iconNudgeRight" },
-            new ToolRegistryEntry { Tool = ToolType.Rectangle, DisplayName = "Rectangle", IconKey = "IconToolRectangle", Tooltip = "Rectangle (R)" },
-            new ToolRegistryEntry { Tool = ToolType.FilledRectangle, DisplayName = "Filled Rectangle", IconKey = "IconToolFilledRectangle", Tooltip = "Filled Rectangle (F)" },
-            new ToolRegistryEntry { Tool = ToolType.Ellipse, DisplayName = "Ellipse", IconKey = "IconToolEllipse", Tooltip = "Ellipse (E)" },
-            new ToolRegistryEntry { Tool = ToolType.Line, DisplayName = "Line", IconKey = "IconToolLine", Tooltip = "Line (L)" },
-            new ToolRegistryEntry { Tool = ToolType.Arrow, DisplayName = "Arrow", IconKey = "IconToolArrow", Tooltip = "Arrow (A)" },
-            new ToolRegistryEntry { Tool = ToolType.Measure, DisplayName = "Measure", IconKey = "IconToolMeasure", Tooltip = "Measure (M)" },
-            new ToolRegistryEntry { Tool = ToolType.Pen, DisplayName = "Pen", IconKey = "IconToolPen", Tooltip = "Pen (P)\nClick to place corners, drag to pull curves.\nEnter, Escape or double-click finishes the path." },
-            new ToolRegistryEntry { Tool = ToolType.Brush, DisplayName = "Brush", IconKey = "IconToolBrush", Tooltip = "Brush (B)" },
-            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", IconKey = "IconToolNumericCount", Tooltip = "Step Count (C)", IconClasses = "tight" },
-            new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", IconKey = "IconToolText", Tooltip = "Text (T)", IconClasses = "tight" },
-            new ToolRegistryEntry { Tool = ToolType.StickyNote, DisplayName = "Sticky Note", IconKey = "IconToolStickyNote", Tooltip = "Sticky Note (N)", IconClasses = "tight" },
-            new ToolRegistryEntry { Tool = ToolType.Pixelate, DisplayName = "Obscure", IconKey = "IconToolPixelate", Tooltip = "Obscure (O)" },
+            new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", Shortcut = Key.D, IconKey = "IconToolNone", DemoName = "pan",
+                Description = "Drag to move the view around. Hold Space with any tool to pan for a moment." },
+            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", Shortcut = Key.S, IconKey = "IconToolPointer", DemoName = "select", IconClasses = "iconNudgeRight",
+                Description = "Click an object to select it and drag to move it, or drag across empty canvas to select everything inside the box." },
+            new ToolRegistryEntry { Tool = ToolType.Rectangle, DisplayName = "Rectangle", Shortcut = Key.R, IconKey = "IconToolRectangle", DemoName = "rectangle",
+                Description = "Drag from one corner to the opposite one to draw an outline. Hold Shift for a perfect square." },
+            new ToolRegistryEntry { Tool = ToolType.FilledRectangle, DisplayName = "Filled Rectangle", Shortcut = Key.F, IconKey = "IconToolFilledRectangle", DemoName = "filled",
+                Description = "Drag out a solid block of the current color. Hold Shift for a square." },
+            new ToolRegistryEntry { Tool = ToolType.Ellipse, DisplayName = "Ellipse", Shortcut = Key.E, IconKey = "IconToolEllipse", DemoName = "ellipse",
+                Description = "Drag out the box the ellipse should fit in. Hold Shift for a perfect circle." },
+            new ToolRegistryEntry { Tool = ToolType.Line, DisplayName = "Line", Shortcut = Key.L, IconKey = "IconToolLine", DemoName = "line",
+                Description = "Drag from one end to the other. Hold Shift to snap the angle to 45° steps. Drag the middle handle to bend it into a curve." },
+            new ToolRegistryEntry { Tool = ToolType.Arrow, DisplayName = "Arrow", Shortcut = Key.A, IconKey = "IconToolArrow", DemoName = "arrow",
+                Description = "Drag from the tail to the point the arrow should hit. Hold Shift to snap to 45° steps. Drag the middle handle to bend it into a curve." },
+            new ToolRegistryEntry { Tool = ToolType.Measure, DisplayName = "Measure", Shortcut = Key.M, IconKey = "IconToolMeasure", DemoName = "measure",
+                Description = "Drag between two points to measure the distance and angle between them. Hold Shift to snap to 45° steps." },
+            new ToolRegistryEntry { Tool = ToolType.Pen, DisplayName = "Pen", Shortcut = Key.P, IconKey = "IconToolPen", DemoName = "pen",
+                Description = "Click to place a corner, or press and drag to pull out curve handles; hold Alt to drag one handle on its own. Double-click a point to switch it between corner and curve. Click the first point to close the shape, or press Enter to finish. Click either end of an existing path to keep extending it." },
+            new ToolRegistryEntry { Tool = ToolType.Brush, DisplayName = "Brush", Shortcut = Key.B, IconKey = "IconToolBrush", DemoName = "brush",
+                Description = "Press and drag to paint a freehand stroke. Stroke in the bar above sets its width." },
+            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", Shortcut = Key.C, IconKey = "IconToolNumericCount", DemoName = "count", IconClasses = "tight",
+                Description = "Click to drop the next numbered step. Drag before letting go to pull an arrow out of it." },
+            new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", Shortcut = Key.T, IconKey = "IconToolText", DemoName = "text", IconClasses = "tight",
+                Description = "Click where the text should go, then type. Enter commits and Shift+Enter starts a new line." },
+            new ToolRegistryEntry { Tool = ToolType.StickyNote, DisplayName = "Sticky Note", Shortcut = Key.N, IconKey = "IconToolStickyNote", DemoName = "note", IconClasses = "tight",
+                Description = "Click to stick a note, then type into it. Enter commits and Shift+Enter adds a line." },
+            new ToolRegistryEntry { Tool = ToolType.Pixelate, DisplayName = "Obscure", Shortcut = Key.O, IconKey = "IconToolPixelate", DemoName = "obscure",
+                Description = "Drag a box over the part of the image to hide. Hold Shift for a square." },
         };
+
+        /// <summary>Bare key to tool, built from <see cref="ToolRegistry"/> so the key handler and
+        /// the flyout keycaps cannot drift: there is one letter per tool and it lives in the
+        /// registry. Declared after the registry (static initialisers run in textual order).</summary>
+        private static readonly Dictionary<Key, ToolType> ToolShortcuts = BuildToolShortcuts();
+
+        private static Dictionary<Key, ToolType> BuildToolShortcuts()
+        {
+            var map = new Dictionary<Key, ToolType>();
+            foreach (var entry in ToolRegistry)
+            {
+                Debug.Assert(entry.Shortcut != Key.None, $"ToolRegistry: {entry.Tool} has no shortcut; every tool button's keycap and bare key come from it");
+                Debug.Assert(!map.ContainsKey(entry.Shortcut), $"ToolRegistry: shortcut {entry.Shortcut} is used by both {map.GetValueOrDefault(entry.Shortcut)} and {entry.Tool}");
+                map[entry.Shortcut] = entry.Tool;
+            }
+            return map;
+        }
+
+        /// <summary>The keycap label for a registry shortcut: the enum name, which for the letter
+        /// keys is the letter itself (Key.R is "R"). Anything fancier (digits as "D1", OEM keys)
+        /// would need a table here; the registry only uses letters today.</summary>
+        private static string ShortcutLabel(Key key) => key == Key.None ? null : key.ToString();
 
         private readonly List<Control> _generatedToolControls = new List<Control>();
 
@@ -929,6 +965,11 @@ namespace Clowd.UI
 
             var generated = new List<Control>();
 
+            // the bare ToolTip theme the rich tips wear (AppResources.axaml); resolved once per
+            // rebuild rather than per button, since FindResource walks up to the app resources
+            var tipTheme = this.FindResource("RichTipToolTipTheme") as ControlTheme;
+            Debug.Assert(tipTheme != null, "RichTipToolTipTheme not found: the tips would fall back to the default ToolTip chrome");
+
             foreach (var tool in order)
             {
                 if (hidden.Contains(tool))
@@ -936,7 +977,7 @@ namespace Clowd.UI
 
                 var entry = GetToolEntry(tool);
                 if (entry != null)
-                    generated.Add(CreateToolButton(entry));
+                    generated.Add(CreateToolButton(entry, tipTheme));
             }
 
             for (int i = 0; i < generated.Count; i++)
@@ -944,7 +985,7 @@ namespace Clowd.UI
             _generatedToolControls.AddRange(generated);
         }
 
-        private ToolButton CreateToolButton(ToolRegistryEntry entry)
+        private ToolButton CreateToolButton(ToolRegistryEntry entry, ControlTheme tipTheme)
         {
             var name = entry.Tool.ToString();
             var button = new ToolButton
@@ -958,7 +999,25 @@ namespace Clowd.UI
                 foreach (var cls in entry.IconClasses.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                     button.Classes.Add(cls);
 
-            ToolTip.SetTip(button, entry.Tooltip);
+            // The rich tip (header, shortcut keycap, description, demo GIF), the same card the
+            // video editor's add-track buttons carry, placed to the right of the strip with a
+            // small gap in both chromes. Tool buttons are never disabled, so no ShowOnDisabled or
+            // DisabledReason.
+            // The buttons are recreated on every customise change, which is fine: a card costs
+            // nothing until its tooltip opens, and the player decodes only while attached.
+            ToolTip.SetPlacement(button, PlacementMode.Right);
+            ToolTip.SetHorizontalOffset(button, 6);
+            ToolTip.SetTip(button, new ToolTip
+            {
+                Theme = tipTheme,
+                Content = new ToolTipCard
+                {
+                    Header = entry.DisplayName,
+                    Shortcut = ShortcutLabel(entry.Shortcut),
+                    Description = entry.Description,
+                    DemoSource = ToolTipCard.DemoUri("ToolTips", "tool-" + entry.DemoName),
+                },
+            });
 
             // mirror the original XAML IsChecked pattern: OneWay from the canvas Tool through the
             // ToolTypeConverter, checked iff the active tool equals this button's tool.
