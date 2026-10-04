@@ -168,16 +168,24 @@ namespace Clowd.Drawing.Tests
                 g.DrawObject(ctx);
             }
 
+            // CopyPixels hands back the bitmap's native layout: BGRA on Windows, RGBA on macOS
             var px = new byte[40 * 20 * 4];
-            using (var wb = new WriteableBitmap(new PixelSize(40, 20), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul))
-            using (var fb = wb.Lock())
+            var handle = GCHandle.Alloc(px, GCHandleType.Pinned);
+            try
             {
-                rtb.CopyPixels(new PixelRect(0, 0, 40, 20), fb.Address, fb.RowBytes * 20, fb.RowBytes);
-                for (int y = 0; y < 20; y++)
-                    Marshal.Copy(fb.Address + y * fb.RowBytes, px, y * 40 * 4, 40 * 4);
+                rtb.CopyPixels(new PixelRect(0, 0, 40, 20), handle.AddrOfPinnedObject(), px.Length, 40 * 4);
+            }
+            finally
+            {
+                handle.Free();
             }
 
-            (byte r, byte g, byte b) At(int x, int y) { int i = (y * 40 + x) * 4; return (px[i + 2], px[i + 1], px[i]); }
+            bool rgba = rtb.Format == PixelFormats.Rgba8888;
+            (byte r, byte g, byte b) At(int x, int y)
+            {
+                int i = (y * 40 + x) * 4;
+                return rgba ? (px[i], px[i + 1], px[i + 2]) : (px[i + 2], px[i + 1], px[i]);
+            }
             var white = At(10, 10);
             Assert.InRange(white.r, 249, 255);
             Assert.Equal(255, white.g);
