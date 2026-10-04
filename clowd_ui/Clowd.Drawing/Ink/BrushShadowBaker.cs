@@ -170,9 +170,13 @@ namespace Clowd.Drawing.Ink
             int dx = 0, dy = 0;
             if (carry)
             {
-                // snap the new plane onto the old pixel grid, at or beyond the requested origin
-                dx = (int)Math.Ceiling((_origin.X - origin.X) * scale);
-                dy = (int)Math.Ceiling((_origin.Y - origin.Y) * scale);
+                // snap the new plane onto the old pixel grid, at or beyond the requested origin.
+                // The stroke's bounds are not monotonic (the start rule swallows the opening points,
+                // a dot thins once the pointer moves), so the request can lie right of / below the old
+                // plane on one side: the new plane still starts no later than the old one, or the
+                // carried rows would land at negative offsets.
+                dx = Math.Max(0, (int)Math.Ceiling((_origin.X - origin.X) * scale));
+                dy = Math.Max(0, (int)Math.Ceiling((_origin.Y - origin.Y) * scale));
                 origin = new Point(_origin.X - dx / scale, _origin.Y - dy / scale);
                 w = Math.Max((int)Math.Ceiling((reserve.Right + pad - origin.X) * scale), dx + _w);
                 h = Math.Max((int)Math.Ceiling((reserve.Bottom + pad - origin.Y) * scale), dy + _h);

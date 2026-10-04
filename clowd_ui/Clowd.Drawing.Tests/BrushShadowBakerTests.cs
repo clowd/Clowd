@@ -83,6 +83,43 @@ namespace Clowd.Drawing.Tests
             return baker;
         }
 
+        /// <summary>The stroke's bounds are not monotonic (the start rule swallows the opening
+        /// points, a dot's resting radius thins once the pointer moves, the tip's cap wanders), so a
+        /// reserve outgrown on one side can ask for a plane whose origin lies right of / below the
+        /// old one. The carried plane must still contain the old one rather than copy to a negative
+        /// index. Fuzzed over jittery, jumpy strokes at several zooms and caps.</summary>
+        [AvaloniaFact]
+        public void ShrinkingBounds_NeverMoveTheCarriedPlanePastTheOldOne()
+        {
+            for (int seed = 0; seed < 40; seed++)
+            {
+                var rnd = new Random(seed);
+                double width = 1 + rnd.NextDouble() * 20;
+                var start = new Point(300, 300);
+                var g = Drawing(start, new[] { start }, lineWidth: width);
+                var baker = new BrushShadowBaker(g);
+                double zoom = new[] { 0.5, 1.0, 2.0 }[seed % 3];
+                int cap = seed % 4 == 0 ? 240 : ShadowSpriteCache.InteractiveMaxDimension;
+
+                double t = 0, x = start.X, y = start.Y;
+                for (int i = 0; i < 300; i++)
+                {
+                    // mostly tiny jitter near the start, with occasional long flicks in any direction
+                    double step = rnd.NextDouble() < 0.08 ? 40 + rnd.NextDouble() * 120 : rnd.NextDouble() * 3;
+                    double a = rnd.NextDouble() * 2 * Math.PI;
+                    x = Math.Clamp(x + Math.Cos(a) * step, 0, 600);
+                    y = Math.Clamp(y + Math.Sin(a) * step, 0, 600);
+                    t += 1 + rnd.NextDouble() * 30;
+                    if (g.AddSample(new Point(x, y), t, 0.5))
+                    {
+                        var stroke = g.GetStroke();
+                        baker.Bake(zoom, cap, out _, out _);
+                        Assert.True(baker.PlaneRect.Contains(stroke.Bounds), $"seed {seed} sample {i}");
+                    }
+                }
+            }
+        }
+
         [AvaloniaFact]
         public void WindowedUpdates_LandOnTheWholePlaneRedo()
         {
