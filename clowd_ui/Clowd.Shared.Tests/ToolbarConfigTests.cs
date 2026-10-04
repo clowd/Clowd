@@ -52,8 +52,9 @@ namespace Clowd.Shared.Tests
         public void ResolveToolbarOrder_StaleRasterEraNames_DroppedAsUnknown()
         {
             // "Raster"/"Eraser" stand in for ToolType members of the removed raster v1 build that may
-            // linger in persisted settings; they no longer parse and must drop silently (the raster
-            // era's "Brush" is a live name again — the vector brush tool — so it is not one of them)
+            // linger in persisted settings; they must drop silently ("Raster" no longer parses, and
+            // "Eraser" is live again only as the overlay-only Draw on Screen eraser, which the
+            // resolver scrubs; the raster era's "Brush" is the vector brush tool now, so it stays)
             var editor = new SettingsEditor { ToolbarOrder = new List<string> { "Raster", "Eraser", "Rectangle" } };
             var resolved = ToolbarConfig.ResolveToolbarOrder(editor);
 

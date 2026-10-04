@@ -43,6 +43,8 @@ namespace Clowd.UI.Controls
             Add(app, "Tray/TraySplitButton");
             Add(app, "Tray/TrayGrip");
             Add(app, "Tray/TrayStatusBlock");
+            Add(app, "Tray/TraySwatch");
+            Add(app, "Tray/TrayDotButton");
         }
 
         private static void Add(Application app, string name)

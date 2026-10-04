@@ -78,6 +78,7 @@ internal class Program
         DrawSizes(sizes, "Numerical", DrawBaseCursor, DrawHash);
         DrawSizes(sizes, "Pen", DrawBaseCursor, DrawNib);
         DrawSizes(sizes, "StickyNote", DrawBaseCursor, DrawStickyNote);
+        DrawSizes(sizes, "Eraser", DrawBaseCursor, DrawEraser);
         DrawSizes(sizes, "Rotate", DrawRotate);
         DrawSizes(sizes, "Obscure", DrawBaseCursor, DrawObscure);
         DrawSizes(sizes, "Move", DrawBaseCursor, DrawResizeCursorSmall);
@@ -865,6 +866,97 @@ internal class Program
             mkpt(right - fold, bottom - fold),
             mkpt(right, bottom - fold),
         });
+    }
+
+    /// <summary>Eraser block for the eraser tool: a rectangle lying at 45 degrees, rising from
+    /// the lower left, with a band across it and the rubber tip below the band filled solid.
+    /// Built like DrawNib: every edge runs at exactly 45 degrees and every vertex is an integer
+    /// offset from the tip corner, so the outline stays on the grid at every size. Up to a 2px
+    /// stroke it is hand rasterized as pixel art (a 45 degree Bresenham chain is a clean
+    /// staircase where GDI+ would smear it grey); from 4px up GDI+ anti-aliasing is fine.</summary>
+    private static void DrawEraser(float scale, int lineWidth, Graphics g)
+    {
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+        var e = EraserGeometry(scale);
+
+        if (lineWidth <= 2)
+        {
+            DrawEraserPixelArt(g, e, lineWidth);
+            return;
+        }
+
+        // even stroke widths sit on pixel edges, so integer coordinates are already aligned
+        PointF P(Point p) => new PointF(p.X, p.Y);
+
+        using var body = new GraphicsPath();
+        body.AddPolygon(e.Body.Select(P).ToArray());
+
+        using var pen = new Pen(Stroke, lineWidth);
+        pen.LineJoin = LineJoin.Miter;
+
+        g.FillPath(Fill, body);
+        g.FillPolygon(Stroke, new[] { P(e.Body[0]), P(e.BandR), P(e.BandL), P(e.Body[3]) });
+        g.DrawPath(pen, body);
+        g.DrawLine(pen, P(e.BandL), P(e.BandR));
+    }
+
+    private record Eraser(Point[] Body, Point BandL, Point BandR);
+
+    /// <summary>Eraser geometry in 32-space scaled by <paramref name="scale"/>, in whole pixels.
+    /// Body is tip corner (bottom), far end bottom, far end top, tip end left; the band runs
+    /// parallel to the tip end, cutting off the rubber tip.</summary>
+    private static Eraser EraserGeometry(float scale)
+    {
+        var tipX = (int)round(11 * scale);
+        var tipY = (int)round(28 * scale);
+        var length = (int)round(9 * scale);       // along (1,-1), in diagonal steps
+        var width = (int)round(5 * scale);        // along (-1,-1), in diagonal steps
+        var band = (int)round(3 * scale);         // tip end to band, in diagonal steps
+
+        var tip = new Point(tipX, tipY);
+        var farB = new Point(tipX + length, tipY - length);
+        var farT = new Point(farB.X - width, farB.Y - width);
+        var tipL = new Point(tipX - width, tipY - width);
+
+        return new Eraser(
+            new[] { tip, farB, farT, tipL },
+            new Point(tipL.X + band, tipL.Y - band),
+            new Point(tipX + band, tipY - band));
+    }
+
+    /// <summary>The eraser rasterized by hand, as DrawNibPixelArt does the nib: the outline and
+    /// band are Bresenham chains of whole pixels, the interior the pixels inside the polygon
+    /// (black inside the tip, white beyond the band), each painted as a stamp-sized square.</summary>
+    private static void DrawEraserPixelArt(Graphics g, Eraser e, int stamp)
+    {
+        var body = e.Body;
+        var tip = new[] { body[0], e.BandR, e.BandL, body[3] };
+        var black = new HashSet<Point>();
+        var white = new HashSet<Point>();
+
+        for (int i = 0; i < body.Length; i++)
+            foreach (var p in Bresenham(body[i], body[(i + 1) % body.Length]))
+                black.Add(p);
+        foreach (var p in Bresenham(e.BandL, e.BandR))
+            black.Add(p);
+
+        for (int y = body.Min(p => p.Y); y <= body.Max(p => p.Y); y++)
+            for (int x = body.Min(p => p.X); x <= body.Max(p => p.X); x++)
+            {
+                var p = new Point(x, y);
+                if (black.Contains(p) || !InsidePolygon(x + 0.5f, y + 0.5f, body))
+                    continue;
+                if (InsidePolygon(x + 0.5f, y + 0.5f, tip))
+                    black.Add(p);
+                else
+                    white.Add(p);
+            }
+
+        foreach (var p in white)
+            g.FillRectangle(Fill, p.X, p.Y, stamp, stamp);
+        foreach (var p in black)
+            g.FillRectangle(Stroke, p.X, p.Y, stamp, stamp);
     }
 
     private static void DrawResizeCursorSmall(float scale, int lineWidth, Graphics g) => DrawResizeCursorSmall(scale, lineWidth, g, 0, true);

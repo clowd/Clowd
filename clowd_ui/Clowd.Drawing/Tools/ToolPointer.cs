@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -343,17 +344,8 @@ namespace Clowd.Drawing.Tools
 
                 drawingCanvas.GraphicsList.Remove(drawingCanvas[drawingCanvas.Count - 1]);
 
-                foreach (var g in drawingCanvas.GraphicsList)
-                {
-                    // hidden and locked graphics are excluded from marquee selection
-                    if (g.Hidden || g.Locked)
-                        continue;
-
-                    if (rect.Contains(g.Bounds))
-                    {
-                        g.IsSelected = true;
-                    }
-                }
+                foreach (var g in GraphicsInMarquee(drawingCanvas.GraphicsList, rect))
+                    g.IsSelected = true;
             }
 
             drawingCanvas.ReleaseMouseCapture();
@@ -384,6 +376,30 @@ namespace Clowd.Drawing.Tools
         public override void SetCursor(DrawingCanvas drawingCanvas)
         {
             drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
+        }
+
+        /// <summary>
+        /// The marquee rule, shared with the eraser: the graphics <paramref name="rect"/> FULLY
+        /// contains, in list order. Hidden and locked graphics are excluded, as is a marquee
+        /// still in the list.
+        /// </summary>
+        internal static List<GraphicBase> GraphicsInMarquee(GraphicCollection list, Rect rect)
+        {
+            var result = new List<GraphicBase>();
+            foreach (var g in list)
+            {
+                if (g is GraphicSelectionRectangle)
+                    continue;
+
+                // hidden and locked graphics are excluded from marquee selection
+                if (g.Hidden || g.Locked)
+                    continue;
+
+                if (rect.Contains(g.Bounds))
+                    result.Add(g);
+            }
+
+            return result;
         }
 
         // decision #3: WPF Rect.Empty sentinels become Rect? null in these helpers.

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Input;
@@ -8,10 +9,13 @@ using Avalonia.Platform;
 namespace Clowd.Drawing.Tools
 {
     /// <summary>
-    /// The brush's cursor: a ring the size of the dot a click leaves (2·LineWidth across, in device
+    /// The brush's cursor: a ring the size of the dot a click leaves (GraphicBrush.SizePerLineWidth·LineWidth across, in device
     /// pixels at the current zoom), drawn as a 1px white ring inside a 1px black ring so it reads on
     /// any artwork. Rasterised by hand with analytic coverage rather than through a DrawingContext,
-    /// so the result is exact and needs no render pass; the cursor for the last diameter is cached.
+    /// so the result is exact and needs no render pass. Ring cursors are cached per diameter and never
+    /// disposed: several canvases (one per monitor, each at its own scaling) hold rings of different
+    /// sizes at once, and disposing the previous diameter's cursor broke the one another canvas was
+    /// still showing. Diameters are whole pixels below <see cref="MaxSize"/>, so the cache is bounded.
     /// The highlighter's is the same two bands around its rectangular tip (<see cref="GetRect"/>).
     /// </summary>
     internal static class BrushCursor
@@ -25,8 +29,7 @@ namespace Clowd.Drawing.Tools
         /// <summary>Below this width a rectangle's two white sides would touch.</summary>
         internal const int MinRectWidth = 3;
 
-        private static int _cachedDiameter = -1;
-        private static Cursor _cached;
+        private static readonly Dictionary<int, Cursor> _rings = new Dictionary<int, Cursor>();
 
         private static PixelSize _cachedRectSize;
         private static Cursor _cachedRect;
@@ -35,15 +38,13 @@ namespace Clowd.Drawing.Tools
         public static Cursor Get(double diameterPx)
         {
             int diameter = Quantize(diameterPx);
-            if (diameter == _cachedDiameter && _cached != null)
-                return _cached;
+            if (_rings.TryGetValue(diameter, out var cached))
+                return cached;
 
             var pixels = Rasterize(diameter, out int size);
-            var previous = _cached;
-            _cached = CreateCursor(pixels, size, size);
-            _cachedDiameter = diameter;
-            previous?.Dispose();
-            return _cached;
+            var cursor = CreateCursor(pixels, size, size);
+            _rings[diameter] = cursor;
+            return cursor;
         }
 
         /// <summary>The cursor for a rectangular tip <paramref name="widthPx"/> by

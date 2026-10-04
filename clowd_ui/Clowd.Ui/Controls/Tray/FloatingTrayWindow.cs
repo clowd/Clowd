@@ -26,6 +26,13 @@ namespace Clowd.UI.Controls.Tray
         /// throws): the chassis cannot honour a hand-placed or rotated strip whose size is pinned.</summary>
         public bool HasGrip { get; init; } = true;
 
+        /// <summary>How the grip divides its room (<see cref="TrayGrip.Layout"/>); ignored without a grip.</summary>
+        public TrayGripLayout GripLayout { get; init; } = TrayGripLayout.EqualCells;
+
+        /// <summary>False leaves the app's mark off the strip. A fixed-size owner that turns it off stops
+        /// counting <see cref="TrayTokens.EmblemLength"/> into the size it declares.</summary>
+        public bool HasEmblem { get; init; } = true;
+
         /// <summary>
         /// Logical size of the tray when the owner must know it BEFORE the window is ever laid out —
         /// a strip that has to decide whether it can be shown outside a region at all. Set ⇒ the
@@ -187,7 +194,7 @@ namespace Clowd.UI.Controls.Tray
 
             if (options.HasGrip)
             {
-                Grip = new TrayGrip();
+                Grip = new TrayGrip { Layout = options.GripLayout };
                 ToolTip.SetTip(Grip, "Drag to move");
                 Tray.Items.Add(Grip);
 
@@ -211,18 +218,37 @@ namespace Clowd.UI.Controls.Tray
                     }
                 };
 
-                // top-left anchored: Position is untouched and size-to-content re-lays out the strip.
+                // top-left anchored: Position is kept and size-to-content re-lays out the strip, so the
+                // rotate cell stays under the pointer whenever the rotated strip fits at the anchor. When it
+                // does not (a strip shown along the bottom by ShowAtBottomOf), one pass after the
+                // re-layout slides it the least distance back into the working area, rather than leaving
+                // the OS to refit it (Win32's SetWindowPlacement does, see SeedClientSizeForShow).
                 Grip.RotateRequested += (s, e) =>
                 {
                     _manuallyPositioned = true;
+                    var anchor = Position;
                     SetOrientation(Orientation == Orientation.Horizontal ? Orientation.Vertical : Orientation.Horizontal);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!IsVisible)
+                            return;
+                        var size = WindowPixelSize();
+                        var screen = DesktopScreens.FromPoint(this, anchor) ?? DesktopScreens.Primary(this);
+                        if (screen == null || size.Width <= 0 || size.Height <= 0)
+                            return;
+                        var work = screen.WorkingArea;
+                        Position = new PixelPoint(
+                            TrayPlacement.Clamp(anchor.X, work.X, work.Right - size.Width),
+                            TrayPlacement.Clamp(anchor.Y, work.Y, work.Bottom - size.Height));
+                    }, DispatcherPriority.Loaded);
                 };
             }
 
             // the app's mark heads every strip, after the grip and before the owner's first item. Added
-            // here, unconditionally, so no strip can forget it; a fixed-size owner has to count
+            // here, on by default, so no strip can forget it; a fixed-size owner has to count
             // TrayTokens.EmblemLength (plus a gap) into the size it declares.
-            Tray.Items.Add(new TrayEmblem());
+            if (options.HasEmblem)
+                Tray.Items.Add(new TrayEmblem());
 
             // an item added after the window is up gets its tooltip aimed once its template exists.
             Tray.ContainerPrepared += (s, e) =>
@@ -292,6 +318,71 @@ namespace Clowd.UI.Controls.Tray
 
             // position after the size-to-content layout pass so Bounds is real
             QueueReposition();
+        }
+
+        /// <summary>
+        /// Shows a strip that attends no region, centred along the bottom of
+        /// <paramref name="workingArea"/> (a monitor's working area in the same capture space as
+        /// <see cref="ShowNear"/>'s region). The placement cascade never runs for it: the strip is
+        /// latched as manually positioned from the start, so after this only a drag or a rotation
+        /// (top-left anchored, as ever, then clamped back into the working area) moves it.
+        /// </summary>
+        public void ShowAtBottomOf(PixelRect workingArea)
+        {
+            _region = null;
+            _manuallyPositioned = true;
+            _rotatedPassPending = false;
+            _repositionDeferred = false;
+
+            if (!IsVisible)
+            {
+                ParkOnScreenAt(workingArea.Center);
+                SeedClientSizeForShow();
+                Show();
+
+                // given back for the same reason as in ShowNear: the strip must stay free to follow
+                // its content. A fixed size is the one thing that is meant to stay pinned.
+                if (!IsFixedSize)
+                {
+                    Width = Double.NaN;
+                    Height = Double.NaN;
+                }
+
+                AimToolTips();
+            }
+
+            // Show() has run the initial layout pass, so the size is real enough to place by now; the
+            // size-to-content pass that follows can still settle it differently, and then the strip is
+            // re-centred once, at the same priority ShowNear's own follow-up placement runs at.
+            var placedSize = PlaceAtBottom(workingArea);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (IsVisible && _region == null && WindowPixelSize() != placedSize)
+                    PlaceAtBottom(workingArea);
+            }, DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Moves the window to <see cref="TrayPlacement.BottomCentre"/> of the area and reports
+        /// the window size it placed.</summary>
+        private PixelSize PlaceAtBottom(PixelRect workingArea)
+        {
+            var size = WindowPixelSize();
+            if (size.Width <= 0 || size.Height <= 0)
+                return size;
+
+            // the same clearance the cascade's inside rung keeps from the placeable bottom edge
+            var scaling = OperatingSystem.IsMacOS() ? 1.0 : RenderScaling;
+            var margin = 2 * (int)Math.Ceiling(15 * scaling);
+
+            Position = TrayPlacement.BottomCentre(workingArea, size, margin);
+            return size;
+        }
+
+        /// <summary>The whole window — tray plus shadow reserve — in capture px.</summary>
+        private PixelSize WindowPixelSize()
+        {
+            var scaling = OperatingSystem.IsMacOS() ? 1.0 : RenderScaling;
+            return new PixelSize((int)Math.Ceiling(ClientSize.Width * scaling), (int)Math.Ceiling(ClientSize.Height * scaling));
         }
 
         /// <summary>
@@ -562,7 +653,14 @@ namespace Clowd.UI.Controls.Tray
         /// </summary>
         private void ParkOnRegionScreen(ScreenRect region)
         {
-            var screen = DesktopScreens.FromPoint(this, new PixelPoint(region.Center.X, region.Center.Y)) ?? DesktopScreens.Primary(this);
+            ParkOnScreenAt(new PixelPoint(region.Center.X, region.Center.Y));
+        }
+
+        /// <summary>The parking described on <see cref="ParkOnRegionScreen"/>, on the monitor under
+        /// <paramref name="point"/> (primary as the fallback).</summary>
+        private void ParkOnScreenAt(PixelPoint point)
+        {
+            var screen = DesktopScreens.FromPoint(this, point) ?? DesktopScreens.Primary(this);
             if (screen == null)
                 return;
 
@@ -588,7 +686,13 @@ namespace Clowd.UI.Controls.Tray
             var isSecondPass = _rotatedPassPending;
             _rotatedPassPending = false;
 
-            if (_region == null || !IsVisible)
+            // no region, no cascade: a strip shown by ShowAtBottomOf (or not yet shown at all) has
+            // nothing to be placed around, so every queued pass — a DPI change, a size change, the
+            // transparency fallback — leaves it exactly where it is.
+            if (_region == null)
+                return;
+
+            if (!IsVisible)
                 return;
 
             if (IsFixedSize)

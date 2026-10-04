@@ -1,0 +1,33 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- No template: TrayDotButton.Render paints Background, the BorderBrush edge and the dot, so every
+         state here is just a value for one of those. The current choice is a light fill with a 1 px
+         inset edge rather than the accent, because the dot itself wears the user's chosen colour and an
+         accent fill under it could swallow it. Active is declared after hover so it holds under the
+         pointer. -->
+    <ControlTheme x:Key="{x:Type tray:TrayDotButton}" TargetType="tray:TrayDotButton">
+        <Setter Property="Width" Value="{x:Static tray:TrayTokens.MiniButtonSize}" />
+        <Setter Property="Height" Value="{x:Static tray:TrayTokens.MiniButtonSize}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{x:Static tray:TrayTokens.WhiteVeil35}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.GripCorner}" />
+        <Setter Property="Cursor" Value="Hand" />
+
+        <Style Selector="^:pointerover">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WhiteVeil12}" />
+        </Style>
+        <Style Selector="^[IsActive=True]">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WhiteVeil16}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

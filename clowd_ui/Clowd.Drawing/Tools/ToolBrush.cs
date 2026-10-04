@@ -35,7 +35,7 @@ namespace Clowd.Drawing.Tools
         // width or the zoom changes (one canvas unit is ContentScale device pixels)
         public override void SetCursor(DrawingCanvas canvas)
         {
-            canvas.Cursor = BrushCursor.Get(2 * canvas.LineWidth * canvas.ContentScale);
+            canvas.Cursor = BrushCursor.Get(GraphicBrush.SizePerLineWidth * canvas.LineWidth * canvas.ContentScale);
         }
 
         /// <summary>The stroke a press starts, at <paramref name="origin"/>.</summary>

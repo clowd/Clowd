@@ -111,6 +111,9 @@ namespace Clowd.Drawing
         public static readonly StyledProperty<string> SubjectNameProperty =
             AvaloniaProperty.Register<DrawingCanvas, string>(nameof(SubjectName));
 
+        public static readonly StyledProperty<bool> IsOverlayModeProperty =
+            AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(IsOverlayMode));
+
         public ToolType Tool
         {
             get => GetValue(ToolProperty);
@@ -281,6 +284,21 @@ namespace Clowd.Drawing
             private set => SetValue(SubjectNameProperty, value);
         }
 
+        /// <summary>
+        /// The draw-on-screen overlay (default false; the editor never sets it). Every behaviour
+        /// difference from the editor is gated on this one flag: the clickable surface is
+        /// transparent but still hit-testable, the view is fixed at 1:1 with the screen
+        /// (canvas units are DIPs, no pan, no wheel zoom), a double-click goes to the tool like a
+        /// single click, a right press is ignored (the overlay host handles it), tools stay sticky
+        /// and leave nothing selected after a gesture, and a press that ends a text edit only
+        /// commits the text.
+        /// </summary>
+        public bool IsOverlayMode
+        {
+            get => GetValue(IsOverlayModeProperty);
+            set => SetValue(IsOverlayModeProperty, value);
+        }
+
         // ====================================================================
         // Public surface
         // ====================================================================
@@ -301,8 +319,30 @@ namespace Clowd.Drawing
 
         public event EventHandler<StateChangedEventArgs> StateUpdated;
 
+        /// <summary>
+        /// Raised once per non-empty history step appended by a user action — never for a merge
+        /// into the current step, an undo or a redo. Cheap (no serialization): the overlay's
+        /// cross-canvas undo history records on this rather than subscribing to
+        /// <see cref="StateUpdated"/>.
+        /// </summary>
+        public event EventHandler HistoryAppended;
+
         /// <summary>True while a tool drag operation is in progress (EditorWindow guards on this).</summary>
         public bool IsToolDragActive => _isToolMouseDown;
+
+        /// <summary>True while the text tool's in-place TextBox is open on a graphic.</summary>
+        public bool IsTextEditing { get; private set; }
+
+        /// <summary>Raised when <see cref="IsTextEditing"/> changes.</summary>
+        public event EventHandler TextEditingChanged;
+
+        /// <summary>
+        /// Where the tool skills bind their settings (color, line width, font...). Null means the
+        /// editor's persisted <c>SettingsRoot.Current.Editor.GetToolSettings</c>; the overlay
+        /// supplies its own per-session dictionary so the editor's preferences are never read or
+        /// written by it.
+        /// </summary>
+        public Func<ToolType, SavedToolSettings> ToolSettingsResolver { get; set; }
 
         /// <summary>
         /// True while a property-bar scrub's merge tail is armed (AutosaveThrottle debounce
@@ -330,6 +370,7 @@ namespace Clowd.Drawing
         internal ToolText ToolText { get; }
         internal ToolPen ToolPen { get; }
         internal ToolBrush ToolBrush { get; }
+        internal ToolEraser ToolEraser { get; }
 
         private ToolDesc CurrentTool;
 
@@ -355,6 +396,9 @@ namespace Clowd.Drawing
 
         // guards the synthetic move replay against key auto-repeat (see OnKeyDown)
         private bool _shiftReplayed;
+
+        // whether a text edit was open when the current press started (see OnPreviewPointerPressed)
+        private bool _textEditingAtPress;
 
         // SyncObjectState bindings (decision table #11/#12)
         private readonly List<IDisposable> _skillBindings = new List<IDisposable>();
@@ -416,6 +460,7 @@ namespace Clowd.Drawing
             ToolText = new ToolText();
             ToolPen = new ToolPen();
             ToolBrush = new ToolBrush();
+            ToolEraser = new ToolEraser();
 
             // the create lambdas close over this canvas, so a new graphic starts out with the
             // property-bar values for every skill its type declares
@@ -490,10 +535,15 @@ namespace Clowd.Drawing
             _toolStore[ToolType.Count] = new ToolDesc("Step Count", new ToolCount(), ObjectType: typeof(GraphicCount));
             _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate(), Skills: Skill.BlurRadius | Skill.ObscureMode);
             _toolStore[ToolType.Measure] = new ToolDesc("Measure", toolMeasure, ObjectType: typeof(GraphicMeasure));
+            // overlay-only (not in the editor's toolbar or ToolRegistry): no object type and no
+            // skills, so SyncObjectState never creates a settings entry for it
+            _toolStore[ToolType.Eraser] = new ToolDesc("Eraser", ToolEraser);
 
             _autosaveThrottle = new AutosaveThrottle(this);
             _undoManager = new UndoManager(this);
             _undoManager.StateChanged += UndoManagerStateChanged;
+
+            AddHandler(PointerPressedEvent, OnPreviewPointerPressed, RoutingStrategies.Tunnel);
 
             double parseDoubleOrDefault(object obj, double def)
             {
@@ -656,6 +706,8 @@ namespace Clowd.Drawing
                 OnArtworkBackgroundChanged();
             else if (change.Property == ContentScaleProperty)
                 OnContentScaleChanged();
+            else if (change.Property == IsOverlayModeProperty)
+                OnOverlayModeChanged(change.GetNewValue<bool>());
 
             // the brush and highlighter cursors are drawn at the stroke's on-screen size
             if ((change.Property == ContentScaleProperty || change.Property == LineWidthProperty)
@@ -697,8 +749,49 @@ namespace Clowd.Drawing
             CurrentTool = desc;
             CurrentTool.Instance.SetCursor(this);
             SetHoveredGraphic(null);
+            SetHoveredGraphics(null);
 
             SyncObjectState();
+        }
+
+        private void OnOverlayModeChanged(bool overlay)
+        {
+            if (_clickable == null)
+                return; // property set during construction
+
+            // the surface stays the one hit-testable child (so the tools keep receiving the
+            // pointer), it just stops painting the checker over the desktop
+            _clickable.IsTransparent = overlay;
+            _clickable.InvalidateVisual();
+
+            if (overlay)
+            {
+                // the overlay host owns the right button (it drops to click-through)
+                ContextMenu = null;
+                ContentOffset = default;
+                ApplyOverlayScale();
+            }
+        }
+
+        /// <summary>
+        /// Pins the view at 1:1 with the screen: ContentScale = DpiZoom makes the render scale
+        /// (ContentScale / DpiZoom) exactly 1, so canvas units are DIPs and
+        /// <see cref="CanvasUiElementScale"/> is 1; the offset is zero. Re-applied whenever the
+        /// window's scaling changes (OnLoaded, UpdateForScalingChange).
+        /// </summary>
+        private void ApplyOverlayScale()
+        {
+            ContentScale = DpiZoom;
+            ContentOffset = default;
+            if (_translateTransform != null)
+            {
+                // the offset setter only re-floors the display translate when the value changed
+                _translateTransform.X = 0;
+                _translateTransform.Y = 0;
+            }
+
+            UpdateScaleTransform();
+            UpdateClickableSurface();
         }
 
         private void OnGraphicsListChanged(GraphicCollection oldValue, GraphicCollection newValue)
@@ -959,21 +1052,32 @@ namespace Clowd.Drawing
 
         public void Delete()
         {
-            bool wasChange = false;
+            DeleteGraphics(GraphicsList.SelectedItems);
+        }
 
-            for (int i = this.Count - 1; i >= 0; i--)
+        /// <summary>
+        /// Removes every one of <paramref name="targets"/> still in the list as ONE history step
+        /// (none when nothing was removed). The selection is left alone: the eraser deletes what
+        /// it hovers or marquees without ever selecting it. Returns whether anything was removed.
+        /// </summary>
+        public bool DeleteGraphics(IReadOnlyCollection<GraphicBase> targets)
+        {
+            if (targets == null || targets.Count == 0)
+                return false;
+
+            bool wasChange = false;
+            foreach (var g in targets)
             {
-                if (this[i].IsSelected)
-                {
-                    this.GraphicsList.RemoveAt(i);
+                if (GraphicsList.Remove(g))
                     wasChange = true;
-                }
             }
 
             if (wasChange)
             {
                 AddCommandToHistory(false);
             }
+
+            return wasChange;
         }
 
         public void DeleteAll()
@@ -1249,6 +1353,71 @@ namespace Clowd.Drawing
             _artworkView?.InvalidateVisual();
         }
 
+        /// <summary>
+        /// The graphics the eraser's marquee currently encloses, each outlined like
+        /// <see cref="HoveredGraphic"/> (same pen, same suppression rules); null for none.
+        /// </summary>
+        internal IReadOnlySet<GraphicBase> HoveredGraphics { get; private set; }
+
+        internal void SetHoveredGraphics(IEnumerable<GraphicBase> graphics)
+        {
+            var set = graphics == null ? null : new HashSet<GraphicBase>(graphics, ReferenceEqualityComparer.Instance);
+            if (set is { Count: 0 })
+                set = null;
+
+            if (HoveredGraphics == null && set == null)
+                return;
+            if (HoveredGraphics != null && set != null && HoveredGraphics.SetEquals(set))
+                return;
+
+            HoveredGraphics = set;
+            _artworkView?.InvalidateVisual();
+        }
+
+        // ====================================================================
+        // Text-edit seam (the overlay commits an open text edit before toolbar actions)
+        // ====================================================================
+
+        /// <summary>ToolText reports its in-place TextBox opening and closing here.</summary>
+        internal void SetTextEditing(bool editing)
+        {
+            if (IsTextEditing == editing)
+                return;
+
+            IsTextEditing = editing;
+            TextEditingChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Ends an open text edit as a click on the canvas would: focusing the canvas takes focus
+        /// off the TextBox, whose LostFocus runs the text tool's FinishEdit. No-op otherwise.
+        /// </summary>
+        public void CommitTextEdit()
+        {
+            if (IsTextEditing)
+                Focus();
+        }
+
+        /// <summary>
+        /// A one-shot drawing tool's gesture is over (ToolBase.OnMouseUp). The editor hands the
+        /// result to the pointer, selected, for immediate editing; the overlay keeps the tool
+        /// (so the next press draws again) and leaves nothing selected, since it has no pointer
+        /// tool to edit with.
+        /// </summary>
+        internal void OnToolGestureEnded()
+        {
+            if (IsOverlayMode)
+            {
+                UnselectAll();
+                CurrentTool.Instance.SetCursor(this);
+            }
+            else
+            {
+                Tool = ToolType.Pointer;
+                Cursor = HelperFunctions.DefaultCursor;
+            }
+        }
+
         // ====================================================================
         // State synchronization
         // ====================================================================
@@ -1283,6 +1452,15 @@ namespace Clowd.Drawing
                 return;
             foreach (var command in _allCommands)
                 command.RaiseCanExecuteChanged();
+        }
+
+        /// <summary>Re-applies the current tool's cursor, for a host that has just made the canvas
+        /// take the mouse again (an overlay leaving click-through) and wants the tool's cursor up
+        /// before the first press rather than after it.</summary>
+        public void RefreshToolCursor()
+        {
+            if (_toolStore != null)
+                CurrentTool.Instance.SetCursor(this);
         }
 
         /// <summary>Rebinds the property bar to the current tool's SavedToolSettings. Call after
@@ -1362,7 +1540,20 @@ namespace Clowd.Drawing
                     // we do not allow the angle to be set in the tool.
                     skills &= ~Skill.Angle;
 
-                    var settings = SettingsRoot.Current.Editor.GetToolSettings(Tool);
+                    // a tool with no skills (the eraser, panning) has nothing to bind, so it never
+                    // looks its settings up either: the lookup creates the entry, and an entry for
+                    // a tool the editor does not know would land in the persisted settings
+                    if (skills == Skill.None)
+                    {
+                        SubjectType = "Tool";
+                        SubjectName = CurrentTool.Name;
+                        SubjectSkill = skills;
+                        return;
+                    }
+
+                    var settings = ToolSettingsResolver != null
+                        ? ToolSettingsResolver(Tool)
+                        : SettingsRoot.Current.Editor.GetToolSettings(Tool);
                     void AddSettingBinding(Skill sk, AvaloniaProperty prop, string path)
                     {
                         if (skills.HasFlag(sk))
@@ -1487,15 +1678,38 @@ namespace Clowd.Drawing
             RequeryCommands();
             _autosaveThrottle.OnHistoryChanged(_undoManager.LastChangeKind, e);
             SyncObjectState();
+
+            // an empty change set never reaches here (AddCommandStep returns before raising), so
+            // every Append is a real step; merges, undo and redo are not appends
+            if (_undoManager.LastChangeKind == HistoryChangeKind.Append)
+                HistoryAppended?.Invoke(this, EventArgs.Empty);
         }
 
         // ====================================================================
         // Pointer / keyboard handling
         // ====================================================================
 
+        /// <summary>
+        /// Tunnel phase of a press. A press lands on the clickable surface (a child), and
+        /// Avalonia's focus-on-press handler runs AT the source during the tunnel phase, walking up
+        /// to the first focusable ancestor — this canvas — before the bubbling
+        /// <see cref="OnPointerPressed"/> runs. That focus change is what closes an open text edit
+        /// (TextBox LostFocus → FinishEdit), so whether an edit was open has to be read here, one
+        /// element earlier on the route, and not in OnPointerPressed.
+        /// </summary>
+        private void OnPreviewPointerPressed(object sender, PointerPressedEventArgs e)
+        {
+            _textEditingAtPress = IsTextEditing;
+        }
+
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {
             base.OnPointerPressed(e);
+
+            // the tunnel latch, or the edit is still open because nothing has focused away from
+            // its TextBox yet (then our own Focus() below closes it)
+            bool wasEditing = _textEditingAtPress || IsTextEditing;
+            _textEditingAtPress = false;
 
             this.Focus();
 
@@ -1512,7 +1726,17 @@ namespace Clowd.Drawing
             var kind = e.GetCurrentPoint(this).Properties.PointerUpdateKind;
             if (kind == PointerUpdateKind.LeftButtonPressed)
             {
-                if (e.ClickCount == 2)
+                // overlay: a press that ended a text edit only commits it — with the text tool
+                // sticky, letting it through would open a new box on every commit click
+                if (IsOverlayMode && wasEditing)
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                // the eraser treats a double-click as two clicks (it has nothing to activate), and
+                // the overlay has no pointer tool for Activate to hand an edit back to
+                if (e.ClickCount == 2 && !IsOverlayMode && Tool != ToolType.Eraser)
                 {
                     // on double click, execute GraphicBase.Activate().
                     // this allows GraphicText to launch an editor etc.
@@ -1529,6 +1753,12 @@ namespace Clowd.Drawing
             }
             else if (kind == PointerUpdateKind.RightButtonPressed)
             {
+                // overlay: the right button belongs to the host window (it drops to click-through
+                // from a tunnel handler, so this is only a backstop) — no forced pointer tool and
+                // no selection change
+                if (IsOverlayMode)
+                    return;
+
                 // fake a mouse up for left mouse button if user is in the middle of an operation
                 _isToolMouseDown = false;
                 CurrentTool.Instance.OnMouseUp(this, s with { LeftPressed = false });
@@ -1605,6 +1835,10 @@ namespace Clowd.Drawing
             base.OnPointerWheelChanged(e);
 
             if (IsPanning)
+                return;
+
+            // the overlay is pinned 1:1 to the screen
+            if (IsOverlayMode)
                 return;
 
             // decision table #16, revised for issue #68: integer deltas are classic wheel notches
@@ -1770,12 +2004,19 @@ namespace Clowd.Drawing
                 CurrentTool.Instance.AbortOperation(this);
             }
 
-            Tool = ToolType.Pointer;
+            // the overlay's tools are sticky: cancelling aborts the gesture but keeps the tool
+            // (and its cursor). The other revert-to-pointer sites — ToolPen's Enter, GraphicPath's
+            // double-click continuation — belong to the pen, which the overlay never offers.
+            if (!IsOverlayMode)
+                Tool = ToolType.Pointer;
             _isToolMouseDown = false;
             GraphicsList.RequestValidation(); // re-bake capped shadow sprites at rest (§A.3)
 
             this.ReleaseMouseCapture();
-            this.Cursor = HelperFunctions.DefaultCursor;
+            if (IsOverlayMode)
+                CurrentTool.Instance.SetCursor(this);
+            else
+                this.Cursor = HelperFunctions.DefaultCursor;
             UnselectAll();
         }
 
@@ -1916,6 +2157,13 @@ namespace Clowd.Drawing
             if (_scaleTransform2 == null)
                 return;
 
+            // the overlay follows the monitor's scaling 1:1 rather than keeping a zoom of its own
+            if (IsOverlayMode)
+            {
+                ApplyOverlayScale();
+                return;
+            }
+
             UpdateScaleTransform();
 
             var dpiZoom = DpiZoom;
@@ -1947,6 +2195,16 @@ namespace Clowd.Drawing
         protected override void OnSizeChanged(SizeChangedEventArgs e)
         {
             base.OnSizeChanged(e);
+
+            // the overlay's origin is the screen's: no recentering shift and no auto-fit, but the
+            // hit surface still has to grow with the window
+            if (IsOverlayMode)
+            {
+                ContentOffset = default;
+                UpdateClickableSurface();
+                return;
+            }
+
             bool isAutoFit = _isAutoFit;
             ContentOffset = new Point(
                 ContentOffset.X + e.NewSize.Width / 2 - e.PreviousSize.Width / 2,

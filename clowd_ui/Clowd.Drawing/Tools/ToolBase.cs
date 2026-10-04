@@ -100,8 +100,8 @@ namespace Clowd.Drawing.Tools
                 AbortOperation(canvas);
             }
 
-            canvas.Tool = ToolType.Pointer;
-            canvas.Cursor = HelperFunctions.DefaultCursor;
+            // the editor reverts to the pointer; the overlay keeps the tool (sticky)
+            canvas.OnToolGestureEnded();
         }
 
         protected virtual void OnMouseDownImpl(DrawingCanvas canvas, Point pt)

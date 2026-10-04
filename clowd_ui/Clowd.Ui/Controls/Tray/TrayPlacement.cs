@@ -223,6 +223,21 @@ namespace Clowd.UI.Controls.Tray
             return null;
         }
 
+        /// <summary>
+        /// The WINDOW top-left that centres a strip along the bottom of <paramref name="work"/>, with
+        /// <paramref name="margin"/> between the window's bottom edge and the area's — for a strip that
+        /// attends no region. <paramref name="window"/> is the whole window, shadow reserve included, and
+        /// the result is clamped into the area; a window larger than the area is pinned to its top-left.
+        /// </summary>
+        public static PixelPoint BottomCentre(PixelRect work, PixelSize window, int margin)
+        {
+            var x = work.X + (work.Width - window.Width) / 2;
+            var y = work.Bottom - window.Height - margin;
+            return new PixelPoint(
+                Clamp(x, work.X, work.Right - window.Width),
+                Clamp(y, work.Y, work.Bottom - window.Height));
+        }
+
         /// <summary>Math.Clamp with a monitor narrower than the strip tolerated: the caller's
         /// bounds check rejects that candidate anyway, but Math.Clamp would throw first.</summary>
         public static int Clamp(int value, int min, int max) => Math.Clamp(value, min, Math.Max(min, max));

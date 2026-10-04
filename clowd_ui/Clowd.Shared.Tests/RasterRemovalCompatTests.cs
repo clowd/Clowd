@@ -10,11 +10,12 @@ namespace Clowd.Shared.Tests
     /// <summary>
     /// A settings file written by the (never-released, since removed) raster-v1 build may still
     /// exist locally. It carries the removed "RasterToolsEnabled" flag, a stale "Eraser" name in
-    /// the toolbar lists, and a Tools dictionary entry keyed by the removed "Eraser" enum member.
-    /// (The raster era also had a "Brush"; that name is live again for the vector brush tool, so
-    /// a stale "Brush" entry now simply binds to it.) Loading it must degrade gracefully: unknown
+    /// the toolbar lists, and Tools dictionary entries keyed by removed enum members. (The raster
+    /// era also had a "Brush" and an "Eraser"; both names are live again, for the vector brush and
+    /// the Draw on Screen eraser, so stale entries for them now simply bind. The eraser takes no
+    /// saved settings, so its entry is inert.) Loading it must degrade gracefully: unknown
     /// properties and unparseable dictionary keys are dropped, everything else binds, and the
-    /// toolbar resolvers scrub the stale names.
+    /// toolbar resolvers scrub the stale names (the overlay-only "Eraser" included).
     /// </summary>
     public class RasterRemovalCompatTests : IDisposable
     {
@@ -31,8 +32,8 @@ namespace Clowd.Shared.Tests
         }
 
         // A raster-era settings file: the removed "RasterToolsEnabled" property, "Eraser" in the
-        // toolbar lists, and a Tools dictionary mixing the removed "Eraser" key with a still-valid
-        // "Text" key.
+        // toolbar lists, and a Tools dictionary mixing the removed "Raster" key and the raster-era
+        // "Eraser" key with a still-valid "Text" key.
         private const string RasterEraSettingsJson = @"{
   ""Editor"": {
     ""RasterToolsEnabled"": true,
@@ -40,6 +41,7 @@ namespace Clowd.Shared.Tests
     ""ToolbarOrderV2"": [ ""Eraser"", ""Rectangle"" ],
     ""HiddenToolsV2"": [ ""Eraser"" ],
     ""ToolsV2"": {
+      ""Raster"": { ""LineWidth"": 3.0 },
       ""Eraser"": { ""LineWidth"": 7.5, ""AutoColor"": false },
       ""Text"": { ""FontFamily"": ""Consolas"", ""FontSize"": 16.0 }
     }
@@ -53,7 +55,7 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void Load_RasterEraSettings_DoesNotThrow_DropsEraserKey_BindsTheRest()
+        public void Load_RasterEraSettings_DoesNotThrow_DropsUnknownKey_BindsTheRest()
         {
             WriteRasterEraSettings();
 
@@ -63,11 +65,13 @@ namespace Clowd.Shared.Tests
             // the removed "RasterToolsEnabled" and "SidebarVisible" properties are silently ignored;
             // a real property on the same object still binds, proving the load did not abort on them
             Assert.Equal(new[] { "Eraser", "Rectangle" }, loaded.Editor.ToolbarOrder);
-            // the unparseable "Eraser" dictionary key is dropped while the valid "Text" entry binds
+            // the unparseable "Raster" dictionary key is dropped while the valid "Text" entry binds,
+            // and so does the (inert) "Eraser" one now that the name is live again
             var text = Assert.Contains(ToolType.Text, (IDictionary<ToolType, SavedToolSettings>)loaded.Editor.Tools);
             Assert.Equal("Consolas", text.FontFamily);
             Assert.Equal(16.0, text.FontSize);
-            Assert.Single(loaded.Editor.Tools);
+            Assert.Contains(ToolType.Eraser, (IDictionary<ToolType, SavedToolSettings>)loaded.Editor.Tools);
+            Assert.Equal(2, loaded.Editor.Tools.Count);
         }
 
         [Fact]

@@ -63,6 +63,110 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="Draw_ClearAll" xml:space="preserve">
+    <value>Clear all</value>
+    <comment>Draw on Screen toolbar button tooltip: erases every drawing on every screen (undoable).</comment>
+  </data>
+  <data name="Draw_ClickThrough" xml:space="preserve">
+    <value>Click through</value>
+    <comment>Draw on Screen toolbar toggle tooltip: lets mouse clicks pass through the drawing to the apps underneath.</comment>
+  </data>
+  <data name="Draw_Close" xml:space="preserve">
+    <value>Close</value>
+    <comment>Draw on Screen toolbar button tooltip: closes the drawing overlay and discards the drawing.</comment>
+  </data>
+  <data name="Draw_Color_Black" xml:space="preserve">
+    <value>Black</value>
+    <comment>Draw on Screen colour swatch tooltip.</comment>
+  </data>
+  <data name="Draw_Color_Blue" xml:space="preserve">
+    <value>Blue</value>
+    <comment>Draw on Screen colour swatch tooltip.</comment>
+  </data>
+  <data name="Draw_Color_Green" xml:space="preserve">
+    <value>Green</value>
+    <comment>Draw on Screen colour swatch tooltip.</comment>
+  </data>
+  <data name="Draw_Color_Orange" xml:space="preserve">
+    <value>Orange</value>
+    <comment>Draw on Screen colour swatch tooltip.</comment>
+  </data>
+  <data name="Draw_Color_Purple" xml:space="preserve">
+    <value>Purple</value>
+    <comment>Draw on Screen colour swatch tooltip.</comment>
+  </data>
+  <data name="Draw_Color_Red" xml:space="preserve">
+    <value>Red</value>
+    <comment>Draw on Screen colour swatch tooltip.</comment>
+  </data>
+  <data name="Draw_Color_White" xml:space="preserve">
+    <value>White</value>
+    <comment>Draw on Screen colour swatch tooltip.</comment>
+  </data>
+  <data name="Draw_Color_Yellow" xml:space="preserve">
+    <value>Yellow</value>
+    <comment>Draw on Screen colour swatch tooltip.</comment>
+  </data>
+  <data name="Draw_HideInk" xml:space="preserve">
+    <value>Hide drawing</value>
+    <comment>Draw on Screen toolbar button tooltip: temporarily hides the drawing without deleting it.</comment>
+  </data>
+  <data name="Draw_ShowInk" xml:space="preserve">
+    <value>Show drawing</value>
+    <comment>Draw on Screen toolbar button tooltip: shows the drawing again after it was hidden.</comment>
+  </data>
+  <data name="Draw_Size_Huge" xml:space="preserve">
+    <value>Huge</value>
+    <comment>Draw on Screen line/brush size button tooltip (largest of four).</comment>
+  </data>
+  <data name="Draw_Size_Medium" xml:space="preserve">
+    <value>Medium</value>
+    <comment>Draw on Screen line/brush size button tooltip (second of four).</comment>
+  </data>
+  <data name="Draw_Size_Thick" xml:space="preserve">
+    <value>Thick</value>
+    <comment>Draw on Screen line/brush size button tooltip (third of four).</comment>
+  </data>
+  <data name="Draw_Size_Thin" xml:space="preserve">
+    <value>Thin</value>
+    <comment>Draw on Screen line/brush size button tooltip (smallest of four).</comment>
+  </data>
+  <data name="Draw_Tool_Arrow" xml:space="preserve">
+    <value>Arrow</value>
+    <comment>Draw on Screen tool button tooltip: draws an arrow.</comment>
+  </data>
+  <data name="Draw_Tool_Brush" xml:space="preserve">
+    <value>Brush</value>
+    <comment>Draw on Screen tool button tooltip: freehand drawing.</comment>
+  </data>
+  <data name="Draw_Tool_Ellipse" xml:space="preserve">
+    <value>Ellipse</value>
+    <comment>Draw on Screen tool button tooltip: draws an ellipse outline.</comment>
+  </data>
+  <data name="Draw_Tool_Eraser" xml:space="preserve">
+    <value>Eraser</value>
+    <comment>Draw on Screen tool button tooltip: click or drag over drawings to delete them.</comment>
+  </data>
+  <data name="Draw_Tool_Line" xml:space="preserve">
+    <value>Line</value>
+    <comment>Draw on Screen tool button tooltip: draws a straight line.</comment>
+  </data>
+  <data name="Draw_Tool_Rectangle" xml:space="preserve">
+    <value>Rectangle</value>
+    <comment>Draw on Screen tool button tooltip: draws a rectangle outline.</comment>
+  </data>
+  <data name="Draw_Tool_Text" xml:space="preserve">
+    <value>Text</value>
+    <comment>Draw on Screen tool button tooltip: click to type text on the screen.</comment>
+  </data>
+  <data name="Draw_Undo" xml:space="preserve">
+    <value>Undo</value>
+    <comment>Draw on Screen toolbar button tooltip: undoes the last drawing action.</comment>
+  </data>
+  <data name="Draw_WindowTitle" xml:space="preserve">
+    <value>Draw on Screen</value>
+    <comment>Window title of the Draw on Screen toolbar and overlay windows, read by screen readers.</comment>
+  </data>
   <data name="Main_NewEditor" xml:space="preserve">
     <value>New Editor</value>
     <comment>Sidebar button that opens an empty image editor window.</comment>
@@ -114,6 +218,10 @@
   <data name="Tray_ColorPicker" xml:space="preserve">
     <value>Color Picker</value>
     <comment>Tray menu item: opens the screen color picker.</comment>
+  </data>
+  <data name="Tray_DrawOnScreen" xml:space="preserve">
+    <value>Draw on Screen</value>
+    <comment>Tray menu item: opens a toolbar and a transparent overlay for drawing on top of every screen (or brings an open one to the front).</comment>
   </data>
   <data name="Tray_Exit" xml:space="preserve">
     <value>Exit</value>

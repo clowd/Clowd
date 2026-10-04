@@ -544,6 +544,42 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(new TrayInsets(15, 11, 15, 20), insets);
         }
 
+        /// <summary>A strip with no region sits centred along the bottom of the working area, the margin
+        /// measured from the window's bottom edge (shadow reserve included) to the area's.</summary>
+        [Fact]
+        public void BottomCentre_CentresAlongTheBottomEdge()
+        {
+            var work = new PixelRect(0, 0, 1920, 1040);
+
+            var p = TrayPlacement.BottomCentre(work, new PixelSize(500, 100), 30);
+
+            Assert.Equal(new PixelPoint(710, 910), p);
+        }
+
+        /// <summary>A window wider (or taller) than the area is pinned to its top-left rather than run
+        /// off the leading edge.</summary>
+        [Fact]
+        public void BottomCentre_WindowLargerThanArea_ClampsIntoArea()
+        {
+            var work = new PixelRect(0, 0, 400, 300);
+
+            var p = TrayPlacement.BottomCentre(work, new PixelSize(600, 280), 30);
+
+            Assert.Equal(new PixelPoint(0, 0), p);
+        }
+
+        /// <summary>A monitor that is not the primary one: every coordinate is offset by the area's
+        /// origin, including negative ones (a monitor left of and above the primary).</summary>
+        [Fact]
+        public void BottomCentre_OffsetArea_UsesItsOrigin()
+        {
+            var work = new PixelRect(-2560, -200, 2560, 1400);
+
+            var p = TrayPlacement.BottomCentre(work, new PixelSize(560, 120), 30);
+
+            Assert.Equal(new PixelPoint(-2560 + 1000, -200 + 1400 - 120 - 30), p);
+        }
+
         private static TrayInsets Compact() => TrayInsets.FromLogical(TrayPlacement.ShadowReserve(TrayTokens.ShadowCompact), 1.0);
     }
 }

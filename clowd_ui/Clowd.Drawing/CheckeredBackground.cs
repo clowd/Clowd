@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Rendering;
 using Avalonia.Styling;
 
 namespace Clowd.Drawing
@@ -14,7 +15,7 @@ namespace Clowd.Drawing
     /// so that mouse events are always received, and applies the parallax offset so the background
     /// appears to scroll while remaining fixed to the viewport.
     /// </summary>
-    internal sealed class CheckeredBackground : Control
+    internal sealed class CheckeredBackground : Control, ICustomHitTest
     {
         // WPF source brush (App.xaml):
         //   <DrawingBrush TileMode="Tile" Viewport="0,0,50,50" ViewportUnits="Absolute">
@@ -43,6 +44,12 @@ namespace Clowd.Drawing
             };
         }
 
+        /// <summary>
+        /// The draw-on-screen overlay: paint nothing, so the desktop shows through, while staying
+        /// the surface the pointer lands on (see <see cref="HitTest"/>).
+        /// </summary>
+        public bool IsTransparent { get; set; }
+
         public CheckeredBackground()
         {
             // Render reads the variant rather than binding a brush, so it has to be told when the
@@ -54,8 +61,13 @@ namespace Clowd.Drawing
         {
             // filling the full bounds with a brush also makes the entire surface hit-test visible,
             // mirroring the WPF Border whose Background was the checkered DrawingBrush.
-            var brush = ActualThemeVariant == ThemeVariant.Light ? _checkerLight : _checkerDark;
+            var brush = IsTransparent ? Brushes.Transparent
+                : ActualThemeVariant == ThemeVariant.Light ? _checkerLight : _checkerDark;
             context.FillRectangle(brush, new Rect(Bounds.Size));
         }
+
+        // the whole surface is hit-testable whatever it paints (a transparent fill must not turn
+        // the pointer away); the point is in this control's own coordinates
+        public bool HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
     }
 }

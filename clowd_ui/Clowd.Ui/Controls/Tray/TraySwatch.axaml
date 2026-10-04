@@ -1,0 +1,28 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- No template: the swatch paints its dot and ring itself (TraySwatch.Render). The theme's only
+         job is the ring brush. Hover previews the selection ring in the accent; the selected colour
+         keeps its white ring under the pointer too, which is why IsSelected is declared after it. -->
+    <ControlTheme x:Key="{x:Type tray:TraySwatch}" TargetType="tray:TraySwatch">
+        <Setter Property="Width" Value="{x:Static tray:TrayTokens.MiniButtonSize}" />
+        <Setter Property="Height" Value="{x:Static tray:TrayTokens.MiniButtonSize}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+
+        <Style Selector="^:pointerover">
+            <Setter Property="RingBrush" Value="{DynamicResource TrayAccentBrush}" />
+        </Style>
+        <Style Selector="^[IsSelected=True]">
+            <Setter Property="RingBrush" Value="{x:Static tray:TrayTokens.FgBrush}" />
+        </Style>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

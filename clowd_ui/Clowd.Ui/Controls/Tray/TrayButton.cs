@@ -1,5 +1,6 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 
 namespace Clowd.UI.Controls.Tray
 {
@@ -28,7 +29,9 @@ namespace Clowd.UI.Controls.Tray
     }
 
     /// <summary>
-    /// The tray's plain icon button: one 16 px glyph in a 40×40 slot with the tray radius.
+    /// The tray's plain icon button: one 20 px glyph (or <see cref="Icon"/>) in a 40×40 slot with the
+    /// tray radius. The theme's <c>mini</c>, <c>ringed</c> and <c>nudge</c> classes are the compact 26 px
+    /// tile, the accent-ring "on" and the 1.5 px optical icon shift.
     /// <para>
     /// Everything visual lives in <c>TrayButton.axaml</c>. This class is three styled properties and
     /// nothing else on purpose — a button whose fills are written from code cannot be styled, cannot
@@ -47,6 +50,13 @@ namespace Clowd.UI.Controls.Tray
         /// <summary>The glyph to draw. Null renders an empty slot rather than throwing.</summary>
         public static readonly StyledProperty<TrayGlyph> GlyphProperty =
             AvaloniaProperty.Register<TrayButton, TrayGlyph>(nameof(Glyph));
+
+        /// <summary>
+        /// An app icon resource fitted by its shape into the glyph's box, for an icon the tray glyph set does
+        /// not have. The alternative to <see cref="Glyph"/>: set one or the other.
+        /// </summary>
+        public static readonly StyledProperty<Geometry> IconProperty =
+            AvaloniaProperty.Register<TrayButton, Geometry>(nameof(Icon));
 
         public static readonly StyledProperty<TrayButtonLook> LookProperty =
             AvaloniaProperty.Register<TrayButton, TrayButtonLook>(nameof(Look), TrayButtonLook.Normal);
@@ -74,6 +84,12 @@ namespace Clowd.UI.Controls.Tray
         {
             get => GetValue(GlyphProperty);
             set => SetValue(GlyphProperty, value);
+        }
+
+        public Geometry Icon
+        {
+            get => GetValue(IconProperty);
+            set => SetValue(IconProperty, value);
         }
 
         public TrayButtonLook Look

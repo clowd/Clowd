@@ -27,6 +27,12 @@ namespace Clowd.Config
             ToolType.Pixelate,
         };
 
+        /// <summary>Tools that exist only on the Draw on Screen overlay and never on the editor
+        /// toolbar. <see cref="ToolType.Eraser"/> is also a name the removed raster build persisted,
+        /// so old settings files can still carry it in the toolbar lists; it is dropped as if it
+        /// were unknown.</summary>
+        private static bool IsOverlayOnly(ToolType tool) => tool == ToolType.Eraser;
+
         /// <summary>Resolves an effective toolbar order from persisted keys and the current
         /// defaults: keeps the persisted keys that are still known (dropping unknown ones —
         /// including stale ones from removed tools — and duplicates), then appends any default not
@@ -96,7 +102,7 @@ namespace Clowd.Config
 
             foreach (var name in persisted)
             {
-                if (!Enum.TryParse<ToolType>(name, out var tool))
+                if (!Enum.TryParse<ToolType>(name, out var tool) || IsOverlayOnly(tool))
                     continue;
                 if (!seen.Add(tool))
                     continue;
@@ -123,7 +129,7 @@ namespace Clowd.Config
 
             foreach (var name in persisted)
             {
-                if (!Enum.TryParse<ToolType>(name, out var tool))
+                if (!Enum.TryParse<ToolType>(name, out var tool) || IsOverlayOnly(tool))
                     continue;
                 if (tool == ToolType.Pointer)
                     continue;

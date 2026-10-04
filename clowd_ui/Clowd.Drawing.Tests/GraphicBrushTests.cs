@@ -78,7 +78,7 @@ namespace Clowd.Drawing.Tests
 
             // sanity: the stroke runs from the origin 100 along +x (plus the round caps), a few units wide
             Assert.InRange(g.Bounds.Left, 96, 100);
-            Assert.InRange(g.Bounds.Right, 200, 205);
+            Assert.InRange(g.Bounds.Right, 200, 207);
             Assert.True(g.Bounds.Height > 3 && g.Bounds.Height < 12, $"height {g.Bounds.Height}");
             Assert.Equal(200, (g.Bounds.Top + g.Bounds.Bottom) / 2, 0.5);
         }
@@ -110,9 +110,9 @@ namespace Clowd.Drawing.Tests
             Assert.Equal(0, g.MakeHitTest(new Point(50, 0), Dpi));
             Assert.True(g.Contains(new Point(50, 0)));
 
-            // the ink is ~3 wide at speed; the 8-unit pen reaches 4 past its edge
-            Assert.Equal(0, g.MakeHitTest(new Point(50, 5), Dpi));
-            Assert.False(g.Contains(new Point(50, 5)));
+            // the ink is ~4.5 wide at speed; the 8-unit pen reaches 4 past its edge
+            Assert.Equal(0, g.MakeHitTest(new Point(50, 5.5), Dpi));
+            Assert.False(g.Contains(new Point(50, 5.5)));
             Assert.Equal(-1, g.MakeHitTest(new Point(50, 12), Dpi));
             Assert.Equal(-1, g.MakeHitTest(new Point(130, 0), Dpi));
 
@@ -129,7 +129,7 @@ namespace Clowd.Drawing.Tests
             g.LineWidth = 9;
 
             Assert.Null(g.RenderCache.Geometry);
-            Assert.Equal(18, g.Size);
+            Assert.Equal(27, g.Size);
             Assert.NotSame(geometry, g.GetStroke().Tail);
             Assert.True(g.Bounds.Height > thin.Height * 2, $"thin {thin.Height} thick {g.Bounds.Height}");
         }

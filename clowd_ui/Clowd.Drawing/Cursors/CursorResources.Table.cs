@@ -14,6 +14,7 @@ public partial class CursorResources {
     public static Cursor Numerical => GetCursor("Numerical.cur");
     public static Cursor Pen => GetCursor("Pen.cur");
     public static Cursor StickyNote => GetCursor("StickyNote.cur");
+    public static Cursor Eraser => GetCursor("Eraser.cur");
     public static Cursor Rotate => GetCursor("Rotate.cur");
     public static Cursor Obscure => GetCursor("Obscure.cur");
     public static Cursor Move => GetCursor("Move.cur");

@@ -14,6 +14,7 @@ using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.Localization;
 using Clowd.UI;
+using Clowd.UI.DrawOnScreen;
 using Clowd.UI.Helpers;
 using Clowd.Util;
 
@@ -439,6 +440,16 @@ namespace Clowd
                 menu.Add(share);
             }
 
+            // no hotkey and no feature switch: the overlay is only ever opened from here
+            var draw = new NativeMenuItem(Loc.T("Tray_DrawOnScreen"));
+            draw.Click += async (s, e) =>
+            {
+                // let the tray menu disappear first, or it is still on screen under the new overlay
+                await Task.Delay(400);
+                ToggleDrawOnScreen();
+            };
+            menu.Add(draw);
+
             var colorp = new NativeMenuItem("Color Picker");
             colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
             menu.Add(colorp);
@@ -523,6 +534,12 @@ namespace Clowd
             else if (SettingsRoot.Current.ShareRegion.IsEnabled)
                 StartCapture(CaptureMode.Region, RegionIntent.Share);
         }
+
+        /// <summary>
+        /// Opens Draw on Screen, or brings the open session's toolbar and overlays back to the front.
+        /// Closing is the toolbar's job, so a second click never throws the user's drawing away.
+        /// </summary>
+        public void ToggleDrawOnScreen() => DrawOnScreenSession.Toggle();
 
         private void ApplyTheme()
         {
@@ -727,6 +744,19 @@ namespace Clowd
                 SentryConfig.CaptureHandled(ex, "exit.stop-share-region");
             }
 
+            // Draw on Screen has nothing to save either; this just takes its topmost overlays down
+            // in a known order (CloseAllWindows below would get there too, one window at a time).
+            try
+            {
+                if (DrawOnScreenSession.ActiveInstance is { } drawing)
+                    await drawing.ShutdownAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Error closing Draw on Screen during exit: " + ex);
+                SentryConfig.CaptureHandled(ex, "exit.close-draw-on-screen");
+            }
+
             // close all open windows first so per-window persistence runs before the process dies
             // (EditorWindow.Closing renders the session preview and clears OpenEditor, §5.7).
             CloseAllWindows();
@@ -773,6 +803,12 @@ namespace Clowd
             try
             {
                 _ = ShareRegionPage.ActiveInstance?.ShutdownAsync();
+            }
+            catch { }
+
+            try
+            {
+                _ = DrawOnScreenSession.ActiveInstance?.ShutdownAsync();
             }
             catch { }
 

@@ -93,11 +93,16 @@ namespace Clowd.Drawing.Graphics
         }
 
         /// <summary>
-        /// The perfect-freehand size: twice the stroke width. With thinning 0.5 the ink runs from
-        /// 0.5·size (at speed) to 1.5·size (at rest), i.e. LineWidth when the pointer moves fast
-        /// up to 3·LineWidth when it slows, and a click dots at 2·LineWidth across.
+        /// perfect-freehand size per unit of stroke width. With thinning 0.5 the ink runs from
+        /// 0.5·size (at speed) to 1.5·size (at rest), so at 3 a fast stroke is 1.5·LineWidth, a slow
+        /// one 4.5·LineWidth and a click dots 3·LineWidth across. It was 2, which put a quick stroke
+        /// at exactly LineWidth: since most of a hand-drawn line is quick, the brush read noticeably
+        /// thinner than a shape outlined at the same width.
         /// </summary>
-        internal virtual double Size => Math.Max(1, 2 * LineWidth);
+        internal const double SizePerLineWidth = 3;
+
+        /// <summary>The perfect-freehand size: <see cref="SizePerLineWidth"/> times the stroke width.</summary>
+        internal virtual double Size => Math.Max(1, SizePerLineWidth * LineWidth);
 
         /// <summary>A fresh, empty outline for the current <see cref="Size"/>: the ink's shape.</summary>
         internal virtual IInkOutline CreateOutline() => new FreehandStrokeBuilder(Size);

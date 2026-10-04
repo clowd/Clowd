@@ -13,8 +13,8 @@
          veil. Every state below is a layer's opacity or a layer's brush — nothing here is ever written
          from code, which is what keeps one button's hover identical to the next one's.
 
-         The glyph is 16x16 with the button's Padding as its margin, so an icon-only button measures
-         8 + 16 + 8 = 32 and is then clamped up to MinWidth 40, a square tile. -->
+         The glyph is GlyphSize (20) square with the button's Padding as its margin, so an icon-only
+         button measures 8 + 20 + 8 = 36 and is then clamped up to MinWidth 40, a square tile. -->
     <ControlTheme x:Key="{x:Type tray:TrayButton}" TargetType="tray:TrayButton">
         <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
         <Setter Property="MinWidth" Value="{x:Static tray:TrayTokens.ButtonMinWidth}" />
@@ -65,7 +65,19 @@
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center"
                                         Foreground="{TemplateBinding Foreground}"
-                                        Glyph="{TemplateBinding Glyph}" />
+                                        Glyph="{TemplateBinding Glyph}"
+                                        IsVisible="{TemplateBinding Glyph, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <!-- the Icon alternative to the Glyph: an app icon resource, its shape bounds fitted into the
+                         same box. Owners set one or the other; whichever is null is not laid out. -->
+                    <tray:TrayGeometryIcon Name="_geo"
+                                           Width="{TemplateBinding GlyphSize}"
+                                           Height="{TemplateBinding GlyphSize}"
+                                           Margin="{TemplateBinding Padding}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           Geometry="{TemplateBinding Icon}"
+                                           IsVisible="{TemplateBinding Icon, Converter={x:Static ObjectConverters.IsNotNull}}" />
                     <Border Name="_hover"
                             Background="{x:Static tray:TrayTokens.HoverVeil}"
                             CornerRadius="{TemplateBinding CornerRadius}"
@@ -100,7 +112,41 @@
             <Setter Property="Opacity" Value="1" />
         </Style>
 
+        <!-- "mini": the compact 26 px tile for a secondary lane — no fill of its own, straight on the
+             tray, with the grip cells' smaller radius and a hover veil heavy enough to read on the
+             darker tray. Declared BEFORE the Danger rules on purpose: a mini Danger button must still
+             get the red .28 hover, and at equal specificity the later rule wins. -->
+        <Style Selector="^.mini">
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.MiniButtonSize}" />
+            <Setter Property="Width" Value="{x:Static tray:TrayTokens.MiniButtonSize}" />
+            <Setter Property="MinWidth" Value="{x:Static tray:TrayTokens.MiniButtonSize}" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="GlyphSize" Value="{x:Static tray:TrayTokens.MiniGlyphSize}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.GripCorner}" />
+        </Style>
+        <Style Selector="^.mini /template/ Border#_hover">
+            <Setter Property="Background" Value="{x:Static tray:TrayTokens.WhiteVeil18}" />
+        </Style>
+
+        <!-- "ringed": a quieter "on" than IsActive — the normal segment fill keeps its colour and an
+             accent ring is painted inside its edge, for a mode that should read as engaged without
+             competing with the accent-filled tile beside it. -->
+        <Style Selector="^.ringed /template/ Border#_bg">
+            <Setter Property="BorderBrush" Value="{DynamicResource TrayAccentBrush}" />
+            <Setter Property="BorderThickness" Value="{x:Static tray:TrayTokens.RingBorder}" />
+        </Style>
+
+        <!-- "nudge": an optical correction for an icon whose shape is visibly heavier on one side (a
+             pointer arrow), the same 1.5 px shift as ToolButton's iconNudgeRight. -->
+        <Style Selector="^.nudge /template/ tray|TrayGlyphIcon#_icon, ^.nudge /template/ tray|TrayGeometryIcon#_geo">
+            <Setter Property="RenderTransform" Value="translateX(1.5px)" />
+        </Style>
+
         <Style Selector="^[Look=Danger] /template/ tray|TrayGlyphIcon#_icon, ^[Look=DangerFilled] /template/ tray|TrayGlyphIcon#_icon">
+            <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.RecBrush}" />
+        </Style>
+        <Style Selector="^[Look=Danger] /template/ tray|TrayGeometryIcon#_geo, ^[Look=DangerFilled] /template/ tray|TrayGeometryIcon#_geo">
             <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.RecBrush}" />
         </Style>
         <Style Selector="^[Look=Danger] /template/ Border#_hover, ^[Look=DangerFilled] /template/ Border#_hover">

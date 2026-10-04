@@ -36,6 +36,9 @@ namespace Clowd.UI.Helpers
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOOWNERZORDER = 0x0200;
+        private const uint SWP_FRAMECHANGED = 0x0020;
+
+        private const int GWL_EXSTYLE = -20;
 
         /// <summary>
         /// Injects extra Win32 extended styles into the window at style-application time via
@@ -242,13 +245,63 @@ namespace Clowd.UI.Helpers
         /// window's <see cref="IMacOSTopLevelPlatformHandle"/>. Call from the window's Opened
         /// handler (the NSWindow must exist). Untested here — compile-guarded per design §4.2.
         /// </summary>
-        public static void SetIgnoresMouseEvents(Window window)
+        public static void SetIgnoresMouseEvents(Window window) => SetIgnoresMouseEvents(window, true);
+
+        /// <summary>
+        /// macOS: switches click-through on or off (NSWindow setIgnoresMouseEvents:). Leaving
+        /// click-through must send NO explicitly — AppKit's default (ignore only transparent
+        /// pixels) is a third state the window would otherwise never return to once YES was sent.
+        /// No-op elsewhere. Untested here — compile-guarded per design §4.2.
+        /// </summary>
+        public static void SetIgnoresMouseEvents(Window window, bool ignore)
         {
             if (!OperatingSystem.IsMacOS())
                 return;
 
             if (window.TryGetPlatformHandle() is IMacOSTopLevelPlatformHandle mac && mac.NSWindow != IntPtr.Zero)
-                objc_msgSend(mac.NSWindow, sel_registerName("setIgnoresMouseEvents:"), true);
+                objc_msgSend(mac.NSWindow, sel_registerName("setIgnoresMouseEvents:"), ignore);
+        }
+
+        /// <summary>
+        /// Windows: sets or clears <paramref name="mask"/> in the live window's extended style and
+        /// makes the change take effect now (SWP_FRAMECHANGED). On its own this lasts only until
+        /// Avalonia next re-applies window styles; a togglable style must also be re-asserted by a
+        /// retained styles callback, which is what <see cref="ToggleableExStyles"/> pairs it with.
+        /// No-op off Windows or before the window has a handle.
+        /// </summary>
+        public static void SetExStyleBits(Window window, uint mask, bool on)
+        {
+            if (!OperatingSystem.IsWindows())
+                return;
+
+            var handle = window?.TryGetPlatformHandle();
+            if (handle == null || handle.Handle == IntPtr.Zero)
+                return;
+
+            var ex = (ulong)GetWindowLongPtrW(handle.Handle, GWL_EXSTYLE).ToInt64();
+            var next = on ? ex | mask : ex & ~(ulong)mask;
+            if (next == ex)
+                return;
+
+            SetWindowLongPtrW(handle.Handle, GWL_EXSTYLE, new IntPtr((long)next));
+            SetWindowPos(handle.Handle, IntPtr.Zero, 0, 0, 0, 0,
+                         SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+
+        /// <summary>The current foreground window (Windows), or <see cref="IntPtr.Zero"/> elsewhere.
+        /// Remembered before a NOACTIVATE window takes focus so it can be handed back.</summary>
+        public static IntPtr GetForegroundWindowHandle() =>
+            OperatingSystem.IsWindows() ? GetForegroundWindow() : IntPtr.Zero;
+
+        /// <summary>Hands the foreground back to <paramref name="hwnd"/> if that window still
+        /// exists. No-op off Windows or for a null handle.</summary>
+        public static void TryRestoreForeground(IntPtr hwnd)
+        {
+            if (!OperatingSystem.IsWindows() || hwnd == IntPtr.Zero)
+                return;
+
+            if (IsWindow(hwnd))
+                SetForegroundWindow(hwnd);
         }
 
         // NSStatusWindowLevel — one above NSMainMenuWindowLevel (24), same level the Rust
@@ -293,10 +346,43 @@ namespace Clowd.UI.Helpers
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
                                                 int X, int Y, int cx, int cy, uint uFlags);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetWindowLongPtrW(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtrW(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindow(IntPtr hWnd);
+
         private const string LibObjC = "/usr/lib/libobjc.A.dylib";
 
         [DllImport(LibObjC)]
-        private static extern IntPtr sel_registerName([MarshalAs(UnmanagedType.LPStr)] string name);
+        internal static extern IntPtr sel_registerName([MarshalAs(UnmanagedType.LPStr)] string name);
+
+        [DllImport(LibObjC)]
+        internal static extern IntPtr objc_getClass([MarshalAs(UnmanagedType.LPStr)] string name);
+
+        // NSPoint-returning message (NSEvent +mouseLocation). Two doubles come back in registers on
+        // arm64 and x86_64 alike, so plain objc_msgSend is correct; objc_msgSend_stret is for
+        // larger structs only.
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
+        internal static extern NSPoint objc_msgSend_NSPoint(IntPtr receiver, IntPtr selector);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NSPoint
+        {
+            public double X;
+            public double Y;
+        }
 
         [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
         private static extern void objc_msgSend(IntPtr receiver, IntPtr selector);
@@ -310,5 +396,55 @@ namespace Clowd.UI.Helpers
 
         [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
         private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, nuint arg1);
+    }
+
+    /// <summary>
+    /// Win32 extended styles for a window where some bits stay on for its whole life and others
+    /// are switched at runtime (the draw-on-screen canvases: layered/toolwindow/noactivate always,
+    /// WS_EX_TRANSPARENT only while clicks go through to the desktop). Construct before Show().
+    /// No-op off Windows.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="WindowNativeExtensions.AddExStyles"/> cannot be used for this: it is one-way. Its
+    /// lambda captures the mask once and nothing retains it, so every later Avalonia style
+    /// re-application (a resize, a state or DPI change) silently re-ORs a bit that was cleared by
+    /// hand. Here ONE instance method is registered and kept alive by this object, and it reads
+    /// <see cref="IsOn"/> each time, so a re-application re-asserts the current desire instead of
+    /// the construction-time one: the toggled bits are forced on or masked out, never left to
+    /// whatever was there before.
+    /// </remarks>
+    public sealed class ToggleableExStyles
+    {
+        private readonly Window _window;
+        private readonly uint _alwaysOn;
+        private readonly uint _toggled;
+
+        // the registered callback, held so the delegate Avalonia keeps is the one we created
+        private readonly Win32Properties.CustomWindowStylesCallback _callback;
+
+        public ToggleableExStyles(Window window, uint alwaysOn, uint toggled, bool initiallyOn)
+        {
+            _window = window;
+            _alwaysOn = alwaysOn;
+            _toggled = toggled;
+            IsOn = initiallyOn;
+            _callback = Apply;
+
+            if (OperatingSystem.IsWindows())
+                Win32Properties.AddWindowStylesCallback(window, _callback);
+        }
+
+        /// <summary>Whether the toggled bits are currently wanted on.</summary>
+        public bool IsOn { get; private set; }
+
+        /// <summary>Switches the toggled bits on or off, live.</summary>
+        public void Set(bool on)
+        {
+            IsOn = on;
+            WindowNativeExtensions.SetExStyleBits(_window, _toggled, on);
+        }
+
+        private (uint style, uint exStyle) Apply(uint style, uint exStyle) =>
+            (style, ((exStyle | _alwaysOn) & ~_toggled) | (IsOn ? _toggled : 0));
     }
 }

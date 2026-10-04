@@ -58,15 +58,19 @@
         </Style>
     </ControlTheme>
 
-    <!-- The grip (spec §3, revised). Two EQUAL cells: the dot handle and the rotate button, each with the
+    <!-- The grip (spec §3, revised). Two EQUAL cells: the rotate button and the dot handle, each with the
          same hover veil on the same rounded shape, so the pair reads as two halves of one affordance
-         rather than a grid with a small button tucked under it.
+         rather than a grid with a small button tucked beside it.
 
-         Horizontal: a GripLength-wide column at the row height, the cells stacked (handle above rotate).
-         Vertical: a GripLength-tall row spanning the tray's inner width, the cells side by side (handle
-         left of rotate). The dot grid turns with the strip (4x3 -> 3x4); nothing is rebuilt on a
+         Horizontal: a GripLength-wide column at the row height, the cells stacked (rotate above handle).
+         Vertical: a GripLength-tall row spanning the tray's inner width, the cells side by side (rotate
+         left of handle). The dot grid turns with the strip (4x3 -> 3x4); nothing is rebuilt on a
          rotation, only restyled — the UniformGrid swaps its Rows/Columns, which ARE styleable, unlike a
-         Grid's definitions. -->
+         Grid's definitions.
+
+         Rotate comes FIRST in both axes on purpose: the chassis anchors a rotation at the window's
+         top-left, so the top-left cell is the one spot that is still under the pointer after the strip
+         has turned, and a second click turns it straight back. -->
     <ControlTheme x:Key="{x:Type tray:TrayGrip}" TargetType="tray:TrayGrip">
         <Setter Property="Width" Value="{x:Static tray:TrayTokens.GripLength}" />
         <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
@@ -76,6 +80,11 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <UniformGrid Name="_cells" Rows="2" Columns="1">
+                    <!-- first, so it is the top (row) / left (column) cell: see the note above -->
+                    <Button Name="PART_Rotate"
+                            AutomationProperties.Name="Rotate toolbar"
+                            Theme="{StaticResource TrayGripRotateTheme}"
+                            ToolTip.Tip="Rotate toolbar" />
                     <!-- Background=Transparent is load-bearing: the cell is most of the target the user
                          actually aims at, and an unpainted Border does not hit-test. -->
                     <Border Name="_handle"
@@ -99,10 +108,6 @@
                                                Orientation="{TemplateBinding Orientation}" />
                         </Panel>
                     </Border>
-                    <Button Name="PART_Rotate"
-                            AutomationProperties.Name="Rotate toolbar"
-                            Theme="{StaticResource TrayGripRotateTheme}"
-                            ToolTip.Tip="Rotate toolbar" />
                 </UniformGrid>
             </ControlTemplate>
         </Setter>
@@ -129,7 +134,7 @@
         </Style>
 
         <!-- Vertical strip: the grip lies down. GripLength high, full width, dots 3x4, rotate to the
-             right of the handle. -->
+             left of the handle. -->
         <Style Selector="^[Orientation=Vertical]">
             <Setter Property="Width" Value="{x:Static sys:Double.NaN}" />
             <Setter Property="Height" Value="{x:Static tray:TrayTokens.GripLength}" />
@@ -138,6 +143,70 @@
         <Style Selector="^[Orientation=Vertical] /template/ UniformGrid#_cells">
             <Setter Property="Rows" Value="1" />
             <Setter Property="Columns" Value="2" />
+        </Style>
+
+        <!-- Spanning: the grip runs the tray's full cross extent instead of matching one row — rotate
+             a GripLength square in the corner, the handle filling the rest. A different template
+             rather than restyled cells, because the two cells are no longer equal; it keeps the same
+             part names and handle children, so OnApplyTemplate and the dot/veil styles above still
+             find them. The dot grid lies along the handle's long side (2 across, 7 along) rather than
+             along the strip, so its own Orientation is set here instead of bound to the strip's. -->
+        <Style Selector="^[Layout=Spanning]">
+            <Setter Property="Height" Value="{x:Static sys:Double.NaN}" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <DockPanel Name="_cells">
+                        <Button Name="PART_Rotate"
+                                AutomationProperties.Name="Rotate toolbar"
+                                Theme="{StaticResource TrayGripRotateTheme}"
+                                ToolTip.Tip="Rotate toolbar" />
+                        <Border Name="_handle"
+                                Background="Transparent"
+                                CornerRadius="{x:Static tray:TrayTokens.GripCorner}">
+                            <Panel>
+                                <Border Name="_handleHover"
+                                        Background="{x:Static tray:TrayTokens.WhiteVeil14}"
+                                        CornerRadius="{x:Static tray:TrayTokens.GripCorner}"
+                                        Opacity="0"
+                                        IsHitTestVisible="False">
+                                    <Border.Transitions>
+                                        <Transitions>
+                                            <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                                        </Transitions>
+                                    </Border.Transitions>
+                                </Border>
+                                <tray:TrayGripDots Name="_dots"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                            </Panel>
+                        </Border>
+                    </DockPanel>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="^[Layout=Spanning] /template/ Button#PART_Rotate">
+            <Setter Property="DockPanel.Dock" Value="Top" />
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.GripLength}" />
+        </Style>
+        <Style Selector="^[Layout=Spanning] /template/ tray|TrayGripDots#_dots">
+            <Setter Property="Orientation" Value="Vertical" />
+            <Setter Property="LongCount" Value="7" />
+            <Setter Property="ShortCount" Value="2" />
+        </Style>
+
+        <!-- Spanning in a vertical strip: the same grip laid along the top, GripLength tall and the
+             tray's full width. Declared after both styles it combines so its setters win. -->
+        <Style Selector="^[Layout=Spanning][Orientation=Vertical]">
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.GripLength}" />
+        </Style>
+        <Style Selector="^[Layout=Spanning][Orientation=Vertical] /template/ Button#PART_Rotate">
+            <Setter Property="DockPanel.Dock" Value="Left" />
+            <Setter Property="Height" Value="{x:Static sys:Double.NaN}" />
+            <Setter Property="Width" Value="{x:Static tray:TrayTokens.GripLength}" />
+        </Style>
+        <Style Selector="^[Layout=Spanning][Orientation=Vertical] /template/ tray|TrayGripDots#_dots">
+            <Setter Property="Orientation" Value="Horizontal" />
         </Style>
     </ControlTheme>
 

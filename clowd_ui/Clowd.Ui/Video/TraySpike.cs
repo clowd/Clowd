@@ -1,22 +1,26 @@
 ﻿using System;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Controls.Tray;
+using Clowd.UI.DrawOnScreen;
 using Clowd.UI.Helpers;
 
 namespace Clowd.UI
 {
     /// <summary>
     /// Hidden harness for the floating tray controls, launched as
-    /// <c>clowd --tray-spike generic|glyphs|recording|share|scroll [--vertical] [--shadow spec|compact]
+    /// <c>clowd --tray-spike generic|glyphs|recording|share|scroll|draw [--vertical] [--shadow spec|compact]
     /// [--state name] [--cycle] [--nochevron] [--region full] [--exit-after ms]</c>
     /// — see App.Startup, which short-circuits before the single-instance mutex exactly as the
     /// <c>--video-spike</c> harness does, so a spike process never forwards its args to (or is
@@ -36,6 +40,12 @@ namespace Clowd.UI
     /// chassis options, so <c>--shadow</c> reaches only the two generic modes and <c>--nochevron</c> only
     /// the recording strip; <c>--vertical</c> reaches only the size-to-content modes, the fixed-size
     /// scroll strip never rotating.
+    /// </para>
+    /// <para>
+    /// <c>draw</c> drives the real draw-on-screen toolbar with a stand-in controller and no canvases.
+    /// It attends no region, so it is shown the way the session shows it, centred along the bottom of
+    /// the primary working area, and <c>--region</c> does not reach it. <c>--vertical</c> rotates it
+    /// with a click on the grip's own rotate button, the strip's only way onto the other axis.
     /// </para>
     /// <para>
     /// The only production reference is App.Startup's TryHandleArgs hook; nothing else may depend on
@@ -87,6 +97,9 @@ namespace Clowd.UI
             // region rather than giving up.
             var fixedSize = false;
 
+            // a strip with no region to attend, shown along the bottom of the primary monitor instead
+            var atBottom = false;
+
             if (String.Equals(mode, "generic", StringComparison.OrdinalIgnoreCase))
                 window = new GenericTrayWindow(shadow, vertical);
             else if (String.Equals(mode, "glyphs", StringComparison.OrdinalIgnoreCase))
@@ -100,10 +113,15 @@ namespace Clowd.UI
                 window = new ScrollSpike(state, cycle).Window;
                 fixedSize = true;
             }
+            else if (String.Equals(mode, "draw", StringComparison.OrdinalIgnoreCase))
+            {
+                window = new DrawSpike(state, cycle, vertical).Window;
+                atBottom = true;
+            }
 
             if (window == null)
             {
-                Console.WriteLine("usage: " + ArgName + " generic|glyphs|recording|share|scroll [--vertical]"
+                Console.WriteLine("usage: " + ArgName + " generic|glyphs|recording|share|scroll|draw [--vertical]"
                     + " [--shadow spec|compact] [--state <name>] [--cycle] [--nochevron] [--region full]"
                     + " [--exit-after <ms>] [--snapshot <png>]");
                 Console.Out.Flush();
@@ -127,7 +145,12 @@ namespace Clowd.UI
             // print the exception where the script can see it, then let Startup handle it as before.
             try
             {
-                if (!fixedSize)
+                if (atBottom)
+                {
+                    var screen = DesktopScreens.Primary(window);
+                    window.ShowAtBottomOf(screen?.WorkingArea ?? new PixelRect(0, 0, 1920, 1080));
+                }
+                else if (!fixedSize)
                 {
                     window.ShowNear(region);
                 }
@@ -915,6 +938,139 @@ namespace Clowd.UI
                 _walkIndex = (_walkIndex + 1) % Walk.Length;
                 Apply(Walk[_walkIndex]);
             }
+        }
+
+        /// <summary>
+        /// The real draw-on-screen toolbar with no session behind it: a stand-in controller that only
+        /// moves a <see cref="DrawOnScreenState"/> through its own transitions and pretends to hold three
+        /// strokes, so undo and clear have something to do. Besides the chassis's usual lines it prints
+        /// <c>rotate X,Y WxH</c>, the grip's rotate button in tray coordinates, whenever that changes:
+        /// it must sit in the same top-left cell in both orientations.
+        /// </summary>
+        private sealed class DrawSpike
+        {
+            private static readonly string[] Walk = { "drawing", "clickthrough", "hidden" };
+
+            private readonly SpikeDrawController _controller = new();
+            private readonly DrawOnScreenToolbar _strip;
+            private int _walkIndex;
+
+            public DrawSpike(string state, bool cycle, bool vertical)
+            {
+                _strip = new DrawOnScreenToolbar(_controller);
+                _controller.CloseRequested += (s, e) => ExitSpike();
+
+                Apply(cycle ? Walk[0] : state ?? "drawing");
+
+                if (cycle)
+                    StartTimer(_strip, CycleInterval, Step);
+
+                TraceRotate();
+
+                // the chassis is the axis's only writer, so the spike rotates the strip the way a user
+                // does: a click on the rotate button. Late enough that ShowAtBottomOf's own re-centring
+                // pass has run, so the click anchors on the settled bottom-centre position.
+                if (vertical)
+                    DispatcherTimer.RunOnce(() => RotateButton()?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
+                        TimeSpan.FromMilliseconds(300));
+            }
+
+            public FloatingTrayWindow Window => _strip;
+
+            private void Apply(string state)
+            {
+                switch (state?.ToLowerInvariant())
+                {
+                    case "drawing":
+                        _controller.Set(DrawOnScreenState.Initial);
+                        break;
+                    case "clickthrough":
+                        _controller.Set(DrawOnScreenState.Initial.ToggleClickThrough());
+                        break;
+                    case "hidden":
+                        _controller.Set(DrawOnScreenState.Initial.ToggleHide());
+                        break;
+                    default:
+                        UnknownState(state, "drawing|clickthrough|hidden");
+                        break;
+                }
+            }
+
+            private void Step()
+            {
+                _walkIndex = (_walkIndex + 1) % Walk.Length;
+                Apply(Walk[_walkIndex]);
+            }
+
+            private Button RotateButton() =>
+                _strip.Grip?.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "PART_Rotate");
+
+            private void TraceRotate()
+            {
+                string last = null;
+                _strip.LayoutUpdated += (s, e) =>
+                {
+                    var rotate = RotateButton();
+                    var origin = rotate?.TranslatePoint(new Point(0, 0), _strip.Tray);
+                    if (origin == null)
+                        return;
+
+                    // tray-relative, then on screen: a --vertical run prints the screen rect before and
+                    // after the click, and the two should agree if the rotate cell stayed under the pointer
+                    var screenTopLeft = rotate.PointToScreen(new Point(0, 0));
+                    var screenBottomRight = rotate.PointToScreen(new Point(rotate.Bounds.Width, rotate.Bounds.Height));
+                    var line = String.Format(CultureInfo.InvariantCulture, "rotate {0:0.##},{1:0.##} {2:0.##}x{3:0.##} screen {4},{5}-{6},{7}",
+                        origin.Value.X, origin.Value.Y, rotate.Bounds.Width, rotate.Bounds.Height,
+                        screenTopLeft.X, screenTopLeft.Y, screenBottomRight.X, screenBottomRight.Y);
+                    if (line == last)
+                        return;
+
+                    last = line;
+                    Console.WriteLine(line);
+                    Console.Out.Flush();
+                };
+            }
+        }
+
+        /// <summary>The session's side of the toolbar minus the canvases: every command is the pure
+        /// state transition the real session makes, and the history is a counter.</summary>
+        private sealed class SpikeDrawController : IDrawOnScreenController
+        {
+            private int _strokes = 3;
+
+            public DrawOnScreenState State { get; private set; } = DrawOnScreenState.Initial;
+            public bool CanUndo => _strokes > 0;
+            public bool CanClear => _strokes > 0;
+            public event EventHandler Changed;
+
+            /// <summary>Close, which the spike answers by leaving.</summary>
+            public event EventHandler CloseRequested;
+
+            public void Set(DrawOnScreenState state)
+            {
+                State = state;
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+
+            public void PickTool(ToolType tool) => Set(State.PickTool(tool));
+            public void ToggleClickThrough() => Set(State.ToggleClickThrough());
+            public void ToggleHide() => Set(State.ToggleHide());
+            public void SelectColor(int index) => Set(State.SelectColor(index));
+            public void SelectSize(int index) => Set(State.SelectSize(index));
+
+            public void Undo()
+            {
+                _strokes = Math.Max(0, _strokes - 1);
+                Set(State.AfterUndoOrClear());
+            }
+
+            public void ClearAll()
+            {
+                _strokes = 0;
+                Set(State.AfterUndoOrClear());
+            }
+
+            public void Close() => CloseRequested?.Invoke(this, EventArgs.Empty);
         }
     }
 }

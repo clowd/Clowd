@@ -190,7 +190,7 @@ namespace Clowd.Drawing.Tests
 
             Assert.Equal(FreehandStroke.DotSegments, outline.Count);
             double r = FreehandStroke.Radius(Size, FreehandStroke.DotPressure);
-            Assert.Equal(Size / 2, r); // LineWidth: a click dots at 2·LineWidth across
+            Assert.Equal(Size / 2, r); // a click dots exactly the freehand size across
             foreach (var p in outline)
                 Assert.Equal(r, Dist(p, new Point(10, 20)), 9);
         }

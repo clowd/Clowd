@@ -60,6 +60,23 @@ namespace Clowd.UI.Controls.Tray
                                       WhiteVeil14 = new ImmutableSolidColorBrush(Fg, 0.14),
                                       WhiteVeil16 = new ImmutableSolidColorBrush(Fg, 0.16);
 
+        /// <summary>White .18 — the hover veil on a bare (fill-less) mini button. A step heavier than
+        /// <see cref="HoverVeil"/> because it lands on the darker tray rather than on a segment.</summary>
+        public static readonly IBrush WhiteVeil18 = new ImmutableSolidColorBrush(Fg, 0.18);
+
+        /// <summary>White .35 — the 1 px inset edge of a selected dot button, over its
+        /// <see cref="WhiteVeil16"/> fill.</summary>
+        public static readonly IBrush WhiteVeil35 = new ImmutableSolidColorBrush(Fg, 0.35);
+
+        /// <summary>White .12 — the free-standing 1 px rule between two groups on a strip
+        /// (<see cref="TrayDivider"/>). Not <see cref="Divider"/>: that hairline sits inside a split slot,
+        /// over the segment fill, and is deliberately fainter.</summary>
+        public static readonly IBrush GroupDivider = new ImmutableSolidColorBrush(Fg, 0.12);
+
+        /// <summary>White .18 — the 1 px hairline inside every colour dot (<see cref="TraySwatch"/>), so
+        /// a near-black colour still has an edge against the graphite tray.</summary>
+        public static readonly IBrush DotHairline = new ImmutableSolidColorBrush(Fg, 0.18);
+
         // DangerFilled rest / Danger hover
         public static readonly IBrush RecVeil22 = new ImmutableSolidColorBrush(Rec, 0.22),
                                       RecVeil28 = new ImmutableSolidColorBrush(Rec, 0.28);
@@ -134,6 +151,30 @@ namespace Clowd.UI.Controls.Tray
         /// with 4 px either side — a button's footprint, drawn on the tray with no fill so it reads as
         /// part of the chassis like the grip, not as a button.</summary>
         public const double EmblemLength = 40;
+
+        /// <summary>
+        /// The compact tile: a 26 px square with a 15 px shape-fitted icon, for a second, lighter lane of
+        /// settings and housekeeping that runs at <see cref="SecondaryLaneExtent"/> rather than at the
+        /// button height. <see cref="RingThickness"/> is the inset accent ring of a "ringed" button.
+        /// </summary>
+        public const double MiniButtonSize = 26, MiniGlyphSize = 15, RingThickness = 1.5;
+
+        /// <summary><see cref="RingThickness"/> as a <see cref="Thickness"/>: a setter cannot convert an
+        /// x:Static double, so the "ringed" style binds this one.</summary>
+        public static readonly Thickness RingBorder = new Thickness(RingThickness);
+
+        /// <summary>
+        /// A colour swatch (<see cref="TraySwatch"/>): a 16 px dot, then — when selected or hovered — a
+        /// 2 px gap showing the tray, then a 1.5 px ring. 16 + 2·(2 + 1.5) = 23, inside the 26 px tile.
+        /// </summary>
+        public const double SwatchDot = 16, SwatchGap = 2, SwatchRing = 1.5;
+
+        /// <summary>The two lanes of a <see cref="TrayDeck"/> across the strip axis: the button row and
+        /// the compact row under it (or the two columns, rotated).</summary>
+        public const double PrimaryLaneExtent = ButtonHeight, SecondaryLaneExtent = MiniButtonSize;
+
+        /// <summary>A <see cref="TrayDivider"/>'s length across the strip axis.</summary>
+        public const double DividerLength = 24;
         public const double TrackWidth = 24, TrackHeight = 4, LevelMinWidth = 8;
 
         /// <summary>

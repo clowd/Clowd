@@ -40,7 +40,8 @@ namespace Clowd.Drawing.Rendering
                 // no-raise read: Render must stay pure (a PropertyChanged here could re-enter
                 // invalidation mid-render); the pending validator tick performs the raise
                 ContentBounds: list.GetContentBoundsForRender(),
-                Hovered: _canvas.HoveredGraphic);
+                Hovered: _canvas.HoveredGraphic,
+                HoveredSet: _canvas.HoveredGraphics);
 
             SceneRenderer.Render(context, list.GraphicsSnapshot(), list.ShadowCache, in options);
         }

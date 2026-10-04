@@ -103,6 +103,7 @@ namespace Clowd.Drawing.Tools
             _oldText = newGraphic ? "" : graphicsText.Body;
 
             drawingCanvas.Children.Add(_txtBox);
+            drawingCanvas.SetTextEditing(true);
 
             if (graphicsText is GraphicCount count)
             {
@@ -236,7 +237,7 @@ namespace Clowd.Drawing.Tools
                     // otherwise, revert it to it's previous text
                     _editText.Body = _oldText;
                     _editText.Editing = false;
-                    _editText.IsSelected = true;
+                    _editText.IsSelected = !canvas.IsOverlayMode; // the overlay leaves nothing selected
                 }
 
                 _editText = null;
@@ -250,6 +251,7 @@ namespace Clowd.Drawing.Tools
                 _txtBox = null;
                 DetachDeactivated();
                 canvas.Children.Remove(txtBox);
+                canvas.SetTextEditing(false);
             }
 
             // This enables back all ApplicationCommands,
@@ -274,7 +276,7 @@ namespace Clowd.Drawing.Tools
             }
 
             _editText.Editing = false;
-            _editText.IsSelected = true;
+            _editText.IsSelected = !drawingCanvas.IsOverlayMode; // the overlay leaves nothing selected
 
             // null the fields before removal so re-entrant LostFocus is a no-op (see AbortOperation)
             var txtBox = _txtBox;
@@ -282,6 +284,7 @@ namespace Clowd.Drawing.Tools
             _editText = null;
             DetachDeactivated();
             drawingCanvas.Children.Remove(txtBox);
+            drawingCanvas.SetTextEditing(false);
 
             // This enables back all ApplicationCommands,
             // which are disabled while textbox is active.

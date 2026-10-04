@@ -9,9 +9,23 @@ using Avalonia.Media;
 
 namespace Clowd.UI.Controls.Tray
 {
+    /// <summary>How a <see cref="TrayGrip"/> divides its room between the rotate button and the handle.</summary>
+    public enum TrayGripLayout
+    {
+        /// <summary>Two equal cells, the grip one row deep: the default every single-row strip uses.</summary>
+        EqualCells,
+
+        /// <summary>
+        /// The grip runs the tray's full cross extent: rotate a <see cref="TrayTokens.GripLength"/> square
+        /// in the top-left corner, the handle filling the rest. For a tray deeper than one row.
+        /// </summary>
+        Spanning,
+    }
+
     /// <summary>
-    /// The tray's move affordance: a dot-grid handle the user drags and a rotate button, two equal
-    /// cells under (horizontal) or beside (vertical) each other with the same hover veil. Neither has a
+    /// The tray's move affordance: a rotate button and a dot-grid handle the user drags, two equal
+    /// cells over (horizontal) or beside (vertical) each other with the same hover veil — rotate first,
+    /// so a rotation, which the chassis anchors at the top-left, leaves it under the pointer. Neither has a
     /// fill of its own at rest — both sit straight on the tray, so the grip reads as part of the chassis
     /// rather than as another button.
     /// <para>
@@ -31,10 +45,17 @@ namespace Clowd.UI.Controls.Tray
     {
         /// <summary>
         /// The axis of the strip this grip sits in, pushed down by the tray. Horizontal means the grip
-        /// is a column (handle cell above the rotate cell); Vertical means it is a row.
+        /// is a column (rotate cell above the handle cell); Vertical means it is a row.
         /// </summary>
         public static readonly StyledProperty<Orientation> OrientationProperty =
             AvaloniaProperty.Register<TrayGrip, Orientation>(nameof(Orientation), Orientation.Horizontal);
+
+        /// <summary>
+        /// How the grip is divided; set once by the owner before the grip is shown. The theme swaps the
+        /// template on it, keeping the part names, so nothing in this class depends on the value.
+        /// </summary>
+        public static readonly StyledProperty<TrayGripLayout> LayoutProperty =
+            AvaloniaProperty.Register<TrayGrip, TrayGripLayout>(nameof(Layout), TrayGripLayout.EqualCells);
 
         /// <summary>
         /// True from <see cref="DragStarted"/> until the gesture ends (release or capture loss).
@@ -57,6 +78,12 @@ namespace Clowd.UI.Controls.Tray
         {
             get => GetValue(OrientationProperty);
             set => SetValue(OrientationProperty, value);
+        }
+
+        public TrayGripLayout Layout
+        {
+            get => GetValue(LayoutProperty);
+            set => SetValue(LayoutProperty, value);
         }
 
         public bool IsDragging
@@ -224,24 +251,31 @@ namespace Clowd.UI.Controls.Tray
     }
 
     /// <summary>
-    /// The dot grid itself, drawn rather than assembled: a 4×3 grid of 2 px dots on a 4.5 px pitch that
-    /// becomes 3×4 when the strip stands up. Drawing it is a dozen lines against a dozen elements plus a
-    /// panel, and it lets the grid report its exact 15.5 px extent instead of arriving at it by luck.
+    /// The dot grid itself, drawn rather than assembled: by default a 4×3 grid of 2 px dots on a 4.5 px
+    /// pitch that becomes 3×4 when the strip stands up. Drawing it is a dozen lines against a dozen
+    /// elements plus a panel, and it lets the grid report its exact 15.5 px extent instead of arriving at
+    /// it by luck. <see cref="Orientation"/> names the axis the <see cref="LongCount"/> side runs along.
     /// </summary>
     internal sealed class TrayGripDots : Control
     {
         private const double Pitch = 4.5;
         private const double DotRadius = 1;
-        private const int LongCount = 4;
-        private const int ShortCount = 3;
 
         public static readonly StyledProperty<Orientation> OrientationProperty =
             AvaloniaProperty.Register<TrayGripDots, Orientation>(nameof(Orientation), Orientation.Horizontal);
 
+        /// <summary>Dots along the <see cref="Orientation"/> axis.</summary>
+        public static readonly StyledProperty<int> LongCountProperty =
+            AvaloniaProperty.Register<TrayGripDots, int>(nameof(LongCount), 4);
+
+        /// <summary>Dots across the <see cref="Orientation"/> axis.</summary>
+        public static readonly StyledProperty<int> ShortCountProperty =
+            AvaloniaProperty.Register<TrayGripDots, int>(nameof(ShortCount), 3);
+
         static TrayGripDots()
         {
-            AffectsMeasure<TrayGripDots>(OrientationProperty);
-            AffectsRender<TrayGripDots>(OrientationProperty);
+            AffectsMeasure<TrayGripDots>(OrientationProperty, LongCountProperty, ShortCountProperty);
+            AffectsRender<TrayGripDots>(OrientationProperty, LongCountProperty, ShortCountProperty);
         }
 
         public Orientation Orientation
@@ -250,12 +284,25 @@ namespace Clowd.UI.Controls.Tray
             set => SetValue(OrientationProperty, value);
         }
 
+        public int LongCount
+        {
+            get => GetValue(LongCountProperty);
+            set => SetValue(LongCountProperty, value);
+        }
+
+        public int ShortCount
+        {
+            get => GetValue(ShortCountProperty);
+            set => SetValue(ShortCountProperty, value);
+        }
+
         private int Columns => Orientation == Orientation.Horizontal ? LongCount : ShortCount;
 
         private int Rows => Orientation == Orientation.Horizontal ? ShortCount : LongCount;
 
-        /// <summary>4 dots → 15.5, 3 dots → 11: the pitch spans the gaps, the diameter caps both ends.</summary>
-        private static double Extent(int count) => (count - 1) * Pitch + DotRadius * 2;
+        /// <summary>4 dots → 15.5, 3 dots → 11: the pitch spans the gaps, the diameter caps both ends.
+        /// A count below one draws nothing and measures nothing.</summary>
+        private static double Extent(int count) => count < 1 ? 0 : (count - 1) * Pitch + DotRadius * 2;
 
         protected override Size MeasureOverride(Size availableSize)
         {

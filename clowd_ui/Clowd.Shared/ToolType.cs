@@ -20,5 +20,6 @@ namespace Clowd
         Pen,   // bezier path tool (replaces the pencil, which lives on as PolyLine above)
         Brush, // freehand ink
         Highlighter, // freehand translucent chisel ink
+        Eraser, // overlay-only (draw on screen): deletes what it hovers/marquees; never on the editor toolbar
     };
 }
