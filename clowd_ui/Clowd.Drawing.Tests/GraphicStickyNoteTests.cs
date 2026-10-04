@@ -93,7 +93,11 @@ namespace Clowd.Drawing.Tests
         {
             // FormattedText's default word-ellipsis trimming draws this as "hello / … / world"
             var g = Make("hello Supercalifragilisticexpialidociousness world");
-            var lines = g.TextRect.Height / (g.FittedFontSize * 1.2);
+            // line height is the font's own (it differs by platform font), not a fixed multiple of the size
+            var typeface = new Typeface(FontUtil.CreateSafe(g.FontName), g.FontStyle, g.FontWeight, g.FontStretch);
+            var lineHeight = new FormattedText("hello", System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, typeface, g.FittedFontSize, null).Height;
+            var lines = g.TextRect.Height / lineHeight;
             Assert.True(lines > 3.5, $"{lines:0.0} lines, the long word was elided rather than wrapped");
         }
 
