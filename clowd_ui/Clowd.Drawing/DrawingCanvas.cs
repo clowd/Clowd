@@ -99,6 +99,14 @@ namespace Clowd.Drawing
         public static readonly StyledProperty<double> ContentScaleProperty =
             AvaloniaProperty.Register<DrawingCanvas, double>(nameof(ContentScale), 1d);
 
+        /// <summary>
+        /// <see cref="ContentScale"/> as seen by UI zoom controls (the toolbar spinner): reads the
+        /// same value, but writing it zooms about the viewport center instead of the top-left.
+        /// </summary>
+        public static readonly DirectProperty<DrawingCanvas, double> ViewportZoomProperty =
+            AvaloniaProperty.RegisterDirect<DrawingCanvas, double>(nameof(ViewportZoom),
+                o => o.ViewportZoom, (o, v) => o.ViewportZoom = v, 1d);
+
         public static readonly StyledProperty<GraphicCollection> GraphicsListProperty =
             AvaloniaProperty.Register<DrawingCanvas, GraphicCollection>(nameof(GraphicsList));
 
@@ -256,6 +264,12 @@ namespace Clowd.Drawing
             set => SetValue(ContentScaleProperty, value);
         }
 
+        public double ViewportZoom
+        {
+            get => ContentScale;
+            set => ZoomCentered(value);
+        }
+
         public GraphicCollection GraphicsList
         {
             get => GetValue(GraphicsListProperty);
@@ -373,6 +387,7 @@ namespace Clowd.Drawing
         public RelayCommand CommandRedo { get; }
         public RelayCommand CommandZoomPanAuto { get; }
         public RelayCommand CommandZoomPanActualSize { get; }
+        public RelayCommand CommandZoomReset { get; }
         public RelayCommand CommandCropImage { get; }
 
         internal ToolPointer ToolPointer { get; }
@@ -639,6 +654,11 @@ namespace Clowd.Drawing
                 Text = "Zoom to actual size",
                 GestureText = OperatingSystem.IsMacOS() ? "Cmd+1" : "Ctrl+1",
             };
+            CommandZoomReset = new RelayCommand()
+            {
+                Executed = (obj) => ZoomReset(),
+                Text = "Reset zoom",
+            };
             CommandUndo = new RelayCommand()
             {
                 Executed = (obj) => Undo(),
@@ -714,7 +734,10 @@ namespace Clowd.Drawing
             else if (change.Property == ArtworkBackgroundProperty)
                 OnArtworkBackgroundChanged();
             else if (change.Property == ContentScaleProperty)
+            {
                 OnContentScaleChanged();
+                RaisePropertyChanged(ViewportZoomProperty, change.GetOldValue<double>(), change.GetNewValue<double>());
+            }
             else if (change.Property == IsOverlayModeProperty)
                 OnOverlayModeChanged(change.GetNewValue<bool>());
 
@@ -2285,6 +2308,77 @@ namespace Clowd.Drawing
         {
             ContentScale = zoom;
             ZoomPanCenter();
+        }
+
+        /// <summary>
+        /// Returns to 100% zoom anchored at the viewport center, so the part of the drawing being
+        /// looked at stays put. If that would leave too little of the drawing on screen (less than
+        /// a tenth of what could be visible), falls back to <see cref="ZoomPanActualSize"/>, which
+        /// also recenters the drawing. Used by the toolbar's zoom reset dot.
+        /// </summary>
+        public void ZoomReset()
+        {
+            const double newZoom = 1d;
+            var rect = GraphicsList.ContentBounds;
+            if (rect.Width <= 0 || rect.Height <= 0 || Bounds.Width <= 0 || Bounds.Height <= 0)
+            {
+                ZoomPanActualSize(newZoom);
+                return;
+            }
+
+            var offset = CenteredZoomOffset(newZoom);
+            var newScale = newZoom / DpiZoom;
+
+            var left = rect.Left * newScale + offset.X;
+            var top = rect.Top * newScale + offset.Y;
+            var right = rect.Right * newScale + offset.X;
+            var bottom = rect.Bottom * newScale + offset.Y;
+            var visibleArea = Math.Max(0, Math.Min(right, Bounds.Width) - Math.Max(left, 0))
+                * Math.Max(0, Math.Min(bottom, Bounds.Height) - Math.Max(top, 0));
+
+            // measured against the smaller of drawing and viewport, so a small drawing that is
+            // fully on screen never triggers the recenter just for being small
+            var possibleArea = Math.Min((right - left) * (bottom - top), Bounds.Width * Bounds.Height);
+            if (visibleArea < possibleArea * 0.1)
+            {
+                ZoomPanActualSize(newZoom);
+                return;
+            }
+
+            ContentScale = newZoom;
+            ContentOffset = offset;
+        }
+
+        /// <summary>Zooms to <paramref name="newZoom"/> keeping the canvas point under the
+        /// viewport center fixed (no other pan).</summary>
+        public void ZoomCentered(double newZoom)
+        {
+            if (newZoom == ContentScale)
+                return;
+            if (Bounds.Width <= 0 || Bounds.Height <= 0)
+            {
+                ContentScale = newZoom;
+                return;
+            }
+
+            var offset = CenteredZoomOffset(newZoom);
+            ContentScale = newZoom;
+            ContentOffset = offset;
+        }
+
+        /// <summary>The ContentOffset that keeps the canvas point under the viewport center fixed
+        /// when the zoom changes from the current one to <paramref name="newZoom"/>.</summary>
+        private Point CenteredZoomOffset(double newZoom)
+        {
+            // canvas space -> viewport space is v = c * scale + ContentOffset (see EnsureVisible)
+            var dpiZoom = DpiZoom;
+            var oldScale = ContentScale / dpiZoom;
+            var newScale = newZoom / dpiZoom;
+            var cx = Bounds.Width / 2;
+            var cy = Bounds.Height / 2;
+            return new Point(
+                cx - (cx - ContentOffset.X) / oldScale * newScale,
+                cy - (cy - ContentOffset.Y) / oldScale * newScale);
         }
 
         public void ZoomPanCenter()

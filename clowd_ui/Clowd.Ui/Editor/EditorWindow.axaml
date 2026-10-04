@@ -302,10 +302,11 @@
                     Min="0.1"
                     SpinAmount="0.1"
                     Suffix="%"
-                    Value="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}" />
+                    Value="{Binding ElementName=drawingCanvas, Path=ViewportZoom, Mode=TwoWay}" />
                 <controls:ResetDefaultButton
                     Margin="4,0,0,0"
-                    CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}"
+                    Command="{Binding ElementName=drawingCanvas, Path=CommandZoomReset}"
+                    CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=OneWay}"
                     DefaultValue="1" />
             </StackPanel>
 

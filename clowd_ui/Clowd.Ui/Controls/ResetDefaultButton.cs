@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using System.Windows.Input;
 
 namespace Clowd.UI.Controls
 {
@@ -30,6 +31,19 @@ namespace Clowd.UI.Controls
         {
             get => GetValue(DefaultValueProperty);
             set => SetValue(DefaultValueProperty, value);
+        }
+
+        /// <summary>When set, clicking the dot executes this instead of writing
+        /// <see cref="DefaultValue"/> into <see cref="CurrentValue"/> — for a reset that has to do
+        /// more than set the value (the editor's zoom reset also pans). The dot still shows and
+        /// hides by comparing the two values.</summary>
+        public static readonly StyledProperty<ICommand> CommandProperty =
+            AvaloniaProperty.Register<ResetDefaultButton, ICommand>(nameof(Command));
+
+        public ICommand Command
+        {
+            get => GetValue(CommandProperty);
+            set => SetValue(CommandProperty, value);
         }
 
         public ResetDefaultButton()
@@ -59,6 +73,13 @@ namespace Clowd.UI.Controls
 
         private void ResetDefaultButton_PointerPressed(object sender, PointerPressedEventArgs e)
         {
+            if (Command is { } command)
+            {
+                if (command.CanExecute(null))
+                    command.Execute(null);
+                return;
+            }
+
             SetCurrentValue(CurrentValueProperty, ResetDefaultValue.ForReset(CurrentValue, DefaultValue));
         }
     }
