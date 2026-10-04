@@ -359,6 +359,14 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            var rect = UnrotatedBounds;
+            var radius = ClampCornerRadius(rect);
+            using (ctx.PushTransform(MatrixHelper.Rotation(Angle, CenterOfRotation)))
+                ctx.DrawRectangle(null, pen, rect, radius, radius);
+        }
+
         internal override void DrawObject(DrawingContext drawingContext)
         {
             if (drawingContext == null)

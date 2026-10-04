@@ -695,6 +695,7 @@ namespace Clowd.Drawing
 
             CurrentTool = desc;
             CurrentTool.Instance.SetCursor(this);
+            SetHoveredGraphic(null);
 
             SyncObjectState();
         }
@@ -1232,6 +1233,21 @@ namespace Clowd.Drawing
         /// </summary>
         internal void InvalidateArtwork() => _artworkView?.InvalidateVisual();
 
+        /// <summary>
+        /// The graphic under the pointer tool while the mouse is up, set by its hover hit-test; null
+        /// for none. The scene pass outlines it unless it is already selected.
+        /// </summary>
+        internal GraphicBase HoveredGraphic { get; private set; }
+
+        internal void SetHoveredGraphic(GraphicBase graphic)
+        {
+            if (ReferenceEquals(HoveredGraphic, graphic))
+                return;
+
+            HoveredGraphic = graphic;
+            _artworkView?.InvalidateVisual();
+        }
+
         // ====================================================================
         // State synchronization
         // ====================================================================
@@ -1564,6 +1580,12 @@ namespace Clowd.Drawing
                 // sprites at full resolution (final-design §A.3 "full-res at rest")
                 GraphicsList.RequestValidation();
             }
+        }
+
+        protected override void OnPointerExited(PointerEventArgs e)
+        {
+            base.OnPointerExited(e);
+            SetHoveredGraphic(null);
         }
 
         protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)

@@ -108,6 +108,7 @@ namespace Clowd.Drawing.Tools
 
             int handleNumber;
             var graphic = MakeHitTest(drawingCanvas, wpfPt, out handleNumber);
+            drawingCanvas.SetHoveredGraphic(null); // the hover cue is for the mouse-up state only
 
             // Capture mouse until MouseUp event is received
             drawingCanvas.CaptureMouse(s.Pointer);
@@ -187,6 +188,7 @@ namespace Clowd.Drawing.Tools
         {
             int handleNumber;
             var graphic = MakeHitTest(drawingCanvas, point, out handleNumber);
+            drawingCanvas.SetHoveredGraphic(graphic);
 
             if (handleNumber < 0) // hit no objects
                 drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
@@ -205,6 +207,7 @@ namespace Clowd.Drawing.Tools
             // Exclude all cases except left button on/off.
             if (s.MiddlePressed || s.RightPressed)
             {
+                drawingCanvas.SetHoveredGraphic(null);
                 drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
                 return;
             }

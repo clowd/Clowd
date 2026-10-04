@@ -10,7 +10,8 @@ namespace Clowd.Drawing.Rendering
     /// Options for one <see cref="SceneRenderer"/> pass. Screen: UiScale = CanvasUiElementScale,
     /// DrawChrome = true, Offset = (0,0), Background = null, ArtworkBackground fills
     /// ContentBounds. Export: UiScale = (1,1), DrawChrome = false, Offset =
-    /// (-bounds.Left, -bounds.Top), Background brush fills the full bitmap.
+    /// (-bounds.Left, -bounds.Top), Background brush fills the full bitmap. Hovered is the
+    /// graphic the pointer tool would select on click, outlined on top of the scene (screen only).
     /// </summary>
     internal readonly record struct SceneRenderOptions(
         DpiScale UiScale,
@@ -18,7 +19,8 @@ namespace Clowd.Drawing.Rendering
         Vector Offset,
         IBrush Background,
         Color ArtworkBackground,
-        Rect ContentBounds);
+        Rect ContentBounds,
+        GraphicBase Hovered = null);
 
     /// <summary>
     /// The single render pass for the whole document (final-design §A.2) — background fill,
@@ -52,9 +54,14 @@ namespace Clowd.Drawing.Rendering
             }
         }
 
+        // the hover outline's width on screen, in device-independent pixels
+        private const double HoverOutlineWidth = 1.5;
+
         private static void RenderContent(DrawingContext ctx, IReadOnlyList<GraphicBase> graphics,
                                           ShadowSpriteCache shadows, in SceneRenderOptions o)
         {
+            GraphicBase hovered = null;
+
             // screen: the first fill of the pass absorbs the old ArtworkBackgroundVisual — there
             // is no separate visual to invalidate, so the R5 cascade is structurally impossible
             if (o.DrawChrome)
@@ -71,6 +78,13 @@ namespace Clowd.Drawing.Rendering
                 if (g.Hidden)
                     continue; // hidden graphics neither render nor export, and their shadow is not blitted
 
+                // the outline means "a click selects this", so a selected graphic never shows it
+                // (a click there keeps the selection). Also only while the graphic is still in the
+                // list, visible and canvas-selectable, and not open in the in-place text editor.
+                if (o.DrawChrome && ReferenceEquals(g, o.Hovered) && !g.IsSelected && !g.Locked
+                    && g is not GraphicText { Editing: true })
+                    hovered = g;
+
                 // while a text graphic is being edited the screen pass hides its text, but a sprite
                 // cast by the text (ShadowIncludesText) was baked from the committed text — blitting it would show
                 // a ghost shadow of the OLD body. Skip on the chrome (screen) path only; export
@@ -85,6 +99,12 @@ namespace Clowd.Drawing.Rendering
                 else
                     g.DrawObject(ctx); // export: ink only
             }
+
+            // on top of everything, so the outline shows what a click picks even where graphics
+            // above it cover part of it
+            if (hovered != null)
+                hovered.DrawHoverOutline(ctx, RenderResources.GetPen(GraphicBase.HandleColor, HoverOutlineWidth * o.UiScale.DpiScaleX,
+                                                                     lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round));
         }
     }
 }

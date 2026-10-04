@@ -72,6 +72,12 @@ namespace Clowd.Drawing.Graphics
         // the in-place shadow sprite while the stroke is being drawn (see BakeShadowIncrementally)
         [Transient] private BrushShadowBaker _shadowBaker;
 
+        // the hover outline: the stroke's pieces unioned, so chunk seams and self-crossings are not
+        // outlined. A path-op over the whole stroke, so it is kept for the stroke it was made from.
+        [Transient] private Geometry _hoverOutline;
+        [Transient] private FreehandStrokeBuilder _hoverOutlineStroke;
+        [Transient] private int _hoverOutlineSamples;
+
         protected GraphicBrush() // serializer constructor
         { }
 
@@ -287,6 +293,23 @@ namespace Clowd.Drawing.Graphics
                     }
                 }
             }
+        }
+
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            if (SampleCount == 0)
+                return;
+
+            var stroke = GetStroke();
+            if (_hoverOutline == null || _hoverOutlineStroke != stroke || _hoverOutlineSamples != stroke.SampleCount)
+            {
+                _hoverOutline = new CombinedGeometry(GeometryCombineMode.Union, stroke.Settled ?? stroke.Tail, stroke.Tail);
+                _hoverOutlineStroke = stroke;
+                _hoverOutlineSamples = stroke.SampleCount;
+            }
+
+            using (ctx.PushTransform(Matrix.CreateTranslation(_origin.X, _origin.Y)))
+                ctx.DrawGeometry(null, pen, _hoverOutline);
         }
 
         internal override void Draw(DrawingContext ctx, DpiScale uiscale)

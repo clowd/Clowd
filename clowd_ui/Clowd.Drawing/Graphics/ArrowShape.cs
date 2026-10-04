@@ -148,6 +148,23 @@ namespace Clowd.Drawing.Graphics
             ctx.DrawGeometry(brush, CornerPen(color, width), head);
         }
 
+        /// <summary>Strokes the silhouette of the parts <see cref="Build"/> produced. A solid shaft
+        /// is a filled taper, merged with the head so the seam between them is not outlined; a
+        /// dashed shaft is a bare spine, stroked as is.</summary>
+        public static void DrawOutline(DrawingContext ctx, Geometry shaft, Geometry head, bool dashed, IPen pen, Geometry extra = null)
+        {
+            Geometry fill = head;
+            if (dashed)
+                ctx.DrawGeometry(null, pen, shaft);
+            else if (shaft != null)
+                fill = new CombinedGeometry(GeometryCombineMode.Union, shaft, fill);
+
+            if (extra != null)
+                fill = new CombinedGeometry(GeometryCombineMode.Union, extra, fill);
+
+            ctx.DrawGeometry(null, pen, fill);
+        }
+
         private static ImmutablePen CornerPen(Color color, double width) =>
             RenderResources.GetPen(color, CornerRounding(width), null, PenLineCap.Round, PenLineJoin.Round);
 

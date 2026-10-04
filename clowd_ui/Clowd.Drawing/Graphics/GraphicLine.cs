@@ -170,6 +170,8 @@ namespace Clowd.Drawing.Graphics
                 ctx.DrawLine(pen, LineStart, LineEnd);
         }
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen) => ctx.DrawGeometry(null, pen, GetLineGeometry());
+
         // Cached full-length geometry (RenderCache.Geometry slot) — the straight LineGeometry, or
         // the full LineStart→control→LineEnd quadratic when curved — shared by
         // Bounds/Contains/DrawObject. GraphicArrow reuses this via the inherited Contains (a full

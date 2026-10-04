@@ -207,6 +207,14 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawObject(DrawingContext context) => DrawObjectImpl(context, true);
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            if (GetArrowParts(out var shaft, out var head))
+                ArrowShape.DrawOutline(ctx, shaft, head, false, pen, GetBadgeGeometry());
+            else
+                ctx.DrawGeometry(null, pen, GetBadgeGeometry());
+        }
+
         protected override void DrawObjectImpl(DrawingContext context, bool showText)
         {
             // the arrow goes first: its base is under the white badge, so it visibly starts at the ring

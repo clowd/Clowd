@@ -100,6 +100,16 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            // the fitted transform is already on _final (DrawRectangle ran earlier in this pass)
+            if (_drawing || _final == null)
+                return;
+
+            using (ctx.PushTransform(MatrixHelper.Rotation(Angle, CenterOfRotation)))
+                ctx.DrawGeometry(null, pen, _final);
+        }
+
         internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
             if (_drawing || _final == null) return -1;

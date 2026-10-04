@@ -520,6 +520,12 @@ namespace Clowd.Drawing.Graphics
             ctx.DrawGeometry(null, InkPen, GetGeometry());
         }
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            if (_anchors.Length >= 2)
+                ctx.DrawGeometry(null, pen, GetGeometry());
+        }
+
         internal override void Draw(DrawingContext ctx, DpiScale uiscale)
         {
             DrawObject(ctx);
@@ -603,8 +609,5 @@ namespace Clowd.Drawing.Graphics
             ctx.DrawLine(stem, anchor, tip);
             ctx.DrawEllipse(HandleBrush, ring, tip, radius, radius);
         }
-
-        // the accent color behind HandleBrush, for the pen cache (handles are drawn per frame)
-        private static Color HandleColor => HandleBrush is ISolidColorBrush solid ? solid.Color : Color.FromRgb(0, 0, 255);
     }
 }

@@ -475,6 +475,12 @@ namespace Clowd.Drawing.Graphics
             ctx.DrawGeometry(FlapShade, null, flap);
         }
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            using (ctx.PushTransform(MatrixHelper.Rotation(Angle, CenterOfRotation)))
+                ctx.DrawGeometry(null, pen, GetPaperGeometry());
+        }
+
         internal override void DrawShadowSilhouette(DrawingContext ctx)
         {
             using (ctx.PushTransform(MatrixHelper.Rotation(Angle, CenterOfRotation)))

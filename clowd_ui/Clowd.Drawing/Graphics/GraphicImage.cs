@@ -288,6 +288,13 @@ namespace Clowd.Drawing.Graphics
             DrawTransformed(drawingContext, DrawImageBody);
         }
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            Rect r = UnrotatedBounds;
+            var radius = _imageSource == null ? 0 : DrawnCornerRadius(r, Crop.IsEmptyRect() ? new Rect(_imageSource.Size) : Crop.ToRect());
+            DrawTransformed(ctx, c => c.DrawRectangle(null, pen, r, radius, radius));
+        }
+
         private void DrawImageBody(DrawingContext ctx)
         {
             // decision #21: CroppedBitmap → DrawImage with the crop as the source rect.

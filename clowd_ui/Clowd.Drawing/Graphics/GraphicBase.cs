@@ -183,6 +183,8 @@ namespace Clowd.Drawing.Graphics
         internal const double UnscaledBorderSize = 2.0;
         internal static IBrush HandleBrush { get; set; } = new SolidColorBrush(Color.FromRgb(0, 0, 255));
         internal static readonly IBrush HandleBrush2 = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
+        // the accent color behind HandleBrush, for the pen cache (handles are drawn per frame)
+        internal static Color HandleColor => HandleBrush is ISolidColorBrush solid ? solid.Color : Color.FromRgb(0, 0, 255);
 
         internal abstract bool Contains(Point point);
         internal abstract void Move(double deltaX, double deltaY);
@@ -314,6 +316,13 @@ namespace Clowd.Drawing.Graphics
 
         internal virtual void DrawObject(DrawingContext ctx)
         { }
+
+        /// <summary>
+        /// Strokes the graphic's silhouette with <paramref name="pen"/>: the pointer tool's hover
+        /// cue for what a click would select. Outlines the shape's own edge (or a stroke's spine),
+        /// not its bounding box; the default falls back to the bounds.
+        /// </summary>
+        internal virtual void DrawHoverOutline(DrawingContext ctx, IPen pen) => ctx.DrawRectangle(null, pen, Bounds);
 
         /// <summary>The property the property bar's color swatch edits.</summary>
         internal virtual string ColorPropertyName => nameof(ObjectColor);

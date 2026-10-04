@@ -33,6 +33,12 @@ namespace Clowd.Drawing.Graphics
             ArrowShape.Draw(ctx, shaft, head, ObjectColor, LineWidth, StrokeDash);
         }
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            GetParts(out var shaft, out var head);
+            ArrowShape.DrawOutline(ctx, shaft, head, StrokeDash != null, pen);
+        }
+
         private void GetParts(out Geometry shaft, out Geometry head)
         {
             shaft = RenderCache.TertiaryGeometry;

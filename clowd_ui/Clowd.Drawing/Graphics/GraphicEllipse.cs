@@ -31,6 +31,13 @@ namespace Clowd.Drawing.Graphics
                 radiusY);
         }
 
+        internal override void DrawHoverOutline(DrawingContext ctx, IPen pen)
+        {
+            var center = new Point((Left + Right) / 2.0, (Top + Bottom) / 2.0);
+            using (ctx.PushTransform(MatrixHelper.Rotation(Angle, CenterOfRotation)))
+                ctx.DrawEllipse(null, pen, center, (Right - Left) / 2.0, (Bottom - Top) / 2.0);
+        }
+
         // PORT NOTE (ComputeBounds): closed-form rotated-ellipse AABB, moved verbatim from the old
         // Bounds override; the base cached getter now serves reads.
         protected override Rect ComputeBounds()
