@@ -32,6 +32,10 @@ namespace Clowd.Drawing.Rendering
             Width = width;
             Height = height;
 
+            // grayscale, not LCD, text antialiasing: the export background is usually transparent,
+            // and subpixel coverage composited over nothing turns every glyph edge solid black
+            TextOptions.SetTextRenderingMode(this, TextRenderingMode.Antialias);
+
             _graphics = graphics;
             _shadows = shadows;
             _options = options;
