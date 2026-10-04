@@ -39,29 +39,29 @@ namespace Clowd.Drawing.Tests
         public void ShortText_IsLargest_OnTheDefaultSquare_CenteredOnItsPoint()
         {
             var g = Make("Hi");
-            Assert.Equal(180, g.Right - g.Left, 6);
-            Assert.Equal(180, g.Bottom - g.Top, 6);
+            Assert.Equal(162, g.Right - g.Left, 6);
+            Assert.Equal(162, g.Bottom - g.Top, 6);
             Assert.Equal(new Point(200, 200), new Point((g.Left + g.Right) / 2, (g.Top + g.Bottom) / 2));
-            Assert.Equal(30, g.FittedFontSize);
+            Assert.Equal(27, g.FittedFontSize);
         }
 
         [AvaloniaFact]
         public void LongerText_ShrinksTheFont_BeforeTheNoteGrows()
         {
             var g = Make("Remember to check the logs on the staging server before lunch");
-            Assert.True(g.FittedFontSize < 30, $"font {g.FittedFontSize}");
-            Assert.True(g.FittedFontSize >= 15, $"font {g.FittedFontSize}");
-            Assert.Equal(180, g.Right - g.Left, 6);
+            Assert.True(g.FittedFontSize < 27, $"font {g.FittedFontSize}");
+            Assert.True(g.FittedFontSize >= 13.5, $"font {g.FittedFontSize}");
+            Assert.Equal(162, g.Right - g.Left, 6);
         }
 
         [AvaloniaFact]
         public void TextTooLongForTheSmallestFont_GrowsTheNote_AndStaysSquare()
         {
             var g = Make(String.Join(" ", Enumerable.Repeat("lorem ipsum dolor sit amet", 20)));
-            Assert.True(g.Right - g.Left > 180);
+            Assert.True(g.Right - g.Left > 162);
 
             // the note grows a step at a time, so the grown note may have room for a touch more
-            Assert.InRange(g.FittedFontSize, 15, 17);
+            Assert.InRange(g.FittedFontSize, 13.5, 15.5);
             AssertSquare(g);
 
             // the text fits inside the paper, inset on every side
@@ -74,15 +74,15 @@ namespace Clowd.Drawing.Tests
         {
             var g = Make(String.Join(" ", Enumerable.Repeat("lorem ipsum dolor sit amet", 20)));
             g.Body = "ok";
-            Assert.Equal(180, g.Right - g.Left, 6);
-            Assert.Equal(30, g.FittedFontSize);
+            Assert.Equal(162, g.Right - g.Left, 6);
+            Assert.Equal(27, g.FittedFontSize);
         }
 
         [AvaloniaFact]
         public void AnUnbreakableWord_TooWideAtTheSmallestFont_IsBroken_NotGrownFor()
         {
             var g = Make(new string('W', 120));
-            Assert.Equal(15, g.FittedFontSize);
+            Assert.Equal(13.5, g.FittedFontSize);
             AssertSquare(g);
             Assert.True(g.Right - g.Left < 1000, "grew for the word's width instead of wrapping it");
 
@@ -111,12 +111,12 @@ namespace Clowd.Drawing.Tests
         public void Scale_MultipliesTheSquareAndTheFontLimits()
         {
             var g = Make("Hi", 2);
-            Assert.Equal(360, g.Right - g.Left, 6);
-            Assert.Equal(60, g.FittedFontSize);
+            Assert.Equal(324, g.Right - g.Left, 6);
+            Assert.Equal(54, g.FittedFontSize);
 
             g.Scale = 0.5;
-            Assert.Equal(90, g.Right - g.Left, 6);
-            Assert.Equal(15, g.FittedFontSize);
+            Assert.Equal(81, g.Right - g.Left, 6);
+            Assert.Equal(13.5, g.FittedFontSize);
 
             g.Scale = 100; // clamped
             Assert.Equal(GraphicStickyNote.MaxScale, g.Scale);

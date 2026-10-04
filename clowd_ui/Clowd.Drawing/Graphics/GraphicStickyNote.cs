@@ -39,10 +39,10 @@ namespace Clowd.Drawing.Graphics
         // layout at Scale 1, in canvas units. A note is at least MinSide square with the text
         // Inset from the paper edge; the text is drawn as large as MaxFontSize while it fits and
         // shrinks to MinFontSize before the note grows (by GrowStep at a time) instead.
-        private const double MinSide = 180;
-        private const double Inset = 18;
-        private const double MaxFontSize = 30;
-        private const double MinFontSize = 15;
+        private const double MinSide = 162;
+        private const double Inset = 16.2;
+        private const double MaxFontSize = 27;
+        private const double MinFontSize = 13.5;
         private const double GrowStep = 1.08;
 
         // font sizes are fitted to this granularity, so a keystroke rarely nudges the size
@@ -341,7 +341,9 @@ namespace Clowd.Drawing.Graphics
 
             var inset = Inset * _scale;
             var minFont = MinFontSize * _scale;
-            var steps = (int)Math.Round((MaxFontSize - MinFontSize) * _scale / FontSizeStep);
+            var maxFont = MaxFontSize * _scale;
+            // the range is rarely a whole number of steps, so the top step is clamped to the max
+            var steps = (int)Math.Ceiling((maxFont - minFont) / FontSizeStep - 1e-9);
 
             bool HeightFits(double fontSize, double side)
             {
@@ -359,7 +361,7 @@ namespace Clowd.Drawing.Graphics
             var innerWidth = side - inset * 2;
             bool Fits(int step)
             {
-                var fontSize = minFont + step * FontSizeStep;
+                var fontSize = Math.Min(minFont + step * FontSizeStep, maxFont);
                 return wordWidthPerSize * fontSize <= innerWidth && HeightFits(fontSize, side);
             }
 
@@ -382,7 +384,7 @@ namespace Clowd.Drawing.Graphics
             }
 
             _fitKey = key;
-            _fitFontSize = minFont + lo * FontSizeStep;
+            _fitFontSize = Math.Min(minFont + lo * FontSizeStep, maxFont);
             _fitSide = side;
             return (_fitFontSize, _fitSide);
         }
