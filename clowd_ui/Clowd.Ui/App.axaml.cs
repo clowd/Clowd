@@ -440,8 +440,9 @@ namespace Clowd
                 menu.Add(share);
             }
 
-            // no hotkey and no feature switch: the overlay is only ever opened from here
+            // no feature switch: always on the menu
             var draw = new NativeMenuItem(Loc.T("Tray_DrawOnScreen"));
+            ApplyGesture(draw, SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut);
             draw.Click += async (s, e) =>
             {
                 // let the tray menu disappear first, or it is still on screen under the new overlay
@@ -582,6 +583,7 @@ namespace Clowd
             _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => UploadClipboard());
             _hotkeys.SetAction(HotkeyId.StartStopRecording, ToggleRecording);
             _hotkeys.SetAction(HotkeyId.ShareRegion, ToggleShareRegion);
+            _hotkeys.SetAction(HotkeyId.DrawOnScreen, ToggleDrawOnScreen);
 
             HotkeyManager.Current = _hotkeys;
             ApplyFeatureHotkeys();

@@ -16,6 +16,7 @@ namespace Clowd.UI
         CaptureActive,
         StartStopRecording,
         ShareRegion,
+        DrawOnScreen,
     }
 
     /// <summary>
@@ -147,6 +148,8 @@ namespace Clowd.UI
                 // ships with no default gesture (see SettingsHotkey), so this entry exists purely so
                 // the settings page can offer one — Rebind leaves it unregistered until it has one.
                 Entry(HotkeyId.ShareRegion, nameof(SettingsHotkey.ShareRegionShortcut), s => s.ShareRegionShortcut, (s, g) => s.ShareRegionShortcut = g),
+                // no default gesture either (see SettingsHotkey)
+                Entry(HotkeyId.DrawOnScreen, nameof(SettingsHotkey.DrawOnScreenShortcut), s => s.DrawOnScreenShortcut, (s, g) => s.DrawOnScreenShortcut = g),
             };
 
             HotkeyEntry Entry(HotkeyId id, string prop, Func<SettingsHotkey, SimpleKeyGesture> get, Action<SettingsHotkey, SimpleKeyGesture> set) =>

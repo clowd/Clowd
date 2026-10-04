@@ -66,6 +66,13 @@ namespace Clowd.Config
             set => Set(ref _shareRegionShortcut, Normalize(value));
         }
 
+        [DisplayName("Draw on Screen")]
+        public SimpleKeyGesture DrawOnScreenShortcut
+        {
+            get => _drawOnScreenShortcut;
+            set => Set(ref _drawOnScreenShortcut, Normalize(value));
+        }
+
         /// <summary>
         /// Canonicalizes "not set": a Key.None gesture and null are the same state, stored as null.
         /// (A cleared gesture is persisted as "None" because the configuration binder never assigns
@@ -88,5 +95,9 @@ namespace Clowd.Config
         // it does not need a reflex key the way taking a screenshot does. The action is on the tray
         // menu, and the Hotkeys settings page lets anyone who wants one bind it.
         private SimpleKeyGesture _shareRegionShortcut;
+
+        // No default either, for the same reason: the PrintScreen family is taken, and anything
+        // else risks colliding with the user's other tools. The tray menu has the action.
+        private SimpleKeyGesture _drawOnScreenShortcut;
     }
 }
