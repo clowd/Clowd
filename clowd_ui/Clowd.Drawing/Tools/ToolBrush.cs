@@ -77,8 +77,13 @@ namespace Clowd.Drawing.Tools
             {
                 // the coalesced points have no times of their own: spread them evenly over the gap
                 added = false;
+                float pressure = s.Args.GetCurrentPoint(canvas).Properties.Pressure;
                 for (int j = 0; j < count; j++)
+                {
+                    if (IsHoverSample(points[j], s.Pointer.Type, pressure))
+                        continue;
                     added |= _stroke.AddSample(points[j].Position, _elapsedMs + gap * (j + 1) / count, dedupe, notify: false);
+                }
 
                 var tail = points[count - 1].Position;
                 if (Math.Abs(tail.X - s.Position.X) > 0.01 || Math.Abs(tail.Y - s.Position.Y) > 0.01)
@@ -91,6 +96,17 @@ namespace Clowd.Drawing.Tools
             _elapsedMs += gap;
             _lastTimestamp = s.Timestamp;
         }
+
+        /// <summary>
+        /// Whether a coalesced <paramref name="sample"/> is a pen hovering rather than touching. A
+        /// pen's pointer history can reach back past the touchdown into the hover frames of its
+        /// approach, and appending those puts a hook on the start of the stroke (the ink runs back
+        /// along the approach and turns round). A hover frame reports zero pressure; the test only
+        /// applies while the current sample reports some, since a pen without a pressure sensor
+        /// reports zero throughout. Mouse and touch samples are always contact.
+        /// </summary>
+        internal static bool IsHoverSample(PointerPoint sample, PointerType type, float currentPressure) =>
+            type == PointerType.Pen && currentPressure > 0 && sample.Properties.Pressure <= 0;
 
         // ToolBase.OnMouseUp replays the final move with the real pointer (the release position
         // becomes the last sample), releases capture and reverts to the pointer tool
