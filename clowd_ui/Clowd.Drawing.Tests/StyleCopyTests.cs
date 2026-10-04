@@ -55,6 +55,19 @@ namespace Clowd.Drawing.Tests
         }
 
         [AvaloniaFact]
+        public void AnImage_IsNoStyleSubject()
+        {
+            // it has a style skill (corner radius), but no tool draws images
+            var img = new GraphicImage("missing.png", new Rect(0, 0, 20, 16), default) { CornerRadius = 4 };
+            var canvas = MakeCanvas(img);
+
+            Select(canvas, img);
+            Assert.False(canvas.HasStyleSubject);
+            Assert.Null(canvas.StyleSubjectTool);
+            Assert.Equal(0, canvas.CopyStyleToSimilar());
+        }
+
+        [AvaloniaFact]
         public void CopyStyleToSimilar_ReachesSameTypeOnly_AsOneUndoStep()
         {
             var source = new GraphicArrow(Colors.Lime, 9, new Point(0, 0), new Point(50, 0)) { DashStyle = LineDashStyle.Dashed };

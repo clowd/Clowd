@@ -505,11 +505,10 @@
                 IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Cursor}"
                 ToolTip.Tip="Toggle Captured Mouse Cursor" />
 
-            <!--  Style actions for the one selected graphic. The menu items' enabled state is set
-                  when it opens (StyleMenu_Opening): the save items need a tool that draws this
-                  kind of graphic, which images and legacy polylines do not have.  -->
+            <!--  Style actions for the one selected graphic (only shown for graphics a tool
+                  draws, so every item always applies). The headers name the kind of graphic, so
+                  they are set when the menu opens (StyleMenu_Opening).  -->
             <controls:ToolButton
-                x:Name="btnStyle"
                 Classes="wide"
                 IconPath="{StaticResource IconStyleMenu}"
                 IsVisible="{Binding ElementName=drawingCanvas, Path=HasStyleSubject, Mode=OneWay}"
@@ -518,16 +517,13 @@
                     <MenuFlyout Opening="StyleMenu_Opening" Placement="BottomEdgeAlignedLeft">
                         <MenuItem
                             x:Name="miStyleCopySimilar"
-                            Click="StyleCopySimilar_Click"
-                            Header="Copy style to similar objects" />
+                            Click="StyleCopySimilar_Click" />
                         <MenuItem
                             x:Name="miStyleSession"
-                            Click="StyleSaveSession_Click"
-                            Header="Save style for current session" />
+                            Click="StyleSaveSession_Click" />
                         <MenuItem
                             x:Name="miStyleDefault"
-                            Click="StyleMakeDefault_Click"
-                            Header="Make default for all sessions" />
+                            Click="StyleMakeDefault_Click" />
                     </MenuFlyout>
                 </controls:ToolButton.Flyout>
             </controls:ToolButton>

@@ -306,7 +306,7 @@ namespace Clowd.Drawing
 
         /// <summary>
         /// True while the property bar describes exactly one selected graphic that carries a
-        /// style (color, stroke, font...) — the subject of <see cref="CopyStyleToSimilar"/> and
+        /// style (color, stroke, font...) and that a tool draws — the subject of <see cref="CopyStyleToSimilar"/> and
         /// <see cref="CopyStyleToSettings"/>.
         /// </summary>
         public bool HasStyleSubject
@@ -1294,19 +1294,19 @@ namespace Clowd.Drawing
             => HasStyleSubject && GraphicsList.SelectedItems is { Length: 1 } sel ? sel[0] : null;
 
         /// <summary>The tool that draws graphics like the selected one, or null when there is no
-        /// style subject or no tool draws its type (images, legacy polylines).</summary>
-        public ToolType? StyleSubjectTool
+        /// style subject.</summary>
+        public ToolType? StyleSubjectTool => StyleSubject is { } g ? ToolForGraphicType(g.GetType()) : null;
+
+        /// <summary>The tool that draws graphics of exactly <paramref name="type"/>, or null when
+        /// none does (images, legacy polylines).</summary>
+        private ToolType? ToolForGraphicType(Type type)
         {
-            get
-            {
-                var type = StyleSubject?.GetType();
-                if (type == null || _toolStore == null)
-                    return null;
-                foreach (var (tool, desc) in _toolStore)
-                    if (desc.ObjectType == type)
-                        return tool;
+            if (_toolStore == null)
                 return null;
-            }
+            foreach (var (tool, desc) in _toolStore)
+                if (desc.ObjectType == type)
+                    return tool;
+            return null;
         }
 
         /// <summary>The settings the given tool draws with: the host's
@@ -1780,7 +1780,9 @@ namespace Clowd.Drawing
                     SubjectType = "Selection";
                     SubjectName = attr?.Name ?? "Unknown";
                     SubjectSkill = skills;
-                    HasStyleSubject = (skills & StyleSkills) != Skill.None;
+                    // only graphics a tool draws: the style menu's actions are about making more
+                    // of them look alike, which an image (or a legacy polyline) never is
+                    HasStyleSubject = (skills & StyleSkills) != Skill.None && ToolForGraphicType(obj.GetType()) != null;
                 }
                 // if there are multiple objects selected
                 else

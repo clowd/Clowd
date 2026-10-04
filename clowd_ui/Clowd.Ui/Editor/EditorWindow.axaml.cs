@@ -1168,10 +1168,12 @@ namespace Clowd.UI
 
         private void StyleMenu_Opening(object sender, EventArgs e)
         {
-            // saving a style needs a tool that draws this kind of graphic
-            var hasTool = drawingCanvas.StyleSubjectTool != null;
-            miStyleSession.IsEnabled = hasTool;
-            miStyleDefault.IsEnabled = hasTool;
+            // "Arrow" -> "arrows", "Brush Stroke" -> "brush strokes"; text is uncountable
+            var name = drawingCanvas.SubjectName?.ToLowerInvariant() ?? "objects";
+            var plural = name == "text" ? name : name + "s";
+            miStyleCopySimilar.Header = $"Apply style to all existing {plural}";
+            miStyleSession.Header = $"Remember for new {plural} in this window";
+            miStyleDefault.Header = $"Make default for new {plural} everywhere";
         }
 
         private void StyleCopySimilar_Click(object sender, RoutedEventArgs e)
