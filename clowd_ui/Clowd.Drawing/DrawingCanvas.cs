@@ -381,13 +381,6 @@ namespace Clowd.Drawing
         /// </summary>
         public Func<ToolType, SavedToolSettings> ToolSettingsResolver { get; set; }
 
-        /// <summary>
-        /// True while a property-bar scrub's merge tail is armed (AutosaveThrottle debounce
-        /// pending). The frame validator treats it like a tool drag: shadow bakes are capped at
-        /// interactive resolution and re-baked full-res on the scrub's trailing edge (Flush).
-        /// </summary>
-        internal bool IsInteractiveScrubActive => _autosaveThrottle != null && _autosaveThrottle.IsScrubActive;
-
         public RelayCommand CommandSelectAll { get; }
         public RelayCommand CommandUnselectAll { get; }
         public RelayCommand CommandDelete { get; }
@@ -773,7 +766,7 @@ namespace Clowd.Drawing
                 // if there is an operation in progress while the tool changes, try to abort it
                 CurrentTool.Instance.AbortOperation(this);
                 _isToolMouseDown = false;
-                // drag over: re-bake any interactively-capped shadow sprites at rest (§A.3)
+                // drag over: the drag may have cleared Bounds caches without a raise
                 GraphicsList?.RequestValidation();
             }
 
@@ -1971,8 +1964,8 @@ namespace Clowd.Drawing
             {
                 _isToolMouseDown = false;
                 CurrentTool.Instance.OnMouseUp(this, s);
-                // drag over: one more validation re-bakes any interactively-capped shadow
-                // sprites at full resolution (final-design §A.3 "full-res at rest")
+                // drag over: the drag may have cleared Bounds caches without a raise (e.g. the
+                // drag-end re-round in ToolPointer), so revalidate the content bounds
                 GraphicsList.RequestValidation();
             }
         }
@@ -2174,7 +2167,7 @@ namespace Clowd.Drawing
             if (!IsOverlayMode)
                 Tool = ToolType.Pointer;
             _isToolMouseDown = false;
-            GraphicsList.RequestValidation(); // re-bake capped shadow sprites at rest (§A.3)
+            GraphicsList.RequestValidation(); // the gesture may have cleared Bounds caches without a raise
 
             this.ReleaseMouseCapture();
             if (IsOverlayMode)

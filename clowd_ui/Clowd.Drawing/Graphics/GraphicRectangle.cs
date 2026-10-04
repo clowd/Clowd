@@ -116,12 +116,12 @@ namespace Clowd.Drawing.Graphics
         }
 
         // PORT NOTE (aspect map entry): call base first, then one entry per persisted property
-        // this type declares. Geometry-defining properties invalidate Bounds|Geometry|Shadow;
+        // this type declares. Geometry-defining properties invalidate Bounds|Geometry;
         // IsSelected/ObjectColor exceptions are declared once in GraphicBase.
         internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
         {
             base.DeclarePropertyEffects(map);
-            const InvalidationAspects shape = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
+            const InvalidationAspects shape = InvalidationAspects.Bounds | InvalidationAspects.Geometry;
             map[nameof(Left)] = shape;
             map[nameof(Top)] = shape;
             map[nameof(Right)] = shape;

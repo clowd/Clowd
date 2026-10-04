@@ -42,14 +42,14 @@ namespace Clowd.Drawing.Graphics
         internal override int HandleCount => 2;
 
         // PORT NOTE (aspect map entry): the label string is derived from the endpoints, so on top of
-        // the inherited Bounds|Geometry|Shadow an endpoint change must also drop the cached
+        // the inherited Bounds|Geometry an endpoint change must also drop the cached
         // FormattedText. Move() stays exempt by construction — a pure translation changes neither
         // length nor angle, so the _translating path's Geometry-only clear keeps the right label.
         internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
         {
             base.DeclarePropertyEffects(map);
             const InvalidationAspects shape = InvalidationAspects.Bounds | InvalidationAspects.Geometry |
-                                              InvalidationAspects.Shadow | InvalidationAspects.Text;
+                                              InvalidationAspects.Text;
             map[nameof(LineStart)] = shape;
             map[nameof(LineEnd)] = shape;
         }

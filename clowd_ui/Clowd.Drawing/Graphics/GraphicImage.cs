@@ -762,7 +762,7 @@ namespace Clowd.Drawing.Graphics
                 handle.Free();
             }
 
-            ShadowRenderer.BoxBlur3(pixels, region.Width, region.Height, sigma, 4);
+            BoxBlur.Blur3(pixels, region.Width, region.Height, sigma, 4);
 
             handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
             try

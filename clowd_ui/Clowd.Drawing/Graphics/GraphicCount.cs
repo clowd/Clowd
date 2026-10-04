@@ -11,7 +11,7 @@ namespace Clowd.Drawing.Graphics
     /// A numbered step badge: a white circle (a capsule once the number is wider than it is tall)
     /// ringed in the object color with the number in black, plus an optional pointer arrow whose
     /// base sits at the badge's center. Badge and arrow are ONE graphic, so they move, select and
-    /// delete together, and the drop shadow is baked from their joint silhouette — the badge's
+    /// delete together, and the drop shadow is cast by their joint silhouette — the badge's
     /// shadow never falls across its own arrow, which visibly starts at the ring.
     ///
     /// The arrow is stored as <see cref="ArrowOffset"/>, the tip relative to the badge center, so
@@ -120,7 +120,7 @@ namespace Clowd.Drawing.Graphics
         internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
         {
             base.DeclarePropertyEffects(map);
-            map[nameof(ArrowOffset)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
+            map[nameof(ArrowOffset)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry;
         }
 
         internal override int HandleCount => 2;

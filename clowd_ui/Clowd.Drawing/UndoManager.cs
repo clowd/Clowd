@@ -35,7 +35,7 @@ namespace Clowd.Drawing
     /// (no deserialize, no collection swap, no visual rebuild). Deleted graphics retain their live
     /// instance in the step, so undoing a delete is a list insert — memory-heavy transients are
     /// trimmed at delete-commit via <c>TrimTransientCaches</c> and re-derived on undo (the shared
-    /// decode LRU and the retained shadow sprite keep the re-insert cheap). History is capped at
+    /// decode LRU keeps the re-insert cheap). History is capped at
     /// 200 delta steps, dropping the oldest.
     ///
     /// <see cref="StateChanged"/> payloads: append/undo/redo (discrete actions) carry a freshly
@@ -823,7 +823,7 @@ namespace Clowd.Drawing
             // apply the stored record before inserting (guards against post-removal drift);
             // undo of a delete is a list insert of the retained instance — its memory-heavy
             // transients were trimmed at delete-commit (TrimTransientCaches) and re-derive lazily
-            // (shared decode LRU + retained shadow sprite keep this cheap)
+            // (the shared decode LRU keeps this cheap)
             var drift = WriteFields(inst, target);
             FieldRecord result;
             if (drift != null)
@@ -974,8 +974,8 @@ namespace Clowd.Drawing
         // Transient UI state reset (restore step 1) — direct field writes through compiled
         // accessors, so GraphicImage.IsSelected=false → EndCrop → commit cannot re-enter the
         // engine mid-restore; the follow-up raises keep the collection's SelectedItems and the
-        // repaint pipeline in sync (IsSelected maps to InvalidationAspects.None, so no cache or
-        // shadow-sprite damage).
+        // repaint pipeline in sync (IsSelected maps to InvalidationAspects.None, so no cache
+        // damage).
         // ====================================================================
 
         private static void ResetTransientUiState(GraphicBase g, bool raise)

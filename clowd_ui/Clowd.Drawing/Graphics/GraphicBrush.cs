@@ -27,7 +27,7 @@ namespace Clowd.Drawing.Graphics
     /// settled group, both local to Origin; a null Geometry slot means "ask the builder again".
     /// </summary>
     [GraphicDesc("Brush Stroke", Skills = Skill.Color | Skill.Stroke)]
-    public class GraphicBrush : GraphicBase, IIncrementalShadow
+    public class GraphicBrush : GraphicBase
     {
         /// <summary>One raw pointer sample, relative to <see cref="Origin"/>, with its time in
         /// milliseconds since the stroke began. Raw on purpose: smoothing and pressure are recomputed
@@ -68,9 +68,6 @@ namespace Clowd.Drawing.Graphics
         // the incremental outline (see the class doc); dropped whenever the samples are replaced
         // rather than appended to, and compacted to its geometries once the stroke is finished
         [Transient] private IInkOutline _stroke;
-
-        // the in-place shadow sprite while the stroke is being drawn (see BakeShadowIncrementally)
-        [Transient] private BrushShadowBaker _shadowBaker;
 
         // the hover outline: the stroke's pieces unioned, so chunk seams and self-crossings are not
         // outlined. A path-op over the whole stroke, so it is kept for the stroke it was made from.
@@ -116,7 +113,7 @@ namespace Clowd.Drawing.Graphics
         {
             base.DeclarePropertyEffects(map);
             map[nameof(Origin)] = InvalidationAspects.Bounds; // the outline is local: only where it sits changes
-            map[nameof(Samples)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
+            map[nameof(Samples)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry;
         }
 
         // the geometry is local to the origin, so a translation stales nothing (see Move)
@@ -156,10 +153,9 @@ namespace Clowd.Drawing.Graphics
         internal void NotifySamplesChanged() => OnPropertyChanged(nameof(Samples));
 
         /// <summary>Publishes the collected samples as the persisted array. The outline is the
-        /// same function of the same points, so the cached geometry stays — no rebuild, no
-        /// re-bake, and nothing on screen changes. The builder keeps only its geometries from
-        /// here (a finished stroke's builder is a cache) and the in-progress shadow goes; the
-        /// drag-end validation re-bakes the sprite at rest.</summary>
+        /// same function of the same points, so the cached geometry stays — no rebuild, and
+        /// nothing on screen changes. The builder keeps only its geometries from here (a finished
+        /// stroke's builder is a cache).</summary>
         internal void EndStroke()
         {
             if (_building == null)
@@ -167,7 +163,6 @@ namespace Clowd.Drawing.Graphics
 
             _samples = _building.ToArray();
             _building = null;
-            _shadowBaker = null;
             _stroke?.Compact();
         }
 
@@ -231,7 +226,6 @@ namespace Clowd.Drawing.Graphics
         {
             base.TrimTransientCaches();
             _stroke = null;
-            _shadowBaker = null;
         }
 
         // ---- geometry / rendering -------------------------------------------------------------
@@ -257,7 +251,7 @@ namespace Clowd.Drawing.Graphics
         }
 
         /// <summary><see cref="GetOutline"/> as the brush's own builder, for what needs its
-        /// incremental internals (the shadow baker). Only for a plain brush stroke.</summary>
+        /// incremental internals (tests). Only for a plain brush stroke.</summary>
         internal FreehandStrokeBuilder GetStroke() => (FreehandStrokeBuilder)GetOutline();
 
         protected override Rect ComputeBounds()
@@ -331,21 +325,6 @@ namespace Clowd.Drawing.Graphics
             // no handles to show, so the selection is the text-style marquee
             if (IsSelected)
                 DrawDashedBorder(ctx, Bounds.Inflate(2 * uiscale.DpiScaleX), 1 * uiscale.DpiScaleX);
-        }
-
-        // ---- shadow while drawing (IIncrementalShadow) ----------------------------------------
-
-        // the outline is local to the origin, so the origin is the point a translation moves and
-        // nothing else does — the in-place sprite hangs off it
-        internal override Point ShadowAnchor => _origin;
-
-        bool IIncrementalShadow.CanBakeShadowIncrementally => _building != null && SampleCount > 0;
-
-        WriteableBitmap IIncrementalShadow.BakeShadowIncrementally(double zoomBucket, int maxDimension,
-                                                                   out Vector originFromAnchor, out double bakeScale)
-        {
-            _shadowBaker ??= new BrushShadowBaker(this);
-            return _shadowBaker.Bake(zoomBucket, maxDimension, out originFromAnchor, out bakeScale);
         }
     }
 }

@@ -48,12 +48,10 @@ namespace Clowd.Drawing.Tests
             Assert.Equal("200px 0°", LabelOf(g));
 
             // a pure translation changes neither length nor angle, so the Move() fast path's
-            // Geometry-only clear must leave the shaped label (and the shadow) alone
+            // Geometry-only clear must leave the shaped label alone
             var text = g.RenderCache.Text;
-            var shadowRev = g.ShadowRev;
             g.Move(37, -12);
             Assert.Same(text, g.RenderCache.Text);
-            Assert.Equal(shadowRev, g.ShadowRev);
             Assert.Equal("200px 0°", LabelOf(g));
         }
 

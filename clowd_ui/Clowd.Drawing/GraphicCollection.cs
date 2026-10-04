@@ -59,20 +59,11 @@ namespace Clowd.Drawing
             {
                 // zoom (or monitor DPI) changed: selection chrome draws at on-screen-constant
                 // size, so the artwork re-records ONCE (final-design §A.4 "zoom re-records
-                // once"); the scheduled validation additionally re-bakes shadow sprites whose
-                // zoom bucket changed (§A.3), one per frame.
+                // once"). Shadows are blurred by Skia at draw time, so they need nothing here.
                 if (Set(ref _dpi, value))
-                {
                     _parent.InvalidateArtwork();
-                    _shadowScanNeeded = true; // the zoom bucket may have changed
-                    ScheduleFrameValidation();
-                }
             }
         }
-
-        /// <summary>Baked drop-shadow sprites for this document, drawn by SceneRenderer and
-        /// (re-)baked by the frame validator (final-design §A.3).</summary>
-        internal ShadowSpriteCache ShadowCache { get; }
 
         /// <summary>
         /// Raised on every membership/order mutation (Add/Insert/AddRange/RemoveAt/Clear — reorders
@@ -93,9 +84,7 @@ namespace Clowd.Drawing
         // frame-validation dirty flags (final-design §A.4)
         private bool _boundsDirty;
         private bool _selectionDirty;
-        private bool _shadowScanNeeded;
         private bool _validationScheduled;
-        private int _bakeChainLength;
         private readonly Action _validateAction;
 
         // history dirt, consumed by the undo engine via ConsumeDirty() (final-design §B.2)
@@ -109,8 +98,6 @@ namespace Clowd.Drawing
             _validateAction = Validate;
             _parent = parent;
             _dpi = parent.CanvasUiElementScale;
-            // the id-index resolver lets the sprite cache pin the live working set during eviction
-            ShadowCache = new ShadowSpriteCache(id => _byId.TryGetValue(id, out var g) ? g : null);
         }
 
         public void Add(GraphicBase graphic)
@@ -186,12 +173,6 @@ namespace Clowd.Drawing
                 _dirtySinceCommit.Add(graphic);
             }
 
-            // arm the validator's O(n) bake scan only when a sprite really went stale (O(1) rev
-            // probe) — a pure translation raises with the Shadow flag in the static map but never
-            // bumps ShadowRev, so drag frames skip the scan entirely
-            if (!_shadowScanNeeded && (aspects & InvalidationAspects.Shadow) != 0 && ShadowCache.NeedsBake(graphic))
-                _shadowScanNeeded = true;
-
             if (e.PropertyName == nameof(GraphicBase.Id))
                 RebuildIdIndex(); // the old key is unknown; id rewrites are rare (dedup runs before subscription)
 
@@ -215,8 +196,6 @@ namespace Clowd.Drawing
             // NOTE: g intentionally stays in _dirtySinceCommit if present — a graphic edited,
             // removed and re-inserted before one commit must not lose its field dirt. The history
             // engine ignores dirt for graphics no longer in the collection.
-            // NOTE: its shadow sprite also stays in ShadowCache — undo-of-delete re-inserts the
-            // retained instance with its sprite intact (§B.4); the LRU byte budget bounds it.
             OnStructuralChange(g.IsSelected);
         }
 
@@ -225,7 +204,6 @@ namespace Clowd.Drawing
             _graphics.ForEach(g => g?.DisconnectFromParent());
             _graphics.Clear();
             _byId.Clear();
-            ShadowCache.Clear();
             OnStructuralChange(true);
         }
 
@@ -238,7 +216,6 @@ namespace Clowd.Drawing
         {
             _structuralDirtySinceCommit = true;
             _boundsDirty = true;
-            _shadowScanNeeded = true; // added graphics may need a first bake
             if (selectionMayHaveChanged)
                 _selectionDirty = true;
             ScheduleFrameValidation();
@@ -343,15 +320,13 @@ namespace Clowd.Drawing
         }
 
         /// <summary>
-        /// External nudge for the validator, e.g. when a tool drag ends: one more pass re-bakes
-        /// any interactively-capped shadow sprites at full resolution (§A.3 "full-res at rest").
+        /// External nudge for the validator, e.g. when a tool drag ends.
         /// </summary>
         internal void RequestValidation()
         {
             // callers may have cleared per-graphic Bounds caches directly (no PropertyChanged
             // raise, e.g. the drag-end re-round in ToolPointer) — propagate to ContentBounds
             _boundsDirty = true;
-            _shadowScanNeeded = true;
             ScheduleFrameValidation();
         }
 
@@ -367,29 +342,7 @@ namespace Clowd.Drawing
             if (_selectionDirty)
                 ValidateSelectedItems();
 
-            // 3. bake at most one pending shadow sprite (§A.3); if more remain stale they keep
-            //    drawing stretched and another tick is scheduled — one bake per frame. The scan
-            //    only runs when something real went stale (_shadowScanNeeded, armed by the O(1)
-            //    rev probe / structural / zoom / drag-end paths). The chain counter is a circuit
-            //    breaker: should any bug ever leave a sprite perpetually stale, the chain ends
-            //    instead of spinning the dispatcher; the next real change starts a fresh chain.
-            if (_shadowScanNeeded)
-            {
-                if (ShadowCache.BakeNext(_graphics, _parent.ContentScale, _parent.IsToolDragActive || _parent.IsInteractiveScrubActive))
-                {
-                    if (++_bakeChainLength <= _graphics.Count * 4 + 16)
-                        ScheduleFrameValidation();
-                    else
-                        _bakeChainLength = 0;
-                }
-                else
-                {
-                    _shadowScanNeeded = false;
-                    _bakeChainLength = 0;
-                }
-            }
-
-            // 4. ONE view invalidation for everything that happened since the last tick — the
+            // 3. ONE view invalidation for everything that happened since the last tick — the
             //    whole document re-records in a single SceneRenderer pass
             _parent.InvalidateArtwork();
         }
@@ -459,7 +412,7 @@ namespace Clowd.Drawing
         /// export therefore match by construction. External behavior is byte-identical to the old
         /// GraphicVisual-forest pipeline: 96 dpi, ceil(ContentBounds), background brush first,
         /// null if bounds &lt; 1 px, marquee excluded (SceneRenderer skips it under DrawChrome =
-        /// false). Shadows come from cached b=1 full-res sprites — warm exports skip the bake (R7).
+        /// false). Shadows are blurred by Skia in the same pass, exactly as on screen.
         /// </summary>
         public Bitmap DrawGraphicsToBitmap(IBrush background)
         {
@@ -482,18 +435,6 @@ namespace Clowd.Drawing
             var width = (int)bounds.Width;
             var height = (int)bounds.Height;
 
-            // Export always uses b=1 full-res shadow sprites (final-design §0.3/§A.3): pre-bake any
-            // that are missing, stale, interactively capped or on a different zoom bucket, so the
-            // SceneRenderer blit picks up exactly today's export look. Warm exports (sprites
-            // already current at bucket 1) skip the bake entirely — the R7 speed-up. The marquee
-            // never has a shadow; SceneRenderer excludes it from the pass either way.
-            for (int i = 0; i < _graphics.Count; i++)
-            {
-                var g = _graphics[i];
-                if (g.DropShadowEffect && !g.Hidden && !(g is GraphicSelectionRectangle))
-                    ShadowCache.GetOrBakeFullRes(g);
-            }
-
             // one SceneRenderer pass: background brush over the full bitmap first, then graphics
             // (ink only, no chrome) translated from content space into bitmap space. The visual is
             // pinned at (0,0) spanning the whole bitmap so RenderTargetBitmap.Render never culls it
@@ -506,19 +447,12 @@ namespace Clowd.Drawing
                 ArtworkBackground: default,
                 ContentBounds: bounds);
 
-            var visual = new SceneVisual(width, height, _graphics, ShadowCache, in options);
+            var visual = new SceneVisual(width, height, _graphics, in options);
             visual.Measure(new Size(width, height));
             visual.Arrange(new Rect(0, 0, width, height));
 
             var bmp = new RenderTargetBitmap(new PixelSize(width, height), new Vector(96, 96));
             bmp.Render(visual);
-
-            // Pre-baking replaced any zoomed/interactively-capped screen sprites with b=1 full-res
-            // ones; re-arm the validator so the on-screen shadows re-bake to the current zoom
-            // bucket. No-op when the view is already at bucket 1 and no drag is active (the common
-            // "export at rest" case) so frequent preview exports don't churn the screen cache.
-            if (ShadowSpriteCache.BucketForScale(_parent.ContentScale) != 1.0 || _parent.IsToolDragActive)
-                RequestValidation();
 
             return bmp;
         }

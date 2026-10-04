@@ -68,12 +68,12 @@ namespace Clowd.Drawing.Graphics
         }
 
         // PORT NOTE (aspect map entry): LineStart/LineEnd/CurveOffset define the shape, so they
-        // invalidate Bounds|Geometry|Shadow. GraphicArrow inherits this map (it adds no persisted
+        // invalidate Bounds|Geometry. GraphicArrow inherits this map (it adds no persisted
         // property).
         internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
         {
             base.DeclarePropertyEffects(map);
-            const InvalidationAspects shape = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
+            const InvalidationAspects shape = InvalidationAspects.Bounds | InvalidationAspects.Geometry;
             map[nameof(LineStart)] = shape;
             map[nameof(LineEnd)] = shape;
             map[nameof(CurveOffset)] = shape;

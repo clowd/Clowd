@@ -190,6 +190,13 @@ namespace Clowd.Drawing.Tests
             Assert.False(builder.FillContains(new Point(40, 16)));
         }
 
+        private sealed class DrawHost : Avalonia.Controls.Control
+        {
+            public Action<DrawingContext> Draw { get; set; }
+
+            public override void Render(DrawingContext context) => Draw?.Invoke(context);
+        }
+
         [AvaloniaFact]
         public void TranslucentInk_PaintsOnce_AcrossTheChunkOverlaps()
         {
@@ -204,11 +211,33 @@ namespace Clowd.Drawing.Tests
             var alpha = new byte[w * h];
             using (var rtb = new RenderTargetBitmap(new PixelSize(w, h), new Vector(96, 96)))
             {
-                ShadowRenderer.RasterAlpha(rtb, new PixelRect(0, 0, w, h), ctx =>
+                var host = new DrawHost
                 {
-                    using (ctx.PushTransform(Matrix.CreateTranslation(-bounds.Left + 2, -bounds.Top + 2)))
-                        g.DrawObject(ctx);
-                }, alpha);
+                    Width = w,
+                    Height = h,
+                    Draw = ctx =>
+                    {
+                        using (ctx.PushTransform(Matrix.CreateTranslation(-bounds.Left + 2, -bounds.Top + 2)))
+                            g.DrawObject(ctx);
+                    },
+                };
+                host.Measure(new Size(w, h));
+                host.Arrange(new Rect(0, 0, w, h));
+                rtb.Render(host);
+
+                var buf = new byte[w * h * 4];
+                var handle = GCHandle.Alloc(buf, GCHandleType.Pinned);
+                try
+                {
+                    rtb.CopyPixels(new PixelRect(0, 0, w, h), handle.AddrOfPinnedObject(), buf.Length, w * 4);
+                }
+                finally
+                {
+                    handle.Free();
+                }
+
+                for (int i = 0; i < alpha.Length; i++)
+                    alpha[i] = buf[i * 4 + 3]; // alpha is byte 3 in both BGRA and RGBA
             }
 
             Assert.Equal(100, alpha.Max());

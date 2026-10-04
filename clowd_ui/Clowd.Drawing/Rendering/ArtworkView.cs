@@ -5,7 +5,7 @@ namespace Clowd.Drawing.Rendering
 {
     /// <summary>
     /// The single retained visual for the whole artwork (final-design §A.1): background fill,
-    /// baked shadow sprites, graphics and selection chrome all record in one
+    /// drop shadows, graphics and selection chrome all record in one
     /// <see cref="SceneRenderer"/> pass. Replaces the per-graphic GraphicVisuals and the
     /// ArtworkBackgroundVisual — one InvalidateVisual per frame re-records the document; pan
     /// re-records nothing (transform-only), zoom re-records once.
@@ -43,7 +43,7 @@ namespace Clowd.Drawing.Rendering
                 Hovered: _canvas.HoveredGraphic,
                 HoveredSet: _canvas.HoveredGraphics);
 
-            SceneRenderer.Render(context, list.GraphicsSnapshot(), list.ShadowCache, in options);
+            SceneRenderer.Render(context, list.GraphicsSnapshot(), in options);
         }
     }
 }

@@ -16,16 +16,15 @@ namespace Clowd.Drawing.Rendering
     /// any visual whose arranged rect does not intersect the target, so the graphic-space
     /// translation happens INSIDE the pass (SceneRenderOptions.Offset), never by offsetting this
     /// control (quirk A, canvas-core §6.3). This replaces the throwaway per-graphic GraphicVisual
-    /// forest and its per-export shadow re-bake — shadows come from cached full-res sprites.
+    /// forest; shadows are blurred in the same pass, as on screen.
     /// Never attached to the live visual tree; Measure/Arrange are driven manually by the caller.
     /// </summary>
     internal sealed class SceneVisual : Control
     {
         private readonly IReadOnlyList<GraphicBase> _graphics;
-        private readonly ShadowSpriteCache _shadows;
         private readonly SceneRenderOptions _options;
 
-        public SceneVisual(int width, int height, IReadOnlyList<GraphicBase> graphics, ShadowSpriteCache shadows,
+        public SceneVisual(int width, int height, IReadOnlyList<GraphicBase> graphics,
                            in SceneRenderOptions options)
         {
             // pinned full-bitmap size so RenderTargetBitmap.Render never culls the content
@@ -37,10 +36,9 @@ namespace Clowd.Drawing.Rendering
             TextOptions.SetTextRenderingMode(this, TextRenderingMode.Antialias);
 
             _graphics = graphics;
-            _shadows = shadows;
             _options = options;
         }
 
-        public override void Render(DrawingContext context) => SceneRenderer.Render(context, _graphics, _shadows, in _options);
+        public override void Render(DrawingContext context) => SceneRenderer.Render(context, _graphics, in _options);
     }
 }

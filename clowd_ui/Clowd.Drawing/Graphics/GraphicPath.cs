@@ -115,7 +115,7 @@ namespace Clowd.Drawing.Graphics
         internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
         {
             base.DeclarePropertyEffects(map);
-            const InvalidationAspects shape = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
+            const InvalidationAspects shape = InvalidationAspects.Bounds | InvalidationAspects.Geometry;
             map[nameof(Anchors)] = shape;
             map[nameof(Closed)] = shape;
             map[nameof(PreviewPoint)] = InvalidationAspects.None; // chrome only; the raise still schedules a redraw

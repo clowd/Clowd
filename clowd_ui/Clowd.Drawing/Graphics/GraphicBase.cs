@@ -22,16 +22,7 @@ namespace Clowd.Drawing.Graphics
         public virtual Color ObjectColor
         {
             get => _objectColor;
-            set
-            {
-                // the shadow sprite is baked from the ink's ALPHA silhouette only, so an
-                // opaque-to-opaque color change must not re-bake it (a color scrub would burn a
-                // full-res bake per slider tick for a bitwise-identical sprite). Clear BEFORE the
-                // raise so the collection funnel's NeedsBake probe observes the new ShadowRev.
-                if (_objectColor != value && _objectColor.A != value.A)
-                    RenderCache.Clear(InvalidationAspects.Shadow);
-                Set(ref _objectColor, value);
-            }
+            set => Set(ref _objectColor, value);
         }
 
         public virtual double LineWidth
@@ -129,7 +120,7 @@ namespace Clowd.Drawing.Graphics
 
         // what a bare (nameless) raise — and any property name missing from the map — invalidates
         private const InvalidationAspects ConservativeAspects =
-            InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
+            InvalidationAspects.Bounds | InvalidationAspects.Geometry;
 
         protected GraphicBase()
         { }
@@ -165,12 +156,6 @@ namespace Clowd.Drawing.Graphics
             throw new NotSupportedException($"{GetType().Name} must override either ComputeBounds() (ported) or Bounds (legacy).");
 
         /// <summary>
-        /// Current shadow revision — the shadow sprite cache keys on (Id, ShadowRev, zoomBucket).
-        /// Bumped only when a Shadow-aspect property changes; never by selection or translation.
-        /// </summary>
-        internal int ShadowRev => RenderCache.ShadowRev;
-
-        /// <summary>
         /// The shared dash instance for <see cref="DashStyle"/> (null for Solid), to be passed to
         /// RenderResources.GetPen on INK pens only. Hit-test corridors and bounds pens stay solid —
         /// a dashed hit corridor would make the gaps unclickable.
@@ -197,27 +182,27 @@ namespace Clowd.Drawing.Graphics
         /// <summary>
         /// Declares which cache aspects each property invalidates when it changes (final-design
         /// §C.2). The map is built once per concrete type and merged down the hierarchy. Names
-        /// missing from the map fall back to the conservative Bounds|Geometry|Shadow (same as a
+        /// missing from the map fall back to the conservative Bounds|Geometry (same as a
         /// bare raise), so not-yet-ported types remain correct by default.
         ///
         /// PORT NOTE (aspect map entry): overrides call base.DeclarePropertyEffects(map) FIRST,
         /// then add one entry per property the type declares (e.g. GraphicLine:
-        /// LineStart/LineEnd → Bounds|Geometry|Shadow; GraphicText: Body/Font* →
-        /// Bounds|Geometry|Shadow|Text). Only deviate from the conservative default when it is
+        /// LineStart/LineEnd → Bounds|Geometry; GraphicText: Body/Font* →
+        /// Bounds|Geometry|Text). Only deviate from the conservative default when it is
         /// provably safe — the canonical exceptions live here (IsSelected → None,
-        /// ObjectColor → Shadow).
+        /// ObjectColor → None).
         /// </summary>
         internal virtual void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
         {
             map[nameof(Id)] = InvalidationAspects.None;
-            map[nameof(IsSelected)] = InvalidationAspects.None; // selection never dirties caches (select-all must not queue shadow re-bakes)
+            map[nameof(IsSelected)] = InvalidationAspects.None; // selection never dirties caches (select-all must not churn them)
             map[nameof(Locked)] = InvalidationAspects.None; // lock is a hit-test-only flag; no visual/bounds change (same idiom as IsSelected)
-            // Hidden is deliberately UNMAPPED: it falls back to the conservative Bounds|Geometry|Shadow
+            // Hidden is deliberately UNMAPPED: it falls back to the conservative Bounds|Geometry
             // so toggling it dirties content bounds (a hidden graphic drops out of the export size).
-            map[nameof(ObjectColor)] = InvalidationAspects.None; // ink repaints via the view invalidation; only the ALPHA feeds the shadow silhouette — the setter clears Shadow itself when alpha changes
-            map[nameof(LineWidth)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
-            map[nameof(DashStyle)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow; // the dash gaps change the shadow silhouette
-            map[nameof(DropShadowEffect)] = InvalidationAspects.Shadow;
+            map[nameof(ObjectColor)] = InvalidationAspects.None; // ink and shadow repaint via the view invalidation
+            map[nameof(LineWidth)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry;
+            map[nameof(DashStyle)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry;
+            map[nameof(DropShadowEffect)] = InvalidationAspects.None; // the shadow is drawn live
         }
 
         /// <summary>
@@ -248,7 +233,7 @@ namespace Clowd.Drawing.Graphics
             // apply the aspect map to our own cache BEFORE raising, so subscribers (the
             // collection invalidation funnel) always observe consistent state
             if (_translating)
-                RenderCache.Clear(TranslationAspects); // Move() already offset CachedBounds; shadow/text survive a pure translation
+                RenderCache.Clear(TranslationAspects); // Move() already offset CachedBounds; text survives a pure translation
             else
                 RenderCache.Clear(GetPropertyEffects(args.PropertyName));
 
@@ -260,7 +245,7 @@ namespace Clowd.Drawing.Graphics
         /// fields (bypassing property setters, so no PropertyChanged fired).
         /// <paramref name="changedJsonNames"/> holds the serializer JSON names ("left", "points",
         /// "bitmapFilePath", …) of the field slots that were written. The default nukes every
-        /// derived cache (and thereby bumps ShadowRev) — always safe. A type overrides this only
+        /// derived cache — always safe. A type overrides this only
         /// to keep caches that provably don't depend on the changed fields (e.g. GraphicImage
         /// keeps its decoded bitmaps unless an image-affecting field changed).
         /// </summary>
@@ -327,15 +312,10 @@ namespace Clowd.Drawing.Graphics
         /// <summary>The property the property bar's color swatch edits.</summary>
         internal virtual string ColorPropertyName => nameof(ObjectColor);
 
-        /// <summary>What casts the drop shadow, rasterized alone and blurred by
-        /// <see cref="ShadowRenderer"/>. The object itself, unless it draws soft shading of its own
+        /// <summary>What casts the drop shadow, drawn into a tinted, blurred layer by
+        /// <see cref="SceneRenderer"/>. The object itself, unless it draws soft shading of its own
         /// that must not cast a second shadow.</summary>
         internal virtual void DrawShadowSilhouette(DrawingContext ctx) => DrawObject(ctx);
-
-        /// <summary>The canvas point an anchored shadow sprite (<see cref="ShadowSpriteCache.Sprite.Anchored"/>)
-        /// is positioned from: a point of the ink that a pure translation moves and nothing else
-        /// does. Only <see cref="IIncrementalShadow"/> graphics produce such sprites.</summary>
-        internal virtual Point ShadowAnchor => Bounds.TopLeft;
 
         protected virtual void DrawDashedBorder(DrawingContext ctx, Rect rect, double lineWidth = 2)
         {

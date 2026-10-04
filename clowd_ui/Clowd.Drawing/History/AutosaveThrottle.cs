@@ -100,11 +100,6 @@ namespace Clowd.Drawing.History
             Cancel();
             _canvas.RaiseStateUpdated(new StateChangedEventArgs(UndoManager.SerializeDocument(_canvas),
                                                                 _canvas.HasStateUpdatedSubscribers ? _canvas.SerializeHistory() : null));
-
-            // trailing edge of a property-bar scrub: while _pending was armed the validator capped
-            // shadow bakes at interactive resolution (IsInteractiveScrubActive) — one more pass
-            // re-bakes them at full res, mirroring the ToolPointer drag-end RequestValidation.
-            _canvas.GraphicsList?.RequestValidation();
         }
 
         /// <summary>
@@ -117,12 +112,5 @@ namespace Clowd.Drawing.History
             _pending = false;
             _timer?.Stop();
         }
-
-        /// <summary>
-        /// True while a merge tail is armed — i.e. the user is mid-scrub on a property-bar slider.
-        /// The frame validator treats this like an active tool drag and caps shadow bakes at
-        /// interactive resolution; <see cref="Flush"/> re-bakes full-res on the trailing edge.
-        /// </summary>
-        internal bool IsScrubActive => _pending;
     }
 }

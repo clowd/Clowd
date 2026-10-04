@@ -29,13 +29,7 @@ namespace Clowd.Drawing.Graphics
         public Color Foreground
         {
             get => _foreground;
-            set
-            {
-                // as for ObjectColor: only the alpha feeds the shadow silhouette (the text casts it)
-                if (_foreground != value && _foreground.A != value.A)
-                    RenderCache.Clear(InvalidationAspects.Shadow);
-                Set(ref _foreground, value);
-            }
+            set => Set(ref _foreground, value);
         }
 
         /// <summary>The background fill; fully transparent for none.</summary>
@@ -56,8 +50,7 @@ namespace Clowd.Drawing.Graphics
         internal bool HasFill => ObjectColor.A > 0;
 
         /// <summary>Text casts a drop shadow only from a visible fill: a shadow under bare
-        /// letters on the page just looks smudged. (The fill's alpha toggling this re-bakes the
-        /// shadow by itself; see <see cref="GraphicBase.ObjectColor"/>.)</summary>
+        /// letters on the page just looks smudged.</summary>
         public override bool DropShadowEffect
         {
             get => base.DropShadowEffect && HasShadowSurface;
@@ -161,21 +154,21 @@ namespace Clowd.Drawing.Graphics
         }
 
         // PORT NOTE (aspect map entry): text shaping inputs invalidate the cached FormattedText
-        // (Text) on top of the geometry/bounds/shadow a shape change implies. Editing is
+        // (Text) on top of the geometry/bounds a shape change implies. Editing is
         // transient and left to the conservative default (it repaints, and CreateFormattedText's
         // key already accounts for the editing trailing-newline suffix).
         internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
         {
             base.DeclarePropertyEffects(map);
             const InvalidationAspects text =
-                InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow | InvalidationAspects.Text;
+                InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Text;
             map[nameof(Body)] = text;
             map[nameof(FontName)] = text;
             map[nameof(FontSize)] = text;
             map[nameof(FontStyle)] = text;
             map[nameof(FontWeight)] = text;
             map[nameof(FontStretch)] = text;
-            map[nameof(Foreground)] = InvalidationAspects.Text; // the setter clears Shadow itself when alpha changes
+            map[nameof(Foreground)] = InvalidationAspects.Text;
         }
 
         internal override int HandleCount => 1;
@@ -226,7 +219,7 @@ namespace Clowd.Drawing.Graphics
         internal virtual Color TextColor => Foreground;
 
         /// <summary>Whether the drop shadow is cast by the body text. Such a shadow goes stale as
-        /// soon as editing starts, so it is hidden (and not re-baked) until the edit commits.</summary>
+        /// soon as editing starts, so it is hidden until the edit commits.</summary>
         internal virtual bool ShadowIncludesText => true;
 
         /// <summary>Inset of the body from the bounds, where the in-place editor sits.</summary>

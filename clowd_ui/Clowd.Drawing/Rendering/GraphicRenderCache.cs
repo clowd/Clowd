@@ -38,14 +38,6 @@ namespace Clowd.Drawing.Rendering
         /// <summary>Cached result of GraphicBase.ComputeBounds(). Null = recompute on next read.</summary>
         public Rect? CachedBounds;
 
-        /// <summary>
-        /// Monotonic shadow revision, bumped by <see cref="Clear"/> when the Shadow aspect is
-        /// invalidated. The shadow sprite cache (WP4) keys sprites on (Id, ShadowRev, zoomBucket),
-        /// so a bump simply makes old sprites stop matching. Pure translation never bumps it —
-        /// bounds-relative sprites move for free.
-        /// </summary>
-        public int ShadowRev;
-
         // ---- Geometry aspect ----
         public Geometry Geometry;
         public Geometry SecondaryGeometry;
@@ -73,9 +65,6 @@ namespace Clowd.Drawing.Rendering
                 GeometryBounds = null;
                 GeometryTransform = null;
             }
-
-            if ((aspects & InvalidationAspects.Shadow) != 0)
-                ShadowRev++; // sprites live in the id-keyed ShadowSpriteCache; the bump un-matches them
 
             if ((aspects & InvalidationAspects.Text) != 0)
             {

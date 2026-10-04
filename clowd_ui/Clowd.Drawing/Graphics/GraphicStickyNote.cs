@@ -190,8 +190,8 @@ namespace Clowd.Drawing.Graphics
         internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
         {
             base.DeclarePropertyEffects(map);
-            map[nameof(Scale)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow | InvalidationAspects.Text;
-            map[nameof(LiftStyle)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow | InvalidationAspects.Text;
+            map[nameof(Scale)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Text;
+            map[nameof(LiftStyle)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Text;
         }
 
         internal override Color TextColor => GetInk(ObjectColor);
