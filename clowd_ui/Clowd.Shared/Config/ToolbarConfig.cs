@@ -20,6 +20,7 @@ namespace Clowd.Config
             ToolType.Measure,
             ToolType.Pen,
             ToolType.Brush,
+            ToolType.Highlighter,
             ToolType.Count,
             ToolType.Text,
             ToolType.StickyNote,

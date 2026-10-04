@@ -582,6 +582,14 @@ def brush_cursor(d, x, y, diameter):
     ellipse(d, (x - r + 1, y - r + 1, x + r - 1, y + r - 1), outline=WHITE, width=1)
 
 
+def highlighter_cursor(d, x, y, w, h):
+    """The highlighter's tip outline (BrushCursor.GetRect): a w x h rectangle centred on (x, y),
+    1 px black just outside the edge and 1 px white just inside it."""
+    x0, y0, x1, y1 = x - w / 2, y - h / 2, x + w / 2, y + h / 2
+    rect(d, (x0 - 1, y0 - 1, x1 + 1, y1 + 1), outline=BLACK, width=1)
+    rect(d, (x0, y0, x1, y1), outline=WHITE, width=1)
+
+
 def press_pulse(d, x, y, t):
     """A ring expanding from r 3 to 12 and fading from ACCENT over t 0..1 (4 frames)."""
     t = clamp01(t)
@@ -956,6 +964,60 @@ def ink_brush(img, samples, w=BRUSH_W, color=INK, shadow=True, radii=None, n=Non
         disc(d, (x, y), r, col)
         prev = (x, y, r)
     _end_ink(img, layer, shadow)
+
+
+HIGHLIGHT = (255, 230, 0)    # the highlighter's default marker yellow, ARGB(110, 255, 230, 0)
+HIGHLIGHT_A = 110
+HIGHLIGHT_H = 9              # the tip's height in the miniature (the app's 20), a content line and its gaps
+CHISEL_RATIO = 0.3           # ChiselStrokeBuilder.WidthRatio: the tip is 0.3 of its height wide
+
+
+def _hull(pts):
+    """Convex hull, counter-clockwise (monotone chain)."""
+    pts = sorted(set(pts))
+    if len(pts) <= 2:
+        return pts
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lo, hi = [], []
+    for p in pts:
+        while len(lo) >= 2 and cross(lo[-2], lo[-1], p) <= 0:
+            lo.pop()
+        lo.append(p)
+    for p in reversed(pts):
+        while len(hi) >= 2 and cross(hi[-2], hi[-1], p) <= 0:
+            hi.pop()
+        hi.append(p)
+    return lo[:-1] + hi[:-1]
+
+
+def chisel_bounds(pts, h=HIGHLIGHT_H, n=None):
+    """The box the first n centreline points sweep with the h-tall chisel tip."""
+    n = len(pts) if n is None else n
+    hw, hh = max(1.0, h * CHISEL_RATIO) / 2, h / 2
+    xs, ys = [p[0] for p in pts[:n]], [p[1] for p in pts[:n]]
+    return (min(xs) - hw, min(ys) - hh, max(xs) + hw, max(ys) + hh)
+
+
+def ink_highlighter(img, pts, h=HIGHLIGHT_H, color=HIGHLIGHT, alpha=HIGHLIGHT_A, n=None):
+    """A highlighter stroke (ChiselStrokeBuilder): the axis-aligned h-tall, 0.3 h wide tip swept
+    along the first n centreline points [(x, y)], as the union of each segment's hull of the tip at
+    its two ends, so the ends are flat. The union is painted as one opaque layer then composited at
+    alpha, so overlaps never darken, and it casts no shadow. A lone point is the tip itself."""
+    n = len(pts) if n is None else n
+    if n <= 0:
+        return
+    hw, hh = max(1.0, h * CHISEL_RATIO) / 2, h / 2
+    layer, d = begin_layer(img)
+    col = color + (255,)
+
+    def corners(p):
+        return [(p[0] - hw, p[1] - hh), (p[0] + hw, p[1] - hh), (p[0] + hw, p[1] + hh), (p[0] - hw, p[1] + hh)]
+    polygon(d, corners(pts[0]), fill=col)
+    for a, b in zip(pts[:n - 1], pts[1:n]):
+        polygon(d, _hull(corners(a) + corners(b)), fill=col)
+    end_layer(img, layer, shadow=False, alpha=alpha / 255)
 
 
 def count_badge(img, center, label, ring_w=LINE_W * 1.5, arrow_tip=None, editing=False, color=INK, scale=1.0):

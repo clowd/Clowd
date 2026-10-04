@@ -791,6 +791,8 @@ namespace Clowd.UI
                 Description = "Click to place a corner, or press and drag to pull out curve handles; hold Alt to drag one handle on its own. Double-click a point to switch it between corner and curve. Click the first point to close the shape, or press Enter to finish. Click either end of an existing path to keep extending it." },
             new ToolRegistryEntry { Tool = ToolType.Brush, DisplayName = "Brush", Shortcut = Key.B, IconKey = "IconToolBrush", DemoName = "brush",
                 Description = "Press and drag to paint a freehand stroke. Stroke in the bar above sets its width." },
+            new ToolRegistryEntry { Tool = ToolType.Highlighter, DisplayName = "Highlighter", Shortcut = Key.H, IconKey = "IconToolHighlighter", DemoName = "highlighter",
+                Description = "Press and drag to mark over text or detail with translucent ink, flat-tipped like a marker. Stroke in the bar above sets its height." },
             new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", Shortcut = Key.C, IconKey = "IconToolNumericCount", DemoName = "count", IconClasses = "tight",
                 Description = "Click to drop the next numbered step. Drag before letting go to pull an arrow out of it." },
             new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", Shortcut = Key.T, IconKey = "IconToolText", DemoName = "text", IconClasses = "tight",

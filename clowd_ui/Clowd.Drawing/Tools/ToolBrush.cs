@@ -38,6 +38,9 @@ namespace Clowd.Drawing.Tools
             canvas.Cursor = BrushCursor.Get(2 * canvas.LineWidth * canvas.ContentScale);
         }
 
+        /// <summary>The stroke a press starts, at <paramref name="origin"/>.</summary>
+        protected virtual GraphicBrush CreateStroke(DrawingCanvas canvas, Point origin) => new GraphicBrush(canvas, origin);
+
         public override void OnMouseDown(DrawingCanvas canvas, PointerState s, int clickCount)
         {
             if (!s.LeftPressed)
@@ -46,7 +49,8 @@ namespace Clowd.Drawing.Tools
             canvas.CaptureMouse(s.Pointer);
             canvas.UnselectAll();
 
-            _stroke = new GraphicBrush(canvas, s.Position) { IsSelected = true };
+            _stroke = CreateStroke(canvas, s.Position);
+            _stroke.IsSelected = true;
             _lastTimestamp = s.Timestamp;
             _elapsedMs = 0;
             canvas.GraphicsList.Add(_stroke);

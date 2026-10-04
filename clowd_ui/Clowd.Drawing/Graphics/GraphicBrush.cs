@@ -67,7 +67,7 @@ namespace Clowd.Drawing.Graphics
 
         // the incremental outline (see the class doc); dropped whenever the samples are replaced
         // rather than appended to, and compacted to its geometries once the stroke is finished
-        [Transient] private FreehandStrokeBuilder _stroke;
+        [Transient] private IInkOutline _stroke;
 
         // the in-place shadow sprite while the stroke is being drawn (see BakeShadowIncrementally)
         [Transient] private BrushShadowBaker _shadowBaker;
@@ -75,7 +75,7 @@ namespace Clowd.Drawing.Graphics
         // the hover outline: the stroke's pieces unioned, so chunk seams and self-crossings are not
         // outlined. A path-op over the whole stroke, so it is kept for the stroke it was made from.
         [Transient] private Geometry _hoverOutline;
-        [Transient] private FreehandStrokeBuilder _hoverOutlineStroke;
+        [Transient] private IInkOutline _hoverOutlineStroke;
         [Transient] private int _hoverOutlineSamples;
 
         protected GraphicBrush() // serializer constructor
@@ -97,7 +97,10 @@ namespace Clowd.Drawing.Graphics
         /// 0.5·size (at speed) to 1.5·size (at rest), i.e. LineWidth when the pointer moves fast
         /// up to 3·LineWidth when it slows, and a click dots at 2·LineWidth across.
         /// </summary>
-        internal double Size => Math.Max(1, 2 * LineWidth);
+        internal virtual double Size => Math.Max(1, 2 * LineWidth);
+
+        /// <summary>A fresh, empty outline for the current <see cref="Size"/>: the ink's shape.</summary>
+        internal virtual IInkOutline CreateOutline() => new FreehandStrokeBuilder(Size);
 
         internal int SampleCount => _building?.Count ?? _samples.Length;
 
@@ -178,13 +181,13 @@ namespace Clowd.Drawing.Graphics
 
         private Point ToLocal(Point point) => new Point(point.X - _origin.X, point.Y - _origin.Y);
 
-        internal override bool Contains(Point point) => GetStroke().FillContains(ToLocal(point));
+        internal override bool Contains(Point point) => GetOutline().FillContains(ToLocal(point));
 
         // the ink itself, plus a margin so a thin, fast stroke stays clickable
         internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
             var local = ToLocal(point);
-            var stroke = GetStroke();
+            var stroke = GetOutline();
             if (stroke.FillContains(local) ||
                 stroke.StrokeContains(RenderResources.GetPen(Colors.Black, 8 * uiscale.DpiScaleX), local))
                 return 0;
@@ -233,20 +236,24 @@ namespace Clowd.Drawing.Graphics
         /// last looked (everything, cold), and a stroke width change or a samples replacement
         /// starts a new one. Fills the cache slots as a side effect, like any lazy geometry.
         /// </summary>
-        internal FreehandStrokeBuilder GetStroke()
+        internal IInkOutline GetOutline()
         {
             if (RenderCache.Geometry != null && _stroke != null)
                 return _stroke;
 
             var samples = GetSamples();
             if (_stroke == null || _stroke.Size != Size || !_stroke.CanAppend(samples.Length))
-                _stroke = new FreehandStrokeBuilder(Size);
+                _stroke = CreateOutline();
 
             _stroke.Update(samples);
             RenderCache.Geometry = _stroke.Tail;
             RenderCache.SecondaryGeometry = _stroke.Settled;
             return _stroke;
         }
+
+        /// <summary><see cref="GetOutline"/> as the brush's own builder, for what needs its
+        /// incremental internals (the shadow baker). Only for a plain brush stroke.</summary>
+        internal FreehandStrokeBuilder GetStroke() => (FreehandStrokeBuilder)GetOutline();
 
         protected override Rect ComputeBounds()
         {
@@ -257,7 +264,7 @@ namespace Clowd.Drawing.Graphics
                 return new Rect(_origin.X - size / 2, _origin.Y - size / 2, size, size);
             }
 
-            return GetStroke().Bounds.Translate(new Vector(_origin.X, _origin.Y));
+            return GetOutline().Bounds.Translate(new Vector(_origin.X, _origin.Y));
         }
 
         internal override void DrawObject(DrawingContext ctx)
@@ -265,7 +272,7 @@ namespace Clowd.Drawing.Graphics
             if (SampleCount == 0)
                 return;
 
-            var stroke = GetStroke();
+            var stroke = GetOutline();
             using (ctx.PushTransform(Matrix.CreateTranslation(_origin.X, _origin.Y)))
             {
                 if (stroke.Settled == null)
@@ -300,7 +307,7 @@ namespace Clowd.Drawing.Graphics
             if (SampleCount == 0)
                 return;
 
-            var stroke = GetStroke();
+            var stroke = GetOutline();
             if (_hoverOutline == null || _hoverOutlineStroke != stroke || _hoverOutlineSamples != stroke.SampleCount)
             {
                 _hoverOutline = new CombinedGeometry(GeometryCombineMode.Union, stroke.Settled ?? stroke.Tail, stroke.Tail);

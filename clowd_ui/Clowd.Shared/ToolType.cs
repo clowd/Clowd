@@ -19,5 +19,6 @@ namespace Clowd
         StickyNote,
         Pen,   // bezier path tool (replaces the pencil, which lives on as PolyLine above)
         Brush, // freehand ink
+        Highlighter, // freehand translucent chisel ink
     };
 }

@@ -12,6 +12,7 @@ namespace Clowd.Drawing.Tools
     /// pixels at the current zoom), drawn as a 1px white ring inside a 1px black ring so it reads on
     /// any artwork. Rasterised by hand with analytic coverage rather than through a DrawingContext,
     /// so the result is exact and needs no render pass; the cursor for the last diameter is cached.
+    /// The highlighter's is the same two bands around its rectangular tip (<see cref="GetRect"/>).
     /// </summary>
     internal static class BrushCursor
     {
@@ -21,8 +22,14 @@ namespace Clowd.Drawing.Tools
         /// <summary>Windows draws larger cursors unreliably; a bigger brush keeps a 256px ring.</summary>
         internal const int MaxSize = 256;
 
+        /// <summary>Below this width a rectangle's two white sides would touch.</summary>
+        internal const int MinRectWidth = 3;
+
         private static int _cachedDiameter = -1;
         private static Cursor _cached;
+
+        private static PixelSize _cachedRectSize;
+        private static Cursor _cachedRect;
 
         /// <summary>The cursor for a brush <paramref name="diameterPx"/> device pixels across.</summary>
         public static Cursor Get(double diameterPx)
@@ -32,18 +39,78 @@ namespace Clowd.Drawing.Tools
                 return _cached;
 
             var pixels = Rasterize(diameter, out int size);
-            var bitmap = new WriteableBitmap(new PixelSize(size, size), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
-            using (var fb = bitmap.Lock())
-            {
-                for (int y = 0; y < size; y++)
-                    Marshal.Copy(pixels, y * size * 4, fb.Address + y * fb.RowBytes, size * 4);
-            }
-
             var previous = _cached;
-            _cached = new Cursor(bitmap, new PixelPoint(size / 2, size / 2));
+            _cached = CreateCursor(pixels, size, size);
             _cachedDiameter = diameter;
             previous?.Dispose();
             return _cached;
+        }
+
+        /// <summary>The cursor for a rectangular tip <paramref name="widthPx"/> by
+        /// <paramref name="heightPx"/> device pixels, hotspot at its centre.</summary>
+        public static Cursor GetRect(double widthPx, double heightPx)
+        {
+            var tip = QuantizeRect(widthPx, heightPx);
+            if (tip == _cachedRectSize && _cachedRect != null)
+                return _cachedRect;
+
+            var pixels = RasterizeRect(tip.Width, tip.Height, out int w, out int h);
+            var previous = _cachedRect;
+            _cachedRect = CreateCursor(pixels, w, h);
+            _cachedRectSize = tip;
+            previous?.Dispose();
+            return _cachedRect;
+        }
+
+        private static Cursor CreateCursor(byte[] pixels, int w, int h)
+        {
+            var bitmap = new WriteableBitmap(new PixelSize(w, h), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
+            using (var fb = bitmap.Lock())
+            {
+                for (int y = 0; y < h; y++)
+                    Marshal.Copy(pixels, y * w * 4, fb.Address + y * fb.RowBytes, w * 4);
+            }
+
+            return new Cursor(bitmap, new PixelPoint(w / 2, h / 2));
+        }
+
+        /// <summary>Whole pixels, each side clamped like <see cref="Quantize"/> (the width to
+        /// <see cref="MinRectWidth"/>, so a thin tip still shows a white core).</summary>
+        internal static PixelSize QuantizeRect(double widthPx, double heightPx) =>
+            new PixelSize(Math.Clamp((int)Math.Round(widthPx), MinRectWidth, MaxSize - 4),
+                          Math.Clamp((int)Math.Round(heightPx), MinDiameter, MaxSize - 4));
+
+        /// <summary>
+        /// Premultiplied BGRA pixels of a bitmap centred on a <paramref name="width"/> by
+        /// <paramref name="height"/> rectangle: its outermost pixel row/column white, and a 1px
+        /// black band just outside. The rectangle is pixel-aligned, so both bands are crisp.
+        /// </summary>
+        internal static byte[] RasterizeRect(int width, int height, out int w, out int h)
+        {
+            w = width + 4; // the black band and one pixel of slack on each side, like the ring
+            h = height + 4;
+            var pixels = new byte[w * h * 4];
+
+            // the rectangle covers [2, 2 + width) × [2, 2 + height)
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = 1; x < w - 1; x++)
+                {
+                    bool inside = x >= 2 && x < 2 + width && y >= 2 && y < 2 + height;
+                    bool edge = inside && (x == 2 || x == 1 + width || y == 2 || y == 1 + height);
+                    if (inside && !edge)
+                        continue;
+
+                    byte grey = edge ? (byte)255 : (byte)0; // outside the rect (within 1px): the black band
+                    int i = (y * w + x) * 4;
+                    pixels[i] = grey;
+                    pixels[i + 1] = grey;
+                    pixels[i + 2] = grey;
+                    pixels[i + 3] = 255;
+                }
+            }
+
+            return pixels;
         }
 
         /// <summary>Whole pixels, clamped so the ring is visible and the bitmap stays within

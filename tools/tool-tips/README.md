@@ -1,9 +1,9 @@
 # Tool tip demo GIFs
 
 The looping demos shown in the rich flyouts behind the buttons on the image editor's drawing tool
-strip (Pan, Selection, Rectangle, Filled Rectangle, Ellipse, Line, Arrow, Measure, Pen, Brush, Step
-Count, Text, Sticky Note, Obscure). Each flyout is a header with the tool's keyboard shortcut as a
-keycap beside it (top-right of the card), a short description, and a demo GIF.
+strip (Pan, Selection, Rectangle, Filled Rectangle, Ellipse, Line, Arrow, Measure, Pen, Brush,
+Highlighter, Step Count, Text, Sticky Note, Obscure). Each flyout is a header with the tool's
+keyboard shortcut as a keycap beside it (top-right of the card), a short description, and a demo GIF.
 
 The shortcut is the card's business, not the GIF's: `ToolTipCard.Shortcut` draws the keycap, and
 the letter comes from the `ToolRegistry` entry in `EditorWindow.axaml.cs`, the same field the bare
@@ -169,6 +169,7 @@ hotspot on (x, y) at `CURSOR_PX * s` px (92 % while pressed). Kinds: `default, r
 arrow, measure, pen, numerical, text, stickynote, obscure, move, rotate, sizeall, grab, grabbing,
 size0..size35`. `brush_cursor(d, x, y, diameter)` draws the brush ring. `press_pulse(d, x, y, t)`
 is the accent ring that marks every press and release (t 0..1 over 4 frames).
+`highlighter_cursor(d, x, y, w, h)` draws the highlighter's tip outline (white inside, black outside).
 
 Mini keycaps: `mini_keycap(d, label, x, y, scale, alpha)` (`MINI_CAP_H` 14 px tall) and
 `mini_keycap_pop(d, label, t_in, t_out)` (bottom-left, `back_out` scale-in, fade out) are for
@@ -184,7 +185,10 @@ b, w)` (`measure_label(a, b)` formats the readout), `ink_path(img, anchors, clos
 `(P, In, Out)` (`path_points` flattens them), `ink_brush(img, samples, w, radii, n)` with samples
 `(x, y, t_ms)` drawn as round dabs (`brush_radii` is FreehandStroke's simulated pressure: the radius
 eases toward w / 2 at `BRUSH_V_FAST` and 1.5 w at rest with time constant `BRUSH_TAU`, so the ink runs
-from w to 3 w across; `brush_bounds` boxes the first n samples), `count_badge(img, center, label,
+from w to 3 w across; `brush_bounds` boxes the first n samples), `ink_highlighter(img, pts, h, color,
+alpha, n)` sweeps the `HIGHLIGHT_H` (9) tall, `CHISEL_RATIO` (0.3) wide chisel tip along a centreline
+as one flat-ended layer in `HIGHLIGHT` at `HIGHLIGHT_A` (110) with no shadow (`chisel_bounds` boxes
+it), `count_badge(img, center, label,
 ring_w, arrow_tip, editing, scale)` (`editing` draws the select-all highlight behind the number),
 `ink_text(img, xy, s, font, color, caret, fill, angle)`, `sticky_note(img, center, side, paper, text,
 angle, look, caret, scale)` (looks: `lift_r`, `lift_l`, `dogear`; the dog-ear is 0.14 of the side and
@@ -271,7 +275,7 @@ the arrow on release for one-shot tools; file size inside budget. Iterate until 
 ## Copy rules (flyout text)
 
 - Header: the tool's display name, as the customise popup shows it (`Pan`, `Selection`, `Rectangle`,
-  `Filled Rectangle`, `Ellipse`, `Line`, `Arrow`, `Measure`, `Pen`, `Brush`, `Step Count`, `Text`,
+  `Filled Rectangle`, `Ellipse`, `Line`, `Arrow`, `Measure`, `Pen`, `Brush`, `Highlighter`, `Step Count`, `Text`,
   `Sticky Note`, `Obscure`).
 - Description: concise plain sentences, accurate to the code, with only the important information:
   the gesture, the modifiers that shape it, and any mechanic you would not discover by looking at the
@@ -283,7 +287,7 @@ the arrow on release for one-shot tools; file size inside budget. Iterate until 
 
 ## Existing demos
 
-The shortcuts (D S R F E L A M P B C T N O) live in `ToolRegistry`, not here.
+The shortcuts (D S R F E L A M P B H C T N O) live in `ToolRegistry`, not here.
 
 - `tool-pan.gif`: the artwork at 1.5x zoom; the SizeAll cursor drags it one way, then another
   tool is active, a `Space` mini keycap pops, the view is dragged back, and the tool returns when
@@ -302,6 +306,9 @@ The shortcuts (D S R F E L A M P B C T N O) live in `ToolRegistry`, not here.
   double-click finishes; the pen stays active.
 - `tool-brush.gif`: one stroke, thin through a quick wavy underline and swelling as the hand
   slows into a loop around the button; the ring cursor, then the dashed marquee and the arrow.
+- `tool-highlighter.gif`: the tip-outline cursor sweeps translucent yellow across the heading
+  line (flat chisel ends, no shadow), the arrow returns on release, then the tool again mid-travel
+  and a second pass over the third line.
 - `tool-count.gif`: two badges (`Enter` commits the number), then a press-drag that pulls the
   third badge's arrow out to the button.
 - `tool-text.gif`: click, type, `Enter`, then the green handle dragged to rotate the text. The

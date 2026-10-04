@@ -209,6 +209,23 @@ namespace Clowd.Drawing.Tests
         }
 
         [AvaloniaFact]
+        public void Highlighter_RoundTrips_AsHighlighter()
+        {
+            var g = new GraphicHighlighter(Color.FromArgb(235, 248, 255, 20), 20, new Point(40, 30), 1234567);
+            g.AddSample(new Point(50, 30), 16, 0.5);
+            g.AddSample(new Point(60, 35.5), 33, 0.5);
+            g.EndStroke();
+
+            var r = RoundTrip(g);
+            AssertBaseState(g, r);
+            Assert.IsType<GraphicHighlighter>(r);
+            Assert.Equal(new Point(40, 30), r.Origin);
+            Assert.Equal(g.Samples, r.Samples);
+            Assert.False(r.DropShadowEffect);
+            Assert.Equal(1234567, r.TipSeed);
+        }
+
+        [AvaloniaFact]
         public void PolyLine_RoundTrips_Points()
         {
             var g = new GraphicPolyLine(Colors.Navy, 3, new Point(0, 0));
@@ -312,7 +329,7 @@ namespace Clowd.Drawing.Tests
             Assert.Equal(new[]
             {
                 "GraphicArrow", "GraphicBrush", "GraphicCount", "GraphicEllipse", "GraphicFilledRectangle",
-                "GraphicImage", "GraphicLine", "GraphicMeasure", "GraphicPath", "GraphicPolyLine", "GraphicRectangle",
+                "GraphicHighlighter", "GraphicImage", "GraphicLine", "GraphicMeasure", "GraphicPath", "GraphicPolyLine", "GraphicRectangle",
                 "GraphicStickyNote", "GraphicText",
             }, concrete);
         }

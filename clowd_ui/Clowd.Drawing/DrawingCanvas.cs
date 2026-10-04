@@ -484,6 +484,7 @@ namespace Clowd.Drawing
             // nothing creates one any more (the pen and the brush replaced it)
             _toolStore[ToolType.Pen] = new ToolDesc("Pen", ToolPen, ObjectType: typeof(GraphicPath));
             _toolStore[ToolType.Brush] = new ToolDesc("Brush", ToolBrush, ObjectType: typeof(GraphicBrush));
+            _toolStore[ToolType.Highlighter] = new ToolDesc("Highlighter", new ToolHighlighter(), ObjectType: typeof(GraphicHighlighter));
             _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText));
             _toolStore[ToolType.StickyNote] = new ToolDesc("Sticky Note", new ToolStickyNote(), ObjectType: typeof(GraphicStickyNote));
             _toolStore[ToolType.Count] = new ToolDesc("Step Count", new ToolCount(), ObjectType: typeof(GraphicCount));
@@ -656,9 +657,9 @@ namespace Clowd.Drawing
             else if (change.Property == ContentScaleProperty)
                 OnContentScaleChanged();
 
-            // the brush cursor is drawn at the stroke's on-screen size
+            // the brush and highlighter cursors are drawn at the stroke's on-screen size
             if ((change.Property == ContentScaleProperty || change.Property == LineWidthProperty)
-                && Tool == ToolType.Brush && _toolStore != null)
+                && (Tool == ToolType.Brush || Tool == ToolType.Highlighter) && _toolStore != null)
                 CurrentTool.Instance.SetCursor(this);
             else if (change.Property == ContentOffsetProperty)
                 OnContentOffsetChanged(change.GetNewValue<Point>());

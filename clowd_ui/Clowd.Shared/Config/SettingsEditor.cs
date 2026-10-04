@@ -95,6 +95,14 @@ namespace Clowd.Config
         /// <summary>New brush strokes: twice the shared default width.</summary>
         public const double DefaultBrushLineWidth = 6;
 
+        /// <summary>New highlighter strokes: a tip tall enough to cover a line of text.</summary>
+        public const double DefaultHighlighterLineWidth = 20;
+
+        /// <summary>New highlighter strokes: fluorescent yellow. The ink is multiplied into the
+        /// artwork, so this is the colour white paper turns, dark text stays dark, and the alpha
+        /// is the ink's strength.</summary>
+        public static readonly Color DefaultHighlighterColor = Color.FromArgb(235, 248, 255, 20);
+
         /// <summary>A fresh settings entry for <paramref name="tool"/>: the shared defaults, plus the
         /// few tools whose defaults differ.</summary>
         public static SavedToolSettings CreateDefault(ToolType tool)
@@ -113,6 +121,12 @@ namespace Clowd.Config
             // freehand ink reads thin at the shared default
             if (tool == ToolType.Brush)
                 settings._lineWidth = DefaultBrushLineWidth;
+
+            if (tool == ToolType.Highlighter)
+            {
+                settings._lineWidth = DefaultHighlighterLineWidth;
+                settings._objectColor = DefaultHighlighterColor;
+            }
 
             return settings;
         }

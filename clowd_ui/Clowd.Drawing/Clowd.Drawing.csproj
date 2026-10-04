@@ -7,6 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />
+    <!-- the Skia lease, for ink that blends with what is under it (the highlighter) -->
+    <PackageReference Include="Avalonia.Skia" Version="12.1.2" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Clowd.Drawing.Tests" />

@@ -27,7 +27,7 @@ namespace Clowd.Drawing.Ink
     /// settled state alone (never of how many samples arrived together), so a stroke rebuilt cold
     /// from its persisted samples has the same pieces as the one drawn live.
     /// </summary>
-    internal sealed class FreehandStrokeBuilder
+    internal sealed class FreehandStrokeBuilder : IInkOutline
     {
         /// <summary>Points per sealed chunk: ~500 outline vertices, a few hundred quads each.</summary>
         internal const int ChunkPoints = 256;
