@@ -119,6 +119,9 @@ namespace Clowd.Drawing
         public static readonly StyledProperty<bool> IsCanvasSubjectProperty =
             AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(IsCanvasSubject));
 
+        public static readonly StyledProperty<bool> HasStyleSubjectProperty =
+            AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(HasStyleSubject));
+
         public static readonly StyledProperty<string> SubjectNameProperty =
             AvaloniaProperty.Register<DrawingCanvas, string>(nameof(SubjectName));
 
@@ -299,6 +302,17 @@ namespace Clowd.Drawing
         {
             get => GetValue(IsCanvasSubjectProperty);
             private set => SetValue(IsCanvasSubjectProperty, value);
+        }
+
+        /// <summary>
+        /// True while the property bar describes exactly one selected graphic that carries a
+        /// style (color, stroke, font...) — the subject of <see cref="CopyStyleToSimilar"/> and
+        /// <see cref="CopyStyleToSettings"/>.
+        /// </summary>
+        public bool HasStyleSubject
+        {
+            get => GetValue(HasStyleSubjectProperty);
+            private set => SetValue(HasStyleSubjectProperty, value);
         }
 
         public string SubjectName
@@ -1244,6 +1258,122 @@ namespace Clowd.Drawing
             ApplyGraphicPropertyChange<GraphicRectangle, double>(0, t => t.Angle, (t, v) => t.Angle = v);
         }
 
+        // ---- styles ---------------------------------------------------------------------
+
+        /// <summary>The skills that make up a graphic's style: everything the property bar edits
+        /// except geometry (angle) and per-object state (crop, cursor).</summary>
+        private const Skill StyleSkills = Skill.Color | Skill.Fill | Skill.Stroke | Skill.Radius | Skill.DashStyle
+                                          | Skill.Font | Skill.FontFamily | Skill.Scale;
+
+        /// <summary>One style property: the skill that exposes it, the graphic type that carries
+        /// it, its property on that graphic, and the <see cref="SavedToolSettings"/> property new
+        /// graphics read it from. Mirrors the skill bindings in <see cref="SyncObjectState"/>.</summary>
+        private record struct StyleProp(Skill Skill, Type GraphicType, Func<GraphicBase, string> GraphicProp, string Setting);
+
+        private static readonly StyleProp[] StyleProps =
+        {
+            new(Skill.Color, typeof(GraphicBase), g => g.ColorPropertyName, nameof(SavedToolSettings.ObjectColor)),
+            new(Skill.Fill, typeof(GraphicText), _ => nameof(GraphicText.ObjectColor), nameof(SavedToolSettings.FillColor)),
+            new(Skill.Stroke, typeof(GraphicBase), _ => nameof(GraphicBase.LineWidth), nameof(SavedToolSettings.LineWidth)),
+            new(Skill.Radius, typeof(GraphicRectangle), _ => nameof(GraphicRectangle.CornerRadius), nameof(SavedToolSettings.CornerRadius)),
+            new(Skill.DashStyle, typeof(GraphicBase), _ => nameof(GraphicBase.DashStyle), nameof(SavedToolSettings.DashStyle)),
+            new(Skill.Font | Skill.FontFamily, typeof(GraphicText), _ => nameof(GraphicText.FontName), nameof(SavedToolSettings.FontFamily)),
+            new(Skill.Font, typeof(GraphicText), _ => nameof(GraphicText.FontWeight), nameof(SavedToolSettings.FontWeight)),
+            new(Skill.Font, typeof(GraphicText), _ => nameof(GraphicText.FontStretch), nameof(SavedToolSettings.FontStretch)),
+            new(Skill.Font, typeof(GraphicText), _ => nameof(GraphicText.FontSize), nameof(SavedToolSettings.FontSize)),
+            new(Skill.Font, typeof(GraphicText), _ => nameof(GraphicText.FontStyle), nameof(SavedToolSettings.FontStyle)),
+            new(Skill.Scale, typeof(GraphicStickyNote), _ => nameof(GraphicStickyNote.Scale), nameof(SavedToolSettings.Scale)),
+        };
+
+        /// <summary>The style properties <paramref name="g"/> exposes, as (graphic property, setting).</summary>
+        private static IEnumerable<(PropertyInfo Graphic, PropertyInfo Setting)> GetStyleProps(GraphicBase g)
+        {
+            var skills = g.GetType().GetCustomAttribute<GraphicDescAttribute>()?.Skills ?? Skill.None;
+            foreach (var p in StyleProps)
+            {
+                if ((skills & p.Skill) == Skill.None || !p.GraphicType.IsInstanceOfType(g))
+                    continue;
+                yield return (g.GetType().GetProperty(p.GraphicProp(g)), typeof(SavedToolSettings).GetProperty(p.Setting));
+            }
+        }
+
+        private GraphicBase StyleSubject
+            => HasStyleSubject && GraphicsList.SelectedItems is { Length: 1 } sel ? sel[0] : null;
+
+        /// <summary>The tool that draws graphics like the selected one, or null when there is no
+        /// style subject or no tool draws its type (images, legacy polylines).</summary>
+        public ToolType? StyleSubjectTool
+        {
+            get
+            {
+                var type = StyleSubject?.GetType();
+                if (type == null || _toolStore == null)
+                    return null;
+                foreach (var (tool, desc) in _toolStore)
+                    if (desc.ObjectType == type)
+                        return tool;
+                return null;
+            }
+        }
+
+        /// <summary>The settings the given tool draws with: the host's
+        /// <see cref="ToolSettingsResolver"/>, or the editor's persisted settings.</summary>
+        public SavedToolSettings ResolveToolSettings(ToolType tool)
+            => ToolSettingsResolver != null ? ToolSettingsResolver(tool) : SettingsRoot.Current.Editor.GetToolSettings(tool);
+
+        /// <summary>Applies the selected graphic's style to every other graphic of exactly the same
+        /// type (an arrow's goes to arrows, not to lines), as one undo step. Returns how many
+        /// graphics changed.</summary>
+        public int CopyStyleToSimilar()
+        {
+            var source = StyleSubject;
+            if (source == null)
+                return 0;
+
+            var props = GetStyleProps(source).Select(p => p.Graphic).ToArray();
+            int changed = 0;
+            foreach (var g in GraphicsList)
+            {
+                if (ReferenceEquals(g, source) || g.GetType() != source.GetType())
+                    continue;
+
+                bool any = false;
+                foreach (var prop in props)
+                {
+                    var value = prop.GetValue(source);
+                    if (!Equals(prop.GetValue(g), value))
+                    {
+                        prop.SetValue(g, value);
+                        any = true;
+                    }
+                }
+                if (any)
+                    changed++;
+            }
+
+            if (changed > 0)
+                AddCommandToHistory(false);
+            return changed;
+        }
+
+        /// <summary>Writes the selected graphic's style into <paramref name="settings"/>, so the
+        /// tool that draws it makes new graphics that look the same. Returns false when there is
+        /// no style subject.</summary>
+        public bool CopyStyleToSettings(SavedToolSettings settings)
+        {
+            var source = StyleSubject;
+            if (source == null)
+                return false;
+
+            foreach (var (graphic, setting) in GetStyleProps(source))
+                setting.SetValue(settings, graphic.GetValue(source));
+
+            // the fill just saved is this graphic's own; auto-fill would pick another one
+            if (source is GraphicText && source.GetType().GetCustomAttribute<GraphicDescAttribute>()!.Skills.HasFlag(Skill.Fill))
+                settings.AutoFill = false;
+            return true;
+        }
+
         public void Undo()
         {
             // a pen path still being extended becomes its own step first, so this undo takes
@@ -1541,6 +1671,7 @@ namespace Clowd.Drawing
                 IsCanvasSubject = IsPanning
                                   || Tool == ToolType.None
                                   || (Tool == ToolType.Pointer && selected.Length == 0);
+                HasStyleSubject = false;
 
                 if (IsPanning)
                 {
@@ -1583,9 +1714,7 @@ namespace Clowd.Drawing
                         return;
                     }
 
-                    var settings = ToolSettingsResolver != null
-                        ? ToolSettingsResolver(Tool)
-                        : SettingsRoot.Current.Editor.GetToolSettings(Tool);
+                    var settings = ResolveToolSettings(Tool);
                     void AddSettingBinding(Skill sk, AvaloniaProperty prop, string path)
                     {
                         if (skills.HasFlag(sk))
@@ -1658,6 +1787,7 @@ namespace Clowd.Drawing
                     SubjectType = "Selection";
                     SubjectName = attr?.Name ?? "Unknown";
                     SubjectSkill = skills;
+                    HasStyleSubject = (skills & StyleSkills) != Skill.None;
                 }
                 // if there are multiple objects selected
                 else

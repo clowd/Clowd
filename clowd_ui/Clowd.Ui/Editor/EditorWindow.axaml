@@ -264,7 +264,10 @@
             Background="Transparent"
             Orientation="Horizontal">
             <controls:DockAndWrapPanel.Styles>
-                <Style Selector="StackPanel">
+                <!--  Direct children only: a bare StackPanel selector also reaches the style
+                      menu's flyout (its logical parent is the button here) and lays the menu
+                      items out in a row.  -->
+                <Style Selector="controls|DockAndWrapPanel#PropertiesBar > StackPanel">
                     <Setter Property="Orientation" Value="Horizontal" />
                 </Style>
 
@@ -501,6 +504,33 @@
                 IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectCursorVisible, Mode=TwoWay}"
                 IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Cursor}"
                 ToolTip.Tip="Toggle Captured Mouse Cursor" />
+
+            <!--  Style actions for the one selected graphic. The menu items' enabled state is set
+                  when it opens (StyleMenu_Opening): the save items need a tool that draws this
+                  kind of graphic, which images and legacy polylines do not have.  -->
+            <controls:ToolButton
+                x:Name="btnStyle"
+                Classes="wide"
+                IconPath="{StaticResource IconStyleMenu}"
+                IsVisible="{Binding ElementName=drawingCanvas, Path=HasStyleSubject, Mode=OneWay}"
+                ToolTip.Tip="Style">
+                <controls:ToolButton.Flyout>
+                    <MenuFlyout Opening="StyleMenu_Opening" Placement="BottomEdgeAlignedLeft">
+                        <MenuItem
+                            x:Name="miStyleCopySimilar"
+                            Click="StyleCopySimilar_Click"
+                            Header="Copy style to similar objects" />
+                        <MenuItem
+                            x:Name="miStyleSession"
+                            Click="StyleSaveSession_Click"
+                            Header="Save style for current session" />
+                        <MenuItem
+                            x:Name="miStyleDefault"
+                            Click="StyleMakeDefault_Click"
+                            Header="Make default for all sessions" />
+                    </MenuFlyout>
+                </controls:ToolButton.Flyout>
+            </controls:ToolButton>
 
             <!--  Star/unstar this session — the same toggle as the Recent page's row star, and
                   first in the docked group so it lands leftmost in the right-hand cluster. Glyph,

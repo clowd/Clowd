@@ -153,7 +153,7 @@ namespace Clowd.Drawing.Tools
                 // properties may still be bound to the path that was selected until now (see
                 // DrawingCanvas.SyncObjectState), and a new path is not a copy of the last one.
                 canvas.UnselectAll();
-                var settings = SettingsRoot.Current.Editor.GetToolSettings(ToolType.Pen);
+                var settings = canvas.ResolveToolSettings(ToolType.Pen);
                 _path = new GraphicPath(settings.ObjectColor, settings.LineWidth, pt)
                 {
                     DashStyle = settings.DashStyle,

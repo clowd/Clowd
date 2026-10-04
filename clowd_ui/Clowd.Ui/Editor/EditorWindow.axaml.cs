@@ -40,6 +40,9 @@ namespace Clowd.UI
     {
         private ToolType? _panPreviousTool = null; // null means we're not in a held-key (space) pan
         private SettingsRoot _settings = SettingsRoot.Current;
+        // "Save style for current session": per-window tool settings that supersede the persisted
+        // ones until this editor closes (see the ToolSettingsResolver set in the constructor)
+        private readonly Dictionary<ToolType, SavedToolSettings> _sessionToolSettings = new();
         private SessionInfo _session;
         private int _nudgeRepeatCount;
         private ScreenRect _normalBounds; // tracked manually while WindowState == Normal (decision table #55)
@@ -233,6 +236,11 @@ namespace Clowd.UI
             };
 
             InitCustomizePopup();
+
+            // a tool with a style saved for this window draws (and edits) that; every other tool
+            // falls through to the persisted settings
+            drawingCanvas.ToolSettingsResolver = tool =>
+                _sessionToolSettings.TryGetValue(tool, out var s) ? s : _settings.Editor.GetToolSettings(tool);
 
             // opt-in editor features (customizable toolbar / layers sidebar). The sidebar is
             // per-window and always starts closed, so the strip renders exactly as before plus the
@@ -1149,9 +1157,51 @@ namespace Clowd.UI
                 return;
 
             _settings.Editor.Tools = new Dictionary<ToolType, SavedToolSettings>();
+            _sessionToolSettings.Clear(); // every tool back to the defaults, this window's too
             TrySaveSettings();
             // the property bar is bound to the old SavedToolSettings instances; rebind it to the
             // (lazily re-created) defaults in the new dictionary
+            drawingCanvas.ResyncToolSettings();
+        }
+
+        // ---- style menu -----------------------------------------------------------------
+
+        private void StyleMenu_Opening(object sender, EventArgs e)
+        {
+            // saving a style needs a tool that draws this kind of graphic
+            var hasTool = drawingCanvas.StyleSubjectTool != null;
+            miStyleSession.IsEnabled = hasTool;
+            miStyleDefault.IsEnabled = hasTool;
+        }
+
+        private void StyleCopySimilar_Click(object sender, RoutedEventArgs e)
+        {
+            drawingCanvas.CopyStyleToSimilar();
+        }
+
+        private void StyleSaveSession_Click(object sender, RoutedEventArgs e)
+        {
+            if (drawingCanvas.StyleSubjectTool is not { } tool)
+                return;
+
+            // start from whatever the tool draws with now, so settings this graphic does not
+            // carry (auto-fill, blur...) are kept rather than reset
+            var settings = drawingCanvas.ResolveToolSettings(tool).Clone();
+            drawingCanvas.CopyStyleToSettings(settings);
+            _sessionToolSettings[tool] = settings;
+            drawingCanvas.ResyncToolSettings();
+        }
+
+        private void StyleMakeDefault_Click(object sender, RoutedEventArgs e)
+        {
+            if (drawingCanvas.StyleSubjectTool is not { } tool)
+                return;
+
+            drawingCanvas.CopyStyleToSettings(_settings.Editor.GetToolSettings(tool));
+            // the new default is this style, so a session style saved earlier no longer differs
+            // from it and would only shadow later changes to the default
+            _sessionToolSettings.Remove(tool);
+            TrySaveSettings();
             drawingCanvas.ResyncToolSettings();
         }
 

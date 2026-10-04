@@ -140,6 +140,26 @@ namespace Clowd.Config
             return settings;
         }
 
+        /// <summary>A detached copy (no PropertyChanged subscribers carried over), keeping which
+        /// values are set and which still fall back to the defaults.</summary>
+        public SavedToolSettings Clone() => new()
+        {
+            _fontStretch = _fontStretch,
+            _fontWeight = _fontWeight,
+            _fontStyle = _fontStyle,
+            _fontSize = _fontSize,
+            _fontFamily = _fontFamily,
+            _lineWidth = _lineWidth,
+            _objectColor = _objectColor,
+            _blurRadius = _blurRadius,
+            _cornerRadius = _cornerRadius,
+            _dashStyle = _dashStyle,
+            _obscureMode = _obscureMode,
+            _scale = _scale,
+            _fillColor = _fillColor,
+            _autoFill = _autoFill,
+        };
+
         private FontStretch? _fontStretch;
         private FontWeight? _fontWeight;
         private FontStyle? _fontStyle;
