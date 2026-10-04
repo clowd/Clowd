@@ -230,6 +230,51 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public void ToolSettings_FromBeforeTheToolRework_AreReset()
+        {
+            // the tool rework moved the per-tool settings and toolbar lists to "V2" keys so every
+            // user starts from defaults once. The pre-rework keys must be ignored on load and
+            // dropped from the file on the next save.
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, """
+                {
+                  "Editor": {
+                    "StartupPadding": 42,
+                    "ToolbarOrder": [ "Rectangle" ],
+                    "HiddenTools": [ "Ellipse" ],
+                    "Tools": {
+                      "Text": { "FontFamily": "Consolas" }
+                    }
+                  }
+                }
+                """);
+
+            var loaded = SettingsService.Load(_path);
+
+            // the section really did bind, so the resets below are not a skipped file
+            Assert.Equal(42, loaded.Editor.StartupPadding);
+            Assert.Empty(loaded.Editor.Tools);
+            Assert.Null(loaded.Editor.ToolbarOrder);
+            Assert.Null(loaded.Editor.HiddenTools);
+
+            loaded.Editor.GetToolSettings(ToolType.Text).FontFamily = "Arial";
+            loaded.Editor.ToolbarOrder = new System.Collections.Generic.List<string> { "Ellipse" };
+            loaded.Editor.HiddenTools = new System.Collections.Generic.List<string> { "Rectangle" };
+            SettingsService.Save(loaded, _path);
+
+            // other sections have their own ToolbarOrder, so look only at the Editor object
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(_path));
+            var editor = doc.RootElement.GetProperty("Editor");
+            Assert.True(editor.TryGetProperty("ToolsV2", out _));
+            Assert.True(editor.TryGetProperty("ToolbarOrderV2", out _));
+            Assert.True(editor.TryGetProperty("HiddenToolsV2", out _));
+            Assert.False(editor.TryGetProperty("Tools", out _));
+            Assert.False(editor.TryGetProperty("ToolbarOrder", out _));
+            Assert.False(editor.TryGetProperty("HiddenTools", out _));
+            Assert.DoesNotContain("Consolas", editor.GetRawText());
+        }
+
+        [Fact]
         public void SidebarWidth_Default_WhenAbsentFromFile()
         {
             var loaded = SettingsService.Load(_path);

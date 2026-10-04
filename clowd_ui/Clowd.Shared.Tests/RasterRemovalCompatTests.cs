@@ -37,9 +37,9 @@ namespace Clowd.Shared.Tests
   ""Editor"": {
     ""RasterToolsEnabled"": true,
     ""SidebarVisible"": true,
-    ""ToolbarOrder"": [ ""Eraser"", ""Rectangle"" ],
-    ""HiddenTools"": [ ""Eraser"" ],
-    ""Tools"": {
+    ""ToolbarOrderV2"": [ ""Eraser"", ""Rectangle"" ],
+    ""HiddenToolsV2"": [ ""Eraser"" ],
+    ""ToolsV2"": {
       ""Eraser"": { ""LineWidth"": 7.5, ""AutoColor"": false },
       ""Text"": { ""FontFamily"": ""Consolas"", ""FontSize"": 16.0 }
     }

@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Configuration;
 using Avalonia.Media;
 
 namespace Clowd.Config
@@ -160,6 +162,7 @@ namespace Clowd.Config
         [Category("Drawing")]
         [DisplayName("Tool preferences")]
         [Description("Every drawing tool remembers the color, line width and font last used with it")]
+        [ConfigurationKeyName("ToolsV2"), JsonPropertyName("ToolsV2")] // V2: reset for everyone after the tool rework
         public Dictionary<ToolType, SavedToolSettings> Tools
         {
             get => _tools;
@@ -187,6 +190,7 @@ namespace Clowd.Config
         }
 
         [Browsable(false)]
+        [ConfigurationKeyName("ToolbarOrderV2"), JsonPropertyName("ToolbarOrderV2")] // V2: reset for everyone after the tool rework
         public List<string> ToolbarOrder
         {
             get => _toolbarOrder;
@@ -194,6 +198,7 @@ namespace Clowd.Config
         }
 
         [Browsable(false)]
+        [ConfigurationKeyName("HiddenToolsV2"), JsonPropertyName("HiddenToolsV2")] // V2: reset for everyone after the tool rework
         public List<string> HiddenTools
         {
             get => _hiddenTools;
