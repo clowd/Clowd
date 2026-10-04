@@ -7,6 +7,11 @@ namespace Clowd.Drawing
     {
         None = 0,
         Color = 1 << 0,
+
+        /// <summary>Picks the fill itself (a pastel cycle and a slight tilt for new text), in place
+        /// of the <see cref="Fill"/> setting.</summary>
+        AutoFill = 1 << 1,
+
         Stroke = 1 << 2,
         Font = 1 << 3,
         Angle = 1 << 4,

@@ -120,12 +120,30 @@ namespace Clowd.Drawing.Graphics
         [Transient] private bool _editing; // not persisted by GraphicsSerializer
         private Color _foreground = Colors.Black; // absent from documents saved before it existed
 
+        private static Random _rnd = new Random();
+
+        // auto-fill cycles new text through note-card pastels
+        private static Color[] _autoFills = new Color[]
+        {
+            Color.FromRgb(255, 255, 203), Color.FromRgb(229, 203, 228), Color.FromRgb(203, 228, 222),
+        };
+
+        private static int _nextAutoFill = 0;
+
         protected GraphicText()
         { }
 
         public GraphicText(DrawingCanvas canvas, Point point)
             : this(canvas.ObjectFill, canvas.LineWidth, point)
         {
+            if (canvas.ObjectFillAuto)
+            {
+                ObjectColor = _autoFills[_nextAutoFill];
+                _nextAutoFill = (_nextAutoFill + 1) % _autoFills.Length;
+                // a slight tilt, so cards dropped one after another look hand-placed
+                Angle = _rnd.NextDouble() * 8 - 4;
+            }
+
             Foreground = canvas.ObjectColor;
             FontName = canvas.TextFontFamilyName;
             FontSize = canvas.TextFontSize;

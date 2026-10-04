@@ -48,6 +48,9 @@ namespace Clowd.Drawing
         public static readonly StyledProperty<Color> ObjectFillProperty =
             AvaloniaProperty.Register<DrawingCanvas, Color>(nameof(ObjectFill), defaultBindingMode: BindingMode.TwoWay);
 
+        public static readonly StyledProperty<bool> ObjectFillAutoProperty =
+            AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(ObjectFillAuto), defaultBindingMode: BindingMode.TwoWay);
+
         public static readonly StyledProperty<double> ObjectScaleProperty =
             AvaloniaProperty.Register<DrawingCanvas, double>(nameof(ObjectScale), 1d, defaultBindingMode: BindingMode.TwoWay);
 
@@ -148,6 +151,12 @@ namespace Clowd.Drawing
         {
             get => GetValue(ObjectFillProperty);
             set => SetValue(ObjectFillProperty, value);
+        }
+
+        public bool ObjectFillAuto
+        {
+            get => GetValue(ObjectFillAutoProperty);
+            set => SetValue(ObjectFillAutoProperty, value);
         }
 
         public double ObjectScale
@@ -530,7 +539,7 @@ namespace Clowd.Drawing
             _toolStore[ToolType.Pen] = new ToolDesc("Pen", ToolPen, ObjectType: typeof(GraphicPath));
             _toolStore[ToolType.Brush] = new ToolDesc("Brush", ToolBrush, ObjectType: typeof(GraphicBrush));
             _toolStore[ToolType.Highlighter] = new ToolDesc("Highlighter", new ToolHighlighter(), ObjectType: typeof(GraphicHighlighter));
-            _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText));
+            _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText), Skills: Skill.AutoFill);
             _toolStore[ToolType.StickyNote] = new ToolDesc("Sticky Note", new ToolStickyNote(), ObjectType: typeof(GraphicStickyNote));
             _toolStore[ToolType.Count] = new ToolDesc("Step Count", new ToolCount(), ObjectType: typeof(GraphicCount));
             _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate(), Skills: Skill.BlurRadius | Skill.ObscureMode);
@@ -1564,6 +1573,7 @@ namespace Clowd.Drawing
 
                     AddSettingBinding(Skill.Color, ObjectColorProperty, nameof(SavedToolSettings.ObjectColor));
                     AddSettingBinding(Skill.Fill, ObjectFillProperty, nameof(SavedToolSettings.FillColor));
+                    AddSettingBinding(Skill.AutoFill, ObjectFillAutoProperty, nameof(SavedToolSettings.AutoFill));
                     AddSettingBinding(Skill.Stroke, LineWidthProperty, nameof(SavedToolSettings.LineWidth));
                     AddSettingBinding(Skill.Font, TextFontFamilyNameProperty, nameof(SavedToolSettings.FontFamily));
                     AddSettingBinding(Skill.Font, TextFontWeightProperty, nameof(SavedToolSettings.FontWeight));

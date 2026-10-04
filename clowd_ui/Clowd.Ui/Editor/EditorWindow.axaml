@@ -370,6 +370,14 @@
                     BorderBrush="Black"
                     BorderThickness="1"
                     Classes="swatchOuter">
+                    <!-- auto-fill picks the fill itself, so there is no swatch to pick (only for the tool:
+                         a selected text's fill stays editable, and the check is hidden then) -->
+                    <Border.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                            <Binding ElementName="chkFillAuto" Path="!IsVisible" />
+                            <Binding ElementName="chkFillAuto" Path="!IsChecked" />
+                        </MultiBinding>
+                    </Border.IsVisible>
                     <Border
                         x:Name="objectFillSwatch"
                         Background="{x:Static util:CheckerBrushes.Light}"
@@ -383,6 +391,12 @@
                         <Border Background="{Binding ElementName=drawingCanvas, Path=ObjectFill, Mode=OneWay, Converter={StaticResource convColorToBrush}}" Classes="colorFill" />
                     </Border>
                 </Border>
+                <controls:CaptionedCheckBox
+                    x:Name="chkFillAuto"
+                    Margin="4,0,0,0"
+                    Caption="Auto"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectFillAuto, Mode=TwoWay}"
+                    IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=AutoFill}" />
             </StackPanel>
 
             <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Font}">

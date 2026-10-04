@@ -82,6 +82,15 @@ namespace Clowd.Config
             set => Set(ref _fillColor, value);
         }
 
+        /// <summary>New text picks its own fill (cycling pastel note cards, each slightly tilted)
+        /// instead of <see cref="FillColor"/>. Off by default. (Not the old <c>AutoColor</c> key,
+        /// which defaulted on and so is still stored as true in older settings files.)</summary>
+        public bool AutoFill
+        {
+            get => _autoFill ?? false;
+            set => Set(ref _autoFill, value);
+        }
+
         /// <summary>Uniform size multiplier of new sticky notes (paper, text and limits alike).</summary>
         public double Scale
         {
@@ -144,6 +153,7 @@ namespace Clowd.Config
         private ObscureMode? _obscureMode;
         private double? _scale;
         private Color? _fillColor;
+        private bool? _autoFill;
     }
 
     public class SettingsEditor : SimpleNotifyObject
