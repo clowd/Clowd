@@ -288,8 +288,8 @@ namespace Clowd.Drawing
         /// The draw-on-screen overlay (default false; the editor never sets it). Every behaviour
         /// difference from the editor is gated on this one flag: the clickable surface is
         /// transparent but still hit-testable, the view is fixed at 1:1 with the screen
-        /// (canvas units are DIPs, no pan, no wheel zoom), a double-click goes to the tool like a
-        /// single click, a right press is ignored (the overlay host handles it), tools stay sticky
+        /// (canvas units are DIPs, no pan, no wheel zoom), a double-click goes to a drawing tool like
+        /// a single click, a right press is ignored (the overlay host handles it), tools stay sticky
         /// and leave nothing selected after a gesture, and a press that ends a text edit only
         /// commits the text.
         /// </summary>
@@ -1401,8 +1401,8 @@ namespace Clowd.Drawing
         /// <summary>
         /// A one-shot drawing tool's gesture is over (ToolBase.OnMouseUp). The editor hands the
         /// result to the pointer, selected, for immediate editing; the overlay keeps the tool
-        /// (so the next press draws again) and leaves nothing selected, since it has no pointer
-        /// tool to edit with.
+        /// (so the next press draws again) and leaves nothing selected — editing there is the
+        /// select tool's job, picked on purpose.
         /// </summary>
         internal void OnToolGestureEnded()
         {
@@ -1735,8 +1735,9 @@ namespace Clowd.Drawing
                 }
 
                 // the eraser treats a double-click as two clicks (it has nothing to activate), and
-                // the overlay has no pointer tool for Activate to hand an edit back to
-                if (e.ClickCount == 2 && !IsOverlayMode && Tool != ToolType.Eraser)
+                // so do the overlay's drawing tools (they are sticky: a quick second press draws
+                // again); only its select tool hands a double-click to Activate
+                if (e.ClickCount == 2 && (!IsOverlayMode || Tool == ToolType.Pointer) && Tool != ToolType.Eraser)
                 {
                     // on double click, execute GraphicBase.Activate().
                     // this allows GraphicText to launch an editor etc.

@@ -35,8 +35,9 @@ namespace Clowd.UI.DrawOnScreen
         /// to the desktop: tidying up is the end of a drawing, not the start of the next one.</summary>
         public DrawOnScreenState AfterUndoOrClear() => this with { Hidden = false, ClickThrough = true };
 
-        /// <summary>Picking a colour means "draw with this": from click-through, hidden ink or the
-        /// eraser it takes up the brush; any drawing tool already in hand keeps going.</summary>
+        /// <summary>Picking a colour means "draw with this": from click-through, hidden ink, the
+        /// select tool or the eraser it takes up the brush; any drawing tool already in hand keeps
+        /// going.</summary>
         public DrawOnScreenState SelectColor(int index) =>
             ResumeDrawing() with { ColorIndex = Math.Clamp(index, 0, DrawPalette.Colors.Count - 1) };
 
@@ -45,7 +46,7 @@ namespace Clowd.UI.DrawOnScreen
             ResumeDrawing() with { SizeIndex = Math.Clamp(index, 0, DrawPalette.Sizes.Count - 1) };
 
         private DrawOnScreenState ResumeDrawing() =>
-            ClickThrough || Hidden || Tool == ToolType.Eraser ? PickTool(ToolType.Brush) : this;
+            ClickThrough || Hidden || Tool is ToolType.Eraser or ToolType.Pointer ? PickTool(ToolType.Brush) : this;
 
         /// <summary>Whether <paramref name="tool"/>'s button shows as active: picked, and actually drawing.</summary>
         public bool IsToolLit(ToolType tool) => Tool == tool && !ClickThrough && !Hidden;

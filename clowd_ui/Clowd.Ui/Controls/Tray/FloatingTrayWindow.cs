@@ -3,6 +3,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
@@ -840,7 +841,7 @@ namespace Clowd.UI.Controls.Tray
         }
 
         /// <summary>
-        /// Anchors every tooltip on the strip to its control, on the strip's free side.
+        /// Anchors every tooltip on the strip beside its control, outside the strip on its free side.
         /// </summary>
         /// <remarks>
         /// Avalonia's default is <see cref="PlacementMode.Pointer"/> with a 20px vertical offset,
@@ -858,23 +859,64 @@ namespace Clowd.UI.Controls.Tray
         /// to above it, which put the flipped tip 7 px over the strip. Both offsets stay 0.
         /// Every control is aimed whether or not it has a tip yet: a tip assigned after this ran
         /// (an owner filling in a toggle's two tips, say) would otherwise keep the Pointer default and
-        /// bring the swallowed first click back. Four idempotent attached-property writes per control
+        /// bring the swallowed first click back. A few idempotent attached-property writes per control
         /// is cheap next to re-walking the tree whenever a tip changes.
+        /// <para>
+        /// The anchor is not the control itself but the control's span along the strip, stretched
+        /// across the whole strip (<see cref="PlaceToolTip"/>): anchored to the control alone, a tip
+        /// on a multi-lane strip opened over the next lane, and one the positioner flipped (no room
+        /// below a strip at the bottom of the screen) opened over the lane above it. Stretched, a
+        /// flip moves the tip to the strip's other side, still clear of every tile.
+        /// </para>
         /// </remarks>
         private void AimToolTips()
         {
-            var horizontal = Tray.Orientation == Orientation.Horizontal;
-            var placement = horizontal ? PlacementMode.Bottom : PlacementMode.Right;
-
             foreach (var control in Tray.GetVisualDescendants().OfType<Control>())
             {
-                ToolTip.SetPlacement(control, placement);
+                // the callback reads the axis when the tip opens, so a rotation needs no re-aim
+                ToolTip.SetPlacement(control, PlacementMode.Custom);
+                ToolTip.SetCustomPopupPlacementCallback(control, PlaceToolTip);
                 ToolTip.SetVerticalOffset(control, 0);
                 ToolTip.SetHorizontalOffset(control, 0);
 
                 // per control, not once on the tray: ToolTip.ShowDelay does not inherit.
                 ToolTip.SetShowDelay(control, TrayTokens.ToolTipShowDelayMs);
             }
+        }
+
+        /// <summary>
+        /// The tip's placement (see <see cref="AimToolTips"/>): below a horizontal strip or right of a
+        /// vertical one, centred on the control, its anchor the control's span along the strip by the
+        /// strip's full depth across it. Flipped to the other side when that one has no room, slid
+        /// along the strip to stay on screen.
+        /// </summary>
+        private static void PlaceToolTip(CustomPopupPlacement placement)
+        {
+            if (placement.Target is not Visual target)
+                return;
+
+            var tray = target.FindAncestorOfType<FloatingTray>(includeSelf: true);
+            var horizontal = tray?.Orientation != Orientation.Vertical;
+
+            // the positioner hands over the control's own rect already in the top level's
+            // coordinates, which is the space the anchor is written back in
+            var own = placement.AnchorRectangle;
+
+            // the strip body, translated to the control and then moved with it into that space;
+            // without a tray (or before layout) the control alone is the anchor
+            var across = tray?.TranslatePoint(default, target) is { } origin
+                ? new Rect(origin + own.Position, tray.Bounds.Size)
+                : own;
+
+            placement.AnchorRectangle = horizontal
+                ? new Rect(own.X, across.Y, own.Width, across.Height)
+                : new Rect(across.X, own.Y, across.Width, own.Height);
+            placement.Anchor = horizontal ? PopupAnchor.Bottom : PopupAnchor.Right;
+            placement.Gravity = horizontal ? PopupGravity.Bottom : PopupGravity.Right;
+            placement.ConstraintAdjustment = horizontal
+                ? PopupPositionerConstraintAdjustment.FlipY | PopupPositionerConstraintAdjustment.SlideX
+                : PopupPositionerConstraintAdjustment.FlipX | PopupPositionerConstraintAdjustment.SlideY;
+            placement.Offset = default;
         }
     }
 }

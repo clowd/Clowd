@@ -112,11 +112,12 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Colour_or_size_takes_up_the_brush_from_click_through_hidden_or_eraser()
+        public void Colour_or_size_takes_up_the_brush_from_click_through_hidden_select_or_eraser()
         {
             var eraser = Drawing.PickTool(ToolType.Eraser);
+            var select = Drawing.PickTool(ToolType.Pointer);
             var throughArrow = Drawing.PickTool(ToolType.Arrow) with { ClickThrough = true };
-            foreach (var from in new[] { Through, Hidden, eraser, throughArrow })
+            foreach (var from in new[] { Through, Hidden, eraser, select, throughArrow })
             {
                 foreach (var s in new[] { from.SelectColor(3), from.SelectSize(2) })
                 {

@@ -6,7 +6,7 @@ namespace Clowd.UI.DrawOnScreen
 {
     /// <summary>
     /// The fixed choices the draw-on-screen toolbar offers: eight colours, four sizes and the
-    /// seven tools, with the localisation and icon keys that go with them. Pure tables, so the
+    /// eight tools, with the localisation and icon keys that go with them. Pure tables, so the
     /// values the approved mockup pins are tested (<c>DrawPaletteTests</c>) rather than eyeballed
     /// at a smoke check.
     /// </summary>
@@ -51,9 +51,10 @@ namespace Clowd.UI.DrawOnScreen
         };
 
         /// <summary>The tools, in toolbar order. <see cref="ToolType.Eraser"/> lives only here: the
-        /// editor never offers it.</summary>
+        /// editor never offers it. <see cref="ToolType.Pointer"/> is the select tool.</summary>
         public static IReadOnlyList<ToolType> Tools { get; } = new[]
         {
+            ToolType.Pointer,
             ToolType.Brush,
             ToolType.Arrow,
             ToolType.Line,
@@ -88,7 +89,9 @@ namespace Clowd.UI.DrawOnScreen
         public static string ToolKey(ToolType tool) => "Draw_Tool_" + tool;
 
         /// <summary>Resource key of a tool's icon in Assets/VectorIcons.axaml: <c>IconToolBrush</c>
-        /// and so on.</summary>
-        public static string ToolIconKey(ToolType tool) => "IconTool" + tool;
+        /// and so on. The select tool has its own icon (arrow tip + four-way arrows, after the Move
+        /// cursor): the editor's plain pointer is already the click-through toggle's.</summary>
+        public static string ToolIconKey(ToolType tool) =>
+            tool == ToolType.Pointer ? "IconDrawSelect" : "IconTool" + tool;
     }
 }

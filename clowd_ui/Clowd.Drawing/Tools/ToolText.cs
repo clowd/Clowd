@@ -237,7 +237,8 @@ namespace Clowd.Drawing.Tools
                     // otherwise, revert it to it's previous text
                     _editText.Body = _oldText;
                     _editText.Editing = false;
-                    _editText.IsSelected = !canvas.IsOverlayMode; // the overlay leaves nothing selected
+                    // the overlay leaves nothing selected, unless the edit came from its select tool
+                    _editText.IsSelected = !canvas.IsOverlayMode || canvas.Tool == ToolType.Pointer;
                 }
 
                 _editText = null;
@@ -276,7 +277,8 @@ namespace Clowd.Drawing.Tools
             }
 
             _editText.Editing = false;
-            _editText.IsSelected = !drawingCanvas.IsOverlayMode; // the overlay leaves nothing selected
+            // the overlay leaves nothing selected, unless the edit came from its select tool
+            _editText.IsSelected = !drawingCanvas.IsOverlayMode || drawingCanvas.Tool == ToolType.Pointer;
 
             // null the fields before removal so re-entrant LostFocus is a no-op (see AbortOperation)
             var txtBox = _txtBox;

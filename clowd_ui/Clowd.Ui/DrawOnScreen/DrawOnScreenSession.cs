@@ -264,10 +264,15 @@ namespace Clowd.UI.DrawOnScreen
         }
 
         /// <summary>Lands <see cref="State"/> on one window. Click-through first: turning it on
-        /// ends any gesture before the tool is (re)asserted.</summary>
+        /// ends any gesture before the tool is (re)asserted. A selection only lives while the select
+        /// tool is in hand, and is dropped before the tool changes: with a selection up the canvas's
+        /// colour and size are bound to the selected graphics, and the colour and size writes that
+        /// follow a tool change must land in the tool's settings, not restyle the selection.</summary>
         private void PushState(Overlay overlay)
         {
             overlay.Window.SetClickThrough(State.ClickThrough);
+            if (!State.IsToolLit(ToolType.Pointer))
+                overlay.Canvas.UnselectAll();
             overlay.Canvas.Tool = State.Tool;
             overlay.Canvas.Opacity = State.Hidden ? 0 : 1;
         }

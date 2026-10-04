@@ -151,6 +151,10 @@
     <value>Line</value>
     <comment>Draw on Screen tool button tooltip: draws a straight line.</comment>
   </data>
+  <data name="Draw_Tool_Pointer" xml:space="preserve">
+    <value>Select</value>
+    <comment>Draw on Screen tool button tooltip: select, move and resize existing drawings.</comment>
+  </data>
   <data name="Draw_Tool_Rectangle" xml:space="preserve">
     <value>Rectangle</value>
     <comment>Draw on Screen tool button tooltip: draws a rectangle outline.</comment>

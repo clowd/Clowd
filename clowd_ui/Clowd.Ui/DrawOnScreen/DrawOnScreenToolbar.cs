@@ -14,7 +14,7 @@ namespace Clowd.UI.DrawOnScreen
 {
     /// <summary>
     /// The draw-on-screen toolbar: a two-lane strip behind a full-height grip. The primary lane is
-    /// the emblem, the two modes (click-through, hide) and the seven tools at full size; the compact
+    /// the emblem, the two modes (click-through, hide) and the eight tools at full size; the compact
     /// secondary lane is the colours, the sizes and the ways out (undo, clear, close).
     /// <para>
     /// It owns no state. Everything it shows is read off <see cref="IDrawOnScreenController"/> in

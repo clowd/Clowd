@@ -64,7 +64,7 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.Equal(new[]
             {
-                ToolType.Brush, ToolType.Arrow, ToolType.Line, ToolType.Rectangle,
+                ToolType.Pointer, ToolType.Brush, ToolType.Arrow, ToolType.Line, ToolType.Rectangle,
                 ToolType.Ellipse, ToolType.Text, ToolType.Eraser,
             }, DrawPalette.Tools);
         }
@@ -74,8 +74,9 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.Equal("Draw_Tool_Brush", DrawPalette.ToolKey(ToolType.Brush));
             Assert.Equal("Draw_Tool_Eraser", DrawPalette.ToolKey(ToolType.Eraser));
+            Assert.Equal("Draw_Tool_Pointer", DrawPalette.ToolKey(ToolType.Pointer));
             Assert.Equal(
-                new[] { "IconToolBrush", "IconToolArrow", "IconToolLine", "IconToolRectangle", "IconToolEllipse", "IconToolText", "IconToolEraser" },
+                new[] { "IconDrawSelect", "IconToolBrush", "IconToolArrow", "IconToolLine", "IconToolRectangle", "IconToolEllipse", "IconToolText", "IconToolEraser" },
                 DrawPalette.Tools.Select(DrawPalette.ToolIconKey));
         }
 
