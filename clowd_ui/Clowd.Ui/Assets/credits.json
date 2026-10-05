@@ -24,6 +24,12 @@
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
         {
+          "name": "Avalonia.Skia",
+          "version": "12.1.2",
+          "license": "MIT",
+          "url": "https://github.com/AvaloniaUI/Avalonia/"
+        },
+        {
           "name": "AWSSDK.S3",
           "version": "4.0.101.4",
           "license": "Apache-2.0",
