@@ -96,6 +96,13 @@
                 LineHeight="17"
                 TextWrapping="Wrap" />
 
+            <!--  a tool with many gestures lists them here, one per row, under the description
+                  (filled in code: a bullet column and a hanging-indented text column per row)  -->
+            <StackPanel
+                x:Name="bulletList"
+                Margin="14,0,14,10"
+                Spacing="3" />
+
             <!--  the demo. The player measures to nothing when its asset is missing, and the
                   border wraps it, so a tip without a GIF collapses to header + description
                   instead of showing an empty frame.  -->

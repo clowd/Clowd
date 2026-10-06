@@ -8,12 +8,16 @@ namespace Clowd.Drawing.Tools
 {
     /// <summary>
     /// The pen: click to place a corner anchor, press-and-drag to pull mirrored handles out of the
-    /// anchor being placed (Alt: a cusp with one handle, Shift: 45° snap), click anchor 0 to close,
-    /// Enter / Escape / double-click / a tool switch to finish. Unlike the one-shot drawing tools it
-    /// stays active after a path is finished: the next click starts a new path — or, while exactly
-    /// one path is selected, grabs one of its anchors or handles and drags it in place. Pressing and
-    /// releasing an end anchor of an open path without moving re-enters the extending mode at that
-    /// end; the pointer tool hands the same gesture over here (<see cref="ContinuePath"/>).
+    /// anchor being placed (Alt: a cusp with one handle, Shift: 45° snap), click anchor 0 to close
+    /// (the rubber band snaps onto it within <see cref="GraphicPath.CloseSnapRadius"/>), Enter /
+    /// Escape / double-click / a tool switch to finish. Closing, Enter, Escape and double-click all
+    /// hand the finished path to the pointer, like the one-shot drawing tools; a pen re-selected
+    /// afterwards stays active: the next click starts a new path — or, while exactly one path is
+    /// selected, grabs one of its anchors or handles and drags it in place. Pressing and releasing
+    /// an end anchor of an open path without moving re-enters the extending mode at that end (the
+    /// pen only: the pointer just drags anchors). Hovering the stroke of any path shows a ghost
+    /// anchor (<see cref="GraphicPath.GhostPoint"/>); a press there inserts a real one without
+    /// changing the shape and drags it.
     ///
     /// Every handler keys off <see cref="_mode"/>, never canvas.IsMouseCaptured, so tests drive it
     /// with synthetic pointer states (Pointer == null, for which capture is a no-op). A path being
@@ -21,8 +25,8 @@ namespace Clowd.Drawing.Tools
     /// deselects it behind our back the next event finishes it silently.
     ///
     /// History: one step per path created or extended (committed on finish — property-bar edits
-    /// made meanwhile fold into it), one per handle or anchor drag, one per anchor delete or type
-    /// toggle. An untouched continuation leaves no step.
+    /// made meanwhile fold into it), one per handle or anchor drag, one per anchor insert (with any
+    /// drag that follows it), delete or type toggle. An untouched continuation leaves no step.
     /// </summary>
     internal class ToolPen : ToolBase
     {
@@ -56,7 +60,9 @@ namespace Clowd.Drawing.Tools
         private bool _closedBefore;
         private bool _touched;
         private bool _reversed;
-        private bool _fromPointer;
+
+        // the path showing the ghost anchor of an idle hover, if any
+        private GraphicPath _ghostPath;
 
         // the path the last release closed on anchor 0, so the double-click's second press (which
         // the canvas routes to Activate) does not also toggle that anchor
@@ -67,10 +73,6 @@ namespace Clowd.Drawing.Tools
 
         /// <summary>True while the pen is between clicks on <paramref name="path"/>.</summary>
         internal bool IsExtending(GraphicPath path) => _mode == Mode.Extending && ReferenceEquals(_path, path);
-
-        /// <summary>True while the extension in progress is the pointer tool's hand-over
-        /// (<see cref="ContinuePath"/>) — a double-click there is the pointer's, not the pen's.</summary>
-        internal bool ContinuedFromPointer => _mode == Mode.Extending && _fromPointer;
 
         /// <summary>True (once) when the last release closed <paramref name="path"/> on its first
         /// anchor; any later press or key clears it.</summary>
@@ -91,6 +93,7 @@ namespace Clowd.Drawing.Tools
         {
             Validate(canvas);
             _justClosed = null;
+            SetGhost(null, default);
 
             // right button is the canvas's (context menu); the second press of a double-click goes
             // to Activate instead, and a triple-click's third press must not re-grab the endpoint
@@ -148,6 +151,25 @@ namespace Clowd.Drawing.Tools
                     return;
                 }
 
+                // on the stroke of a path: insert an anchor there (selecting that path) and drag it
+                if (FindInsertion(canvas, pt, dpi) is { } ins)
+                {
+                    if (selected != ins.Path)
+                    {
+                        canvas.UnselectAll();
+                        ins.Path.IsSelected = true;
+                    }
+
+                    _path = ins.Path;
+                    _grab = _path.AnchorHandle(_path.InsertAnchor(ins.Segment, ins.T));
+                    _continueCandidate = false;
+                    _edited = true;
+                    _downPt = pt;
+                    _mode = Mode.DraggingHandle;
+                    canvas.CaptureMouse(s.Pointer);
+                    return;
+                }
+
                 // anywhere else (empty canvas, a body, another kind of graphic) starts a new path.
                 // Its style is the pen's saved settings, read directly: the canvas's style
                 // properties may still be bound to the path that was selected until now (see
@@ -164,7 +186,6 @@ namespace Clowd.Drawing.Tools
                 _closedBefore = false;
                 _touched = true;
                 _reversed = false;
-                _fromPointer = false;
                 _placing = 0;
                 _placingIncoming = false;
                 _downPt = pt;
@@ -202,7 +223,11 @@ namespace Clowd.Drawing.Tools
                 break;
 
             case Mode.Extending:
-                if ((s.Modifiers & KeyModifiers.Shift) != 0)
+                // near anchor 0 the band snaps onto it (the click there closes); the raw cursor
+                // decides, so a Shift snap cannot pull it in or out of range
+                if (_path.IsNearFirstAnchor(pt, dpi))
+                    pt = _path.Anchors[0].P;
+                else if ((s.Modifiers & KeyModifiers.Shift) != 0)
                     pt = HelperFunctions.SnapPointToCommonAngle(_path.LastAnchor.P, pt, false);
                 _path.PreviewPoint = pt;
                 canvas.Cursor = CursorResources.Pen;
@@ -210,10 +235,19 @@ namespace Clowd.Drawing.Tools
 
             case Mode.Idle:
                 var selected = SelectedPath(canvas);
-                int handle;
-                canvas.Cursor = selected != null && (handle = selected.MakeHitTest(pt, dpi)) > 0
-                    ? selected.GetHandleCursor(handle)
-                    : CursorResources.Pen;
+                var handle = selected?.MakeHitTest(pt, dpi) ?? -1;
+                if (handle > 0)
+                {
+                    SetGhost(null, default);
+                    canvas.Cursor = selected.IsEndpointHandle(handle) ? CursorResources.Pen : selected.GetHandleCursor(handle);
+                }
+                else
+                {
+                    var ins = FindInsertion(canvas, pt, dpi);
+                    SetGhost(ins?.Path, ins?.Point ?? default);
+                    canvas.Cursor = CursorResources.Pen;
+                }
+
                 break;
             }
         }
@@ -233,8 +267,10 @@ namespace Clowd.Drawing.Tools
                 _path.Normalize();
                 if (_path.Closed)
                 {
+                    // a closed path is done: hand it to the pointer, still selected, like Enter
                     _justClosed = _path;
                     Finish(canvas);
+                    canvas.Tool = ToolType.Pointer;
                 }
                 else
                 {
@@ -305,11 +341,21 @@ namespace Clowd.Drawing.Tools
             return false;
         }
 
-        public override void CommitPending(DrawingCanvas canvas) => Finish(canvas);
+        public override void CommitPending(DrawingCanvas canvas)
+        {
+            SetGhost(null, default);
+            Finish(canvas);
+        }
 
         // Escape FINISHES a pen path (every reference editor does); only a path with fewer than two
         // anchors is discarded. Capture loss mid-drag therefore keeps what was dragged so far.
-        public override void AbortOperation(DrawingCanvas canvas) => Finish(canvas);
+        public override void AbortOperation(DrawingCanvas canvas)
+        {
+            SetGhost(null, default);
+            Finish(canvas);
+        }
+
+        public override void OnMouseLeave(DrawingCanvas canvas) => SetGhost(null, default);
 
         /// <summary>
         /// Ends whatever is in progress and commits it: a drag becomes a step if it edited anything;
@@ -334,7 +380,6 @@ namespace Clowd.Drawing.Tools
             _path = null;
             _edited = false;
             _continueCandidate = false;
-            _fromPointer = false;
             path.PreviewPoint = null;
 
             // a finished path is an object again: Delete now deletes it, not its last anchor
@@ -383,7 +428,6 @@ namespace Clowd.Drawing.Tools
                 path.ReverseDirection();
 
             _reversed = atStart;
-            _fromPointer = false;
             _anchorsBefore = (PathAnchor[])path.Anchors.Clone();
             _closedBefore = path.Closed;
             _touched = false;
@@ -392,15 +436,6 @@ namespace Clowd.Drawing.Tools
             _mode = Mode.Extending;
             path.PreviewPoint = null;
             canvas.Cursor = CursorResources.Pen;
-        }
-
-        /// <summary>The pointer tool's hand-over: a motionless click on an end anchor switches to
-        /// the pen (the outgoing pointer has nothing pending) and continues the path from there.</summary>
-        internal void ContinuePath(DrawingCanvas canvas, GraphicPath path, bool atStart)
-        {
-            canvas.Tool = ToolType.Pen;
-            BeginExtending(canvas, path, atStart);
-            _fromPointer = true;
         }
 
         // the path being worked on may have been deleted or deselected by the Layers panel: a
@@ -416,12 +451,37 @@ namespace Clowd.Drawing.Tools
                 _path = null;
                 _edited = false;
                 _continueCandidate = false;
-                _fromPointer = false;
             }
             else if (!_path.IsSelected)
             {
                 Finish(canvas);
             }
+        }
+
+        private readonly record struct Insertion(GraphicPath Path, int Segment, double T, Point Point);
+
+        // the topmost visible, unlocked path whose stroke passes near the cursor, and where on it
+        // an anchor would go
+        private static Insertion? FindInsertion(DrawingCanvas canvas, Point pt, DpiScale dpi)
+        {
+            var list = canvas.GraphicsList;
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                if (list[i] is GraphicPath path && !path.Hidden && !path.Locked
+                    && path.TryFindInsertion(pt, dpi, out var segment, out var t, out var onStroke))
+                    return new Insertion(path, segment, t, onStroke);
+            }
+
+            return null;
+        }
+
+        private void SetGhost(GraphicPath path, Point point)
+        {
+            if (_ghostPath != null && _ghostPath != path)
+                _ghostPath.GhostPoint = null;
+            _ghostPath = path;
+            if (path != null)
+                path.GhostPoint = point;
         }
 
         // the one path whose anchors and handles the idle pen edits

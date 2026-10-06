@@ -22,6 +22,8 @@ namespace Clowd.Drawing.Graphics
     /// Two transients drive the pen tool's chrome: <see cref="PreviewPoint"/> is the cursor while
     /// the path is being extended (a half-alpha rubber band from the last anchor), and
     /// <see cref="ActiveAnchor"/> is the anchor last clicked or dragged (Delete/Backspace removes it).
+    /// A third, <see cref="GhostPoint"/>, is the idle pen hovering the stroke: the anchor a click
+    /// there would insert.
     ///
     /// Cache slots: Geometry = the open/closed cubic figure shared by Bounds/Contains/DrawObject.
     /// </summary>
@@ -38,6 +40,14 @@ namespace Clowd.Drawing.Graphics
 
         /// <summary>How far (screen px) the pointer must travel from a press before it is a drag.</summary>
         internal const double ClickThreshold = 3;
+
+        /// <summary>How close (screen px) the cursor must come to anchor 0 for the rubber band to
+        /// snap onto it — the click there closes the path.</summary>
+        internal const double CloseSnapRadius = 10;
+
+        /// <summary>How close (screen px, beyond half the stroke) the cursor must come to the
+        /// stroke for the pen to offer a ghost anchor there.</summary>
+        internal const double InsertTolerance = 6;
 
         internal enum HandleKind
         {
@@ -64,6 +74,7 @@ namespace Clowd.Drawing.Graphics
         // not persisted by GraphicsSerializer
         [Transient] private Point? _previewPoint;
         [Transient] private int _activeAnchor = -1;
+        [Transient] private Point? _ghostPoint;
         [Transient] private bool _mirrorNext;
 
         protected GraphicPath() // serializer constructor
@@ -87,6 +98,14 @@ namespace Clowd.Drawing.Graphics
         {
             get => _previewPoint;
             set => Set(ref _previewPoint, value);
+        }
+
+        /// <summary>Where on the stroke a pen click would insert an anchor (drawn as a translucent
+        /// anchor); null otherwise. Set only by ToolPen.</summary>
+        internal Point? GhostPoint
+        {
+            get => _ghostPoint;
+            set => Set(ref _ghostPoint, value);
         }
 
         /// <summary>Index of the anchor last clicked or dragged, or -1. Drawn filled; the editor's
@@ -119,6 +138,7 @@ namespace Clowd.Drawing.Graphics
             map[nameof(Anchors)] = shape;
             map[nameof(Closed)] = shape;
             map[nameof(PreviewPoint)] = InvalidationAspects.None; // chrome only; the raise still schedules a redraw
+            map[nameof(GhostPoint)] = InvalidationAspects.None;
             map[nameof(ActiveAnchor)] = InvalidationAspects.None;
         }
 
@@ -160,9 +180,8 @@ namespace Clowd.Drawing.Graphics
             };
         }
 
-        // the end anchors of an open path offer to continue it; everything else just drags
-        internal override Cursor GetHandleCursor(int handleNumber) =>
-            IsEndpointHandle(handleNumber) ? CursorResources.Pen : CursorResources.SizeAll;
+        // every handle just drags; the pen shows its own cursor over the end anchors it continues from
+        internal override Cursor GetHandleCursor(int handleNumber) => CursorResources.SizeAll;
 
         internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
@@ -196,10 +215,92 @@ namespace Clowd.Drawing.Graphics
             _anchors.Length >= 2 &&
             GetGeometry().StrokeContains(RenderResources.GetPen(Colors.Black, Math.Max(LineWidth, 8)), point);
 
-        /// <summary>True while the pointer sits on anchor 0 of an open path with at least two
-        /// anchors — the next click closes the path.</summary>
+        /// <summary>True while the pointer is within <see cref="CloseSnapRadius"/> of anchor 0 of an
+        /// open path with at least two anchors — the rubber band snaps to it and the next click
+        /// closes the path.</summary>
         internal bool IsNearFirstAnchor(Point point, DpiScale uiscale) =>
-            _anchors.Length >= 2 && !_closed && GetHandleRectangle(1, uiscale).Contains(point);
+            _anchors.Length >= 2 && !_closed
+            && GraphicLine.Distance(point, _anchors[0].P) <= CloseSnapRadius * uiscale.DpiScaleX;
+
+        /// <summary>
+        /// The point on the stroke nearest <paramref name="point"/>, if it lies within
+        /// <see cref="InsertTolerance"/> (plus half the stroke) and not on top of an existing anchor:
+        /// the segment it is on (segment i runs from anchor i to the next, wrapping on a closed path)
+        /// and its bezier parameter there.
+        /// </summary>
+        internal bool TryFindInsertion(Point point, DpiScale uiscale, out int segment, out double t, out Point onStroke)
+        {
+            segment = -1;
+            t = 0;
+            onStroke = default;
+
+            var n = _anchors.Length;
+            if (n < 2)
+                return false;
+
+            var best = double.MaxValue;
+            var segments = _closed ? n : n - 1;
+            for (int i = 0; i < segments; i++)
+            {
+                var (p0, p1, p2, p3) = PathMath.Segment(_anchors[i], _anchors[(i + 1) % n]);
+                var (st, sp, sd) = PathMath.Nearest(p0, p1, p2, p3, point);
+                if (sd < best)
+                {
+                    best = sd;
+                    segment = i;
+                    t = st;
+                    onStroke = sp;
+                }
+            }
+
+            var dpi = uiscale.DpiScaleX;
+            if (best > LineWidth / 2 + InsertTolerance * dpi)
+                return false;
+
+            // an anchor already sits here: a click there belongs to it, not to a new one
+            for (int i = 0; i < n; i++)
+                if (GraphicLine.Distance(onStroke, _anchors[i].P) < AnchorSize * dpi)
+                    return false;
+
+            return true;
+        }
+
+        /// <summary>Splits <paramref name="segment"/> at <paramref name="t"/> with a new anchor that
+        /// leaves the drawn shape unchanged (de Casteljau: a curve gains a smooth anchor and its
+        /// neighbours' facing handles shorten; a straight segment gains a corner). The new anchor is
+        /// the active one; returns its index.</summary>
+        internal int InsertAnchor(int segment, double t)
+        {
+            var n = _anchors.Length;
+            var next = (segment + 1) % n;
+            var a = _anchors[segment];
+            var b = _anchors[next];
+
+            // t is the cubic's parameter (handle-less ends make it non-linear along a straight
+            // segment), so a straight split still evaluates the cubic rather than lerping
+            var (p0, p1, p2, p3) = PathMath.Segment(a, b);
+            PathAnchor added;
+            if (PathMath.IsStraight(a, b))
+            {
+                added = PathAnchor.Corner(PathMath.Evaluate(p0, p1, p2, p3, t));
+            }
+            else
+            {
+                var q = PathMath.Split(p0, p1, p2, p3, t);
+                var s = q[2];
+                added = new PathAnchor(s, q[1] - s, q[3] - s, true);
+                _anchors[segment].Out = q[0] - a.P;
+                _anchors[next].In = q[4] - b.P;
+            }
+
+            var index = segment + 1;
+            var list = new List<PathAnchor>(_anchors);
+            list.Insert(index, added);
+            _anchors = list.ToArray();
+            _activeAnchor = index;
+            OnPropertyChanged(nameof(Anchors));
+            return index;
+        }
 
         // ---- editing ---------------------------------------------------------------------
 
@@ -363,6 +464,7 @@ namespace Clowd.Drawing.Graphics
         {
             base.OnFieldsRestored(changedJsonNames);
             _previewPoint = null;
+            _ghostPoint = null;
             _activeAnchor = -1;
             _mirrorNext = false;
         }
@@ -465,16 +567,12 @@ namespace Clowd.Drawing.Graphics
             if (pen.ConsumeJustClosed(this))
                 return;
 
-            if (pen.IsExtending(this))
+            // a finished path goes to the pointer, like Enter; an untouched continuation (the
+            // first press of this double-click re-entered it on an end anchor) falls through
+            if (pen.IsExtending(this) && pen.Finish(canvas))
             {
-                var handedOver = pen.ContinuedFromPointer;
-                if (pen.Finish(canvas))
-                    return;
-
-                // an untouched continuation that the pointer tool handed over on the first press
-                // of this double-click: the user is toggling the anchor, not switching tools
-                if (handedOver)
-                    canvas.Tool = ToolType.Pointer;
+                canvas.Tool = ToolType.Pointer;
+                return;
             }
 
             var n = _anchors.Length;
@@ -485,8 +583,7 @@ namespace Clowd.Drawing.Graphics
                 canvas.AddCommandToHistory(false);
             }
 
-            // follow-up: a double-click on a segment should insert an anchor there (PathMath.Split
-            // is in place); bounding-box scaling/rotation of a path is also still to come
+            // follow-up: bounding-box scaling/rotation of a path is still to come
         }
 
         // ---- geometry / rendering --------------------------------------------------------
@@ -530,16 +627,24 @@ namespace Clowd.Drawing.Graphics
         {
             DrawObject(ctx);
 
+            var closing = false;
             if (_previewPoint is { } cursor && _anchors.Length >= 1 && !_closed)
-                DrawRubberBand(ctx, cursor, uiscale);
+                closing = DrawRubberBand(ctx, cursor, uiscale);
 
             if (IsSelected)
                 DrawTrackers(ctx, uiscale);
+
+            if (closing)
+                DrawCloseHighlight(ctx, uiscale);
+
+            if (_ghostPoint is { } ghost)
+                DrawGhostAnchor(ctx, ghost, uiscale);
         }
 
-        // the segment the next click would add, at half alpha, with a hollow dot at the cursor;
-        // when the cursor is over anchor 0 that anchor becomes a ring to say "click to close"
-        private void DrawRubberBand(DrawingContext ctx, Point cursor, DpiScale uiscale)
+        // the segment the next click would add, at half alpha, with a hollow dot at the cursor.
+        // Near anchor 0 the band snaps onto it and takes the closing segment's shape (anchor 0's
+        // In handle included); returns true then, so the anchor is lit up above the trackers.
+        private bool DrawRubberBand(DrawingContext ctx, Point cursor, DpiScale uiscale)
         {
             var dpi = uiscale.DpiScaleX;
             var last = LastAnchor;
@@ -547,13 +652,17 @@ namespace Clowd.Drawing.Graphics
             var pen = RenderResources.GetPen(Color.FromArgb((byte)(c.A / 2), c.R, c.G, c.B), LineWidth, StrokeDash,
                                              PenLineCap.Round, PenLineJoin.Round);
 
-            if (last.HasOut)
+            var closing = IsNearFirstAnchor(cursor, uiscale);
+            var end = closing ? _anchors[0].P : cursor;
+            var endHandle = closing ? end + _anchors[0].In : end;
+
+            if (last.HasOut || endHandle != end)
             {
                 var band = new StreamGeometry();
                 using (var gctx = band.Open())
                 {
                     gctx.BeginFigure(last.P, false);
-                    gctx.CubicBezierTo(last.P + last.Out, cursor, cursor);
+                    gctx.CubicBezierTo(last.P + last.Out, endHandle, end);
                     gctx.EndFigure(false);
                 }
 
@@ -561,18 +670,44 @@ namespace Clowd.Drawing.Graphics
             }
             else
             {
-                ctx.DrawLine(pen, last.P, cursor);
+                ctx.DrawLine(pen, last.P, end);
             }
 
-            var chrome = RenderResources.GetPen(HandleColor, 1 * dpi);
-            var radius = HandleDotRadius * dpi;
-            ctx.DrawEllipse(null, chrome, cursor, radius, radius);
-
-            if (IsNearFirstAnchor(cursor, uiscale))
+            if (!closing)
             {
-                var ring = EndpointSize * dpi / 2;
-                ctx.DrawEllipse(HandleBrush2, RenderResources.GetPen(HandleColor, 2 * dpi), _anchors[0].P, ring, ring);
+                var chrome = RenderResources.GetPen(HandleColor, 1 * dpi);
+                var radius = HandleDotRadius * dpi;
+                ctx.DrawEllipse(null, chrome, cursor, radius, radius);
             }
+
+            return closing;
+        }
+
+        // "click to close": anchor 0 filled with the accent, inside a soft accent halo
+        private void DrawCloseHighlight(DrawingContext ctx, DpiScale uiscale)
+        {
+            var dpi = uiscale.DpiScaleX;
+            var p = _anchors[0].P;
+            var accent = HandleColor;
+            var halo = CloseSnapRadius * dpi;
+            ctx.DrawEllipse(RenderResources.GetBrush(Color.FromArgb(0x40, accent.R, accent.G, accent.B)),
+                            RenderResources.GetPen(Color.FromArgb(0xA0, accent.R, accent.G, accent.B), 1 * dpi),
+                            p, halo, halo);
+
+            var size = (EndpointSize + 2) * dpi;
+            ctx.DrawRectangle(HandleBrush, RenderResources.GetPen(Colors.White, 1 * dpi),
+                              new Rect(p.X - size / 2, p.Y - size / 2, size, size));
+        }
+
+        // the anchor a pen click would insert: an anchor square in translucent accent
+        private static void DrawGhostAnchor(DrawingContext ctx, Point p, DpiScale uiscale)
+        {
+            var dpi = uiscale.DpiScaleX;
+            var accent = HandleColor;
+            var size = AnchorSize * dpi;
+            ctx.DrawRectangle(RenderResources.GetBrush(Color.FromArgb(0x60, accent.R, accent.G, accent.B)),
+                              RenderResources.GetPen(accent, 1 * dpi),
+                              new Rect(p.X - size / 2, p.Y - size / 2, size, size));
         }
 
         // handle stems and dots first, then the anchor squares on top (endpoints of an open path a

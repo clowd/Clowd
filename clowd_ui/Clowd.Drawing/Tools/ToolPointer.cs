@@ -29,10 +29,6 @@ namespace Clowd.Drawing.Tools
         private int _handleGrabbed;
         private double _handleRatio;
 
-        // a press on an end anchor of an open path: released without moving, it hands the path to
-        // the pen tool to continue from that end
-        private bool _continueCandidate;
-
         // Keep state about last and current point (used to edit objects via dragging, e.g. move and resize).
         // Drag bookkeeping is root-window space in DOUBLE precision. The previous screen-space scheme
         // (PointToScreen/PointToClient) rounds to whole physical pixels on every event; at canvas zoom
@@ -130,7 +126,6 @@ namespace Clowd.Drawing.Tools
             // Similarly, if we mouse down on an object or handle but don’t end up dragging it anywhere, it’s also not an edit,
             // so we don’t set _wasEdit to true until the mouse-move event with the button pressed.
             _wasEdit = false;
-            _continueCandidate = false;
 
             if (graphic != null)
             {
@@ -143,12 +138,11 @@ namespace Clowd.Drawing.Tools
                         handleNumber = GraphicCount.ArrowHandle;
 
                     // Alt on a path anchor pulls fresh handles out of it (the drag then drives its
-                    // Out handle); a plain press on an end anchor may continue the path on release
+                    // Out handle). Continuing a path from an end anchor is the pen's alone.
                     if (graphic is GraphicPath path)
                     {
                         handleNumber = path.ResolveGrab(handleNumber, s.Modifiers);
                         path.SetActiveAnchor(handleNumber);
-                        _continueCandidate = path.IsEndpointHandle(handleNumber) && (s.Modifiers & KeyModifiers.Alt) == 0;
                     }
 
                     _selectMode = SelectionMode.HandleDrag;
@@ -321,19 +315,7 @@ namespace Clowd.Drawing.Tools
             {
                 // after resizing/rotating
                 _handleGrabbedObject.Normalize();
-                var grabbed = _handleGrabbedObject;
                 _handleGrabbedObject = null;
-
-                // a motionless press on an end anchor of an open path: hand it to the pen tool,
-                // which continues the path from that end (nothing was edited, so no step here)
-                if (_continueCandidate && !_wasEdit && grabbed is GraphicPath path)
-                {
-                    _continueCandidate = false;
-                    _selectMode = SelectionMode.None;
-                    drawingCanvas.ReleaseMouseCapture();
-                    drawingCanvas.ToolPen.ContinuePath(drawingCanvas, path, atStart: _handleGrabbed == 1);
-                    return;
-                }
             }
 
             if (_selectMode == SelectionMode.GroupSelection)

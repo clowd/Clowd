@@ -114,6 +114,46 @@ namespace Clowd.Drawing.Graphics
             return new[] { q0, q1, s, r0, r1 };
         }
 
+        /// <summary>The point on the cubic nearest <paramref name="target"/>: a coarse sample to
+        /// find the right span, then a ternary search inside it. Returns its parameter, the point,
+        /// and the distance.</summary>
+        public static (double T, Point P, double Distance) Nearest(Point p0, Point p1, Point p2, Point p3, Point target)
+        {
+            const int Samples = 32;
+            double bestT = 0, bestD = double.MaxValue;
+            for (int i = 0; i <= Samples; i++)
+            {
+                var t = (double)i / Samples;
+                var d = GraphicLine.Distance(Evaluate(p0, p1, p2, p3, t), target);
+                if (d < bestD)
+                {
+                    bestD = d;
+                    bestT = t;
+                }
+            }
+
+            double lo = Math.Max(0, bestT - 1.0 / Samples), hi = Math.Min(1, bestT + 1.0 / Samples);
+            for (int i = 0; i < 24; i++)
+            {
+                var m1 = lo + (hi - lo) / 3;
+                var m2 = hi - (hi - lo) / 3;
+                if (GraphicLine.Distance(Evaluate(p0, p1, p2, p3, m1), target) < GraphicLine.Distance(Evaluate(p0, p1, p2, p3, m2), target))
+                    hi = m2;
+                else
+                    lo = m1;
+            }
+
+            var tt = (lo + hi) / 2;
+            var p = Evaluate(p0, p1, p2, p3, tt);
+            return (tt, p, GraphicLine.Distance(p, target));
+        }
+
+        public static Point Evaluate(Point p0, Point p1, Point p2, Point p3, double t)
+        {
+            var u = 1 - t;
+            return p0 * (u * u * u) + p1 * (3 * u * u * t) + p2 * (3 * u * t * t) + p3 * (t * t * t);
+        }
+
         /// <summary>A segment with no handle on either end is a straight line; drawn as one so
         /// it never picks up bezier flattening artifacts.</summary>
         public static bool IsStraight(PathAnchor a, PathAnchor b) => !a.HasOut && !b.HasIn;

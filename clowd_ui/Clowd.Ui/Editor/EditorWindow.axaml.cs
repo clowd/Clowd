@@ -761,6 +761,11 @@ namespace Clowd.UI
             /// shortcut letter: the keycap shows it.</summary>
             public string Description;
 
+            /// <summary>Optional gestures listed one per row under <see cref="Description"/>, for
+            /// a tool with too many to read as prose (the description is then one short lead
+            /// sentence). Same rule: never the shortcut letter.</summary>
+            public string[] Bullets;
+
             /// <summary>The demo's file stem under Assets/ToolTips without the "tool-" prefix:
             /// "pen" shows tool-pen.gif. A missing GIF collapses the flyout to header + text.</summary>
             public string DemoName;
@@ -796,7 +801,17 @@ namespace Clowd.UI
             new ToolRegistryEntry { Tool = ToolType.Measure, DisplayName = "Measure", Shortcut = Key.M, IconKey = "IconToolMeasure", DemoName = "measure",
                 Description = "Drag between two points to measure the distance and angle between them. Hold Shift to snap to 45° steps." },
             new ToolRegistryEntry { Tool = ToolType.Pen, DisplayName = "Pen", Shortcut = Key.P, IconKey = "IconToolPen", DemoName = "pen",
-                Description = "Click to place a corner, or press and drag to pull out curve handles; hold Alt to drag one handle on its own. Double-click a point to switch it between corner and curve. Click the first point to close the shape, or press Enter to finish. Click either end of an existing path to keep extending it." },
+                Description = "Draw a path node by node.",
+                Bullets = new[]
+                {
+                    "Click for a corner, click-and-drag for a curve.",
+                    "While dragging curve handles, hold Alt to move one handle on its own, or Shift to snap to 45°.",
+                    "Press Backspace to remove the last node.",
+                    "Press Enter to finish drawing an open path, or click the first node to close it.",
+                    "Click the first or last node to extend an existing path.",
+                    "Click between two nodes on an existing path to add a new node between them.",
+                    "Double-click a node to switch it between corner and curve.",
+                } },
             new ToolRegistryEntry { Tool = ToolType.Brush, DisplayName = "Brush", Shortcut = Key.B, IconKey = "IconToolBrush", DemoName = "brush",
                 Description = "Press and drag to paint a freehand stroke. Stroke in the bar above sets its width." },
             new ToolRegistryEntry { Tool = ToolType.Highlighter, DisplayName = "Highlighter", Shortcut = Key.H, IconKey = "IconToolHighlighter", DemoName = "highlighter",
@@ -1025,6 +1040,7 @@ namespace Clowd.UI
                     Header = entry.DisplayName,
                     Shortcut = ShortcutLabel(entry.Shortcut),
                     Description = entry.Description,
+                    Bullets = entry.Bullets,
                     DemoSource = ToolTipCard.DemoUri("ToolTips", "tool-" + entry.DemoName),
                 },
             });

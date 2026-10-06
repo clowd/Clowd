@@ -121,6 +121,9 @@ namespace Clowd.Drawing.Tools
         /// Called by DrawingCanvas for the outgoing tool in OnToolChanged and before Undo/Redo.</summary>
         public virtual void CommitPending(DrawingCanvas canvas) { }
 
+        /// <summary>The pointer left the canvas: drop any hover chrome.</summary>
+        public virtual void OnMouseLeave(DrawingCanvas canvas) { }
+
         /// <summary>A bare key (no modifiers) routed from the editor's tunnel handler. Return true
         /// to swallow it; false lets the editor's own Escape/Delete/tool-letter handling run.</summary>
         public virtual bool OnKeyDown(DrawingCanvas canvas, Key key) => false;

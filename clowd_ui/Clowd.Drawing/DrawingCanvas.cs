@@ -1976,6 +1976,7 @@ namespace Clowd.Drawing
         {
             base.OnPointerExited(e);
             SetHoveredGraphic(null);
+            CurrentTool.Instance?.OnMouseLeave(this);
         }
 
         protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
@@ -2164,8 +2165,8 @@ namespace Clowd.Drawing
             }
 
             // the overlay's tools are sticky: cancelling aborts the gesture but keeps the tool
-            // (and its cursor). The other revert-to-pointer sites — ToolPen's Enter, GraphicPath's
-            // double-click continuation — belong to the pen, which the overlay never offers.
+            // (and its cursor). The other revert-to-pointer sites — ToolPen's Enter and close,
+            // GraphicPath's double-click finish — belong to the pen, which the overlay never offers.
             if (!IsOverlayMode)
                 Tool = ToolType.Pointer;
             _isToolMouseDown = false;
