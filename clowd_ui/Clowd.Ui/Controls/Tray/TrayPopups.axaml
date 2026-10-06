@@ -25,44 +25,9 @@
              readers: retune the shadow and the menu still lands 8 px off its tile. -->
         <Thickness x:Key="TrayMenuShadowReserve">30,18,30,42</Thickness>
 
-        <!-- Spec §10. One look, two users: the hover tooltip and the 6 s status blip are the same little
-             dark chip, so they are the same theme; a blip that looked different would read as a second
-             kind of message when it is really the same voice. No arrow (an arrow needs a placement it
-             can point from, and these are re-aimed on every rotation) and no wrapping: a tip long
-             enough to wrap belongs in the window, not over the desktop. -->
-        <ControlTheme x:Key="TrayTipTheme" TargetType="ContentControl">
-            <Setter Property="Background" Value="{x:Static tray:TrayTokens.TipFill}" />
-            <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
-            <Setter Property="FontSize" Value="11" />
-            <!-- spec writes CSS "4,8" (vertical 4, horizontal 8) -->
-            <Setter Property="Padding" Value="8,4" />
-            <Setter Property="CornerRadius" Value="6" />
-            <!-- the clearance from the strip, as transparent room inside the popup (TrayTokens.TipMargin
-                 says why it is not a placement offset) -->
-            <Setter Property="Margin" Value="{x:Static tray:TrayTokens.TipMargin}" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Template">
-                <ControlTemplate>
-                    <Border Name="_bg"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="{TemplateBinding CornerRadius}"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter Name="PART_ContentPresenter"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-        </ControlTheme>
-
-        <!-- A ToolTip IS a ContentControl, so the chip above is the whole theme; the placement and the
-             350 ms delay are per-control facts the window writes, not part of the look. -->
-        <ControlTheme x:Key="TrayToolTipTheme"
-                      TargetType="ToolTip"
-                      BasedOn="{StaticResource TrayTipTheme}" />
+        <!-- The tooltip chip itself (TrayTipTheme / TrayToolTipTheme) lives in TrayTips.axaml, merged
+             into the application resources by AppResources.axaml so the editors' tool strips can wear
+             the same chip; the ToolTip style below finds it there. -->
 
         <!-- Spec §5. The menu is one step darker and more opaque than the tray: it sits ON the tray's
              own window edge, so a lighter panel would look like a hole in the strip. Opaque enough that

@@ -178,6 +178,10 @@ namespace Clowd.UI.Controls.Tray
             // write covers every current and future item; the :disabled themes already pin the hover veil to 0.
             ToolTip.SetShowOnDisabled(Tray, true);
 
+            // one tip popup for the whole strip, re-aimed from tile to tile rather than closed and
+            // reopened per tile, which flashed the desktop between two tips (StripToolTips)
+            StripToolTips.SetIsEnabled(Tray, true);
+
             if (IsFixedSize)
             {
                 var size = options.FixedTraySize.Value;
@@ -885,38 +889,13 @@ namespace Clowd.UI.Controls.Tray
         }
 
         /// <summary>
-        /// The tip's placement (see <see cref="AimToolTips"/>): below a horizontal strip or right of a
-        /// vertical one, centred on the control, its anchor the control's span along the strip by the
-        /// strip's full depth across it. Flipped to the other side when that one has no room, slid
-        /// along the strip to stay on screen.
+        /// The tip's placement (see <see cref="AimToolTips"/>): the strip placement the editors' bars
+        /// share (<see cref="StripToolTips.Place"/>), with the tray as the strip and its own axis.
         /// </summary>
         private static void PlaceToolTip(CustomPopupPlacement placement)
         {
-            if (placement.Target is not Visual target)
-                return;
-
-            var tray = target.FindAncestorOfType<FloatingTray>(includeSelf: true);
-            var horizontal = tray?.Orientation != Orientation.Vertical;
-
-            // the positioner hands over the control's own rect already in the top level's
-            // coordinates, which is the space the anchor is written back in
-            var own = placement.AnchorRectangle;
-
-            // the strip body, translated to the control and then moved with it into that space;
-            // without a tray (or before layout) the control alone is the anchor
-            var across = tray?.TranslatePoint(default, target) is { } origin
-                ? new Rect(origin + own.Position, tray.Bounds.Size)
-                : own;
-
-            placement.AnchorRectangle = horizontal
-                ? new Rect(own.X, across.Y, own.Width, across.Height)
-                : new Rect(across.X, own.Y, across.Width, own.Height);
-            placement.Anchor = horizontal ? PopupAnchor.Bottom : PopupAnchor.Right;
-            placement.Gravity = horizontal ? PopupGravity.Bottom : PopupGravity.Right;
-            placement.ConstraintAdjustment = horizontal
-                ? PopupPositionerConstraintAdjustment.FlipY | PopupPositionerConstraintAdjustment.SlideX
-                : PopupPositionerConstraintAdjustment.FlipX | PopupPositionerConstraintAdjustment.SlideY;
-            placement.Offset = default;
+            var tray = (placement.Target as Visual)?.FindAncestorOfType<FloatingTray>(includeSelf: true);
+            StripToolTips.Place(placement, tray, tray?.Orientation != Orientation.Vertical);
         }
     }
 }

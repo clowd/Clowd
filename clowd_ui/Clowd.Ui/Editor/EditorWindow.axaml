@@ -262,6 +262,7 @@
             x:Name="PropertiesBar"
             HorizontalAlignment="Stretch"
             Background="Transparent"
+            Classes="tipBridge"
             Orientation="Horizontal">
             <controls:DockAndWrapPanel.Styles>
                 <!--  Direct children only: a bare StackPanel selector also reaches the style
@@ -631,6 +632,7 @@
             <controls:DockAndWrapPanel
                 x:Name="ToolBar"
                 Grid.Column="0"
+                Classes="tipBridge"
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 

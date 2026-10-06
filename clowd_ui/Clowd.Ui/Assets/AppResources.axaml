@@ -1,9 +1,15 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:controls="clr-namespace:Clowd.UI.Controls">
+        xmlns:controls="clr-namespace:Clowd.UI.Controls"
+        xmlns:tray="using:Clowd.UI.Controls.Tray">
 
     <Styles.Resources>
         <ResourceDictionary>
+            <!-- The floating tray's tooltip chip, keyed: StripToolTips asks for it by name for the
+                 tray and the "tipBridge" bars below, and nothing picks it up implicitly. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://Clowd.Ui/Controls/Tray/TrayTips.axaml" />
+            </ResourceDictionary.MergedDictionaries>
             <!-- Clowd brand color — single source for the logo (and anything else brand-tinted). -->
             <Color x:Key="ClowdAccentColor">#00AFF0</Color>
             <SolidColorBrush x:Key="ClowdAccentBrush" Color="#00AFF0" />
@@ -191,6 +197,29 @@
     </Style>
     <Style Selector=":is(MenuFlyoutPresenter)">
         <Setter Property="controls:MenuScrollFix.Enabled" Value="True" />
+    </Style>
+
+    <!-- "tipBridge": a button strip whose tooltip stays up while the pointer moves from one button to
+         the next, re-aimed and refilled in place rather than closed and reopened (StripToolTips says
+         why that matters). The panel takes a transparent fill so its gaps still count as the strip:
+         without one, a gap hit-tests to whatever is behind it and the tip closes there. -->
+    <Style Selector=":is(Panel).tipBridge">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="controls:StripToolTips.IsEnabled" Value="True" />
+    </Style>
+
+    <!-- A tipBridge bar's tips sit outside the bar on its free side (StripToolTips), on the tray's
+         delay; plain text ones wear the tray's chip. The owners are the bar's buttons and those in its
+         grouping StackPanels — named explicitly rather than as any descendant, because a button's
+         flyout is its logical child and the menu's own tips must keep their placement. A rich tip (a
+         ToolTip instance wearing RichTipToolTipTheme) sets its Placement and offset locally, and a
+         local value beats these setters, so it keeps its place beside the button. -->
+    <Style Selector=":is(Panel).tipBridge > :is(Control), :is(Panel).tipBridge > StackPanel > :is(Control)">
+        <Setter Property="ToolTip.Placement" Value="Custom" />
+        <Setter Property="ToolTip.CustomPopupPlacementCallback" Value="{x:Static controls:StripToolTips.Placement}" />
+        <Setter Property="ToolTip.HorizontalOffset" Value="0" />
+        <Setter Property="ToolTip.VerticalOffset" Value="0" />
+        <Setter Property="ToolTip.ShowDelay" Value="{x:Static tray:TrayTokens.ToolTipShowDelayMs}" />
     </Style>
 
 </Styles>

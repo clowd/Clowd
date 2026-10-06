@@ -490,7 +490,7 @@
             x:Name="TopBar"
             HorizontalAlignment="Stretch"
             Background="Transparent"
-            Classes="chromeBar"
+            Classes="chromeBar tipBridge"
             Orientation="Horizontal">
             <controls:DockAndWrapPanel.Styles>
                 <!--  Height and margin are the chrome's to say (see the root grid's styles); what
@@ -641,7 +641,7 @@
             <controls:DockAndWrapPanel
                 x:Name="ToolBar"
                 Grid.Column="0"
-                Classes="chromeBar"
+                Classes="chromeBar tipBridge"
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 
