@@ -808,7 +808,7 @@ namespace Clowd.UI
             new ToolRegistryEntry { Tool = ToolType.StickyNote, DisplayName = "Sticky Note", Shortcut = Key.N, IconKey = "IconToolStickyNote", DemoName = "note", IconClasses = "tight",
                 Description = "Click to stick a note, then type into it. Enter commits and Shift+Enter adds a line." },
             new ToolRegistryEntry { Tool = ToolType.Pixelate, DisplayName = "Obscure", Shortcut = Key.O, IconKey = "IconToolPixelate", DemoName = "obscure",
-                Description = "Drag a box over the part of the image to hide. Hold Shift for a square." },
+                Description = "Drag a box over the part of an image to hide. Hold Shift for a square. Only image objects under the box are obscured, not shapes or text." },
         };
 
         /// <summary>Bare key to tool, built from <see cref="ToolRegistry"/> so the key handler and
