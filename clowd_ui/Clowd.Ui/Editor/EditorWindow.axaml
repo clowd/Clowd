@@ -648,6 +648,16 @@
                       and inserted at the front of this panel; the fixed Undo/Redo/customize
                       buttons below dock to the bottom of the strip.  -->
 
+                <!--  Shown by the panel only when overflow is set to Hide and some tools did not
+                      fit: it follows the last tool that did, and opens the rest as a menu.  -->
+                <controls:ToolButton
+                    x:Name="btnMoreTools"
+                    Classes="tight"
+                    controls:DockAndWrapPanel.IsOverflowButton="True"
+                    Click="moreTools_Click"
+                    IconPath="{StaticResource IconDotsHorizontal}"
+                    ToolTip.Tip="More tools" />
+
                 <controls:ToolButton
                     controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding ElementName=drawingCanvas, Path=CommandUndo, Mode=OneWay}"

@@ -295,6 +295,16 @@ namespace Clowd.UI.Controls
                     Source = SettingsRoot.Current.General,
                     Mode = BindingMode.TwoWay,
                 });
+
+            // the overflow picker, the same way and for the same reason
+            overflowCombo.ItemTemplate = layoutCombo.ItemTemplate;
+            overflowCombo.ItemsSource = Enum.GetValues(typeof(ToolbarOverflow));
+            overflowCombo.Bind(SelectingItemsControl.SelectedItemProperty,
+                new Binding(nameof(SettingsGeneral.EditorToolbarOverflow))
+                {
+                    Source = SettingsRoot.Current.General,
+                    Mode = BindingMode.TwoWay,
+                });
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

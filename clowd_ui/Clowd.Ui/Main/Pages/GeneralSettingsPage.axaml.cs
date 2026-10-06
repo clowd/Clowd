@@ -20,6 +20,7 @@ namespace Clowd.UI.Pages
 
             BindEnumCombo(ThemeCombo, nameof(SettingsGeneral.Theme), typeof(AppTheme));
             BindEnumCombo(LayoutCombo, nameof(SettingsGeneral.EditorLayout), typeof(EditorLayout));
+            BindEnumCombo(OverflowCombo, nameof(SettingsGeneral.EditorToolbarOverflow), typeof(ToolbarOverflow));
             BindEnumCombo(TrayClickCombo, nameof(SettingsGeneral.TrayClick), typeof(ClickAction));
             BindEnumCombo(ShortcutClickCombo, nameof(SettingsGeneral.ShortcutClick), typeof(ClickAction));
             BindEnumCombo(UpdateIntervalCombo, nameof(SettingsGeneral.UpdateCheckInterval), typeof(UpdateInterval));

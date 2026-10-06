@@ -27,7 +27,7 @@
         Placement="Right">
         <Border
             x:Name="popupRoot"
-            Width="220"
+            Width="440"
             Margin="10"
             Padding="8"
             Background="{DynamicResource ApplicationBackgroundBrush}"
@@ -36,57 +36,86 @@
             BoxShadow="0 2 8 0 #80000000"
             CornerRadius="8"
             TextElement.Foreground="{DynamicResource SemiColorText0}">
-            <StackPanel>
+            <!--  Two columns, so the flyout is as tall as the tool list and no taller: the tools
+                  on the left, every other setting on the right, each under a small caption.  -->
+            <Grid ColumnDefinitions="*,Auto,200" RowDefinitions="Auto,*">
+                <Grid.Styles>
+                    <Style Selector="TextBlock.caption">
+                        <Setter Property="Margin" Value="4,0,4,4" />
+                        <Setter Property="FontSize" Value="11" />
+                        <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+                    </Style>
+                </Grid.Styles>
+
                 <TextBlock
                     x:Name="titleText"
+                    Grid.ColumnSpan="3"
                     Margin="4,2,4,8"
                     FontSize="12"
                     FontWeight="SemiBold"
                     Foreground="{DynamicResource SemiColorText0}"
                     Text="Customize toolbar" />
 
-                <!--  The chrome setting, repeated here because this popup is where someone already
-                      fiddling with the toolbar would look for it. The stock combo box, not a
-                      ThemedDropDown: this popup wears neither chrome.  -->
-                <TextBlock
-                    Margin="4,0,4,4"
-                    FontSize="11"
-                    Foreground="{DynamicResource SemiColorText2}"
-                    Text="Layout" />
-                <ComboBox
-                    x:Name="layoutCombo"
-                    Margin="4,0,4,10"
-                    HorizontalAlignment="Stretch" />
+                <StackPanel Grid.Row="1" Grid.Column="0">
+                    <TextBlock Classes="caption" Text="Tools &amp; Order" />
 
-                <!--  Rows are generated in the code-behind; the drop indicator is a sibling laid
-                      over them, as in the layers panel.  -->
-                <Panel>
-                    <StackPanel x:Name="rowsHost" />
-                    <Border
-                        x:Name="dropIndicator"
-                        Height="2"
-                        VerticalAlignment="Top"
-                        IsHitTestVisible="False"
-                        IsVisible="False" />
-                </Panel>
+                    <!--  Rows are generated in the code-behind; the drop indicator is a sibling laid
+                          over them, as in the layers panel.  -->
+                    <Panel>
+                        <StackPanel x:Name="rowsHost" />
+                        <Border
+                            x:Name="dropIndicator"
+                            Height="2"
+                            VerticalAlignment="Top"
+                            IsHitTestVisible="False"
+                            IsVisible="False" />
+                    </Panel>
+                </StackPanel>
 
-                <Button
-                    x:Name="btnResetOrder"
-                    Margin="4,8,4,0"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Center"
-                    Content="Reset Tool Order" />
+                <Rectangle
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Width="1"
+                    Margin="8,0"
+                    Fill="{DynamicResource SemiColorBorder}" />
 
-                <!--  Hidden unless the host asks for it: the video editor's tools carry no saved
-                      settings to reset.  -->
-                <Button
-                    x:Name="btnResetSettings"
-                    Margin="4,4,4,2"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Center"
-                    Classes="Danger"
-                    Content="Reset Tool Settings" />
-            </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="2">
+                    <!--  The chrome setting, repeated here because this popup is where someone
+                          already fiddling with the toolbar would look for it. The stock combo box,
+                          not a ThemedDropDown: this popup wears neither chrome.  -->
+                    <TextBlock Classes="caption" Text="Layout" />
+                    <ComboBox
+                        x:Name="layoutCombo"
+                        Margin="4,0,4,10"
+                        HorizontalAlignment="Stretch" />
+
+                    <!--  What the strip does with tools that do not fit — a second lane, or a "more"
+                          menu. Shared by both editors, like the chrome.  -->
+                    <TextBlock Classes="caption" Text="Overflow" />
+                    <ComboBox
+                        x:Name="overflowCombo"
+                        Margin="4,0,4,10"
+                        HorizontalAlignment="Stretch" />
+
+                    <TextBlock Classes="caption" Text="Default settings" />
+                    <Button
+                        x:Name="btnResetOrder"
+                        Margin="4,0,4,0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Content="Reset Tool Order" />
+
+                    <!--  Hidden unless the host asks for it: the video editor's tools carry no
+                          saved settings to reset.  -->
+                    <Button
+                        x:Name="btnResetSettings"
+                        Margin="4,4,4,2"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Classes="Danger"
+                        Content="Reset Tool Settings" />
+                </StackPanel>
+            </Grid>
         </Border>
     </Popup>
 </UserControl>

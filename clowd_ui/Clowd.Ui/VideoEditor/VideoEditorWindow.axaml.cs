@@ -247,6 +247,7 @@ namespace Clowd.UI.VideoEditor
             InitializeComponent();
 
             ApplyChrome();
+            ApplyToolbarOverflow();
             ApplyPreviewChecker();
             ActualThemeVariantChanged += (_, _) => ApplyPreviewChecker();
             General.PropertyChanged += OnGeneralSettingChanged;
@@ -1617,6 +1618,13 @@ namespace Clowd.UI.VideoEditor
         {
             if (e.PropertyName is null or nameof(SettingsGeneral.EditorLayout))
                 ApplyChrome();
+            if (e.PropertyName is null or nameof(SettingsGeneral.EditorToolbarOverflow))
+                ApplyToolbarOverflow();
+        }
+
+        private void ApplyToolbarOverflow()
+        {
+            ToolBar.HideOverflow = General is { EditorToolbarOverflow: ToolbarOverflow.Hide };
         }
 
         /// <summary>
@@ -1707,6 +1715,8 @@ namespace Clowd.UI.VideoEditor
                     ToolBar.Children.Insert(index++, button);
             }
 
+            ToolBar.PinnedChild = tools.FirstOrDefault(t => t.Key == Settings?.PinnedOverflowTool).Button;
+
             // the voice recorder's overlay outlives its button: hiding the button while a take is
             // set up would otherwise leave the overlay on the preview with nothing to close it
             if (btnVoice.Parent == null && btnVoice.IsChecked == true)
@@ -1790,6 +1800,7 @@ namespace Clowd.UI.VideoEditor
 
             Settings.ToolbarOrder = null;
             Settings.HiddenTools = null;
+            Settings.PinnedOverflowTool = null;
             RebuildToolStrip();
             TrySaveSettings();
             customizePopup.Rebuild();
@@ -1798,6 +1809,29 @@ namespace Clowd.UI.VideoEditor
         private void customize_Click(object sender, RoutedEventArgs e)
         {
             customizePopup.Open(btnCustomize);
+        }
+
+        /// <summary>Lists the tools the strip had to hide, and runs and pins the one picked: it
+        /// keeps the strip's last slot from then on, whenever its own place is cut off.</summary>
+        private void moreTools_Click(object sender, RoutedEventArgs e)
+        {
+            var order = ToolbarConfig.ResolveOrder(Settings?.ToolbarOrder, StripToolKeys);
+            var tools = StripTools;
+            var entries = order
+                .Select(key => tools.FirstOrDefault(t => t.Key == key))
+                .Where(t => t.Button != null)
+                .Select(t => new ToolStripOverflowEntry(t.Key, t.Button, t.Label, null));
+
+            ToolStripOverflowMenu.Show(ToolBar, btnMoreTools, entries, picked =>
+            {
+                picked.Button.PerformClick();
+                if (Settings == null)
+                    return;
+
+                Settings.PinnedOverflowTool = picked.Key;
+                ToolBar.PinnedChild = picked.Button;
+                TrySaveSettings();
+            });
         }
 
         private void ApplySidebarVisible(bool value)

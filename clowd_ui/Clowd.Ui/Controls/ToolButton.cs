@@ -56,6 +56,10 @@ namespace Clowd.UI.Controls
             if (CanToggle)
                 base.Toggle();
         }
+
+        /// <summary>Does what a click on the button does — toggle, command, Click handlers — for a
+        /// stand-in such as a tool strip's "more" menu item.</summary>
+        public void PerformClick() => OnClick();
     }
 
     /// <summary>Builds the progress-arc geometry for the <see cref="ToolButton"/> ring (Avalonia 11.3

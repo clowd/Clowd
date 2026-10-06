@@ -120,6 +120,7 @@ namespace Clowd.UI
             InitializeComponent();
 
             ApplyChrome();
+            ApplyToolbarOverflow();
             _settings.General.PropertyChanged += OnGeneralSettingChanged;
             Closed += (_, _) => _settings.General.PropertyChanged -= OnGeneralSettingChanged;
 
@@ -938,6 +939,13 @@ namespace Clowd.UI
         {
             if (e.PropertyName is null or nameof(SettingsGeneral.EditorLayout))
                 ApplyChrome();
+            if (e.PropertyName is null or nameof(SettingsGeneral.EditorToolbarOverflow))
+                ApplyToolbarOverflow();
+        }
+
+        private void ApplyToolbarOverflow()
+        {
+            ToolBar.HideOverflow = _settings.General.EditorToolbarOverflow == ToolbarOverflow.Hide;
         }
 
         /// <summary>
@@ -1002,6 +1010,7 @@ namespace Clowd.UI
             _generatedToolControls.Clear();
 
             var generated = new List<Control>();
+            ToolButton pinned = null;
 
             // the bare ToolTip theme the rich tips wear (AppResources.axaml); resolved once per
             // rebuild rather than per button, since FindResource walks up to the app resources
@@ -1014,13 +1023,41 @@ namespace Clowd.UI
                     continue;
 
                 var entry = GetToolEntry(tool);
-                if (entry != null)
-                    generated.Add(CreateToolButton(entry, tipTheme));
+                if (entry == null)
+                    continue;
+
+                var button = CreateToolButton(entry, tipTheme);
+                generated.Add(button);
+                if (tool.ToString() == _settings.Editor.PinnedOverflowTool)
+                    pinned = button;
             }
 
             for (int i = 0; i < generated.Count; i++)
                 ToolBar.Children.Insert(i, generated[i]);
             _generatedToolControls.AddRange(generated);
+            ToolBar.PinnedChild = pinned;
+        }
+
+        /// <summary>Lists the tools the strip had to hide, and runs and pins the one picked: it
+        /// keeps the strip's last slot from then on, whenever its own place is cut off.</summary>
+        private void moreTools_Click(object sender, RoutedEventArgs e)
+        {
+            var entries = new List<ToolStripOverflowEntry>();
+            foreach (var button in _generatedToolControls.OfType<ToolButton>())
+            {
+                var key = (string)button.CommandParameter;
+                var entry = GetToolEntry(Enum.Parse<ToolType>(key));
+                var shortcut = entry.Shortcut == Key.None ? null : new KeyGesture(entry.Shortcut);
+                entries.Add(new ToolStripOverflowEntry(key, button, entry.DisplayName, shortcut));
+            }
+
+            ToolStripOverflowMenu.Show(ToolBar, btnMoreTools, entries, picked =>
+            {
+                picked.Button.PerformClick();
+                _settings.Editor.PinnedOverflowTool = picked.Key;
+                ToolBar.PinnedChild = picked.Button;
+                TrySaveSettings();
+            });
         }
 
         private ToolButton CreateToolButton(ToolRegistryEntry entry, ControlTheme tipTheme)
@@ -1170,6 +1207,7 @@ namespace Clowd.UI
         {
             _settings.Editor.ToolbarOrder = null;
             _settings.Editor.HiddenTools = null;
+            _settings.Editor.PinnedOverflowTool = null;
             RebuildToolStrip();
             TrySaveSettings();
             customizePopup.Rebuild();

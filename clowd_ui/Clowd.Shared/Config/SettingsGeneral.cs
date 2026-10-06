@@ -18,6 +18,19 @@ namespace Clowd.Config
         Compact,
     }
 
+    /// <summary>
+    /// What an editor's tool strip does when it has more tools than room: wrap them onto a second
+    /// lane (the original behaviour), or keep one lane and move the rest behind a "more" button.
+    /// </summary>
+    public enum ToolbarOverflow
+    {
+        [Description("Wrap")]
+        Wrap,
+
+        [Description("Hide")]
+        Hide,
+    }
+
     public enum AppTheme
     {
         [Description("Follow system")]
@@ -215,6 +228,18 @@ namespace Clowd.Config
         }
 
         /// <summary>
+        /// What the editors' tool strips do with tools that do not fit. Picked up live, like
+        /// <see cref="EditorLayout"/>, which it sits beside in both editors' customize flyouts.
+        /// </summary>
+        [DisplayName("Toolbar overflow")]
+        [Description("What the editor tool bars do with tools that do not fit.")]
+        public ToolbarOverflow EditorToolbarOverflow
+        {
+            get => _editorToolbarOverflow;
+            set => Set(ref _editorToolbarOverflow, value);
+        }
+
+        /// <summary>
         /// macOS only: run window content up under a transparent title bar, so the traffic lights
         /// float over it, instead of sitting below a title bar of its own. Read once per window in
         /// SystemThemedWindow's constructor, which is why the description promises new windows
@@ -326,6 +351,7 @@ namespace Clowd.Config
         private bool _registerAutoStart = DefaultRegisterAutoStart;
         private AppTheme _theme = AppTheme.System;
         private EditorLayout _editorLayout = EditorLayout.Modern;
+        private ToolbarOverflow _editorToolbarOverflow = ToolbarOverflow.Wrap;
 
         // On by default: it is what a Tahoe-era mac window looks like, and the windows that
         // extend have been laid out for it (the gutters in SystemThemedWindow).

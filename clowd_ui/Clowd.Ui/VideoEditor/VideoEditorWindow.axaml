@@ -847,6 +847,16 @@
                     </ToolTip.Tip>
                 </controls:ToolButton>
 
+                <!--  Shown by the panel only when overflow is set to Hide and some tools did not
+                      fit: it follows the last tool that did, and opens the rest as a menu.  -->
+                <controls:ToolButton
+                    x:Name="btnMoreTools"
+                    Classes="tight"
+                    controls:DockAndWrapPanel.IsOverflowButton="True"
+                    Click="moreTools_Click"
+                    IconPath="{StaticResource IconDotsHorizontal}"
+                    ToolTip.Tip="More tools" />
+
                 <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
                 <controls:ToolButton
                     Classes="wide"

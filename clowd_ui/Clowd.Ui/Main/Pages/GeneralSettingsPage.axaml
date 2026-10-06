@@ -166,6 +166,16 @@
                                    Text="Chrome for the image and video editors. Modern floats rounded tool bars on the window background; Compact is the denser, flat look. Editors already open follow the change straight away." />
                     </StackPanel>
 
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Toolbar overflow" />
+                            <ComboBox x:Name="OverflowCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="What the editor tool bars do with tools that do not fit. Wrap adds a second column; Hide keeps one and puts the rest behind a more button, where the last tool you pick stays on the bar." />
+                    </StackPanel>
+
                     <!-- macOS only (hidden in the code-behind): the window chrome choice. Read
                          once per window in SystemThemedWindow's constructor, hence the caption's
                          promise about new windows; the main window reopens itself on the spot so
