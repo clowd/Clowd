@@ -787,7 +787,7 @@ namespace Clowd.UI
             public string IconClasses;
         }
 
-        // Rows mirror the original static XAML 1:1 (icons and the Count/Text tighter-inset
+        // Rows mirror the original static XAML 1:1 (icons and the Text tighter-inset
         // overrides). The shortcut, the flyout copy and the demo names live here; the GIFs come
         // from tools/tool-tips/generate.py (README there). The shortcut is not in the copy and not
         // in the GIF: the card draws it as a keycap beside the header from Shortcut.
@@ -825,7 +825,7 @@ namespace Clowd.UI
                 Description = "Press and drag to paint a freehand stroke. Stroke in the bar above sets its width." },
             new ToolRegistryEntry { Tool = ToolType.Highlighter, DisplayName = "Highlighter", Shortcut = Key.H, IconKey = "IconToolHighlighter", DemoName = "highlighter",
                 Description = "Press and drag to mark over text or detail with translucent ink, flat-tipped like a marker. Stroke in the bar above sets its height." },
-            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", Shortcut = Key.C, IconKey = "IconToolNumericCount", DemoName = "count", IconClasses = "tight",
+            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", Shortcut = Key.C, IconKey = "IconToolNumericCount", DemoName = "count",
                 Description = "Click to drop the next numbered step. Drag before letting go to pull an arrow out of it." },
             new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", Shortcut = Key.T, IconKey = "IconToolText", DemoName = "text", IconClasses = "tight",
                 Description = "Click where the text should go, then type. Enter commits and Shift+Enter starts a new line." },
