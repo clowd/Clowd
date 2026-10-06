@@ -722,6 +722,7 @@ namespace Clowd.UI
 
             // bare tool letters (replaces the WPF BareKeyBindings, decision table #36). The map is
             // built from ToolRegistry's Shortcut field, the same value the flyout keycap shows.
+            // Pan (Space) and Selection (Escape) never get here: both keys are handled above.
             if (ToolShortcuts.TryGetValue(e.Key, out var tool)) {
                 e.Handled = true;
                 SelectToolExecuted(tool.ToString());
@@ -792,9 +793,9 @@ namespace Clowd.UI
         // in the GIF: the card draws it as a keycap beside the header from Shortcut.
         private static readonly ToolRegistryEntry[] ToolRegistry =
         {
-            new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", Shortcut = Key.D, IconKey = "IconToolNone", DemoName = "pan",
+            new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", Shortcut = Key.Space, IconKey = "IconToolNone", DemoName = "pan",
                 Description = "Drag to move the view around. Hold Space with any tool to pan for a moment." },
-            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", Shortcut = Key.S, IconKey = "IconToolPointer", DemoName = "select", IconClasses = "iconNudgeRight",
+            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", Shortcut = Key.Escape, IconKey = "IconToolPointer", DemoName = "select", IconClasses = "iconNudgeRight",
                 Description = "Click an object to select it and drag to move it, or drag across empty canvas to select everything inside the box." },
             new ToolRegistryEntry { Tool = ToolType.Rectangle, DisplayName = "Rectangle", Shortcut = Key.R, IconKey = "IconToolRectangle", DemoName = "rectangle",
                 Description = "Drag from one corner to the opposite one to draw an outline. Hold Shift for a perfect square." },
@@ -852,9 +853,13 @@ namespace Clowd.UI
         }
 
         /// <summary>The keycap label for a registry shortcut: the enum name, which for the letter
-        /// keys is the letter itself (Key.R is "R"). Anything fancier (digits as "D1", OEM keys)
-        /// would need a table here; the registry only uses letters today.</summary>
-        private static string ShortcutLabel(Key key) => key == Key.None ? null : key.ToString();
+        /// keys is the letter itself (Key.R is "R"). Escape is shortened to "Esc"; anything fancier
+        /// (digits as "D1", OEM keys) would need entries here.</summary>
+        private static string ShortcutLabel(Key key) => key switch {
+            Key.None => null,
+            Key.Escape => "Esc",
+            _ => key.ToString(),
+        };
 
         private readonly List<Control> _generatedToolControls = new List<Control>();
 
