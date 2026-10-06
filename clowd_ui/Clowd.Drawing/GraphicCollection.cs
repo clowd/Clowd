@@ -109,6 +109,7 @@ namespace Clowd.Drawing
             _graphics.Add(graphic);
             _byId[graphic.Id] = graphic;
             graphic.PropertyChanged += (sender, args) => GraphicPropertyChanged(graphic, args);
+            graphic.OnAttached(_parent);
             OnStructuralChange(graphic.IsSelected);
         }
 
@@ -121,6 +122,7 @@ namespace Clowd.Drawing
             _graphics.Insert(index, graphic);
             _byId[graphic.Id] = graphic;
             graphic.PropertyChanged += (sender, args) => GraphicPropertyChanged(graphic, args);
+            graphic.OnAttached(_parent);
             OnStructuralChange(graphic.IsSelected);
         }
 
@@ -142,6 +144,7 @@ namespace Clowd.Drawing
                 _graphics.Add(graphic);
                 _byId[graphic.Id] = graphic;
                 graphic.PropertyChanged += (sender, args) => GraphicPropertyChanged(captured, args);
+                graphic.OnAttached(_parent);
                 anySelected |= graphic.IsSelected;
             }
 

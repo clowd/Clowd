@@ -29,6 +29,7 @@ namespace Clowd.Drawing.History
             public Dictionary<string, FieldRecord> BaselineById;
             public string[] BaselineOrder;
             public Color BaselineBackground;
+            public MeasureUnits BaselineMeasureUnits;
         }
 
         /// <summary>The record-space document at the saved cursor (validation replay result).</summary>
@@ -37,6 +38,7 @@ namespace Clowd.Drawing.History
             public Dictionary<string, FieldRecord> ById;
             public string[] Order;
             public Color Background;
+            public MeasureUnits MeasureUnits;
         }
 
         public static JsonObject Serialize(HistoryStep current, CommittedState committed)
@@ -82,6 +84,7 @@ namespace Clowd.Drawing.History
             var byId = new Dictionary<string, FieldRecord>(committed.ById, StringComparer.Ordinal);
             var order = committed.Order;
             var background = committed.Background;
+            var units = committed.MeasureUnits;
             for (int j = cursor - 1; j >= 0; j--)
             {
                 var s = steps[j];
@@ -97,9 +100,11 @@ namespace Clowd.Drawing.History
                     order = s.Order.Value.Before;
                 if (s.Background.HasValue)
                     background = s.Background.Value.Before;
+                if (s.MeasureUnits.HasValue)
+                    units = s.MeasureUnits.Value.Before;
             }
 
-            return SerializeState(byId, order, background);
+            return SerializeState(byId, order, background, units);
         }
 
         /// <summary>
@@ -117,6 +122,8 @@ namespace Clowd.Drawing.History
 
             var baseline = history["baseline"].AsObject();
             parsed.BaselineBackground = baseline["BackgroundColor"].Deserialize<Color>(GraphicsSerializer.Options);
+            // absent from files written before measure units existed: pixels
+            parsed.BaselineMeasureUnits = baseline["MeasureUnits"]?.Deserialize<MeasureUnits>(GraphicsSerializer.Options);
             parsed.BaselineById = new Dictionary<string, FieldRecord>(StringComparer.Ordinal);
             var order = new List<string>();
             foreach (var node in baseline["Graphics"].AsArray())
@@ -154,10 +161,11 @@ namespace Clowd.Drawing.History
             var byId = new Dictionary<string, FieldRecord>(parsed.BaselineById, StringComparer.Ordinal);
             var order = parsed.BaselineOrder;
             var background = parsed.BaselineBackground;
+            var units = parsed.BaselineMeasureUnits;
             ReplayedState atCursor = null;
 
             if (parsed.Cursor == 0)
-                atCursor = Snapshot(byId, order, background);
+                atCursor = Snapshot(byId, order, background, units);
 
             for (int j = 0; j < parsed.Steps.Count; j++)
             {
@@ -177,19 +185,22 @@ namespace Clowd.Drawing.History
                     order = s.Order.Value.After;
                 if (s.Background.HasValue)
                     background = s.Background.Value.After;
+                if (s.MeasureUnits.HasValue)
+                    units = s.MeasureUnits.Value.After;
 
                 if (j == parsed.Cursor - 1)
-                    atCursor = Snapshot(byId, order, background);
+                    atCursor = Snapshot(byId, order, background, units);
             }
 
             return atCursor;
 
-            static ReplayedState Snapshot(Dictionary<string, FieldRecord> byId, string[] order, Color background) =>
+            static ReplayedState Snapshot(Dictionary<string, FieldRecord> byId, string[] order, Color background, MeasureUnits units) =>
                 new ReplayedState
                 {
                     ById = new Dictionary<string, FieldRecord>(byId, StringComparer.Ordinal),
                     Order = order,
                     Background = background,
+                    MeasureUnits = units,
                 };
         }
 
@@ -204,7 +215,7 @@ namespace Clowd.Drawing.History
         public static JsonObject SerializeReplayed(ReplayedState state, bool normalize)
         {
             if (!normalize)
-                return SerializeState(state.ById, state.Order, state.Background);
+                return SerializeState(state.ById, state.Order, state.Background, state.MeasureUnits);
 
             if (state.Order.Length != state.ById.Count)
                 throw new JsonException("history order sequence does not match membership");
@@ -224,6 +235,7 @@ namespace Clowd.Drawing.History
             return new JsonObject
             {
                 ["BackgroundColor"] = JsonSerializer.SerializeToNode(state.Background, GraphicsSerializer.Options),
+                ["MeasureUnits"] = JsonSerializer.SerializeToNode(state.MeasureUnits, GraphicsSerializer.Options),
                 ["Graphics"] = graphics,
             };
         }
@@ -270,6 +282,15 @@ namespace Clowd.Drawing.History
                 };
             }
 
+            if (step.MeasureUnits.HasValue)
+            {
+                json["measureUnits"] = new JsonObject
+                {
+                    ["before"] = JsonSerializer.SerializeToNode(step.MeasureUnits.Value.Before, GraphicsSerializer.Options),
+                    ["after"] = JsonSerializer.SerializeToNode(step.MeasureUnits.Value.After, GraphicsSerializer.Options),
+                };
+            }
+
             return json;
         }
 
@@ -308,6 +329,9 @@ namespace Clowd.Drawing.History
             if (json["background"] is JsonObject backgroundJson)
                 step.Background = (backgroundJson["before"].Deserialize<Color>(GraphicsSerializer.Options),
                                    backgroundJson["after"].Deserialize<Color>(GraphicsSerializer.Options));
+            if (json["measureUnits"] is JsonObject unitsJson)
+                step.MeasureUnits = (unitsJson["before"]?.Deserialize<MeasureUnits>(GraphicsSerializer.Options),
+                                     unitsJson["after"]?.Deserialize<MeasureUnits>(GraphicsSerializer.Options));
 
             return step;
         }
@@ -351,7 +375,7 @@ namespace Clowd.Drawing.History
             throw new JsonException("graphic record has no id slot");
         }
 
-        private static JsonObject SerializeState(Dictionary<string, FieldRecord> byId, string[] order, Color background)
+        private static JsonObject SerializeState(Dictionary<string, FieldRecord> byId, string[] order, Color background, MeasureUnits units)
         {
             if (order.Length != byId.Count)
                 throw new JsonException("history order sequence does not match membership");
@@ -363,6 +387,7 @@ namespace Clowd.Drawing.History
             return new JsonObject
             {
                 ["BackgroundColor"] = JsonSerializer.SerializeToNode(background, GraphicsSerializer.Options),
+                ["MeasureUnits"] = JsonSerializer.SerializeToNode(units, GraphicsSerializer.Options),
                 ["Graphics"] = graphics,
             };
         }

@@ -73,6 +73,8 @@ namespace Clowd.Drawing.History
 
         public (Color Before, Color After)? Background;
 
+        public (MeasureUnits Before, MeasureUnits After)? MeasureUnits;
+
         /// <summary>
         /// Full marquee-excluded id sequences of both sides, recorded whenever the sequence
         /// changed at all (any add/remove/reorder). Undo/redo finishes by permuting the live list

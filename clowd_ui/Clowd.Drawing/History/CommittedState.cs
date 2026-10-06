@@ -8,7 +8,7 @@ namespace Clowd.Drawing.History
     /// <summary>
     /// Incrementally-maintained shadow of the current history node's document state (final-design
     /// §B.1): captured persisted fields per graphic id, the marquee-excluded id z-order, and the
-    /// artwork background. Commits diff the live document against this (O(changed)); undo/redo
+    /// document-level properties (artwork background, measure units). Commits diff the live document against this (O(changed)); undo/redo
     /// move it to the applied side. It holds ONE field capture of the document — comparable to a
     /// single one of the old full-JSON snapshots, held once instead of per node.
     /// </summary>
@@ -20,10 +20,12 @@ namespace Clowd.Drawing.History
 
         public Color Background;
 
+        public MeasureUnits MeasureUnits;
+
         /// <summary>Full capture of the live document (bootstrap / ClearHistory / RestoreState).</summary>
         public static CommittedState Capture(DrawingCanvas canvas)
         {
-            var state = new CommittedState { Background = canvas.ArtworkBackground };
+            var state = new CommittedState { Background = canvas.ArtworkBackground, MeasureUnits = canvas.MeasureUnits.Current };
 
             var collection = canvas.GraphicsList;
             if (collection == null)

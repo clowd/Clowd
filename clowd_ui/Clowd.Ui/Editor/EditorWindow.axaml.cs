@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -636,6 +637,13 @@ namespace Clowd.UI
                 else
                     miniColor.Cancel();
                 e.Handled = true;
+                return;
+            }
+
+            // the measure units popup owns its keys too (its own KeyDown handles them when it holds
+            // focus); none of them may reach the canvas while it is open
+            if (measureUnitsPopup.IsOpen && (e.Key == Key.Escape || e.Key == Key.Enter)) {
+                measureUnitsPopup_KeyDown(sender, e);
                 return;
             }
 
@@ -1687,6 +1695,80 @@ namespace Clowd.UI
             miniColorPopup.PlacementTarget = backgroundColorSwatch;
             miniColor.Reset(drawingCanvas.ArtworkBackground, (c) => drawingCanvas.SetBackgroundColor(c));
             miniColorPopup.IsOpen = true;
+        }
+
+        private GraphicMeasure SelectedMeasure
+            => drawingCanvas.GraphicsList.SelectedItems is { Length: 1 } sel ? sel[0] as GraphicMeasure : null;
+
+        private void measureUnits_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedMeasure is not { } measure)
+                return;
+
+            // seeded with what the line reads now, so reopening shows the current calibration
+            var units = drawingCanvas.MeasureUnits;
+            txtMeasureLength.Text = units.Current != null ? MeasureUnits.FormatLength(units.ToUnits(measure.PixelLength)) : "";
+            txtMeasureUnit.Text = units.Current?.Unit ?? "";
+            txtMeasureLength.Classes.Remove("error");
+            txtMeasureUnit.Classes.Remove("error");
+
+            measureUnitsPopup.PlacementTarget = btnMeasureUnits;
+            measureUnitsPopup.IsOpen = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                txtMeasureLength.Focus();
+                txtMeasureLength.SelectAll();
+            }, DispatcherPriority.Input);
+        }
+
+        private void measureUnitsPopup_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+                SaveMeasureUnits();
+            else if (e.Key == Key.Escape)
+                measureUnitsPopup.IsOpen = false;
+            else
+                return;
+            e.Handled = true;
+        }
+
+        private void measureUnitsSave_Click(object sender, RoutedEventArgs e) => SaveMeasureUnits();
+
+        private void measureUnitsReset_Click(object sender, RoutedEventArgs e)
+        {
+            drawingCanvas.ResetMeasureUnits();
+            measureUnitsPopup.IsOpen = false;
+        }
+
+        private void SaveMeasureUnits()
+        {
+            if (SelectedMeasure is not { } measure || measure.PixelLength <= 0)
+            {
+                measureUnitsPopup.IsOpen = false;
+                return;
+            }
+
+            var lengthText = txtMeasureLength.Text?.Trim();
+            var lengthOk = (double.TryParse(lengthText, NumberStyles.Float, CultureInfo.CurrentCulture, out var length)
+                            || double.TryParse(lengthText, NumberStyles.Float, CultureInfo.InvariantCulture, out length))
+                           && double.IsFinite(length) && length > 0;
+            var unit = MeasureUnits.NormalizeUnit(txtMeasureUnit.Text);
+
+            txtMeasureLength.Classes.Set("error", !lengthOk);
+            txtMeasureUnit.Classes.Set("error", unit == null);
+            if (!lengthOk)
+            {
+                txtMeasureLength.Focus();
+                return;
+            }
+            if (unit == null)
+            {
+                txtMeasureUnit.Focus();
+                return;
+            }
+
+            drawingCanvas.SetMeasureUnits(measure, length, unit);
+            measureUnitsPopup.IsOpen = false;
         }
 
         private async void font_Click(object sender, RoutedEventArgs e)

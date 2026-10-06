@@ -26,7 +26,7 @@ namespace Clowd.Drawing
         /// <summary>The font face alone, for graphics that size their own text.</summary>
         FontFamily = 1 << 13,
 
-        /// <summary>A uniform size multiplier (sticky notes).</summary>
+        /// <summary>A uniform size multiplier (sticky notes, measure labels).</summary>
         Scale = 1 << 14,
 
         /// <summary>A background fill color, separate from the (foreground) color.</summary>

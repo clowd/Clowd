@@ -49,6 +49,7 @@ namespace Clowd.Drawing
         class GraphicState
         {
             public Color BackgroundColor { get; set; } = Colors.Transparent;
+            public MeasureUnits MeasureUnits { get; set; }
             public GraphicBase[] Graphics { get; set; } = new GraphicBase[0];
         }
 
@@ -114,6 +115,7 @@ namespace Clowd.Drawing
                 collection?.Clear();
                 collection?.AddRange(state.Graphics);
                 _drawingCanvas.ArtworkBackground = state.BackgroundColor;
+                _drawingCanvas.RestoreMeasureUnits(state.MeasureUnits);
             }
             else if (collection != null && collection.Count > 0)
             {
@@ -126,7 +128,7 @@ namespace Clowd.Drawing
 
             // loading is not user dirt
             collection?.ConsumeDirty();
-            _drawingCanvas.ConsumeBackgroundDirty();
+            _drawingCanvas.ConsumeDocumentDirty();
 
 #if DEBUG
             _debugShadowJson = SerializeDocument(_drawingCanvas);
@@ -151,7 +153,7 @@ namespace Clowd.Drawing
                 _committed = CommittedState.Capture(_drawingCanvas);
                 _node = new HistoryStep();
                 collection?.ConsumeDirty();
-                _drawingCanvas.ConsumeBackgroundDirty();
+                _drawingCanvas.ConsumeDocumentDirty();
 #if DEBUG
                 _debugShadowJson = SerializeDocument(_drawingCanvas);
 #endif
@@ -165,18 +167,18 @@ namespace Clowd.Drawing
             _canMergeNext = mergable;
 
             var (dirtyGraphics, structuralDirty) = collection.ConsumeDirty();
-            var backgroundDirty = _drawingCanvas.ConsumeBackgroundDirty();
+            var documentDirty = _drawingCanvas.ConsumeDocumentDirty();
 
             if (FullScanNextCommit)
             {
                 FullScanNextCommit = false;
                 structuralDirty = true;
-                backgroundDirty = true;
+                documentDirty = true;
                 foreach (var g in collection)
                     dirtyGraphics.Add(g);
             }
 
-            var built = ChangeSetBuilder.Build(_drawingCanvas, _committed, dirtyGraphics, structuralDirty, backgroundDirty);
+            var built = ChangeSetBuilder.Build(_drawingCanvas, _committed, dirtyGraphics, structuralDirty, documentDirty);
 
             DiagnosticCommitBuilt?.Invoke(this, built.Changes);
 #if DEBUG
@@ -190,7 +192,7 @@ namespace Clowd.Drawing
                 // Delta with no change paths: no undo step is warranted, but the committed shadow
                 // must still swap its Instance refs or it would keep the dead instance and a later
                 // restore would silently resurrect it. Deltas without change paths can only be
-                // instance swaps, and Order/Background are never set on an empty-changes build.
+                // instance swaps, and Order/Background/MeasureUnits are never set on an empty-changes build.
                 if (built.Deltas.Count > 0)
                     ApplyToShadow(built);
                 return;
@@ -215,6 +217,7 @@ namespace Clowd.Drawing
                 Changes = built.Changes,
                 Graphics = built.Deltas.ToArray(),
                 Background = built.Background,
+                MeasureUnits = built.MeasureUnits,
                 Order = built.Order,
             };
             _node.Next = step;
@@ -405,7 +408,7 @@ namespace Clowd.Drawing
         }
 
         /// <summary>
-        /// Serializes the canvas document as the persisted <c>{BackgroundColor, Graphics[]}</c>
+        /// Serializes the canvas document as the persisted <c>{BackgroundColor, MeasureUnits, Graphics[]}</c>
         /// shape (byte-compatible with graphics.json and the old StateUpdated payloads). Used for
         /// the discrete-action StateChanged payloads, by the autosave throttle's trailing edge,
         /// and by the parity tests.
@@ -415,6 +418,7 @@ namespace Clowd.Drawing
             var state = new GraphicState
             {
                 BackgroundColor = canvas.ArtworkBackground,
+                MeasureUnits = canvas.MeasureUnits.Current,
                 Graphics = canvas.GraphicsList?.GetGraphicList(false) ?? new GraphicBase[0],
             };
             return (JsonObject)JsonSerializer.SerializeToNode(state, GraphicsSerializer.Options);
@@ -515,6 +519,8 @@ namespace Clowd.Drawing
                 _committed.Order = built.Order.Value.After;
             if (built.Background.HasValue)
                 _committed.Background = built.Background.Value.After;
+            if (built.MeasureUnits.HasValue)
+                _committed.MeasureUnits = built.MeasureUnits.Value.After;
         }
 
         /// <summary>
@@ -562,6 +568,13 @@ namespace Clowd.Drawing
                 node.Background = before == after ? default((Color, Color)?) : (before, after);
             }
 
+            if (built.MeasureUnits.HasValue)
+            {
+                var before = node.MeasureUnits.HasValue ? node.MeasureUnits.Value.Before : built.MeasureUnits.Value.Before;
+                var after = built.MeasureUnits.Value.After;
+                node.MeasureUnits = Equals(before, after) ? default((MeasureUnits, MeasureUnits)?) : (before, after);
+            }
+
             node.CachedJson = null; // the fold rewrote the step — re-serialize on the next emission
         }
 
@@ -594,6 +607,7 @@ namespace Clowd.Drawing
                 oldest.Graphics = Array.Empty<GraphicDelta>();
                 oldest.Order = null;
                 oldest.Background = null;
+                oldest.MeasureUnits = null;
                 oldest.Changes = null; // it is the new root; nothing may merge into it from below
                 oldest.Previous = null;
                 oldest.CachedJson = null;
@@ -649,7 +663,7 @@ namespace Clowd.Drawing
         {
             var collection = _drawingCanvas.GraphicsList;
             var (dirtyGraphics, structuralDirty) = collection.ConsumeDirty();
-            var backgroundDirty = _drawingCanvas.ConsumeBackgroundDirty();
+            var documentDirty = _drawingCanvas.ConsumeDocumentDirty();
 
             foreach (var g in dirtyGraphics)
             {
@@ -689,12 +703,15 @@ namespace Clowd.Drawing
             if (structuralDirty)
                 ReconcileMembership(collection, _committed.Order, id => _committed.ById[id]);
 
-            if (backgroundDirty)
+            if (documentDirty)
+            {
                 _drawingCanvas.ArtworkBackground = _committed.Background;
+                _drawingCanvas.RestoreMeasureUnits(_committed.MeasureUnits);
+            }
 
             // the reverting writes above raised their own PropertyChanged dirt — not user dirt
             collection.ConsumeDirty();
-            _drawingCanvas.ConsumeBackgroundDirty();
+            _drawingCanvas.ConsumeDocumentDirty();
         }
 
         private void ApplyStep(HistoryStep step, bool undo)
@@ -771,9 +788,17 @@ namespace Clowd.Drawing
                 _committed.Background = bg;
             }
 
+            // 2e. measure units
+            if (step.MeasureUnits.HasValue)
+            {
+                var units = undo ? step.MeasureUnits.Value.Before : step.MeasureUnits.Value.After;
+                _drawingCanvas.RestoreMeasureUnits(units);
+                _committed.MeasureUnits = units;
+            }
+
             // 3. the apply raised its own PropertyChanged dirt — not user dirt
             collection.ConsumeDirty();
-            _drawingCanvas.ConsumeBackgroundDirty();
+            _drawingCanvas.ConsumeDocumentDirty();
         }
 
         /// <summary>

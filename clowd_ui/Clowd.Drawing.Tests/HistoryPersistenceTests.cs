@@ -442,5 +442,27 @@ namespace Clowd.Drawing.Tests
             var reopened = Reopen((JsonObject)JsonNode.Parse(last.State.ToJsonString()), reparsed);
             Assert.True(CanUndo(reopened));
         }
+        [AvaloniaFact]
+        public void MeasureUnitSteps_SurviveReopen()
+        {
+            var canvas = new DrawingCanvas();
+            var measure = new GraphicMeasure(Colors.Red, 2, new Point(0, 0), new Point(200, 0));
+            canvas.GraphicsList.Add(measure);
+            canvas.AddCommandToHistory(false);
+            canvas.SetMeasureUnits(measure, 4, "ft");
+            canvas.SetMeasureUnits(measure, 2, "m");
+
+            var doc = Doc(canvas);
+            var canvas2 = Reopen(doc, HistoryFromDisk(canvas));
+            AssertDocsEqual(doc, Doc(canvas2));
+            Assert.Equal(new MeasureUnits("m", 100), canvas2.MeasureUnits.Current);
+
+            canvas2.Undo();
+            Assert.Equal(new MeasureUnits("ft", 50), canvas2.MeasureUnits.Current);
+            canvas2.Undo();
+            Assert.Null(canvas2.MeasureUnits.Current);
+            canvas2.Redo();
+            Assert.Equal(new MeasureUnits("ft", 50), canvas2.MeasureUnits.Current);
+        }
     }
 }

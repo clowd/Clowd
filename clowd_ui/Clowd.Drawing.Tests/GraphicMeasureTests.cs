@@ -1,3 +1,4 @@
+using System;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
@@ -19,7 +20,7 @@ namespace Clowd.Drawing.Tests
         private static string LabelOf(GraphicMeasure g)
         {
             _ = g.Bounds;
-            return g.RenderCache.TextKey as string;
+            return g.RenderCache.TextKey is ValueTuple<string, double> key ? key.Item1 : null;
         }
 
         private static GraphicMeasure Make(double x0, double y0, double x1, double y1, double lineWidth = 2) =>
@@ -89,5 +90,132 @@ namespace Clowd.Drawing.Tests
             Assert.True(g.Contains(new Point(50, 2)));
             Assert.False(g.Contains(new Point(50, 40)));
         }
+        [AvaloniaFact]
+        public void Scale_GrowsTheLabelPill_AndClamps()
+        {
+            var g = Make(0, 0, 100, 0);
+            var top = g.Bounds.Top;
+
+            g.Scale = 2;
+            Assert.True(g.Bounds.Top < top * 1.8, $"{g.Bounds.Top} vs {top}");
+            Assert.Equal("100px 0°", LabelOf(g));
+
+            g.Scale = 100;
+            Assert.Equal(GraphicMeasure.MaxScale, g.Scale);
+        }
+
+        [AvaloniaFact]
+        public void Scale_RoundTrips()
+        {
+            var g = new GraphicMeasure(Colors.Red, 2, new Point(0, 0), new Point(100, 0), 1.5);
+            var bytes = GraphicsSerializer.SerializeToUtf8Bytes(new GraphicBase[] { g });
+            var r = Assert.IsType<GraphicMeasure>(Assert.Single(GraphicsSerializer.DeserializeFromUtf8Bytes(bytes)));
+            Assert.Equal(1.5, r.Scale);
+            Assert.Equal(g.Bounds, r.Bounds);
+        }
+        [AvaloniaTheory]
+        [InlineData(200, 4, "ft", "4ft 0°")]
+        [InlineData(100, 3, "cm", "3cm 0°")]
+        [InlineData(100, 30, "cm", "30cm 0°")]
+        public void Label_ReadsInTheCanvasUnits(double pixels, double length, string unit, string expected)
+        {
+            var canvas = new DrawingCanvas();
+            var g = Make(0, 0, pixels, 0);
+            canvas.GraphicsList.Add(g);
+            canvas.SetMeasureUnits(g, length, unit);
+            Assert.Equal(expected, LabelOf(g));
+        }
+
+        [AvaloniaFact]
+        public void Label_KeepsTwoDecimals_InUnits()
+        {
+            var canvas = new DrawingCanvas();
+            var legend = Make(0, 0, 300, 0);
+            var other = Make(0, 0, 100, 0);
+            canvas.GraphicsList.Add(legend);
+            canvas.GraphicsList.Add(other);
+            canvas.SetMeasureUnits(legend, 1, "m");
+            Assert.Equal("0.33m 0°", LabelOf(other));
+        }
+
+        [AvaloniaFact]
+        public void SetMeasureUnits_RelabelsEveryMeasure_AndNewOnes_AndUndoes()
+        {
+            var canvas = new DrawingCanvas();
+            var legend = Make(0, 0, 200, 0);
+            var other = Make(0, 50, 0, 150);
+            canvas.GraphicsList.Add(legend);
+            var tiny = Make(0, 0, 10, 0); // its label pill, not the line, sets its width
+            canvas.GraphicsList.Add(other);
+            canvas.GraphicsList.Add(tiny);
+            canvas.AddCommandToHistory(false);
+            var pixelBounds = tiny.Bounds;
+
+            canvas.SetMeasureUnits(legend, 4, " ft ");
+            Assert.Equal(new MeasureUnits("ft", 50), canvas.MeasureUnits.Current);
+            Assert.Equal("4ft 0°", LabelOf(legend));
+            Assert.Equal("2ft -90°", LabelOf(other));
+            Assert.Equal("0.2ft 0°", LabelOf(tiny));
+            Assert.NotEqual(pixelBounds.Width, tiny.Bounds.Width); // the new label re-laid-out the pill
+
+            // a measure that joins the canvas later reads in the same units
+            var later = Make(0, 0, 25, 0);
+            canvas.GraphicsList.Add(later);
+            Assert.Equal("0.5ft 0°", LabelOf(later));
+            canvas.AddCommandToHistory(false);
+
+            canvas.Undo(); // the add
+            canvas.Undo(); // the calibration
+            Assert.Null(canvas.MeasureUnits.Current);
+            Assert.Equal("200px 0°", LabelOf(legend));
+            Assert.Equal("100px -90°", LabelOf(other));
+
+            canvas.Redo();
+            Assert.Equal("2ft -90°", LabelOf(other));
+
+            canvas.ResetMeasureUnits();
+            Assert.Null(canvas.MeasureUnits.Current);
+            Assert.Equal("100px -90°", LabelOf(other));
+            canvas.Undo();
+            Assert.Equal("2ft -90°", LabelOf(other));
+        }
+
+        [AvaloniaFact]
+        public void MeasureUnits_AreSavedWithTheDocument_NotOnTheGraphic()
+        {
+            var canvas = new DrawingCanvas();
+            var g = Make(0, 0, 200, 0);
+            canvas.GraphicsList.Add(g);
+            canvas.SetMeasureUnits(g, 4, "ft");
+
+            var doc = UndoManager.SerializeDocument(canvas);
+            Assert.Equal("ft", (string)doc["MeasureUnits"]["Unit"]);
+            Assert.Equal(50, (double)doc["MeasureUnits"]["PixelsPerUnit"]);
+            Assert.DoesNotContain("ft", doc["Graphics"].ToJsonString());
+
+            var reopened = new DrawingCanvas();
+            reopened.RestoreState(doc);
+            Assert.Equal(new MeasureUnits("ft", 50), reopened.MeasureUnits.Current);
+            Assert.Equal("4ft 0°", LabelOf(Assert.IsType<GraphicMeasure>(Assert.Single(reopened.GraphicsList))));
+            Assert.False(reopened.CommandUndo.CanExecute(null)); // loaded state is the baseline
+
+            // a document from before measure units existed reads in pixels
+            doc.Remove("MeasureUnits");
+            var old = new DrawingCanvas();
+            old.RestoreState(doc);
+            Assert.Null(old.MeasureUnits.Current);
+        }
+
+        [AvaloniaFact]
+        public void MeasureUnits_RejectInvalidCalibration()
+        {
+            var canvas = new DrawingCanvas();
+            var g = Make(0, 0, 200, 0);
+            canvas.GraphicsList.Add(g);
+            Assert.Throws<System.ArgumentException>(() => canvas.SetMeasureUnits(g, 0, "ft"));
+            Assert.Throws<System.ArgumentException>(() => canvas.SetMeasureUnits(g, 4, "  "));
+            Assert.Null(MeasureUnits.Normalize(new MeasureUnits("ft", double.NaN)));
+        }
+
     }
 }

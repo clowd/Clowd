@@ -265,6 +265,10 @@ namespace Clowd.Drawing.Graphics
             RenderCache.Clear(InvalidationAspects.All);
         }
 
+        /// <summary>Called whenever the graphic joins <paramref name="canvas"/>'s collection (draw,
+        /// paste, load, undo re-insert), for types that read canvas-level state when they lay out.</summary>
+        internal virtual void OnAttached(DrawingCanvas canvas) { }
+
         internal virtual void Activate(DrawingCanvas canvas) { }
 
         /// <summary>Double-click entry point with the click position; the default ignores the point.</summary>

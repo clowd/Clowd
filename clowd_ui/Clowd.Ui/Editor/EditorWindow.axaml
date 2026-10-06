@@ -425,7 +425,7 @@
             </StackPanel>
 
             <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Scale}">
-                <TextBlock VerticalAlignment="Center" Text="Size" />
+                <TextBlock VerticalAlignment="Center" Text="Scale" />
                 <controls:ThemedSpinner
                     Max="{x:Static graphics:GraphicStickyNote.MaxScale}"
                     Min="{x:Static graphics:GraphicStickyNote.MinScale}"
@@ -506,6 +506,14 @@
                 IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Cursor}"
                 ToolTip.Tip="Toggle Captured Mouse Cursor" />
 
+            <controls:ToolButton
+                x:Name="btnMeasureUnits"
+                Classes="wide"
+                Click="measureUnits_Click"
+                IconPath="{StaticResource IconMeasureUnits}"
+                IsVisible="{Binding ElementName=drawingCanvas, Path=HasMeasureSubject, Mode=OneWay}"
+                ToolTip.Tip="Set measure units" />
+
             <!--  Style actions for the one selected graphic (only shown for graphics a tool
                   draws, so every item always applies). The headers name the kind of graphic, so
                   they are set when the menu opens (StyleMenu_Opening).  -->
@@ -513,7 +521,7 @@
                 Classes="wide"
                 IconPath="{StaticResource IconStyleMenu}"
                 IsVisible="{Binding ElementName=drawingCanvas, Path=HasStyleSubject, Mode=OneWay}"
-                ToolTip.Tip="Style">
+                ToolTip.Tip="Apply or save this style">
                 <controls:ToolButton.Flyout>
                     <MenuFlyout Opening="StyleMenu_Opening" Placement="BottomEdgeAlignedLeft">
                         <MenuItem
@@ -770,6 +778,73 @@
                 x:Name="miniColor"
                 Margin="10"
                 Realtime="True" />
+        </Popup>
+
+        <!--  Calibrates the canvas's measure units from the selected measure: the user types what
+              its line really measures (4 ft), and every measure on the canvas reads in that unit.
+              Wears the app theme like the customize flyout, so it states its own ink.  -->
+        <Popup
+            x:Name="measureUnitsPopup"
+            HorizontalOffset="-10"
+            IsLightDismissEnabled="True"
+            Placement="BottomEdgeAlignedLeft"
+            VerticalOffset="-8">
+            <Border
+                Width="250"
+                Margin="10"
+                Padding="12"
+                Background="{DynamicResource ApplicationBackgroundBrush}"
+                BorderBrush="{DynamicResource SemiColorBorder}"
+                BorderThickness="1"
+                BoxShadow="0 2 8 0 #80000000"
+                CornerRadius="8"
+                KeyDown="measureUnitsPopup_KeyDown"
+                TextElement.Foreground="{DynamicResource SemiColorText0}">
+                <Border.Styles>
+                    <!--  a field Save refused  -->
+                    <Style Selector="TextBox.error">
+                        <Setter Property="BorderBrush" Value="{DynamicResource SemiColorDanger}" />
+                        <Setter Property="BorderThickness" Value="1" />
+                    </Style>
+                </Border.Styles>
+                <StackPanel Spacing="8">
+                    <TextBlock
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Text="Set measure units" />
+                    <TextBlock
+                        FontSize="11"
+                        Foreground="{DynamicResource SemiColorText2}"
+                        Text="How long is this line in real life? Every measure on the canvas will use the same scale."
+                        TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="*,8,*">
+                        <TextBox
+                            x:Name="txtMeasureLength"
+                            PlaceholderText="Length" />
+                        <TextBox
+                            x:Name="txtMeasureUnit"
+                            Grid.Column="2"
+                            MaxLength="{x:Static draw:MeasureUnits.MaxUnitLength}"
+                            PlaceholderText="Unit (e.g. ft)" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,8,*">
+                        <Button
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Click="measureUnitsReset_Click"
+                            Content="Reset"
+                            ToolTip.Tip="Measure in pixels again" />
+                        <Button
+                            Grid.Column="2"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Classes="Primary"
+                            Click="measureUnitsSave_Click"
+                            Content="Save"
+                            Theme="{StaticResource SolidButton}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
         </Popup>
 
         <!--  The shared customize flyout (Controls/CustomizeToolbarPopup): rows, chrome picker

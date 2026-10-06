@@ -13,13 +13,16 @@ namespace Clowd.Drawing.History
         /// field edit → "root/Graphics/&lt;id&gt;/&lt;jsonName&gt;[...]"; add/remove →
         /// "root/Graphics/&lt;id&gt;"; pure reorder (same length AND same member set) → a single
         /// "root/Graphics/(order)" (membership change suppresses it even if survivors moved);
-        /// background → "root/BackgroundColor".
+        /// background → "root/BackgroundColor"; measure units → "root/MeasureUnits" when either side
+        /// is pixels (null), else "root/MeasureUnits/&lt;member&gt;" per changed member.
         /// </summary>
         public readonly SortedSet<string> Changes = new SortedSet<string>(StringComparer.Ordinal);
 
         public readonly List<GraphicDelta> Deltas = new List<GraphicDelta>();
 
         public (Color Before, Color After)? Background;
+
+        public (MeasureUnits Before, MeasureUnits After)? MeasureUnits;
 
         public (string[] Before, string[] After)? Order;
     }
@@ -34,7 +37,7 @@ namespace Clowd.Drawing.History
     internal static class ChangeSetBuilder
     {
         public static ChangeSet Build(DrawingCanvas canvas, CommittedState committed,
-                                      HashSet<GraphicBase> dirtyGraphics, bool structuralDirty, bool backgroundDirty)
+                                      HashSet<GraphicBase> dirtyGraphics, bool structuralDirty, bool documentDirty)
         {
             var result = new ChangeSet();
             var collection = canvas.GraphicsList;
@@ -67,14 +70,35 @@ namespace Clowd.Drawing.History
             if (needStructural)
                 DiffStructure(committed, collection, result, deltaIds);
 
-            // ---- background ----
-            if (backgroundDirty)
+            // ---- document-level properties ----
+            if (documentDirty)
             {
                 var after = canvas.ArtworkBackground;
                 if (after != committed.Background)
                 {
                     result.Changes.Add("root/BackgroundColor");
                     result.Background = (committed.Background, after);
+                }
+
+                var unitsBefore = committed.MeasureUnits;
+                var unitsAfter = canvas.MeasureUnits.Current;
+                if (!Equals(unitsBefore, unitsAfter))
+                {
+                    // the oracle's grammar: null ↔ object is a structure change of the member
+                    // itself, object ↔ object recurses into the record's members
+                    if (unitsBefore == null || unitsAfter == null)
+                    {
+                        result.Changes.Add("root/MeasureUnits");
+                    }
+                    else
+                    {
+                        if (unitsBefore.Unit != unitsAfter.Unit)
+                            result.Changes.Add("root/MeasureUnits/" + nameof(MeasureUnits.Unit));
+                        if (!unitsBefore.PixelsPerUnit.Equals(unitsAfter.PixelsPerUnit))
+                            result.Changes.Add("root/MeasureUnits/" + nameof(MeasureUnits.PixelsPerUnit));
+                    }
+
+                    result.MeasureUnits = (unitsBefore, unitsAfter);
                 }
             }
 

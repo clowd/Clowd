@@ -122,6 +122,9 @@ namespace Clowd.Drawing
         public static readonly StyledProperty<bool> HasStyleSubjectProperty =
             AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(HasStyleSubject));
 
+        public static readonly StyledProperty<bool> HasMeasureSubjectProperty =
+            AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(HasMeasureSubject));
+
         public static readonly StyledProperty<string> SubjectNameProperty =
             AvaloniaProperty.Register<DrawingCanvas, string>(nameof(SubjectName));
 
@@ -315,6 +318,17 @@ namespace Clowd.Drawing
             private set => SetValue(HasStyleSubjectProperty, value);
         }
 
+        /// <summary>True while the property bar describes exactly one selected measure — the
+        /// reference line the measure units are calibrated from.</summary>
+        public bool HasMeasureSubject
+        {
+            get => GetValue(HasMeasureSubjectProperty);
+            private set => SetValue(HasMeasureSubjectProperty, value);
+        }
+
+        /// <summary>The unit every measure on this canvas reads in (see <see cref="SetMeasureUnits"/>).</summary>
+        public MeasureUnitService MeasureUnits { get; } = new MeasureUnitService();
+
         public string SubjectName
         {
             get => GetValue(SubjectNameProperty);
@@ -436,7 +450,7 @@ namespace Clowd.Drawing
         private readonly HashSet<string> _boundGraphicProps = new HashSet<string>();
         private GraphicBase _boundGraphic;
         private bool _syncingState;
-        private bool _backgroundDirtySinceCommit;
+        private bool _documentDirtySinceCommit;
 
         // persistence boundary (final-design §B.6): immediate StateUpdated for discrete history
         // actions, 150ms trailing-edge debounce for merge-in-place rewrites (the scrub path)
@@ -484,6 +498,7 @@ namespace Clowd.Drawing
             _artworkView = new ArtworkView(this);
             VisualChildren.Add(_artworkView);
 
+            MeasureUnits.Changed += OnMeasureUnitsChanged;
             GraphicsList = new GraphicCollection(this);
 
             // create array of drawing tools
@@ -543,7 +558,7 @@ namespace Clowd.Drawing
 
             var toolMeasure = new ToolDraggable<GraphicMeasure>(
                 () => CursorResources.Measure,
-                point => new GraphicMeasure(ObjectColor, LineWidth, point, point),
+                point => new GraphicMeasure(ObjectColor, LineWidth, point, point, ObjectScale),
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
 
@@ -854,8 +869,8 @@ namespace Clowd.Drawing
         private void OnArtworkBackgroundChanged()
         {
             // history dirt for the commit path (final-design §B.2): the undo engine consumes this
-            // alongside GraphicCollection.ConsumeDirty() to know a background compare is needed
-            _backgroundDirtySinceCommit = true;
+            // alongside GraphicCollection.ConsumeDirty() to know a document-level compare is needed
+            _documentDirtySinceCommit = true;
             _artworkView?.InvalidateVisual();
         }
 
@@ -905,6 +920,45 @@ namespace Clowd.Drawing
             {
                 AddCommandToHistory(true);
             }
+        }
+
+        // ---- measure units --------------------------------------------------------------
+
+        /// <summary>Calibrates the canvas's measure units so that <paramref name="reference"/>'s
+        /// line reads <paramref name="length"/> <paramref name="unit"/>; every measure on the canvas
+        /// then reads in that unit. Document state: saved with the session and undoable.</summary>
+        public void SetMeasureUnits(GraphicMeasure reference, double length, string unit)
+        {
+            ArgumentNullException.ThrowIfNull(reference);
+            unit = Drawing.MeasureUnits.NormalizeUnit(unit);
+            if (unit == null || !double.IsFinite(length) || length <= 0 || reference.PixelLength <= 0)
+                throw new ArgumentException("A measure unit needs a name, a positive length and a line with length.");
+            if (MeasureUnits.Set(new MeasureUnits(unit, reference.PixelLength / length)))
+                AddCommandToHistory(false);
+        }
+
+        /// <summary>Returns every measure on the canvas to reading in canvas pixels.</summary>
+        public void ResetMeasureUnits()
+        {
+            if (MeasureUnits.Set(null))
+                AddCommandToHistory(false);
+        }
+
+        // the history engine's write path: no commit, the engine owns the shadow
+        internal void RestoreMeasureUnits(MeasureUnits units) => MeasureUnits.Set(units);
+
+        private void OnMeasureUnitsChanged(object sender, EventArgs e)
+        {
+            _documentDirtySinceCommit = true;
+
+            // every measure's label (and so its bounds) derives from the units; no graphic field
+            // changed, so drop the caches by hand and let the frame validator repaint once
+            foreach (var g in GraphicsList)
+            {
+                if (g is GraphicMeasure)
+                    g.RenderCache.Clear(InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Text);
+            }
+            GraphicsList.RequestValidation();
         }
 
         public Bitmap DrawGraphicsToBitmap() => GraphicsList.DrawGraphicsToBitmap(new ImmutableSolidColorBrush(ArtworkBackground));
@@ -1276,6 +1330,7 @@ namespace Clowd.Drawing
             new(Skill.Font, typeof(GraphicText), _ => nameof(GraphicText.FontSize), nameof(SavedToolSettings.FontSize)),
             new(Skill.Font, typeof(GraphicText), _ => nameof(GraphicText.FontStyle), nameof(SavedToolSettings.FontStyle)),
             new(Skill.Scale, typeof(GraphicStickyNote), _ => nameof(GraphicStickyNote.Scale), nameof(SavedToolSettings.Scale)),
+            new(Skill.Scale, typeof(GraphicMeasure), _ => nameof(GraphicMeasure.Scale), nameof(SavedToolSettings.Scale)),
         };
 
         /// <summary>The style properties <paramref name="g"/> exposes, as (graphic property, setting).</summary>
@@ -1665,6 +1720,7 @@ namespace Clowd.Drawing
                                   || Tool == ToolType.None
                                   || (Tool == ToolType.Pointer && selected.Length == 0);
                 HasStyleSubject = false;
+                HasMeasureSubject = false;
 
                 if (IsPanning)
                 {
@@ -1769,6 +1825,7 @@ namespace Clowd.Drawing
                     AddObjectBinding<GraphicText>(Skill.Font, TextFontStyleProperty, x => nameof(x.FontStyle));
                     AddObjectBinding<GraphicText>(Skill.FontFamily, TextFontFamilyNameProperty, x => nameof(x.FontName));
                     AddObjectBinding<GraphicStickyNote>(Skill.Scale, ObjectScaleProperty, x => nameof(x.Scale));
+                    AddObjectBinding<GraphicMeasure>(Skill.Scale, ObjectScaleProperty, x => nameof(x.Scale));
                     AddObjectBinding<GraphicImage>(Skill.Cursor, ObjectCursorVisibleProperty, x => nameof(x.CursorVisible));
 
                     if (_boundGraphicProps.Count > 0)
@@ -1783,6 +1840,7 @@ namespace Clowd.Drawing
                     // only graphics a tool draws: the style menu's actions are about making more
                     // of them look alike, which an image (or a legacy polyline) never is
                     HasStyleSubject = (skills & StyleSkills) != Skill.None && ToolForGraphicType(obj.GetType()) != null;
+                    HasMeasureSubject = obj is GraphicMeasure;
                 }
                 // if there are multiple objects selected
                 else
@@ -2251,12 +2309,13 @@ namespace Clowd.Drawing
 
         /// <summary>
         /// Companion to <see cref="GraphicCollection.ConsumeDirty"/> (final-design §B.2): true if
-        /// ArtworkBackground changed since the last consume. Read by the history engine at commit.
+        /// a document-level property (ArtworkBackground, the measure units) changed since the last
+        /// consume. Read by the history engine at commit.
         /// </summary>
-        internal bool ConsumeBackgroundDirty()
+        internal bool ConsumeDocumentDirty()
         {
-            var dirty = _backgroundDirtySinceCommit;
-            _backgroundDirtySinceCommit = false;
+            var dirty = _documentDirtySinceCommit;
+            _documentDirtySinceCommit = false;
             return dirty;
         }
 
