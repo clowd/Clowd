@@ -238,7 +238,8 @@ namespace Clowd.VideoSDK.Tests
         {
             var (session, vm) = NewInspector(out _, out _);
             var first = session.AddZoomEffect(0, Ms(2_000));
-            var second = session.AddZoomEffect(Ms(4_000), Ms(2_000));
+            var second = session.AddZoomEffect(Ms(1_000), Ms(2_000)); // overlaps: second row
+            Assert.NotEqual(first.TrackId, second.TrackId);
             session.Select(second.Id);
 
             vm.ZoomFactor = 3;

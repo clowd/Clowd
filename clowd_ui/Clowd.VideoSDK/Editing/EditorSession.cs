@@ -1462,25 +1462,37 @@ namespace Clowd.VideoSDK.Editing
             return true;
         }
 
-        /// <summary>Adds a zoom effect item on a <b>new</b> zoom row composited above the whole
-        /// video block — a zoom applies to the rows beneath it, and a new one starts by covering
-        /// all of them (drag the row down to narrow its reach). Returns the live item, or null
-        /// when rolled back.</summary>
+        /// <summary>Adds a zoom effect item. It joins the topmost existing zoom row when the playhead
+        /// stands in a free stretch of that row wide enough for a full-size item; otherwise (no
+        /// zoom row yet, or a zoom already under the playhead) it goes on a <b>new</b> zoom row
+        /// composited above the whole video block — a zoom applies to the rows beneath it, and a
+        /// new one starts by covering all of them (drag the row down to narrow its reach). This is
+        /// the voice take's rule (see <see cref="FindReusableVoiceTrack"/>). Returns the live
+        /// item, or null when rolled back.</summary>
         public Item AddZoomEffect(long startTicks, long durationTicks, object origin = null)
         {
             Item created = null;
             var committed = Mutate("Add Zoom", ProjectChangeKind.Structural, null, origin, p =>
             {
-                // placed exactly as AddSpeedEffect does, over the whole content span (a zoom always
-                // lands on a row of its own, so it has no neighbours to fit between): effect items
-                // don't extend the project, so anything past the content end would be unreachable,
-                // and a playhead at the very end backs the item off it rather than shaving it down
-                // to something unclickable.
-                if (!PlaceInsert(startTicks, durationTicks, 0, p.GetDurationTicks(),
-                        out var start, out var duration))
-                    return;
+                // placed exactly as AddSpeedEffect does, inside the free stretch of the row it
+                // lands on (the whole content span on a new row): effect items don't extend the
+                // project, so anything past the content end would be unreachable, and a playhead
+                // at the very end backs the item off it rather than shaving it down to something
+                // unclickable.
+                long start, duration;
+                var track = FindReusableZoomTrack(p, startTicks, out var gapStart, out var gapEnd);
+                if (track != null)
+                {
+                    if (!PlaceInsert(startTicks, durationTicks, gapStart, gapEnd, out start, out duration))
+                        return;
+                }
+                else
+                {
+                    if (!PlaceInsert(startTicks, durationTicks, 0, p.GetDurationTicks(), out start, out duration))
+                        return;
+                    track = InsertEffectTrackOnTop(p, "Zoom");
+                }
 
-                var track = InsertEffectTrackOnTop(p, "Zoom");
                 created = new Item
                 {
                     Id = Guid.NewGuid(),
@@ -1492,6 +1504,40 @@ namespace Clowd.VideoSDK.Editing
                 p.Items.Add(created);
             });
             return committed ? created : null;
+        }
+
+        /// <summary>The topmost zoom row when the playhead (clamped into the content) stands in a
+        /// free stretch of it at least <see cref="TimelineOps.MinInsertTicks"/> wide — narrower
+        /// than that, the item would have to be squeezed or shoved off the playhead, so a new row
+        /// is the better home. <paramref name="gapStart"/>/<paramref name="gapEnd"/> are that
+        /// stretch's edges. Null when the project has no zoom row or the stretch is too short.</summary>
+        private static Track FindReusableZoomTrack(Project project, long startTicks, out long gapStart, out long gapEnd)
+        {
+            gapStart = 0;
+            gapEnd = project.GetDurationTicks();
+
+            var track = project.Tracks
+                .Where(t => t.Kind == TrackKind.Effect &&
+                            project.Items.Any(i => i.TrackId == t.Id && i.Content is ZoomContent))
+                .OrderByDescending(t => t.Order)
+                .FirstOrDefault();
+            if (track == null || gapEnd < TimelineOps.MinSegmentTicks)
+                return null;
+
+            var at = Math.Clamp(startTicks, 0, gapEnd - TimelineOps.MinSegmentTicks);
+            foreach (var other in project.Items)
+            {
+                if (other.TrackId != track.Id)
+                    continue;
+                if (Covers(other, at))
+                    return null;
+                if (other.TimelineEndTicks <= at)
+                    gapStart = Math.Max(gapStart, other.TimelineEndTicks);
+                else
+                    gapEnd = Math.Min(gapEnd, other.TimelineStartTicks);
+            }
+
+            return gapEnd - gapStart >= TimelineOps.MinInsertTicks ? track : null;
         }
 
         /// <summary>Whether the project already carries the (single) speed row. Not what gates the

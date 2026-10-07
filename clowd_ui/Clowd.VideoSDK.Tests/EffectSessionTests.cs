@@ -205,6 +205,50 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void AddZoomEffect_in_a_free_stretch_joins_the_topmost_zoom_row()
+        {
+            var session = NewSession(out _, out _, out _);
+
+            var first = session.AddZoomEffect(Ms(1_000), Ms(3_000));
+            var second = session.AddZoomEffect(Ms(2_000), Ms(3_000)); // covered: new row on top
+            var third = session.AddZoomEffect(Ms(8_000), Ms(3_000));  // free on the top row
+
+            Assert.NotEqual(first.TrackId, second.TrackId);
+            Assert.Equal(second.TrackId, third.TrackId);
+            Assert.Equal(Ms(8_000), third.TimelineStartTicks);
+            Assert.Equal(Ms(3_000), third.DurationTicks);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void AddZoomEffect_fits_between_neighbours_on_the_reused_row()
+        {
+            var session = NewSession(out _, out _, out _);
+
+            var before = session.AddZoomEffect(Ms(1_000), Ms(2_000));
+            session.AddZoomEffect(Ms(6_000), Ms(2_000)); // free: same row
+            var between = session.AddZoomEffect(Ms(4_000), Ms(5_000));
+
+            Assert.Equal(before.TrackId, between.TrackId);
+            Assert.Equal(Ms(4_000), between.TimelineStartTicks);
+            Assert.Equal(Ms(2_000), between.DurationTicks); // clamped to the next item
+            Assert.Single(session.Project.Tracks, t => t.Kind == TrackKind.Effect);
+        }
+
+        [Fact]
+        public void AddZoomEffect_in_a_sliver_gap_takes_a_new_row()
+        {
+            var session = NewSession(out _, out _, out _);
+
+            var left = session.AddZoomEffect(Ms(1_000), Ms(2_000));
+            session.AddZoomEffect(Ms(3_500), Ms(2_000)); // free: same row, leaves a 500 ms gap
+            var squeezed = session.AddZoomEffect(Ms(3_100), Ms(2_000));
+
+            Assert.NotEqual(left.TrackId, squeezed.TrackId);
+            Assert.Equal(Ms(3_100), squeezed.TimelineStartTicks);
+        }
+
+        [Fact]
         public void Speed_row_stays_on_top_of_a_later_zoom_add()
         {
             var session = NewSession(out _, out _, out _);

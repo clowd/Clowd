@@ -219,7 +219,7 @@ namespace Clowd.VideoSDK.Tests
 
             var session = new EditorSession(project, null, save => save());
             Assert.NotNull(session.AddZoomEffect(Ms(1_000), Ms(5_000)));
-            Assert.NotNull(session.AddZoomEffect(Ms(8_000), Ms(5_000)));
+            Assert.NotNull(session.AddZoomEffect(Ms(3_000), Ms(5_000))); // overlaps: second row
             Assert.NotNull(session.AddSpeedEffect(Ms(2_000), Ms(5_000)));
             return session;
         }
