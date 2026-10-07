@@ -119,7 +119,8 @@ public static class TimelineOps
         // is SourceInTicks / speed timeline ticks (floored — never let rounding rewind past 0).
         // An exempt clip consumes source on the output clock, so its room is measured there and
         // mapped back into project ticks (see ExemptStartHeadroom).
-        var maxExtend = media == null
+        // a freeze frame consumes no source, so only the origin bounds it.
+        var maxExtend = media == null || media.Freeze
             ? item.TimelineStartTicks
             : media.SpeedWarpExempt
                 ? Math.Min(item.TimelineStartTicks, ExemptStartHeadroom(project, item, media, speed))
@@ -158,7 +159,7 @@ public static class TimelineOps
         if (deltaTicks < -maxShrink)
             deltaTicks = Math.Min(0, -maxShrink);
 
-        if (item.Content is MediaContent media)
+        if (item.Content is MediaContent { Freeze: false } media)
         {
             var streamDuration = StreamDurationOf(project, media);
             if (streamDuration > 0)
@@ -347,9 +348,15 @@ public static class TimelineOps
     /// (a recording's audio ends a hair before its video), and a delete that left a sub-minimum
     /// sliver behind would strand an item no edit is allowed to produce.
     /// </summary>
-    private static void CutGroupRange(Project project, Guid itemId, long start, long end)
+    private static void CutGroupRange(Project project, Guid itemId, long start, long end) =>
+        CutRange(project, GetGroupedItems(project, itemId), start, end);
+
+    /// <summary>The body of <see cref="CutGroupRange"/> over any set of items: what each of
+    /// <paramref name="candidates"/> plays inside <c>[start, end)</c> is removed, with the same
+    /// trim/split/cull rules.</summary>
+    private static void CutRange(Project project, IEnumerable<Item> candidates, long start, long end)
     {
-        foreach (var m in GetGroupedItems(project, itemId)
+        foreach (var m in candidates
                      .Where(m => m.TimelineStartTicks < end && m.TimelineEndTicks > start).ToList())
         {
             var leftLength = start - m.TimelineStartTicks;
@@ -401,6 +408,306 @@ public static class TimelineOps
 
         project.Items.Remove(item);
         return true;
+    }
+
+    // ----------------------------------------------------------------------------------- gaps
+
+    /// <summary>The empty stretch of <paramref name="trackId"/> around <paramref name="ticks"/>:
+    /// from the end of the item before it (or the origin) to the start of the item after it.
+    /// Null when an item covers the instant, or when no item follows it — the open run past a
+    /// row's last item is the end of the row, not a gap in it.</summary>
+    public static TimelineGap? FindGap(Project project, Guid trackId, long ticks)
+    {
+        if (ticks < 0)
+            return null;
+
+        Item left = null, right = null;
+        foreach (var item in project.Items)
+        {
+            if (item.TrackId != trackId)
+                continue;
+            if (Covers(item, ticks))
+                return null;
+
+            if (item.TimelineEndTicks <= ticks)
+            {
+                if (left == null || item.TimelineEndTicks > left.TimelineEndTicks)
+                    left = item;
+            }
+            else if (right == null || item.TimelineStartTicks < right.TimelineStartTicks)
+            {
+                right = item;
+            }
+        }
+
+        if (right == null)
+            return null;
+
+        var start = left?.TimelineEndTicks ?? 0;
+        return right.TimelineStartTicks > start
+            ? new TimelineGap(trackId, start, right.TimelineStartTicks, left?.Id, right.Id)
+            : null;
+    }
+
+    /// <summary>Whether the project still has exactly this gap — the guard every gap operation
+    /// runs first, so a menu built before an edit cannot act on a row that has since
+    /// changed.</summary>
+    public static bool IsCurrentGap(Project project, TimelineGap gap) =>
+        FindGap(project, gap.TrackId, gap.StartTicks) == gap;
+
+    /// <summary>
+    /// Closes a gap on its own row: the item after it slides left onto the gap's start, and the
+    /// members of its group that sit at or past the gap slide with it, so a recording's other rows
+    /// (its audio, its cursor) stay in sync. Group members before the gap stay put — they are the
+    /// earlier segments the gap was opened from. Nothing else moves; a shift that runs a group
+    /// member into another item on its row is left for validation to refuse. Returns false
+    /// when the gap is not current.
+    /// </summary>
+    public static bool CloseGap(Project project, TimelineGap gap)
+    {
+        if (!IsCurrentGap(project, gap))
+            return false;
+
+        var span = gap.DurationTicks;
+        foreach (var m in GetGroupedItems(project, gap.RightItemId)
+                     .Where(m => m.TimelineStartTicks >= gap.EndTicks))
+            m.TimelineStartTicks -= span;
+
+        return true;
+    }
+
+    /// <summary>
+    /// The gap's span cut out of the whole timeline: whatever any other row plays inside it is
+    /// removed (trimmed, split or dropped exactly as <see cref="RippleDelete"/> cuts a group), then
+    /// everything at or past the gap shifts left by its length. Cross-row sync survives because
+    /// every row loses the same span. Returns false when the gap is not current.
+    /// </summary>
+    public static bool RippleCloseGap(Project project, TimelineGap gap)
+    {
+        if (!IsCurrentGap(project, gap))
+            return false;
+
+        var start = gap.StartTicks;
+        var span = gap.DurationTicks;
+        CutRange(project, project.Items, start, gap.EndTicks);
+
+        foreach (var item in project.Items)
+        {
+            if (item.TimelineStartTicks >= start)
+                item.TimelineStartTicks = Math.Max(start, item.TimelineStartTicks - span);
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether <see cref="FillGapWithFreeze"/> can hold a frame of the gap's left
+    /// (<paramref name="fromLeft"/>) or right neighbor: the gap is current, sits on a video row,
+    /// and that neighbor exists and is media.</summary>
+    public static bool CanFillGapWithFreeze(Project project, TimelineGap gap, bool fromLeft)
+    {
+        if (!IsCurrentGap(project, gap))
+            return false;
+
+        var neighborId = fromLeft ? gap.LeftItemId : gap.RightItemId;
+        var neighbor = neighborId == null ? null : project.Items.FirstOrDefault(i => i.Id == neighborId);
+        var track = project.Tracks.FirstOrDefault(t => t.Id == gap.TrackId);
+        return neighbor?.Content is MediaContent && track?.Kind == TrackKind.Video;
+    }
+
+    /// <summary>
+    /// Fills the gap with a freeze frame (<see cref="MediaContent.Freeze"/>) of a neighbor: the
+    /// last frame the left item shows, or the first frame the right item shows, held for the
+    /// gap's whole length. The new item wears the neighbor's placement, surround and effect so
+    /// the picture does not jump at the seam; it carries no transitions and no group (a held
+    /// frame has no source clock to keep in sync). Returns the new item's id, or null when
+    /// <see cref="CanFillGapWithFreeze"/> says no.
+    /// </summary>
+    public static Guid? FillGapWithFreeze(Project project, TimelineGap gap, bool fromLeft)
+    {
+        if (!CanFillGapWithFreeze(project, gap, fromLeft))
+            return null;
+
+        var neighbor = Require(project, fromLeft ? gap.LeftItemId.Value : gap.RightItemId);
+        var media = (MediaContent)neighbor.Content;
+
+        var content = (MediaContent)media.Clone();
+        content.SourceInTicks = fromLeft ? LastFrameTicks(project, neighbor, media) : media.SourceInTicks;
+        content.Freeze = true;
+        content.Speed = 1.0;
+        content.SpeedWarpExempt = false;
+
+        var item = new Item
+        {
+            Id = Guid.NewGuid(),
+            TrackId = gap.TrackId,
+            TimelineStartTicks = gap.StartTicks,
+            DurationTicks = gap.DurationTicks,
+            Content = content,
+            Transform = neighbor.Transform?.Clone() ?? new Transform(),
+            Surround = neighbor.Surround?.Clone(),
+            Effect = neighbor.Effect?.Clone(),
+            Volume = neighbor.Volume,
+        };
+        project.Items.Add(item);
+        project.Normalize();
+        return item.Id;
+    }
+
+    /// <summary>The source instant of the last frame a media item shows: one tick short of its
+    /// out-point (the out-point itself is the first instant the edit removed — the convention
+    /// the preview's past-the-end clamp follows too), held inside the stream when the item hangs
+    /// past the end of its source.</summary>
+    private static long LastFrameTicks(Project project, Item item, MediaContent media)
+    {
+        if (media.Freeze)
+            return media.SourceInTicks;
+
+        var end = media.SourceInTicks
+                  + SourceTicksBetween(project, media, item.TimelineStartTicks, item.TimelineEndTicks);
+        var streamDuration = StreamDurationOf(project, media);
+        if (streamDuration > 0)
+            end = Math.Min(end, streamDuration);
+
+        return Math.Max(media.SourceInTicks, end - 1);
+    }
+
+    /// <summary>Whether <see cref="ExtendIntoGap"/> would fill the whole gap: the neighbor has
+    /// that much material on the gap's side (trimmed-off source for media; anything else stretches
+    /// freely). Answered by trial on a copy, so it can never disagree with the trims
+    /// themselves.</summary>
+    public static bool CanExtendIntoGap(Project project, TimelineGap gap, bool fromLeft)
+    {
+        if (!IsCurrentGap(project, gap) || (fromLeft && gap.LeftItemId == null))
+            return false;
+
+        return ExtendIntoGapCore(Project.FromJson(project.ToJson()), gap, fromLeft);
+    }
+
+    /// <summary>
+    /// Fills the gap by un-trimming a neighbor into it: the left item's out-point moves to the
+    /// gap's end, or the right item's in-point moves back to the gap's start, revealing the
+    /// source that was trimmed away. Single-item, like the trims it is made of — the neighbor's
+    /// group partners keep their own edges. All-or-nothing: returns false without touching the
+    /// project when the neighbor cannot cover the whole gap (see
+    /// <see cref="CanExtendIntoGap"/>).
+    /// </summary>
+    public static bool ExtendIntoGap(Project project, TimelineGap gap, bool fromLeft) =>
+        CanExtendIntoGap(project, gap, fromLeft) && ExtendIntoGapCore(project, gap, fromLeft);
+
+    private static bool ExtendIntoGapCore(Project project, TimelineGap gap, bool fromLeft)
+    {
+        var span = gap.DurationTicks;
+        return fromLeft
+            ? TrimEnd(project, gap.LeftItemId.Value, span) == span
+            : TrimStart(project, gap.RightItemId, -span) == -span;
+    }
+
+    /// <summary>
+    /// Whether the gap's two neighbors are the halves of one cut that <see cref="RejoinGap"/> can
+    /// heal: the same stream at the same speed, neither a freeze frame nor on the output clock,
+    /// and the right one picking up at or after where the left one stops in the source (so the
+    /// rejoined clip plays the source forward, through whatever the cut and trims removed).
+    /// </summary>
+    public static bool CanRejoinGap(Project project, TimelineGap gap)
+    {
+        if (!IsCurrentGap(project, gap) || gap.LeftItemId is not Guid leftId)
+            return false;
+
+        var left = project.Items.FirstOrDefault(i => i.Id == leftId);
+        var right = project.Items.FirstOrDefault(i => i.Id == gap.RightItemId);
+        if (left?.Content is not MediaContent lm || right?.Content is not MediaContent rm)
+            return false;
+
+        return lm.SourceId == rm.SourceId && lm.StreamIndex == rm.StreamIndex
+               && !lm.Freeze && !rm.Freeze && !lm.SpeedWarpExempt && !rm.SpeedWarpExempt
+               && SpeedOf(lm) == SpeedOf(rm)
+               && rm.SourceInTicks >= lm.SourceInTicks + SourceTicksBetween(project, lm, left.TimelineStartTicks, left.TimelineEndTicks);
+    }
+
+    /// <summary>
+    /// Undoes the cut between the gap's neighbors on this row only: the left clip grows to play
+    /// its source straight through to where the right clip ended — the material the cut and any
+    /// trims removed included — and the right clip is absorbed into it (its exit transition
+    /// carried over). Everything after it on the row shifts by however far the right clip's end
+    /// moved — left when the gap was wider than the removed material, right when it was
+    /// narrower — so the rest of the row keeps its spacing. Other rows, group partners included,
+    /// are untouched. Returns false when <see cref="CanRejoinGap"/> says no.
+    /// </summary>
+    public static bool RejoinGap(Project project, TimelineGap gap)
+    {
+        if (!CanRejoinGap(project, gap))
+            return false;
+
+        var left = Require(project, gap.LeftItemId.Value);
+        var right = Require(project, gap.RightItemId);
+        var lm = (MediaContent)left.Content;
+        var rm = (MediaContent)right.Content;
+        var speed = SpeedOf(lm);
+
+        var sourceEnd = rm.SourceInTicks + SourceTicksBetween(project, rm, right.TimelineStartTicks, right.TimelineEndTicks);
+        var sourceSpan = sourceEnd - lm.SourceInTicks;
+        var newEnd = left.TimelineStartTicks + (speed == 1.0 ? sourceSpan : (long)Math.Round(sourceSpan / speed));
+        var shift = newEnd - right.TimelineEndTicks;
+
+        foreach (var item in project.Items)
+        {
+            if (item.TrackId == gap.TrackId && item.TimelineStartTicks >= right.TimelineEndTicks)
+                item.TimelineStartTicks += shift;
+        }
+
+        left.DurationTicks = newEnd - left.TimelineStartTicks;
+        left.Exit = right.Exit;
+        project.Items.Remove(right);
+        return true;
+    }
+
+    /// <summary>Whether <paramref name="clip"/> — an item lifted off a row of kind
+    /// <paramref name="clipTrackKind"/> — can be pasted into the gap: the gap is current and at
+    /// least <see cref="MinSegmentTicks"/> long, the clip is media, text, an image or a solid
+    /// (effect items and input overlays belong to rows of their own), and its row kind matches
+    /// the gap's (a picture never lands on an audio row, nor a sound on a video row).</summary>
+    public static bool CanPasteIntoGap(Project project, TimelineGap gap, Item clip, TrackKind clipTrackKind)
+    {
+        if (clip == null || !IsCurrentGap(project, gap) || gap.DurationTicks < MinSegmentTicks)
+            return false;
+
+        var track = project.Tracks.FirstOrDefault(t => t.Id == gap.TrackId);
+        return clip.Content switch
+        {
+            MediaContent => track?.Kind == clipTrackKind,
+            TextContent or ImageContent or SolidContent => track?.Kind == TrackKind.Video,
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Pastes <paramref name="clip"/> at the start of the gap, end-trimmed to fit when it is
+    /// longer than the gap. The clip must be a private copy (it is inserted as-is, re-identified:
+    /// a new id, the gap's row, no group). A media clip from another project brings its
+    /// <paramref name="clipSource"/> along when this project does not have that source yet.
+    /// Returns the new item's id, or null when <see cref="CanPasteIntoGap"/> says no.
+    /// </summary>
+    public static Guid? PasteIntoGap(Project project, TimelineGap gap, Item clip, TrackKind clipTrackKind,
+        Source clipSource)
+    {
+        if (!CanPasteIntoGap(project, gap, clip, clipTrackKind))
+            return null;
+
+        if (clip.Content is MediaContent media && project.Sources.All(s => s.Id != media.SourceId))
+        {
+            if (clipSource == null || clipSource.Id != media.SourceId)
+                return null;
+            project.Sources.Add(clipSource);
+        }
+
+        clip.Id = Guid.NewGuid();
+        clip.TrackId = gap.TrackId;
+        clip.TimelineStartTicks = gap.StartTicks;
+        clip.DurationTicks = Math.Min(clip.DurationTicks, gap.DurationTicks);
+        clip.GroupId = null;
+        project.Items.Add(clip);
+        project.Normalize();
+        return clip.Id;
     }
 
     /// <summary>Clears <see cref="Item.GroupId"/> on the given items so they edit
@@ -510,10 +817,10 @@ public static class TimelineOps
 
     /// <summary>Whether two items map source time to timeline time identically. Only media carries
     /// such a mapping — text, images and solids have nothing to disagree about. A re-timed item
-    /// (speed ≠ 1) never re-links: its clock has left the recording's for good.</summary>
+    /// (speed ≠ 1) or a freeze frame never re-links: its clock has left the recording's for good.</summary>
     private static bool Aligned(Item a, Item b) =>
         a.Content is not MediaContent ma || b.Content is not MediaContent mb ||
-        (SpeedOf(ma) == 1.0 && SpeedOf(mb) == 1.0 &&
+        (!ma.Freeze && !mb.Freeze && SpeedOf(ma) == 1.0 && SpeedOf(mb) == 1.0 &&
          a.TimelineStartTicks - ma.SourceInTicks == b.TimelineStartTicks - mb.SourceInTicks);
 
     /// <summary>
@@ -522,12 +829,13 @@ public static class TimelineOps
     /// <c>oldSpeed / newSpeed</c>, anchored at its start. The new duration is clamped to at least
     /// <see cref="MinSegmentTicks"/> and to the gap before the next item on the track (slowing a
     /// clip down must not run it into its neighbor — the content is end-trimmed instead). Single
-    /// item, media only; returns the speed actually stored (unchanged for non-media).
+    /// item, media only (a freeze frame has no speed); returns the speed actually stored (1.0 for
+    /// non-media and freeze frames).
     /// </summary>
     public static double SetSpeed(Project project, Guid itemId, double speed)
     {
         var item = Require(project, itemId);
-        if (item.Content is not MediaContent media)
+        if (item.Content is not MediaContent media || media.Freeze)
             return 1.0;
 
         speed = Math.Clamp(speed, 0.01, 100);
@@ -593,6 +901,9 @@ public static class TimelineOps
     public static long SourceTicksBetween(Project project, MediaContent media, long fromProjectTicks,
         long toProjectTicks)
     {
+        if (media is { Freeze: true })
+            return 0;
+
         var speed = SpeedOf(media);
         if (media == null || !media.SpeedWarpExempt)
             return ToSourceTicks(toProjectTicks - fromProjectTicks, speed);

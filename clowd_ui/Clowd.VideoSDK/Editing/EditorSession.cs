@@ -830,6 +830,138 @@ namespace Clowd.VideoSDK.Editing
                 PruneEmptyTracks(p);
             });
 
+        // ---------------------------------------------------------------------------------- gaps
+
+        /// <summary>Wraps <see cref="TimelineOps.FindGap"/> on the live project.</summary>
+        public TimelineGap? FindGap(Guid trackId, long ticks) => TimelineOps.FindGap(Project, trackId, ticks);
+
+        /// <summary>Whether <see cref="CloseGap"/> would go through — tried on a copy, because
+        /// the group members that slide with the right-hand clip can run into other items on their
+        /// own rows, and only validation knows.</summary>
+        public bool CanCloseGap(TimelineGap gap) => DryRun(p => TimelineOps.CloseGap(p, gap));
+
+        /// <summary>Wraps <see cref="TimelineOps.CloseGap"/>: the gap's right-hand clip (and its
+        /// group members past the gap) slides left onto the gap's start. Returns false when nothing
+        /// changed or the shift was rolled back.</summary>
+        public bool CloseGap(TimelineGap gap, object origin = null) =>
+            Mutate("Close Gap", ProjectChangeKind.Mapping, null, origin,
+                p => TimelineOps.CloseGap(p, gap), failureValue: false);
+
+        /// <summary>Wraps <see cref="TimelineOps.RippleCloseGap"/> (the gap's span cut from every
+        /// row, everything after it shifted left), with the track prune a cut that empties a row
+        /// needs — in the same mutation, so one undo restores both.</summary>
+        public bool RippleCloseGap(TimelineGap gap, object origin = null) =>
+            Mutate("Ripple Close Gap", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                if (!TimelineOps.RippleCloseGap(p, gap))
+                    return false;
+                PruneEmptyTracks(p);
+                return true;
+            }, failureValue: false);
+
+        /// <summary>Wraps <see cref="TimelineOps.FillGapWithFreeze"/>. Returns the new freeze
+        /// frame's id, or null when it could not be made.</summary>
+        public Guid? FillGapWithFreeze(TimelineGap gap, bool fromLeft, object origin = null) =>
+            Mutate("Freeze Frame", ProjectChangeKind.Structural, null, origin,
+                p => TimelineOps.FillGapWithFreeze(p, gap, fromLeft), failureValue: null);
+
+        /// <summary>Wraps <see cref="TimelineOps.RejoinGap"/>: the cut between the gap's
+        /// neighbors healed on their row, the rest of the row shifted to suit.</summary>
+        public bool RejoinGap(TimelineGap gap, object origin = null) =>
+            Mutate("Rejoin Clips", ProjectChangeKind.Structural, null, origin,
+                p => TimelineOps.RejoinGap(p, gap), failureValue: false);
+
+        /// <summary>Wraps <see cref="TimelineOps.ExtendIntoGap"/> (all-or-nothing).</summary>
+        public bool ExtendIntoGap(TimelineGap gap, bool fromLeft, object origin = null) =>
+            Mutate("Extend Clip", ProjectChangeKind.Mapping, null, origin,
+                p => TimelineOps.ExtendIntoGap(p, gap, fromLeft), failureValue: false);
+
+        /// <summary>
+        /// The copied clip, process-wide so a clip copied in one editor window pastes into
+        /// another: a one-item project holding the item, its row (for the row kind) and, for media,
+        /// its source — everything a paste into a project that has never seen that source needs.
+        /// Stored as JSON so every paste deserializes a private copy.
+        /// </summary>
+        private static string s_clipboard;
+
+        /// <summary>Whether <see cref="CopyItem"/> can lift the item: media, text, images and
+        /// solids on a video or audio row. Effect items and input overlays are defined by the rows
+        /// they sit on and have nowhere else to go.</summary>
+        public bool CanCopyItem(Guid itemId)
+        {
+            var item = Project.Items.FirstOrDefault(i => i.Id == itemId);
+            var track = item == null ? null : Project.Tracks.FirstOrDefault(t => t.Id == item.TrackId);
+            return track is { Kind: TrackKind.Video or TrackKind.Audio }
+                   && item.Content is MediaContent or TextContent or ImageContent or SolidContent;
+        }
+
+        /// <summary>Copies the item to the clip clipboard (see <see cref="CanCopyItem"/>).
+        /// Returns false, leaving the clipboard alone, when it cannot be copied.</summary>
+        public bool CopyItem(Guid itemId)
+        {
+            if (!CanCopyItem(itemId))
+                return false;
+
+            var item = Project.Items.First(i => i.Id == itemId);
+            var clip = new Project
+            {
+                Output = Project.Output,
+                Tracks = Project.Tracks.Where(t => t.Id == item.TrackId).ToList(),
+                Items = new List<Item> { item },
+                Sources = item.Content is MediaContent media
+                    ? Project.Sources.Where(s => s.Id == media.SourceId).ToList()
+                    : new List<Source>(),
+            };
+            s_clipboard = clip.ToJson();
+            return true;
+        }
+
+        /// <summary>Whether the copied clip can be pasted into the gap (see
+        /// <see cref="TimelineOps.CanPasteIntoGap"/>). False with nothing copied.</summary>
+        public bool CanPasteIntoGap(TimelineGap gap) =>
+            ReadClipboard() is { } clip &&
+            TimelineOps.CanPasteIntoGap(Project, gap, clip.Item, clip.TrackKind);
+
+        /// <summary>Wraps <see cref="TimelineOps.PasteIntoGap"/> with a private copy of the
+        /// copied clip. Returns the new item's id, or null when nothing was pasted.</summary>
+        public Guid? PasteIntoGap(TimelineGap gap, object origin = null)
+        {
+            if (ReadClipboard() is not { } clip)
+                return null;
+
+            return Mutate("Paste", ProjectChangeKind.Structural, null, origin,
+                p => TimelineOps.PasteIntoGap(p, gap, clip.Item, clip.TrackKind, clip.Source),
+                failureValue: null);
+        }
+
+        private static (Item Item, TrackKind TrackKind, Source Source)? ReadClipboard()
+        {
+            var json = s_clipboard;
+            if (json == null)
+                return null;
+
+            var clip = Project.FromJson(json);
+            if (clip.Items.Count != 1 || clip.Tracks.Count != 1)
+                return null;
+
+            return (clip.Items[0], clip.Tracks[0].Kind, clip.Sources.FirstOrDefault());
+        }
+
+        /// <summary>Runs <paramref name="edit"/> on a throwaway copy of the project through the
+        /// same post-edit steps <see cref="Mutate{T}"/> applies, and reports whether the result
+        /// would both change something (the edit returned true) and pass validation — how a menu
+        /// asks "would this work?" without touching the model or the undo stack.</summary>
+        private bool DryRun(Func<Project, bool> edit)
+        {
+            var copy = Project.FromJson(Project.ToJson());
+            if (!edit(copy))
+                return false;
+
+            TimelineOps.CollapseLoneGroups(copy);
+            copy.Normalize();
+            return copy.Validate().Count == 0;
+        }
+
         /// <summary>
         /// True when the item's group is a recording-segment group — one with a member on a
         /// track the session opened with — as opposed to the per-file group an import gets. The

@@ -983,9 +983,12 @@ namespace Clowd.VideoSDK.Playback
             // gap) the worker still presents its last kept frame, and adopting that frame's pts
             // would drag the position back to the end of the video — a seek to the end of a project
             // whose text or images outlast the footage would land on the last video frame instead.
+            // A freeze frame is the same: its held frame's pts maps back to the neighbor it was
+            // taken from, never to the instant inside the hold the seek asked for.
             var map = _map;
             if (map != null && map.TryGetVideo(set.Primary.Key, out var stream)
-                && stream.OffsetAtTimeline(Position.Ticks) == long.MinValue)
+                && (stream.OffsetAtTimeline(Position.Ticks) == long.MinValue
+                    || stream.IsFrozenAt(Position.Ticks)))
                 return;
 
             _clock.SetPosition(new TimeSpan(MapVideoPtsToClock(set.Primary.Key, pts.Ticks)));

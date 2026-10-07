@@ -49,7 +49,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             foreach (var other in project.Items)
             {
                 if (ReferenceEquals(other, item) || other.Content is not MediaContent media ||
-                    media.SourceId != sourceId)
+                    media.SourceId != sourceId || media.Freeze)
                     continue;
                 if (other.TimelineStartTicks >= item.TimelineEndTicks || other.TimelineEndTicks <= item.TimelineStartTicks)
                     continue;

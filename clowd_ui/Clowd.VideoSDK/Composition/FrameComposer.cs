@@ -212,6 +212,9 @@ namespace Clowd.VideoSDK.Composition
         /// exact for realtime so speed-1 projects keep integer-perfect math.</summary>
         public static long SourceTimeTicks(MediaContent media, Item item, long timeTicks)
         {
+            if (media.Freeze)
+                return media.SourceInTicks;
+
             long elapsed = timeTicks - item.TimelineStartTicks;
             double speed = TimelineOps.SpeedOf(media);
             return media.SourceInTicks + (speed == 1.0 ? elapsed : (long)Math.Round(elapsed * speed));

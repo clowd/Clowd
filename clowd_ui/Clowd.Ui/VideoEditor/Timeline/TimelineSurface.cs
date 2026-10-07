@@ -36,6 +36,13 @@ namespace Clowd.UI.VideoEditor.Timeline
         private const double JumpGlyphSize = 10;    // the chevron inside the fade that jumps to the cut-off end
         private const double AiChipSize = 15;       // the AI badge's chip (the star inside it is smaller still)
         private const double AiStarSize = 10;
+        private const double GapChipHeight = 18;    // the gap overlay's duration chip (its menu button)
+        private const double GapChipPadX = 7;
+        private const double GapChevronWidth = 7;
+        private const double GapChevronGapX = 4;    // between the chip's label and its chevron
+        private const double GapChipMargin = 6;     // the dimension line's inset from the clip edges
+        private const double GapTickHalf = 4;       // half-height of the dimension line's end ticks
+        private const double GapLineMinPx = 18;     // shortest dotted run worth drawing beside the chip
 
         /// <summary>The AI badge's tip. One line covering every AI-backed feature an item can
         /// carry (the speech enhancer, background blur/removal): naming the specific one would
@@ -114,6 +121,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         private Cursor _cursorHand;
         private Guid _contextItemId; // the item the pending right-click landed on
         private long _contextTicks;  // …and where along the timeline it landed
+        private TimelineGap? _contextGap; // the gap the pending menu acts on, when it is a gap menu
+
+        /// <summary>The gap on a video/audio row under the pointer, drawn as the
+        /// <c>&lt;--(...)--&gt;</c> overlay, and whether the pointer is on its button.</summary>
+        private TimelineGap? _hoverGap;
+        private bool _hoverGapPill;
 
         public event EventHandler ScrubStarted;
 
@@ -353,6 +366,17 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             var hit = HitTestAt(pos);
 
+            // the gap overlay's button opens the gap menu; the rest of the gap scrubs as before.
+            if (hit.Kind == TimelineHitKind.Empty && GapAt(pos) is { } gap && GapPillRect(gap)?.Contains(pos) == true)
+            {
+                _contextItemId = Guid.Empty;
+                _contextGap = gap;
+                if (ContextMenu is { } menu && PopulateMenu(menu))
+                    menu.Open(this);
+                e.Handled = true;
+                return;
+            }
+
             switch (hit.Kind)
             {
                 case TimelineHitKind.Empty:
@@ -511,10 +535,12 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             ShowAiTip(false);
 
-            if (_hoverItemId != Guid.Empty || _hoverJump != null)
+            if (_hoverItemId != Guid.Empty || _hoverJump != null || _hoverGap != null)
             {
                 _hoverItemId = Guid.Empty;
                 _hoverJump = null;
+                _hoverGap = null;
+                _hoverGapPill = false;
                 InvalidateVisual();
             }
         }
@@ -733,8 +759,18 @@ namespace Clowd.UI.VideoEditor.Timeline
                 InvalidateVisual();
             }
 
-            // a chevron owns the cursor while under it — the press goes to the jump, not the item.
-            if (jumpKey != null)
+            var gap = hit.Kind == TimelineHitKind.Empty && jumpKey == null ? GapAt(pos) : null;
+            var onPill = gap is { } g && GapPillRect(g)?.Contains(pos) == true;
+            if (gap != _hoverGap || onPill != _hoverGapPill)
+            {
+                _hoverGap = gap;
+                _hoverGapPill = onPill;
+                InvalidateVisual();
+            }
+
+            // a chevron owns the cursor while under it — the press goes to the jump, not the item;
+            // the gap button likewise opens its menu rather than scrubbing.
+            if (jumpKey != null || onPill)
             {
                 Cursor = _cursorHand ??= new Cursor(StandardCursorType.Hand);
                 return;
@@ -783,10 +819,18 @@ namespace Clowd.UI.VideoEditor.Timeline
         {
             _contextItemId = Guid.Empty;
             _contextTicks = 0;
+            _contextGap = null;
             if (_session == null || _dragMode != DragMode.None || _session.IsGestureActive)
                 return;
 
             var hit = HitTestAt(pos);
+            if (hit.Kind == TimelineHitKind.Empty)
+            {
+                // a right-click anywhere in a gap opens the same menu its button does
+                _contextGap = GapAt(pos);
+                return;
+            }
+
             if (hit.Kind is not (TimelineHitKind.ItemBody or TimelineHitKind.ItemStart or TimelineHitKind.ItemEnd))
                 return;
 
@@ -801,16 +845,28 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private void ContextMenu_Opening(object sender, CancelEventArgs e)
         {
-            var menu = (ContextMenu)sender;
+            // empty rows and the ruler gutter have nothing to offer — no menu at all beats an
+            // all-disabled one.
+            if (!PopulateMenu((ContextMenu)sender))
+                e.Cancel = true;
+        }
+
+        /// <summary>Fills the menu for what the pending press landed on — a clip, or a gap on a
+        /// video/audio row. Returns false when it landed on neither. Called from
+        /// <see cref="ContextMenu_Opening"/> and directly before the gap button opens the menu by
+        /// hand, so both ways in build the same entries.</summary>
+        private bool PopulateMenu(ContextMenu menu)
+        {
+            if (_session == null || _session.IsGestureActive)
+                return false;
+
+            if (_contextGap is { } gap)
+                return PopulateGapMenu(menu, gap);
+
             var item = _contextItemId == Guid.Empty ? null : FindItem(_contextItemId);
             var track = item == null ? null : FindTrack(item.TrackId);
-            if (item == null || track == null || _session.IsGestureActive)
-            {
-                // empty rows and the ruler gutter have nothing to offer — no menu at all beats an
-                // all-disabled one.
-                e.Cancel = true;
-                return;
-            }
+            if (item == null || track == null)
+                return false;
 
             menu.Items.Clear();
 
@@ -831,6 +887,8 @@ namespace Clowd.UI.VideoEditor.Timeline
             menu.Items.Add(NewMenuItem("Split at Cursor",
                 !track.Locked && cursorTicks > item.TimelineStartTicks && cursorTicks < item.TimelineEndTicks,
                 () => _session.SplitItemAt(itemId, cursorTicks, this)));
+
+            menu.Items.Add(NewMenuItem("Copy", _session.CanCopyItem(itemId), () => _session.CopyItem(itemId)));
 
             menu.Items.Add(NewMenuItem("Delete", !track.Locked, () => DeleteSelection?.Invoke()));
 
@@ -868,6 +926,166 @@ namespace Clowd.UI.VideoEditor.Timeline
                 menu.Items.Add(new Separator());
                 menu.Items.Add(NewMenuItem("Ungroup Row", true, () => _session.UngroupTrack(trackId, this)));
             }
+
+            return true;
+        }
+
+        /// <summary>
+        /// The gap menu: close the gap on this row, or across the whole timeline; fill it from a
+        /// neighbor (a held frame on a video row, or the neighbor's own trimmed-off material); or
+        /// paste the copied clip into it. The closes are always listed — Close Gap greyed out
+        /// when the shift would collide — while a fill is listed only when its neighbor can
+        /// supply it, so the menu never offers a fill that cannot happen.
+        /// </summary>
+        private bool PopulateGapMenu(ContextMenu menu, TimelineGap gap)
+        {
+            var project = _session.Project;
+            if (FindTrack(gap.TrackId) == null || !TimelineOps.IsCurrentGap(project, gap))
+                return false;
+
+            menu.Items.Clear();
+            menu.Items.Add(NewMenuItem("Close Gap", _session.CanCloseGap(gap), () => _session.CloseGap(gap, this)));
+            menu.Items.Add(NewMenuItem("Ripple Close Gap (All Tracks)", true,
+                () => _session.RippleCloseGap(gap, this)));
+
+            var fills = new List<MenuItem>();
+            if (TimelineOps.CanRejoinGap(project, gap))
+                fills.Add(NewMenuItem("Rejoin Clips (Undo Cut)", true, () => _session.RejoinGap(gap, this)));
+            if (TimelineOps.CanFillGapWithFreeze(project, gap, fromLeft: true))
+                fills.Add(NewMenuItem("Freeze Last Frame of Left Clip", true,
+                    () => _session.FillGapWithFreeze(gap, fromLeft: true, this)));
+            if (TimelineOps.CanFillGapWithFreeze(project, gap, fromLeft: false))
+                fills.Add(NewMenuItem("Freeze First Frame of Right Clip", true,
+                    () => _session.FillGapWithFreeze(gap, fromLeft: false, this)));
+            if (TimelineOps.CanExtendIntoGap(project, gap, fromLeft: true))
+                fills.Add(NewMenuItem("Extend Left Clip", true, () => _session.ExtendIntoGap(gap, fromLeft: true, this)));
+            if (TimelineOps.CanExtendIntoGap(project, gap, fromLeft: false))
+                fills.Add(NewMenuItem("Extend Right Clip", true, () => _session.ExtendIntoGap(gap, fromLeft: false, this)));
+            if (fills.Count > 0)
+            {
+                menu.Items.Add(new Separator());
+                foreach (var fill in fills)
+                    menu.Items.Add(fill);
+            }
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(NewMenuItem("Paste", _session.CanPasteIntoGap(gap), () => _session.PasteIntoGap(gap, this)));
+            return true;
+        }
+
+        /// <summary>The gap under the pointer on an unlocked video or audio row, or null. Other
+        /// rows are left alone: on text, effect and input-overlay rows the space between items is
+        /// the normal state, and an overlay there would be clutter.</summary>
+        private TimelineGap? GapAt(Point pos)
+        {
+            if (_session == null)
+                return null;
+
+            var row = _rows.FirstOrDefault(r => pos.Y >= r.Top && pos.Y < r.Bottom);
+            if (row is not { Kind: TimelineRowKind.Video or TimelineRowKind.Audio })
+                return null;
+            if (FindTrack(row.TrackId) is not { Locked: false })
+                return null;
+
+            return _session.FindGap(row.TrackId, _viewport.XToTicks(pos.X));
+        }
+
+        /// <summary>Where the gap overlay's chip sits: centered on the gap's visible part and on
+        /// its row, sized to its duration label. Null when the row is gone or the visible part is
+        /// too narrow to hold the chip — a right-click still reaches the menu there.</summary>
+        private Rect? GapPillRect(TimelineGap gap)
+        {
+            var row = _rows.FirstOrDefault(r => r.TrackId == gap.TrackId);
+            if (row == null)
+                return null;
+
+            var x0 = Math.Max(0, _viewport.TickToX(gap.StartTicks));
+            var x1 = Math.Min(Bounds.Width, _viewport.TickToX(gap.EndTicks));
+            var width = GapChipWidth(gap);
+            if (x1 - x0 < width + GapChipMargin * 2)
+                return null;
+
+            var height = Math.Min(GapChipHeight, row.Height - ItemPadY * 2 - 4);
+            return new Rect(Math.Round((x0 + x1 - width) / 2), Math.Round(row.Top + (row.Height - height) / 2),
+                width, height);
+        }
+
+        private static double GapChipWidth(TimelineGap gap) =>
+            Math.Ceiling(GapChipPadX + GapLabelText(gap, Brushes.Black).Width + GapChevronGapX + GapChevronWidth + GapChipPadX);
+
+        private static FormattedText GapLabelText(TimelineGap gap, IBrush ink) =>
+            new FormattedText(GapLabel(gap), CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                new Typeface(FontFamily.Default, weight: FontWeight.SemiBold), 11, ink);
+
+        /// <summary>The gap's length the way an editor reads it: tenths of a second up to a minute,
+        /// minutes:seconds past it.</summary>
+        private static string GapLabel(TimelineGap gap)
+        {
+            var span = TimeSpan.FromTicks(gap.DurationTicks);
+            return span.TotalSeconds < 60
+                ? span.TotalSeconds.ToString(span.TotalSeconds < 10 ? "0.0" : "0", CultureInfo.InvariantCulture) + "s"
+                : $"{(int)span.TotalMinutes}:{span.Seconds:00}";
+        }
+
+        /// <summary>
+        /// The hovered gap, drawn as an empty slot with a measurement across it: the stretch gets a
+        /// faint accent wash inside a dashed outline (the shape a clip would take there), a dotted
+        /// dimension line runs between end ticks at the two clip edges, and a chip in the middle
+        /// reads the gap's length with a chevron saying it opens a menu. Hovering the chip fills it
+        /// with the accent. On a gap too narrow for the line, the chip stands alone.
+        /// </summary>
+        private void RenderGapOverlay(DrawingContext context, TimelinePalette palette, TimelineGap gap)
+        {
+            var row = _rows.FirstOrDefault(r => r.TrackId == gap.TrackId);
+            if (row == null || GapPillRect(gap) is not { } chip)
+                return;
+
+            var accent = palette.SelectionPen.Brush is ISolidColorBrush solid ? solid.Color : Colors.DodgerBlue;
+            var x0 = Math.Max(0, _viewport.TickToX(gap.StartTicks));
+            var x1 = Math.Min(Bounds.Width, _viewport.TickToX(gap.EndTicks));
+
+            // the slot: where a clip would sit, as a dashed, faintly tinted silhouette
+            var slot = new Rect(x0 + 1, row.Top + ItemPadY + 0.5, Math.Max(1, x1 - x0 - 2),
+                Math.Max(1, row.Height - ItemPadY * 2 - 1));
+            context.DrawRectangle(new SolidColorBrush(accent, 0.07),
+                new Pen(new SolidColorBrush(accent, 0.45), 1, new DashStyle(new double[] { 3, 3 }, 0)),
+                slot, ItemCornerRadius, ItemCornerRadius);
+
+            // the dimension line: dotted, between short end ticks a few px inside the clip edges
+            var y = Math.Round(chip.Center.Y) + 0.5;
+            var lineBrush = new SolidColorBrush(accent, _hoverGapPill ? 0.9 : 0.6);
+            var tickPen = new Pen(lineBrush, 1.25, lineCap: PenLineCap.Round);
+            var dotPen = new Pen(lineBrush, 1.5, new DashStyle(new double[] { 0, 3 }, 0), PenLineCap.Round);
+            var left = x0 + GapChipMargin;
+            var right = x1 - GapChipMargin;
+            if (chip.Left - GapChipMargin - left >= GapLineMinPx)
+            {
+                context.DrawLine(tickPen, new Point(left, y - GapTickHalf), new Point(left, y + GapTickHalf));
+                context.DrawLine(dotPen, new Point(left + 4, y), new Point(chip.Left - 4, y));
+                context.DrawLine(tickPen, new Point(right, y - GapTickHalf), new Point(right, y + GapTickHalf));
+                context.DrawLine(dotPen, new Point(chip.Right + 4, y), new Point(right - 4, y));
+            }
+
+            // the chip: the gap's length and a chevron, outlined at rest, filled on hover
+            var radius = chip.Height / 2;
+            var chipFill = _hoverGapPill ? (IBrush)new SolidColorBrush(accent) : palette.SurfaceBackground;
+            var ink = _hoverGapPill ? Brushes.White : (IBrush)new SolidColorBrush(accent);
+            context.DrawRectangle(chipFill, new Pen(new SolidColorBrush(accent, 0.8), 1), chip.Deflate(0.5), radius, radius,
+                new BoxShadows(new BoxShadow { OffsetY = 1, Blur = 4, Color = Color.FromArgb(50, 0, 0, 0) }));
+
+            var text = GapLabelText(gap, ink);
+            var textX = chip.X + GapChipPadX;
+            context.DrawText(text, new Point(textX, Math.Round(chip.Center.Y - text.Height / 2)));
+
+            var cx = chip.Right - GapChipPadX - GapChevronWidth / 2;
+            var cy = chip.Center.Y + 0.5;
+            var chevron = new Pen(ink, 1.5, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+            context.DrawGeometry(null, chevron, new PolylineGeometry(new[]
+            {
+                new Point(cx - GapChevronWidth / 2, cy - 1.5),
+                new Point(cx, cy + 1.5),
+                new Point(cx + GapChevronWidth / 2, cy - 1.5),
+            }, false));
         }
 
         private static MenuItem NewMenuItem(string header, bool enabled, Action execute)
@@ -1014,6 +1232,11 @@ namespace Clowd.UI.VideoEditor.Timeline
                         evenRow: i % 2 == 0);
                 }
             }
+
+            // the hovered gap's close/fill button — not mid-drag, and not once an edit has
+            // changed the row under it (the next pointer move finds the new one)
+            if (_hoverGap is { } hoverGap && _dragMode == DragMode.None && TimelineOps.IsCurrentGap(project, hoverGap))
+                RenderGapOverlay(context, palette, hoverGap);
 
             // the voice take being recorded, over the row's clips: where the take will land
             if (_session.VoiceTakeGhost is { } ghost)
@@ -1182,6 +1405,11 @@ namespace Clowd.UI.VideoEditor.Timeline
             string label = null;
             switch (item.Content)
             {
+                // a held frame looks exactly like the clip it came from; the label is what says
+                // nothing moves here.
+                case MediaContent { Freeze: true }:
+                    label = "Freeze Frame";
+                    break;
                 case TextContent text:
                     (glyph, label) = (TimelineIcons.Find("IconToolText"), text.Text);
                     break;
@@ -1476,6 +1704,12 @@ namespace Clowd.UI.VideoEditor.Timeline
                 ? stream.DisplayWidth / stream.DisplayHeight
                 : 16.0 / 9;
 
+            if (media.Freeze)
+            {
+                RenderFrozenStrip(context, palette, media, body, Math.Max(8, body.Height * aspect));
+                return;
+            }
+
             // a re-timed item (speed ≠ 1) covers DurationTicks * speed of SOURCE, and one screen
             // pixel spans tpp * speed source ticks — all the strip math below runs in source time,
             // so it uses the scaled tick-per-pixel throughout.
@@ -1543,6 +1777,34 @@ namespace Clowd.UI.VideoEditor.Timeline
                     {
                         context.FillRectangle(palette.FilmstripPlaceholderFill, dest.Deflate(0.5));
                     }
+                }
+            }
+        }
+
+        /// <summary>A freeze frame's strip: its one held frame tiled along the body at its natural
+        /// width — every slot of a filmstrip would show the same picture anyway. Asked for at
+        /// the finest interval the provider has (it quantizes up to its base grid), so the
+        /// nearest cached thumb is as close to the held instant as the strip gets.</summary>
+        private void RenderFrozenStrip(DrawingContext context, TimelinePalette palette, MediaContent media,
+            Rect body, double slotWidth)
+        {
+            var strip = _previewProvider.GetThumbnails(new ThumbnailRequest(media.SourceId, media.StreamIndex,
+                media.SourceInTicks, 1, 1, (int)Math.Round(body.Height)));
+            var thumb = NearestThumb(strip.Thumbnails, media.SourceInTicks, Math.Max(1, strip.IntervalTicks) * 2);
+
+            using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = BitmapInterpolationMode.HighQuality }))
+            using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
+            {
+                var visStartX = Math.Max(body.X, 0);
+                var visEndX = Math.Min(body.Right, Bounds.Width);
+                var first = Math.Max(0, Math.Floor((visStartX - body.X) / slotWidth));
+                for (var x = body.X + first * slotWidth; x < visEndX; x += slotWidth)
+                {
+                    var dest = new Rect(x, body.Y, slotWidth, body.Height);
+                    if (thumb is { Image: { } bitmap })
+                        context.DrawImage(bitmap, dest);
+                    else
+                        context.FillRectangle(palette.FilmstripPlaceholderFill, dest.Deflate(0.5));
                 }
             }
         }

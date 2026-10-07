@@ -219,6 +219,9 @@ public sealed class Project
                         errors.Add($"Item {item.Id} has a negative source in-point ({media.SourceInTicks} ticks).");
                     if (!(media.Speed > 0) || Double.IsInfinity(media.Speed))
                         errors.Add($"Item {item.Id} has a non-positive playback speed ({media.Speed}).");
+                    // a held frame is a picture; there is nothing to hold on an audio row.
+                    if (media.Freeze && track != null && track.Kind != TrackKind.Video)
+                        errors.Add($"Freeze frame item {item.Id} is on non-video track {track.Id}.");
                     break;
 
                 case SpeedContent speed:

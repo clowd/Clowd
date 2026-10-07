@@ -65,6 +65,15 @@ public sealed class MediaContent : ItemContent
     /// </summary>
     public bool SpeedWarpExempt { get; set; }
 
+    /// <summary>
+    /// When true the item is a freeze frame: every instant it covers shows the one source frame
+    /// at <see cref="SourceInTicks"/> (the latest frame at or before it), so it consumes no
+    /// source at all — <see cref="Speed"/> is ignored, a trim never moves the in-point and the
+    /// item may be stretched to any length. Video rows only. Made by filling a timeline gap with
+    /// a neighbor's edge frame (<see cref="TimelineOps.FillGapWithFreeze"/>).
+    /// </summary>
+    public bool Freeze { get; set; }
+
     public override ItemContent Clone() => new MediaContent
     {
         SourceId = SourceId,
@@ -72,6 +81,7 @@ public sealed class MediaContent : ItemContent
         SourceInTicks = SourceInTicks,
         Speed = Speed,
         SpeedWarpExempt = SpeedWarpExempt,
+        Freeze = Freeze,
     };
 }
 

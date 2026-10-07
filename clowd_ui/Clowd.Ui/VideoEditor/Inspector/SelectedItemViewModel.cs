@@ -3207,7 +3207,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 CommandUngroup.RaiseCanExecuteChanged();
 
                 var media = item?.Content as MediaContent;
-                Set(ref _showSpeed, media != null && item.GroupId == null, nameof(ShowSpeed));
+                // a freeze frame plays no source, so it has no speed to set
+                Set(ref _showSpeed, media is { Freeze: false } && item.GroupId == null, nameof(ShowSpeed));
                 Set(ref _speed, TimelineOps.SpeedOf(media), nameof(SpeedChoice));
 
                 // the speed-warp opt-out is written on the content, so it needs one: an audio row
@@ -3862,6 +3863,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private static string DescribeContent(Item item, bool onAudioTrack) => item?.Content switch
         {
             null => "",
+            MediaContent { Freeze: true } => "Freeze Frame",
             MediaContent => onAudioTrack ? "Audio" : "Video",
             TextContent => "Text",
             ImageContent => "Image",

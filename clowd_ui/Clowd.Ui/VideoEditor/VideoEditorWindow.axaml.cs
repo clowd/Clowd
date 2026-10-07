@@ -154,6 +154,9 @@ namespace Clowd.UI.VideoEditor
         public RelayCommand CommandJumpStart { get; }
         public RelayCommand CommandJumpEnd { get; }
         public RelayCommand CommandSplit { get; }
+
+        /// <summary>Copies the selected clip for the timeline gap menu's Paste.</summary>
+        public RelayCommand CommandCopyClip { get; }
         public RelayCommand CommandUndo { get; }
         public RelayCommand CommandRedo { get; }
         public RelayCommand CommandAddText { get; }
@@ -194,6 +197,12 @@ namespace Clowd.UI.VideoEditor
             CommandJumpStart = new RelayCommand { Executed = _ => JumpToStart(), Text = "Jump to start" };
             CommandJumpEnd = new RelayCommand { Executed = _ => JumpToEnd(), Text = "Jump to end" };
             CommandSplit = new RelayCommand { Executed = _ => SplitAtPlayhead(), Text = "_Split Every Track at Playhead", Gesture = new SimpleKeyGesture(Key.K, KeyModifiers.Control) };
+            CommandCopyClip = new RelayCommand
+            {
+                Executed = _ => CopySelectedClip(),
+                Text = "_Copy Clip",
+                Gesture = new SimpleKeyGesture(Key.C, KeyModifiers.Control),
+            };
             CommandUndo = new RelayCommand
             {
                 Executed = _ => Undo(),
@@ -273,6 +282,7 @@ namespace Clowd.UI.VideoEditor
             // Escape is handled there only to leave crop mode when no drag is in flight — the
             // timeline surface and gizmo keep it for canceling a drag in progress.
             AddCommandKeyBinding(CommandSplit);
+            AddCommandKeyBinding(CommandCopyClip);
             AddCommandKeyBinding(CommandUndo);
             AddCommandKeyBinding(CommandRedo);
             KeyBindings.Add(new KeyBinding { Command = CommandRedo, Gesture = new KeyGesture(Key.Z, KeyModifiers.Control | KeyModifiers.Shift) });
@@ -1489,6 +1499,12 @@ namespace Clowd.UI.VideoEditor
         // ====================================================================
         // Keyboard
         // ====================================================================
+
+        private void CopySelectedClip()
+        {
+            if (_editor?.PrimarySelectedItem is { } item)
+                _editor.CopyItem(item.Id);
+        }
 
         private void AddCommandKeyBinding(RelayCommand command)
         {

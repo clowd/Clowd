@@ -532,8 +532,11 @@ namespace Clowd.UI.VideoEditor.Timeline
                 if (to <= from)
                     continue;
 
-                spans.Add((media.SourceInTicks + (from - item.TimelineStartTicks),
-                    media.SourceInTicks + (to - item.TimelineStartTicks)));
+                // a freeze frame shows one instant however long it is
+                spans.Add(media.Freeze
+                    ? (media.SourceInTicks, media.SourceInTicks + 1)
+                    : (media.SourceInTicks + (from - item.TimelineStartTicks),
+                        media.SourceInTicks + (to - item.TimelineStartTicks)));
             }
 
             if (spans.Count <= 1)

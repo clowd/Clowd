@@ -30,12 +30,13 @@ namespace Clowd.VideoSDK.Playback
         /// consumed at <see cref="Speed"/> source ticks per timeline tick (1 = realtime).</summary>
         internal readonly struct Segment
         {
-            public Segment(long tlStart, long tlEnd, long srcIn, double speed = 1.0)
+            public Segment(long tlStart, long tlEnd, long srcIn, double speed = 1.0, bool freeze = false)
             {
                 TlStart = tlStart;
                 TlEnd = tlEnd;
                 SrcIn = srcIn;
                 Speed = speed > 0 ? speed : 1.0;
+                Freeze = freeze;
             }
 
             public long TlStart { get; }
@@ -43,16 +44,27 @@ namespace Clowd.VideoSDK.Playback
             public long SrcIn { get; }
             public double Speed { get; }
 
+            /// <summary>A freeze frame (<see cref="MediaContent.Freeze"/>): the whole span shows
+            /// the frame at <see cref="SrcIn"/> and consumes no source, so the segment is empty in
+            /// the source domain — it neither paces a frame nor bounds a cut.</summary>
+            public bool Freeze { get; }
+
             public long SrcEnd => SrcIn + ToSource(TlEnd - TlStart);
 
             /// <summary>Source minus timeline at the segment's start. No longer the per-instant
             /// offset once <see cref="Speed"/> ≠ 1 — it serves as the segment's identity for seam
             /// detection (the player only ever compares it across instants), never arithmetic.</summary>
-            public long Offset => SrcIn - TlStart;
+            public long Offset => Freeze ? FreezeIdentity(TlStart) : SrcIn - TlStart;
+
+            /// <summary>A freeze segment's seam identity: unique per start instant and far below
+            /// any real source−timeline offset, so entering or leaving a hold always reads as a
+            /// discontinuity — the hop is what puts the held frame on screen. Never
+            /// <see cref="long.MinValue"/>, which means "nothing covers the instant".</summary>
+            private static long FreezeIdentity(long tlStart) => long.MinValue + 1 + tlStart;
 
             /// <summary>A timeline span inside this segment, rendered into source ticks.</summary>
             public long ToSource(long timelineTicks) =>
-                Speed == 1.0 ? timelineTicks : (long)Math.Round(timelineTicks * Speed);
+                Freeze ? 0 : Speed == 1.0 ? timelineTicks : (long)Math.Round(timelineTicks * Speed);
 
             /// <summary>A source span inside this segment, rendered into timeline ticks.</summary>
             public long ToTimeline(long sourceTicks) =>
@@ -126,6 +138,19 @@ namespace Clowd.VideoSDK.Playback
                 return _segments.Length > 0 ? _segments[0].TlStart : srcTicks;
             }
 
+            /// <summary>Whether a freeze segment covers the timeline instant — where the frame on
+            /// screen is a held one whose pts says nothing about the playhead.</summary>
+            public bool IsFrozenAt(long tlTicks)
+            {
+                foreach (var seg in _segments)
+                {
+                    if (tlTicks >= seg.TlStart && tlTicks < seg.TlEnd)
+                        return seg.Freeze;
+                }
+
+                return false;
+            }
+
             /// <summary>The source-timeline offset of the segment covering the timeline instant,
             /// or <see cref="long.MinValue"/> when nothing covers it (a gap, or outside the
             /// stream's span). A change in this value across a played seam is exactly a source
@@ -143,11 +168,14 @@ namespace Clowd.VideoSDK.Playback
 
             private static SkipRangeSchedule BuildCuts(Segment[] segments)
             {
+                // a hold plays no source, so the cut between two played segments is measured
+                // straight across it — a freeze between the halves of a split cuts nothing.
+                var played = Array.FindAll(segments, s => !s.Freeze);
                 List<TimeRange> ranges = null;
-                for (int i = 1; i < segments.Length; i++)
+                for (int i = 1; i < played.Length; i++)
                 {
-                    long cutStart = segments[i - 1].SrcEnd;
-                    long cutEnd = segments[i].SrcIn;
+                    long cutStart = played[i - 1].SrcEnd;
+                    long cutEnd = played[i].SrcIn;
                     if (cutEnd > cutStart)
                     {
                         ranges ??= new List<TimeRange>();
@@ -220,7 +248,7 @@ namespace Clowd.VideoSDK.Playback
                     var media = (MediaContent)item.Content;
                     var key = (media.SourceId, media.StreamIndex);
                     var segment = new Segment(item.TimelineStartTicks, item.TimelineEndTicks,
-                        media.SourceInTicks, TimelineOps.SpeedOf(media));
+                        media.SourceInTicks, TimelineOps.SpeedOf(media), media.Freeze);
 
                     if (!videoSegments.TryGetValue(key, out var list))
                         videoSegments[key] = list = new List<Segment>();
