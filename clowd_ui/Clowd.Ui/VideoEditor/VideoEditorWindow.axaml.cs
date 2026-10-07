@@ -373,7 +373,20 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>Opens (or focuses) the editor for a recording session. Falls back to the OS
         /// video player with a notice when in-process playback is unavailable.</summary>
-        public static void ShowSession(SessionInfo session)
+        public static void ShowSession(SessionInfo session) => ShowSession(session, restoring: false);
+
+        /// <summary>Reopens an editor that was still open when Clowd last went down without the
+        /// user closing it (see <see cref="App.KeepOpenEditorsOnExit"/>) — in the background, like
+        /// the image editor's restored windows. The stale marker is dropped first: an editor that
+        /// does open writes a fresh one, and one that can no longer open (recording gone, video
+        /// editing switched off) must not keep the session pinned against cleanup forever.</summary>
+        internal static void RestoreSession(SessionInfo session)
+        {
+            session.OpenEditor = null;
+            ShowSession(session, restoring: true);
+        }
+
+        private static void ShowSession(SessionInfo session, bool restoring)
         {
             if (session == null)
                 return;
@@ -437,6 +450,13 @@ namespace Clowd.UI.VideoEditor
             }
 
             var wnd = new VideoEditorWindow(session, videoPath, exitOnClose: false);
+            if (restoring)
+            {
+                wnd.ShowActivated = false;
+                wnd.Show();
+                return;
+            }
+
             wnd.Show();
             wnd.Activate();
         }
@@ -509,9 +529,10 @@ namespace Clowd.UI.VideoEditor
             return false;
         }
 
-        /// <summary>Whether a video editor window is open on <paramref name="session"/>. The video
-        /// editor does not mark sessions with OpenEditor (that is the image editor's), so this is
-        /// the check for "the user is working on it".</summary>
+        /// <summary>Whether a video editor window is open on <paramref name="session"/>. The
+        /// session's OpenEditor marker says the same while the window is up, but it also survives
+        /// an unrequested exit (to be restored on start), so this is the check for "the user is
+        /// working on it right now".</summary>
         internal static bool IsOpenFor(SessionInfo session) =>
             GetOpenEditors().Any(w => ReferenceEquals(w._session, session));
 
@@ -530,6 +551,11 @@ namespace Clowd.UI.VideoEditor
 
         private async void VideoEditorWindow_Opened(object sender, EventArgs e)
         {
+            // marks the session open — what reopens it after an unrequested exit (session restore),
+            // and what keeps Recents' delete and the retention sweep off it meanwhile.
+            if (_session != null)
+                _session.OpenEditor = new SessionOpenEditor { IsVideoEditor = true };
+
             // poster first: the session's preview frame fills the letterbox until the first
             // decoded frame replaces it.
             var poster = _session?.PreviewImgPath;
@@ -2602,7 +2628,11 @@ namespace Clowd.UI.VideoEditor
             // -> a full Recents rebuild for a page that is behind this window anyway.
             _session?.NotifyContentChanged();
 
-            DiscardEmptyProject();
+            var discarded = DiscardEmptyProject();
+
+            // left marked across an unrequested exit, so the next start reopens it
+            if (_session != null && !discarded && !App.KeepOpenEditorsOnExit)
+                _session.OpenEditor = null;
 
             SaveWindowState();
             TrySaveSettings();
@@ -2637,19 +2667,21 @@ namespace Clowd.UI.VideoEditor
         /// <summary>A blank project the user closed without putting anything into it leaves no
         /// Recents row behind — the same rule the image editor applies to a new session that was
         /// never drawn on. A project holding any media or any item is kept, videoedit.json and
-        /// all.</summary>
-        private void DiscardEmptyProject()
+        /// all. Returns true when the session was deleted (and is disposed).</summary>
+        private bool DiscardEmptyProject()
         {
             if (!IsProjectEdit || _session == null)
-                return;
+                return false;
 
             var project = _editor?.Project;
             if (project != null && (project.Sources.Count > 0 || project.Items.Count > 0))
-                return;
+                return false;
 
             try
             {
+                _session.OpenEditor = null; // DeleteSession refuses sessions marked open in an editor
                 SessionManager.Current.DeleteSession(_session);
+                return true;
             }
             catch (Exception ex)
             {
@@ -2657,6 +2689,7 @@ namespace Clowd.UI.VideoEditor
                 // leaves an empty row behind.
                 Debug.WriteLine("Failed to discard empty video project: " + ex.Message);
                 SentryConfig.CaptureHandled(ex, "videoeditor.discard-project");
+                return false;
             }
         }
 

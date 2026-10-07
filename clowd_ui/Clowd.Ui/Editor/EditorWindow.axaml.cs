@@ -32,6 +32,7 @@ using Clowd.PlatformUtil;
 using Clowd.UI.Config;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
+using Clowd.UI.VideoEditor;
 using Clowd.Util;
 using Path = System.IO.Path;
 
@@ -444,7 +445,8 @@ namespace Clowd.UI
             }
 
             UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
-            _session.OpenEditor = null;
+            if (!App.KeepOpenEditorsOnExit)
+                _session.OpenEditor = null; // left marked across an unrequested exit, to reopen on start
             _session = null;
         }
 
@@ -461,7 +463,7 @@ namespace Clowd.UI
                 }
             }
 
-            bool isExistingSession = session?.OpenEditor != null && session.OpenEditor.RestorePosition != null;
+            bool isExistingSession = session?.OpenEditor is { IsVideoEditor: false, RestorePosition: not null };
             bool canPlaceExactly = session?.OriginalBounds?.IsEmpty() == false;
 
             if (session == null)
@@ -544,7 +546,10 @@ namespace Clowd.UI
                                          .Where(s => s.OpenEditor != null).ToArray();
 
             foreach (var g in sessions) {
-                ShowSession(g);
+                if (g.OpenEditor.IsVideoEditor)
+                    VideoEditorWindow.RestoreSession(g);
+                else
+                    ShowSession(g);
             }
         }
 

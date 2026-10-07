@@ -28,6 +28,10 @@ namespace Clowd
         public bool IsMinimized { get; set; }
         public bool IsMaximized { get; set; }
         public ScreenRect RestorePosition { get; set; }
+
+        /// <summary>The session is open in the video editor rather than the image editor. The
+        /// video editor keeps its placement in its own settings, so it records nothing above.</summary>
+        public bool IsVideoEditor { get; set; }
     }
 
     /// <summary>

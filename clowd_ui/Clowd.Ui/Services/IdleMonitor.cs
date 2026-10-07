@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using Clowd.Config;
+using Clowd.UI.VideoEditor;
 
 namespace Clowd.UI
 {
@@ -105,7 +106,7 @@ namespace Clowd.UI
                 return false;
             }
 
-            if (EditorWindow.GetOpenEditors().Any()
+            if ((EditorWindow.GetOpenEditors().Any() || VideoEditorWindow.GetOpenEditors().Any())
                 && SettingsRoot.Current?.Editor?.RestoreSessionsOnClowdStart != true)
             {
                 // reopening the editors after the restart is what makes this non-destructive; without

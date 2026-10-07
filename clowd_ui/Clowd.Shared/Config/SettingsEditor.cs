@@ -180,7 +180,7 @@ namespace Clowd.Config
     {
         [Category("Sessions")]
         [DisplayName("Restore sessions on startup")]
-        [Description("Reopen the editor sessions that were still open when Clowd last exited")]
+        [Description("Reopen image and video editors that were still open when Clowd was restarted for an update or the computer shut down")]
         public bool RestoreSessionsOnClowdStart
         {
             get => _restoreSessionsOnClowdStart;

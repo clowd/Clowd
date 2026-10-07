@@ -378,7 +378,9 @@ namespace Clowd.UI
                 return;
             }
 
-            Dispatcher.UIThread.Post(() => App.Current?.ExitApp());
+            // a background restart is not the user closing Clowd: whatever editors are open come
+            // back after it (IdleMonitor only lets it happen when session restore is on).
+            Dispatcher.UIThread.Post(() => App.Current?.ExitApp(keepOpenEditors: silent));
         }
 
         // ---- manager ----
