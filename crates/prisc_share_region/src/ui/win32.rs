@@ -43,11 +43,12 @@ use windows::Win32::Graphics::GdiPlus::{
     GdipCreateFontFamilyFromName, GdipCreateFromHDC, GdipCreatePath, GdipCreateSolidFill,
     GdipCreateStringFormat, GdipDeleteBrush, GdipDeleteFont, GdipDeleteFontFamily,
     GdipDeleteGraphics, GdipDeletePath, GdipDeleteStringFormat, GdipDrawString, GdipFillPath,
-    GdipFillRectangleI, GdipIsStyleAvailable, GdipMeasureString, GdipSetSmoothingMode,
-    GdipSetStringFormatAlign, GdipSetStringFormatLineAlign, GdipSetTextRenderingHint,
-    GdiplusStartup, GdiplusStartupInput, GpBrush, GpFont, GpFontFamily, GpGraphics, GpPath,
-    GpSolidFill, GpStringFormat, RectF, SmoothingModeAntiAlias, Status, StringAlignmentCenter,
-    TextRenderingHintClearTypeGridFit, UnitPixel,
+    GdipFillRectangleI, GdipIsStyleAvailable, GdipMeasureString, GdipSetPixelOffsetMode,
+    GdipSetSmoothingMode, GdipSetStringFormatAlign, GdipSetStringFormatLineAlign,
+    GdipSetTextRenderingHint, GdiplusStartup, GdiplusStartupInput, GpBrush, GpFont, GpFontFamily,
+    GpGraphics, GpPath, GpSolidFill, GpStringFormat, PixelOffsetModeHalf, RectF,
+    SmoothingModeAntiAlias, Status, StringAlignmentCenter, TextRenderingHintClearTypeGridFit,
+    UnitPixel,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::WM_MOUSELEAVE;
@@ -184,12 +185,13 @@ const CLR_DIVIDER: u32 = 0x333333;
 /// Heading, and the supporting line at reduced strength.
 const CLR_TEXT: u32 = 0xF2F2F2;
 const CLR_TEXT_DIM: u32 = 0x9EA4A9;
-/// The OK button: a mid blue that carries white text, lightened for hover and
-/// darkened for pressed.
+/// The OK button's default fill: a mid blue that carries white text. The
+/// caller can replace it (`UiConfig::accent`); hover and pressed are derived
+/// from whichever accent is in effect by [`accent_hot`] and [`accent_down`].
 const CLR_ACCENT: u32 = 0x54A9FF;
-const CLR_ACCENT_HOT: u32 = 0x68B3FF;
-const CLR_ACCENT_DOWN: u32 = 0x4790D9;
 const CLR_BTN_TEXT: u32 = 0xFFFFFF;
+/// Button label on an accent too light to carry white.
+const CLR_BTN_TEXT_DARK: u32 = 0x000000;
 
 /// Font families, in preference order. "Segoe UI Variable" is Win11's UI face
 /// and simply does not exist on Win10, where the second entry is the right
@@ -284,6 +286,8 @@ struct App {
     /// WM_COMMAND(IDOK/IDCANCEL) from `IsDialogMessageW` (see ID_PROMPT_OK).
     ok_hot: bool,
     ok_down: bool,
+    /// The OK button's fill, 0xRRGGBB: `UiConfig::accent` or [`CLR_ACCENT`].
+    accent: u32,
 }
 
 fn fatal(what: &str) -> ! {
@@ -415,6 +419,45 @@ unsafe fn apply_dark_chrome(hwnd: HWND) {
 /// 0xRRGGBB (the palette's order) to the 0x00BBGGRR a COLORREF wants.
 fn colorref(rgb: u32) -> u32 {
     ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF)
+}
+
+/// Applies `f` to each channel of a 0xRRGGBB colour.
+fn map_channels(rgb: u32, f: impl Fn(u32) -> u32) -> u32 {
+    (f((rgb >> 16) & 0xFF).min(255) << 16)
+        | (f((rgb >> 8) & 0xFF).min(255) << 8)
+        | f(rgb & 0xFF).min(255)
+}
+
+/// Hover fill: the accent moved 12% of the way to white.
+fn accent_hot(accent: u32) -> u32 {
+    map_channels(accent, |c| c + (255 - c) * 12 / 100)
+}
+
+/// Pressed fill: the accent at 85% brightness.
+fn accent_down(accent: u32) -> u32 {
+    map_channels(accent, |c| (c * 85 + 50) / 100)
+}
+
+/// The button label for an accent: white, unless the accent is light enough
+/// that white would wash out. The cut is relative luminance 0.5, which keeps
+/// the default blue (≈0.38) on the white label the design was drawn with.
+fn button_text_for(accent: u32) -> u32 {
+    let lin = |c: u32| {
+        let c = c as f32 / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let l = 0.2126 * lin((accent >> 16) & 0xFF)
+        + 0.7152 * lin((accent >> 8) & 0xFF)
+        + 0.0722 * lin(accent & 0xFF);
+    if l > 0.5 {
+        CLR_BTN_TEXT_DARK
+    } else {
+        CLR_BTN_TEXT
+    }
 }
 
 // -- prompt phase -----------------------------------------------------------
@@ -699,6 +742,15 @@ impl Gfx {
         // text — the client area is opaque, which is the one condition
         // ClearType needs.
         GdipSetSmoothingMode(g, SmoothingModeAntiAlias);
+        // Pixel edges, not pixel centres, on integer coordinates. GDI+'s
+        // default puts pixel centres there, so under antialiasing every
+        // integer-aligned fill only half-covers its first row and column. On
+        // the background fill that left the client's top row and left column
+        // a 50% blend with the back buffer's uninitialised black — a dark
+        // hairline under the caption on screen, and, because the blend also
+        // halves the alpha, a WHITE one in a meeting app's window capture,
+        // which composites that alpha over white.
+        GdipSetPixelOffsetMode(g, PixelOffsetModeHalf);
         GdipSetTextRenderingHint(g, TextRenderingHintClearTypeGridFit);
         Some(Gfx(g))
     }
@@ -954,7 +1006,7 @@ unsafe fn draw_prompt(app: *mut App, hdc: HDC, cw: i32, ch: i32, dpi: u32) {
             centered: false,
         },
     );
-    draw_ok_button(&g, &l, dpi, (*app).ok_hot, (*app).ok_down);
+    draw_ok_button(&g, &l, dpi, (*app).accent, (*app).ok_hot, (*app).ok_down);
 
     g.text(
         PROMPT_SUBTITLE,
@@ -976,13 +1028,13 @@ unsafe fn draw_prompt(app: *mut App, hdc: HDC, cw: i32, ch: i32, dpi: u32) {
 /// state the pointer has put it. Drawn as part of the client paint — there is
 /// no control here, so nothing else can put a pixel inside it or around it. The
 /// corners the rounded rect gives up show the footer it sits on.
-unsafe fn draw_ok_button(g: &Gfx, l: &PromptLayout, dpi: u32, hot: bool, down: bool) {
+unsafe fn draw_ok_button(g: &Gfx, l: &PromptLayout, dpi: u32, accent: u32, hot: bool, down: bool) {
     let fill = if down {
-        CLR_ACCENT_DOWN
+        accent_down(accent)
     } else if hot {
-        CLR_ACCENT_HOT
+        accent_hot(accent)
     } else {
-        CLR_ACCENT
+        accent
     };
     g.fill_round_rect(l.button, scale(dpi, PROMPT_BTN_RADIUS), fill);
     g.text(
@@ -994,7 +1046,7 @@ unsafe fn draw_ok_button(g: &Gfx, l: &PromptLayout, dpi: u32, hot: bool, down: b
             // no bolder weight to give and would silently stay semibold.
             families: &FONT_TEXT,
             size_px: scalef(dpi, PROMPT_BTN_PX),
-            color: CLR_BTN_TEXT,
+            color: button_text_for(accent),
             bold: true,
             centered: true,
         },
@@ -1368,6 +1420,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             prompt_active: false,
             ok_hot: false,
             ok_down: false,
+            accent: cfg.accent.unwrap_or(CLR_ACCENT),
         }));
         SetWindowLongPtrW(mirror, GWLP_USERDATA, app as isize);
 

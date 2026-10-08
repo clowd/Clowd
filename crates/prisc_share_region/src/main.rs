@@ -136,6 +136,22 @@ struct Cli {
     /// `GraphicsCaptureSession::IsBorderRequired`, which is Windows 11+.
     #[arg(long, value_name = "METHOD", default_value = "auto")]
     capture_method: CaptureMethod,
+
+    /// Fill colour of the prompt's OK button, as `#RRGGBB` (the `#` is
+    /// optional). Hover and pressed shades are derived from it, and the label
+    /// switches to black on a light colour. Windows only — ignored on macOS,
+    /// where the button is a native one in the system accent.
+    #[arg(long, value_name = "COLOR", value_parser = parse_hex_color)]
+    accent_color: Option<u32>,
+}
+
+/// `#RRGGBB` or `RRGGBB` → 0xRRGGBB.
+fn parse_hex_color(s: &str) -> Result<u32, String> {
+    let hex = s.strip_prefix('#').unwrap_or(s);
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("expected #RRGGBB, got '{s}'"));
+    }
+    u32::from_str_radix(hex, 16).map_err(|e| e.to_string())
 }
 
 /// The `AppEvents` implementation: the shim from UI callbacks onto [`Mirror`],
@@ -298,7 +314,10 @@ fn main() {
     // exit_process(0), or a fatal error exits underneath it.
     ui::run(
         region,
-        UiConfig { title: cli.title },
+        UiConfig {
+            title: cli.title,
+            accent: cli.accent_color,
+        },
         Box::new(App { mirror, region }),
     )
 }

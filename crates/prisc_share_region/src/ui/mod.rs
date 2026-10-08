@@ -106,6 +106,10 @@ pub struct UiConfig {
     /// recognisable. It stays the window's title after the caption is dropped,
     /// because pickers list the title, not the caption bar.
     pub title: String,
+    /// Fill of the prompt's OK button, 0xRRGGBB; `None` keeps the built-in
+    /// colour. Windows only: the AppKit prompt uses a native NSButton, which
+    /// takes the system accent and ignores this.
+    pub accent: Option<u32>,
 }
 
 /// Implemented in main.rs over `Mirror`. All calls arrive on the UI/main thread.
