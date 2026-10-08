@@ -2,7 +2,7 @@
 //! own video mix (`obs_view_add2`), used for secondary video tracks (e.g. a
 //! webcam recorded alongside the main canvas).
 //!
-//! CRITICAL invariant (verified in libobs 32.1.2 source): `obs_reset_video`
+//! CRITICAL invariant (verified in libobs 32.2.2 source): `obs_reset_video`
 //! destroys ALL view mixes. Any code path that calls `obs_reset_video` while
 //! an `ObsView` with an added mix exists must drop the view (and everything
 //! bound to its `video_t`, e.g. encoders) first, then rebuild and rebind

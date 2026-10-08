@@ -21,3 +21,6 @@ windows = { workspace = true }
 objc2 = { workspace = true }
 objc2-app-kit = { workspace = true }
 objc2-foundation = { workspace = true }
+
+[build-dependencies]
+obs-build-support = { workspace = true }

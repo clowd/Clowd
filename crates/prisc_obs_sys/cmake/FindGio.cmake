@@ -4,7 +4,7 @@
 # own finder directories after it, so this file wins and delegates to OBS's.
 #
 # Why: the reference build image (tools/linux-build/Dockerfile, manylinux_2_34
-# = AlmaLinux 9) ships GLib 2.68, but OBS 32.1.2's linux-pipewire asks for
+# = AlmaLinux 9) ships GLib 2.68, but OBS 32.2.2's linux-pipewire asks for
 # `find_package(Gio 2.76 REQUIRED)`. The only 2.76 API it uses is
 # g_clear_fd(), a static inline in <glib-unix.h> — nothing from the 2.76
 # *library*. So the real version check is done here against 2.68, and with

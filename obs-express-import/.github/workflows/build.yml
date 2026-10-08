@@ -68,9 +68,9 @@ jobs:
       # -DOBS_VERSION_OVERRIDE, but OBS's windows/architecture.cmake spawns
       # *child* CMake configures (build_x86, and build_x64 for the ARM64 parent)
       # that ignore that cache var and re-run `git describe`. HEAD is exactly the
-      # 32.1.2 release commit, so a lightweight tag makes it resolve everywhere.
+      # 32.2.2 release commit, so a lightweight tag makes it resolve everywhere.
       - name: Tag OBS submodule for versioning
-        run: git -C obs-studio tag -f 32.1.2
+        run: git -C obs-studio tag -f 32.2.2
 
       - name: Toolchain diagnostics
         run: |
@@ -136,7 +136,7 @@ jobs:
           if (Test-Path target/release/data)        { Copy-Item -Recurse target/release/data $dist }
           # vid2gif links the FFmpeg DLLs directly; it is a hard shipping
           # requirement on every platform (no separate ffmpeg.exe needed).
-          foreach ($required in @("obs-express.exe","clowd_share_region.exe","obs.dll","vid2gif.exe","avcodec-61.dll","avfilter-10.dll")) {
+          foreach ($required in @("obs-express.exe","clowd_share_region.exe","obs.dll","vid2gif.exe","avcodec-62.dll","avfilter-11.dll")) {
             if (-not (Test-Path "$dist/$required")) {
               Write-Host "::error::required binary missing from dist: $required"
               exit 1
@@ -177,9 +177,8 @@ jobs:
   # ---------------------------------------------------------------------------
   macos:
     name: Build (macOS ${{ matrix.arch }})
-    # macos-latest (not a pinned older image): OBS 32.1.2's CMake requires the
-    # macOS 15.0 SDK (Xcode 16+). macos-14's default Xcode is 15.4 (SDK 14.5),
-    # which is too low; macos-latest ships a current Xcode. Both the arm64
+    # macos-latest (not a pinned older image): OBS 32.2.2's CMake requires the
+    # macOS 26.5 SDK (Xcode 26.5+); macos-latest ships a current Xcode. Both the arm64
     # (native) and x64 (cross) slices run on this arm64 runner.
     runs-on: macos-latest
     timeout-minutes: 120
@@ -213,10 +212,10 @@ jobs:
           echo "OBS submodule SHA: $sha"
 
       # See the Windows job: give the tagless CI submodule a lightweight tag on
-      # HEAD (the 32.1.2 release commit) so OBS's `git describe --tags` version
+      # HEAD (the 32.2.2 release commit) so OBS's `git describe --tags` version
       # discovery resolves to a valid MAJOR.MINOR.PATCH.
       - name: Tag OBS submodule for versioning
-        run: git -C obs-studio tag -f 32.1.2
+        run: git -C obs-studio tag -f 32.2.2
 
       - name: Select full Xcode
         run: |
@@ -508,10 +507,10 @@ jobs:
           echo "OBS submodule SHA: $sha"
 
       # See the Windows job: give the tagless CI submodule a lightweight tag on
-      # HEAD (the 32.1.2 release commit) so OBS's `git describe --tags` version
+      # HEAD (the 32.2.2 release commit) so OBS's `git describe --tags` version
       # discovery resolves to a valid MAJOR.MINOR.PATCH.
       - name: Tag OBS submodule for versioning
-        run: git -C obs-studio tag -f 32.1.2
+        run: git -C obs-studio tag -f 32.2.2
 
       # The image is rebuilt from the Dockerfile every run, with its layers
       # cached in the GitHub Actions cache, so a Dockerfile edit takes effect

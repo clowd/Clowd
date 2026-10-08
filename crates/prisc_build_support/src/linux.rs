@@ -8,8 +8,8 @@
 //! each carry their own codec registry and allocator state, and a distro
 //! FFmpeg of a different major version would not even be ABI compatible with
 //! headers we generated bindings from. So the system libav* is never used:
-//! every consumer links the pinned BtbN build below, which is FFmpeg 7.1 — the
-//! same ABI line (libavcodec 61) the Windows and macOS obs-deps ship, so the
+//! every consumer links the pinned BtbN build below, which is FFmpeg 8.1 — the
+//! same ABI line (libavcodec 62) the Windows and macOS obs-deps ship, so the
 //! `avcodec_version()` assertion in ffmpeg-sys holds on every OS.
 //!
 //! BtbN's `gpl-shared` builds link all external codec libraries statically
@@ -22,8 +22,8 @@
 //!
 //! The archive's libraries carry no RUNPATH at all. That is fine when they sit
 //! in `/usr/lib`, but not here: an executable's DT_RUNPATH only applies to its
-//! *direct* dependencies, so `libavfilter.so.10` asking for
-//! `libpostproc.so.58` would be looked up in the system paths and fail (or,
+//! *direct* dependencies, so `libavfilter.so.11` asking for
+//! `libswscale.so.9` would be looked up in the system paths and fail (or,
 //! worse, find a distro copy). [`ensure_ffmpeg`] therefore rewrites every
 //! library's RUNPATH to `$ORIGIN` once, at extraction time, so the siblings
 //! resolve each other wherever the set is copied to — the Linux analogue of
@@ -48,20 +48,20 @@ pub struct FfmpegAsset {
     pub dir_name: &'static str,
 }
 
-/// BtbN FFmpeg-Builds, release `autobuild-2026-07-31-14-10`, FFmpeg n7.1.5,
+/// BtbN FFmpeg-Builds, release `autobuild-2026-10-08-13-05`, FFmpeg n8.1.3,
 /// GPL, shared libraries.
 pub const FFMPEG_LINUX_X64: FfmpegAsset = FfmpegAsset {
-    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-shared-7.1.tar.xz",
-    sha256: "df7e15a2d2fe0ee15ae36e0e3b83596dd088ee0a0767874241d9a54380df0add",
-    dir_name: "ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-shared-7.1",
+    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-08-13-05/ffmpeg-n8.1.3-14-g330caae0c1-linux64-gpl-shared-8.1.tar.xz",
+    sha256: "8d90b5b09ce1cf97dca692bb81a1f72c01b8d3c17b0c5187a0c99ecfad4d45a4",
+    dir_name: "ffmpeg-n8.1.3-14-g330caae0c1-linux64-gpl-shared-8.1",
 };
 
 /// The same BtbN release and FFmpeg revision as [`FFMPEG_LINUX_X64`], built
 /// for aarch64, so both Linux arches ship the same FFmpeg source.
 pub const FFMPEG_LINUX_ARM64: FfmpegAsset = FfmpegAsset {
-    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-linuxarm64-gpl-shared-7.1.tar.xz",
-    sha256: "659a2801655f9ca187efd95e594ddb1eba9f309c809d91d3e95669a4f22469ee",
-    dir_name: "ffmpeg-n7.1.5-12-g1fdbca85aa-linuxarm64-gpl-shared-7.1",
+    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-08-13-05/ffmpeg-n8.1.3-14-g330caae0c1-linuxarm64-gpl-shared-8.1.tar.xz",
+    sha256: "9257ca509d687e0128a0e21d3ea204b3c0be22f21c8f10915a6097bf7d836745",
+    dir_name: "ffmpeg-n8.1.3-14-g330caae0c1-linuxarm64-gpl-shared-8.1",
 };
 
 /// The asset for a Rust target arch (`CARGO_CFG_TARGET_ARCH`).
@@ -205,7 +205,7 @@ fn is_shared_object_name(name: &str) -> bool {
 }
 
 /// The SONAME-named entries of a library directory, resolved to their real
-/// files: `(libavcodec.so.61, <dir>/libavcodec.so.61.19.101)`.
+/// files: `(libavcodec.so.62, <dir>/libavcodec.so.62.<minor>.<micro>)`.
 ///
 /// The runtime loader asks for exactly the SONAME, so that is the only name a
 /// shipped directory needs. The development `libfoo.so` link and the fully

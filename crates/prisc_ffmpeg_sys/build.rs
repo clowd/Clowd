@@ -113,15 +113,13 @@ fn wait_for_deps(deps_dir: &Path) -> PathBuf {
 /// The bundle for this target arch, or `None` while it is still missing. A
 /// bundle for a *different* arch is never returned (see [`wait_for_deps`]).
 fn find_deps(deps_dir: &Path) -> Option<PathBuf> {
-    std::fs::read_dir(deps_dir)
-        .ok()?
-        .flatten()
-        .map(|e| e.path())
+    // deps_dir is <obs-studio>/.deps; the bundle version comes from the
+    // checkout's CMakePresets.json.
+    obs_build_support::obs_deps_bundles(deps_dir.parent()?)
+        .into_iter()
         .find(|dir| {
             let name = dir.file_name().unwrap_or_default().to_string_lossy();
-            name.starts_with("obs-deps-")
-                && !name.contains("qt6")
-                && is_target_arch(&name)
+            is_target_arch(&name)
                 && dir.join("include").join("libavcodec").exists()
                 && dir.join("lib").exists()
         })

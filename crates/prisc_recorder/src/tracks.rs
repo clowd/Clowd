@@ -16,7 +16,7 @@
 //! `recorder::Recorder`).
 
 /// Maximum audio tracks a libobs output can carry (`MAX_AUDIO_MIXES` /
-/// `MAX_OUTPUT_AUDIO_ENCODERS`, both 6 in libobs 32.1.2). Only relevant in
+/// `MAX_OUTPUT_AUDIO_ENCODERS`, both 6 in libobs 32.2.2). Only relevant in
 /// multi-track mode — single-track recordings mix any number of sources
 /// (capped by `cli::MAX_AUDIO_SOURCES`) into their one track.
 pub const MAX_AUDIO_TRACKS: usize = 6;

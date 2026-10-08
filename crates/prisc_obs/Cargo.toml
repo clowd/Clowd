@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 obs-sys = { workspace = true }
+
+[build-dependencies]
+obs-build-support = { workspace = true }
