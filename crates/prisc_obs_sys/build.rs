@@ -407,6 +407,16 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
         // warnings-as-errors so a newer MSVC toolchain than OBS 32.1.2 was
         // tested against cannot break our build on a stray warning.
         .arg("-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF")
+        // Silences VS 2026's hard deprecation error for libobs-winrt's
+        // <experimental/coroutine>; see the file for details.
+        .arg(format!(
+            "-DCMAKE_PROJECT_INCLUDE={}",
+            PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+                .join("cmake/msvc-compat.cmake")
+                .display()
+                .to_string()
+                .replace('\\', "/")
+        ))
         .arg("-DENABLE_FRONTEND=OFF")
         .arg("-DENABLE_UI=OFF")
         .arg("-DENABLE_SCRIPTING=OFF")
