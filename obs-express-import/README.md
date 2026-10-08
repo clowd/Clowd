@@ -281,7 +281,7 @@ The conversion is two in-process passes (fps/scale + `palettegen`, then `palette
 libobs is compiled from the `obs-studio` submodule (pinned to **32.1.2**), so a full native toolchain is needed:
 
 - `git`, `cmake` (≥ 3.28), and a recent **Rust** toolchain (`cargo`)
-- **Windows** — Visual Studio 2022 (the "Visual Studio 17 2022" generator) and LLVM/`libclang` (for `bindgen`; point `LIBCLANG_PATH` at it if not on `PATH`)
+- **Windows** — Visual Studio 2022 or 2026 (the newest installed one picks the CMake generator; set `OBS_CMAKE_GENERATOR` to override) and LLVM/`libclang` (for `bindgen`; point `LIBCLANG_PATH` at it if not on `PATH`)
 - **macOS** — full **Xcode** (not just the Command Line Tools — the Metal renderer and Swift are required)
 - **Linux** (x86_64 and aarch64) — build in the reference image, `tools/linux-build/Dockerfile`. It is a manylinux_2_34 (AlmaLinux 9, glibc 2.34) base with clang/`libclang` (for `bindgen`), `ninja`, `nasm`, `patchelf`, Rust, and the development packages of the system libraries the bundle links. CI builds in the same image, and building there is what keeps the result portable to every glibc 2.34+ distribution:
 

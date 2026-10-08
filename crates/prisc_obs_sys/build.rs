@@ -313,8 +313,55 @@ fn workspace_obs_build_dir(arch_suffix: &str) -> PathBuf {
     workspace_target.join(format!("obs-{arch_suffix}"))
 }
 
+/// The newest installed Visual Studio, as reported by `vswhere`:
+/// `(major version, installation path)`. `None` when vswhere is missing or
+/// finds nothing.
+fn find_visual_studio() -> Option<(u32, PathBuf)> {
+    let program_files_x86 =
+        env::var("ProgramFiles(x86)").unwrap_or_else(|_| "C:/Program Files (x86)".to_string());
+    let vswhere =
+        PathBuf::from(program_files_x86).join("Microsoft Visual Studio/Installer/vswhere.exe");
+    let query = |property: &str| -> Option<String> {
+        let output = Command::new(&vswhere)
+            .args([
+                "-latest",
+                "-products",
+                "*",
+                "-format",
+                "value",
+                "-property",
+                property,
+            ])
+            .output()
+            .ok()?;
+        let value = String::from_utf8(output.stdout).ok()?.trim().to_string();
+        (output.status.success() && !value.is_empty()).then_some(value)
+    };
+
+    let major = query("installationVersion")?
+        .split('.')
+        .next()?
+        .parse()
+        .ok()?;
+    Some((major, PathBuf::from(query("installationPath")?)))
+}
+
+/// CMake Visual Studio generator. `OBS_CMAKE_GENERATOR` overrides; otherwise
+/// it follows the newest installed VS, so a runner image that swaps VS 2022
+/// for VS 2026 (as windows-11-arm did) keeps building.
+fn win_cmake_generator() -> String {
+    println!("cargo:rerun-if-env-changed=OBS_CMAKE_GENERATOR");
+    if let Ok(g) = env::var("OBS_CMAKE_GENERATOR") {
+        return g;
+    }
+    match find_visual_studio().map(|(major, _)| major) {
+        Some(18..) => "Visual Studio 18 2026".to_string(),
+        _ => "Visual Studio 17 2022".to_string(),
+    }
+}
+
 /// cmake is frequently not on PATH on dev machines; fall back to the copy that
-/// ships with Visual Studio 2022.
+/// ships with Visual Studio.
 fn find_cmake() -> PathBuf {
     if Command::new("cmake")
         .arg("--version")
@@ -325,15 +372,17 @@ fn find_cmake() -> PathBuf {
         return PathBuf::from("cmake");
     }
 
-    let vs = PathBuf::from("C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe");
-    if vs.exists() {
-        return vs;
+    let vs_cmake = find_visual_studio().map(|(_, path)| {
+        path.join("Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe")
+    });
+    match vs_cmake {
+        Some(cmake) if cmake.exists() => cmake,
+        Some(cmake) => panic!(
+            "cmake not found on PATH and the Visual Studio fallback is missing at {}",
+            cmake.display()
+        ),
+        None => panic!("cmake not found on PATH and no Visual Studio install was found"),
     }
-
-    panic!(
-        "cmake not found on PATH and the Visual Studio fallback is missing at {}",
-        vs.display()
-    );
 }
 
 fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
@@ -350,7 +399,7 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
         .arg("-B")
         .arg(build_dir)
         .arg("-G")
-        .arg("Visual Studio 17 2022")
+        .arg(win_cmake_generator())
         .arg("-A")
         .arg(win_vs_platform())
         .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
