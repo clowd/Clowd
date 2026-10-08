@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using Clowd.Drawing.Graphics;
 using Xunit;
@@ -49,14 +50,48 @@ namespace Clowd.Drawing.Tests
         }
 
         [AvaloniaFact]
-        public void MidHandleDrag_ProjectsOntoTheChordNormal()
+        public void MidHandleDrag_AlongTheChord_LeansTheBendWithinTheSkewLimit()
         {
-            // only the perpendicular component is curvature; sliding along the chord does nothing
+            // a modest slide along the chord stays under the pointer
             var g = Horizontal();
-            g.MoveHandleTo(new Point(80, 25), MidHandle);
+            g.MoveHandleTo(new Point(65, 25), MidHandle);
 
             Assert.Equal(25, g.CurveOffset, 9);
-            AssertPointClose(new Point(50, 25), g.GetHandle(MidHandle, Dpi));
+            Assert.Equal(0.15, g.CurveSkew, 9);
+            AssertPointClose(new Point(65, 25), g.GetHandle(MidHandle, Dpi));
+
+            // ...but past the limit the handle stops at 25% of the chord from the midpoint
+            g.MoveHandleTo(new Point(95, 25), MidHandle);
+
+            Assert.Equal(GraphicLine.MaxCurveSkew, g.CurveSkew, 9);
+            AssertPointClose(new Point(75, 25), g.GetHandle(MidHandle, Dpi));
+        }
+
+        [AvaloniaFact]
+        public void ShiftMidHandleDrag_SnapsToASymmetricBendInTenPercentSteps()
+        {
+            var g = Horizontal();
+            g.MoveHandleTo(new Point(70, 27), MidHandle, KeyModifiers.Shift);
+
+            Assert.Equal(30, g.CurveOffset, 9); // 10% of the 100-unit chord per step
+            Assert.Equal(0, g.CurveSkew);
+            AssertPointClose(new Point(50, 30), g.GetHandle(MidHandle, Dpi));
+
+            // within half a step of the chord, Shift lands on exactly straight
+            g.MoveHandleTo(new Point(60, -4), MidHandle, KeyModifiers.Shift);
+            Assert.Equal(0, g.CurveOffset);
+        }
+
+        [AvaloniaFact]
+        public void Skew_ScalesWithTheChord()
+        {
+            var g = Horizontal();
+            g.MoveHandleTo(new Point(70, 20), MidHandle);
+
+            g.MoveHandleTo(new Point(200, 0), 2); // chord doubles in length
+
+            Assert.Equal(0.2, g.CurveSkew, 9);
+            AssertPointClose(new Point(140, 20), g.GetHandle(MidHandle, Dpi));
         }
 
         [AvaloniaFact]

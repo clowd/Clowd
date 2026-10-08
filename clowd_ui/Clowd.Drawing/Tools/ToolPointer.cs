@@ -276,6 +276,12 @@ namespace Clowd.Drawing.Tools
                             wpfPt = HelperFunctions.SnapPointToCommonAngle(anchor, wpfPt, false);
                             _handleGrabbedObject.MoveHandleTo(wpfPt, _handleGrabbed);
                         }
+                        // the line's curve handle reads Shift itself: it snaps the bend symmetric and
+                        // into 10% steps of the chord length
+                        else if (lineGraphic != null)
+                        {
+                            lineGraphic.MoveHandleTo(wpfPt, _handleGrabbed, s.Modifiers);
+                        }
                         // a path handle reads the modifiers itself: Shift snaps the handle to 45°,
                         // Alt breaks a smooth anchor's symmetry
                         else if (_handleGrabbedObject is GraphicPath path)

@@ -39,9 +39,24 @@ namespace Clowd.Drawing.Graphics
             set => Set(ref _curveOffset, value);
         }
 
+        /// <summary>
+        /// How far the bow's midpoint (the mid handle) slides along the chord away from the chord
+        /// midpoint, as a fraction of the chord length (positive toward LineEnd), so the bend can
+        /// lean toward one end instead of always being symmetric. Clamped to ±<see cref="MaxCurveSkew"/>
+        /// by the handle drag; 0 — the default, and what older sessions deserialize to — is the
+        /// symmetric bow. Stored relative to the chord length for the same reason CurveOffset is
+        /// chord-relative: it survives Move and endpoint drags unchanged. Ignored while straight.
+        /// </summary>
+        public double CurveSkew
+        {
+            get => _curveSkew;
+            set => Set(ref _curveSkew, value);
+        }
+
         private Point _lineStart;
         private Point _lineEnd;
         private double _curveOffset;
+        private double _curveSkew;
 
         // handle 1/2 are LineStart/LineEnd (a numbering other code depends on — e.g. the line and
         // arrow tools create with MoveHandleTo(point, 2)); the curve handle is appended as 3.
@@ -52,6 +67,14 @@ namespace Clowd.Drawing.Graphics
         // dragging the mid handle back within this many units of the chord snaps to exactly
         // straight, so a curved line can be restored to the straight fast path by hand
         private const double StraightSnapDistance = 1.0;
+
+        // the mid handle may slide this far (as a fraction of the chord length) either side of the
+        // chord midpoint — enough for a lopsided bend without letting the curve fold back on itself
+        internal const double MaxCurveSkew = 0.25;
+
+        // Shift-drag quantizes the bow to multiples of this fraction of the chord length (and drops
+        // the skew), so a bend is easy to straighten exactly or repeat across several lines
+        internal const double SnappedOffsetStep = 0.1;
 
         // segments used to walk the curve when converting between arc length and the bezier
         // parameter (only runs when the cached geometries are refilled, never per pointer event)
@@ -67,7 +90,7 @@ namespace Clowd.Drawing.Graphics
             _lineEnd = end;
         }
 
-        // PORT NOTE (aspect map entry): LineStart/LineEnd/CurveOffset define the shape, so they
+        // PORT NOTE (aspect map entry): LineStart/LineEnd/CurveOffset/CurveSkew define the shape, so they
         // invalidate Bounds|Geometry. GraphicArrow inherits this map (it adds no persisted
         // property).
         internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
@@ -77,6 +100,7 @@ namespace Clowd.Drawing.Graphics
             map[nameof(LineStart)] = shape;
             map[nameof(LineEnd)] = shape;
             map[nameof(CurveOffset)] = shape;
+            map[nameof(CurveSkew)] = shape;
         }
 
         // PORT NOTE (ComputeBounds): the old Bounds getter body moves here; the cached base Bounds
@@ -116,7 +140,7 @@ namespace Clowd.Drawing.Graphics
         // PORT NOTE (_translating fast path): pure translation offsets the cached bounds once and
         // clears only the Geometry aspect (shadow/text survive). Fields are set directly and a single
         // bare raise is emitted — the existing Move raise pattern is a contract and is unchanged.
-        // CurveOffset is chord-relative, so it survives the translation untouched.
+        // CurveOffset/CurveSkew are chord-relative, so they survive the translation untouched.
         internal override void Move(double deltaX, double deltaY)
         {
             _translating = true;
@@ -136,20 +160,48 @@ namespace Clowd.Drawing.Graphics
         // PORT NOTE (Move/MoveHandleTo raise pattern): every handle raises through a property
         // setter — one named raise per pointer event is what the history engine turns into undo
         // steps.
-        internal override void MoveHandleTo(Point point, int handleNumber)
+        internal override void MoveHandleTo(Point point, int handleNumber) =>
+            MoveHandleTo(point, handleNumber, KeyModifiers.None);
+
+        /// <summary>
+        /// Shift on the mid handle snaps to a symmetric bow in <see cref="SnappedOffsetStep"/>
+        /// steps; endpoint handles ignore the modifiers (their angle snap lives in ToolPointer).
+        /// </summary>
+        internal void MoveHandleTo(Point point, int handleNumber, KeyModifiers modifiers)
         {
             if (handleNumber == MidHandle)
             {
                 if (!TryGetChordNormal(out var normal))
                     return; // a zero-length chord has no normal to project onto — nothing to bow around
 
+                var length = ChordLength();
+                var tangent = new Vector(normal.Y, -normal.X);
                 var mid = ChordMidpoint();
-                var offset = (point.X - mid.X) * normal.X + (point.Y - mid.Y) * normal.Y;
+                var dx = point.X - mid.X;
+                var dy = point.Y - mid.Y;
+                var offset = dx * normal.X + dy * normal.Y;
+                var skew = (dx * tangent.X + dy * tangent.Y) / length;
+
+                if ((modifiers & KeyModifiers.Shift) != 0)
+                {
+                    var step = SnappedOffsetStep * length;
+                    offset = Math.Round(offset / step) * step;
+                    skew = 0;
+                }
+                else
+                {
+                    skew = Math.Clamp(skew, -MaxCurveSkew, MaxCurveSkew);
+                }
 
                 if (Math.Abs(offset) < StraightSnapDistance)
                     offset = 0;
 
+                // a straight line has no bend to lean, so it always carries the symmetric default
+                if (offset == 0)
+                    skew = 0;
+
                 CurveOffset = offset;
+                CurveSkew = skew;
                 return;
             }
 
@@ -185,10 +237,11 @@ namespace Clowd.Drawing.Graphics
         }
 
         /// <summary>
-        /// The bezier control point implied by <see cref="CurveOffset"/>: chordMid + 2*offset*normal.
-        /// The factor 2 is the quadratic's on-curve/control relation — B(0.5) lands halfway between
-        /// the chord midpoint and the control point — so doubling here puts the curve's own midpoint
-        /// (and therefore the mid handle) exactly CurveOffset away from the chord. False means
+        /// The bezier control point implied by <see cref="CurveOffset"/> and <see cref="CurveSkew"/>:
+        /// chordMid + 2*(offset*normal + skew*length*tangent). The factor 2 is the quadratic's
+        /// on-curve/control relation — B(0.5) lands halfway between the chord midpoint and the
+        /// control point — so doubling here puts the curve's own midpoint (and therefore the mid
+        /// handle) exactly at the offset/skew position the drag stored. False means
         /// straight (offset 0, or a degenerate zero-length chord that has no normal), i.e. every
         /// caller must take the untouched straight fast path.
         /// </summary>
@@ -201,9 +254,13 @@ namespace Clowd.Drawing.Graphics
             }
 
             var mid = ChordMidpoint();
-            control = new Point(mid.X + 2 * _curveOffset * normal.X, mid.Y + 2 * _curveOffset * normal.Y);
+            var along = _curveSkew * ChordLength();
+            control = new Point(mid.X + 2 * (_curveOffset * normal.X + along * normal.Y),
+                                mid.Y + 2 * (_curveOffset * normal.Y - along * normal.X));
             return true;
         }
+
+        private double ChordLength() => Distance(LineStart, LineEnd);
 
         protected Point ChordMidpoint() => new Point((LineStart.X + LineEnd.X) / 2, (LineStart.Y + LineEnd.Y) / 2);
 
