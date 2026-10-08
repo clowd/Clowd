@@ -106,7 +106,7 @@ namespace Clowd.UI
             _options.Click += (s, e) => SettingsClicked?.Invoke(this, EventArgs.Empty);
 
             // annotating the region you are showing is the obvious next move during a share, so the
-            // drawing toolbar is one click away; it sits by Stop, apart from the share's own controls.
+            // drawing toolbar is one click away; it sits just left of Options.
             _draw = new TrayButton { Glyph = TrayGlyphs.Draw };
             ToolTip.SetTip(_draw, Loc.T("Tray_DrawOnScreen"));
             AutomationProperties.SetName(_draw, Loc.T("Tray_DrawOnScreen"));
@@ -122,8 +122,8 @@ namespace Clowd.UI
             Tray.Items.Add(_fps);
             Tray.Items.Add(_hide);
             Tray.Items.Add(_resize);
-            Tray.Items.Add(_options);
             Tray.Items.Add(_draw);
+            Tray.Items.Add(_options);
             Tray.Items.Add(_stop);
 
             // Seeded HERE, in the constructor, so the tile's glyph, bar and tooltip can never be set

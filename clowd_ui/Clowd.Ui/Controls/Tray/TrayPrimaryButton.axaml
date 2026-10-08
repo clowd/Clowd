@@ -228,8 +228,13 @@
         <Style Selector="^[State=Paused]:pointerover /template/ Border#_veil">
             <Setter Property="Opacity" Value="0" />
         </Style>
+        <!-- the resting bars take the hover layer's size (14 in the 10 box, overhanging by 2), so
+             they match the pause verb the Active hover shows rather than the 9px record dot -->
         <Style Selector="^[State=Paused] /template/ tray|TrayGlyphIcon#_state">
             <Setter Property="Glyph" Value="{x:Static tray:TrayGlyphs.Pause}" />
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Margin" Value="-2" />
             <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.WarnBrush}" />
         </Style>
         <Style Selector="^[State=Paused] /template/ tray|TrayGlyphIcon#_act">
