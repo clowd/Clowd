@@ -282,7 +282,7 @@ namespace Clowd.Drawing.Tools
                         {
                             lineGraphic.MoveHandleTo(wpfPt, _handleGrabbed, s.Modifiers);
                         }
-                        // a path handle reads the modifiers itself: Shift snaps the handle to 45°,
+                        // a path handle reads the modifiers itself: Shift snaps the handle to 15° steps,
                         // Alt breaks a smooth anchor's symmetry
                         else if (_handleGrabbedObject is GraphicPath path)
                         {

@@ -8,7 +8,7 @@ namespace Clowd.Drawing.Tests
 {
     /// <summary>
     /// The pen path's vector helpers are pure (no Avalonia platform), so they are pinned here
-    /// platform-free: 45° snapping, the smooth-anchor collinear rule, Inkscape-style auto handles,
+    /// platform-free: 15° snapping, the smooth-anchor collinear rule, Inkscape-style auto handles,
     /// path reversal, the de Casteljau split and the "absent handle" threshold.
     /// </summary>
     public class PathMathTests
@@ -20,19 +20,23 @@ namespace Clowd.Drawing.Tests
         }
 
         [Fact]
-        public void Snap45_RoundsToTheNearestMultiple_AndKeepsTheLength()
+        public void SnapAngle_RoundsToTheNearestMultiple_AndKeepsTheLength()
         {
-            var flat = PathMath.Snap45(new Point(10, 1)); // ~5.7° → 0°
+            var flat = PathMath.SnapAngle(new Point(10, 1)); // ~5.7° → 0°
             AssertPointClose(new Point(Math.Sqrt(101), 0), flat);
 
-            var diagonal = PathMath.Snap45(new Point(1, 1.2)); // ~50° → 45°
+            var diagonal = PathMath.SnapAngle(new Point(1, 1.2)); // ~50° → 45°
             var len = Math.Sqrt(1 + 1.44);
             AssertPointClose(new Point(len * Math.Cos(Math.PI / 4), len * Math.Sin(Math.PI / 4)), diagonal);
 
-            var up = PathMath.Snap45(new Point(-0.3, -7)); // ~-92.5° → -90°
+            var up = PathMath.SnapAngle(new Point(-0.3, -7)); // ~-92.5° → -90°
             AssertPointClose(new Point(0, -Math.Sqrt(0.09 + 49)), up);
 
-            Assert.Equal(default, PathMath.Snap45(default));
+            var steep = PathMath.SnapAngle(new Point(10, 6)); // ~31° → 30°, not 45°
+            var steepLen = Math.Sqrt(136);
+            AssertPointClose(new Point(steepLen * Math.Cos(Math.PI / 6), steepLen * Math.Sin(Math.PI / 6)), steep);
+
+            Assert.Equal(default, PathMath.SnapAngle(default));
         }
 
         [Fact]

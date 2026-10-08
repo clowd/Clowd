@@ -141,7 +141,7 @@ namespace Clowd.Drawing.Tests
         }
 
         [AvaloniaFact]
-        public void MoveHandleTo_WithShift_SnapsTheHandleTo45Degrees()
+        public void MoveHandleTo_WithShift_SnapsTheHandleTo15DegreeSteps()
         {
             var g = MakeThree();
             g.MoveHandleTo(new Point(60, 1), g.OutHandle(1), KeyModifiers.Shift);

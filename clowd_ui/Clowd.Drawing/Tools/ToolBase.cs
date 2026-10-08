@@ -75,7 +75,7 @@ namespace Clowd.Drawing.Tools
             {
                 var pt = s.Position;
 
-                // snap the point to a 45deg angle (maybe).
+                // snap the point to a 15° step (or a diagonal for box tools).
                 // decision #9: both shifts snap (KeyModifiers.Shift); the WPF left-shift-only bug is fixed deliberately.
                 if (_snapMode != SnapMode.None && (s.Modifiers & KeyModifiers.Shift) != 0)
                 {

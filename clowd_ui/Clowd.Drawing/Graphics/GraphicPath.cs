@@ -309,7 +309,7 @@ namespace Clowd.Drawing.Graphics
 
         /// <summary>
         /// Drags a handle. An anchor handle translates the anchor (its handles are offsets, so they
-        /// follow). An In/Out handle is re-aimed at the pointer: Shift snaps it to 45°; Alt moves
+        /// follow). An In/Out handle is re-aimed at the pointer: Shift snaps it to 15° steps; Alt moves
         /// that side alone and makes the anchor a corner; otherwise a smooth anchor turns the
         /// opposite handle to stay collinear (keeping its length) — or, right after an Alt-press
         /// on the anchor itself (<see cref="ResolveGrab"/>), mirrors it exactly.
@@ -329,7 +329,7 @@ namespace Clowd.Drawing.Graphics
             {
                 var v = point - a.P;
                 if ((modifiers & KeyModifiers.Shift) != 0)
-                    v = PathMath.Snap45(v);
+                    v = PathMath.SnapAngle(v);
 
                 if (_mirrorNext)
                 {
@@ -512,7 +512,7 @@ namespace Clowd.Drawing.Graphics
             ref var a = ref _anchors[index];
             var v = cursor - a.P;
             if ((modifiers & KeyModifiers.Shift) != 0)
-                v = PathMath.Snap45(v);
+                v = PathMath.SnapAngle(v);
 
             var mirror = (modifiers & KeyModifiers.Alt) == 0;
             if (incoming)

@@ -37,15 +37,15 @@ namespace Clowd.Drawing.Graphics
             return len > 0 ? v / len : default;
         }
 
-        /// <summary>Rotates a handle vector to the nearest multiple of 45°, keeping its length;
-        /// zero stays zero.</summary>
-        public static Point Snap45(Point v)
+        /// <summary>Rotates a handle vector to the nearest multiple of
+        /// <see cref="HelperFunctions.SnapAngleStepDegrees"/>, keeping its length; zero stays zero.</summary>
+        public static Point SnapAngle(Point v)
         {
             var len = Length(v);
             if (len == 0)
                 return v;
 
-            const double step = Math.PI / 4;
+            const double step = HelperFunctions.SnapAngleStepDegrees * Math.PI / 180;
             var theta = Math.Round(Math.Atan2(v.Y, v.X) / step) * step;
             return new Point(Math.Cos(theta) * len, Math.Sin(theta) * len);
         }

@@ -8,7 +8,7 @@ namespace Clowd.Drawing.Tools
 {
     /// <summary>
     /// The pen: click to place a corner anchor, press-and-drag to pull mirrored handles out of the
-    /// anchor being placed (Alt: a cusp with one handle, Shift: 45° snap), click anchor 0 to close
+    /// anchor being placed (Alt: a cusp with one handle, Shift: 15° snap), click anchor 0 to close
     /// (the rubber band snaps onto it within <see cref="GraphicPath.CloseSnapRadius"/>), Enter /
     /// Escape / double-click / a tool switch to finish. Closing, Enter, Escape and double-click all
     /// hand the finished path to the pointer, like the one-shot drawing tools; a pen re-selected
