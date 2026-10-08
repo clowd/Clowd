@@ -66,8 +66,14 @@ impl CaptureMode {
 pub struct CapturerSettings {
     /// RGBA (each channel in [0, 1]) accent color used for crosshair
     /// arms, selection borders, and UI highlights. Written into the
-    /// per-window uniform buffer once, at render-thread startup.
+    /// per-window uniform buffer once, at render-thread startup. This is the
+    /// pick put through [`crate::accent::ensure_contrast_with_white`] unless
+    /// the shell asked for the exact color (`--no-accent-contrast`).
     pub accent_color: [f32; 4],
+    /// The accent exactly as the user picked it, before any contrast
+    /// correction: what light-emitting accents with no white ink on them —
+    /// the hint comet — derive their colors from.
+    pub picked_accent_color: [f32; 4],
     /// Which tips/hints mode is active when the capturer first opens.
     /// The user cycles through modes with the `T` key.
     pub tips_mode_at_startup: TipsMode,
@@ -152,10 +158,10 @@ impl Default for CapturerSettings {
         Self {
             // #2F7CAE — the legacy "clowd blue" (#3B97D2) darkened to a 4.5:1 contrast ratio
             // against the white labels drawn on accent-filled buttons (issue #48). The shell
-            // always passes `--accent-color` (the OS accent, or the user's pick, put through
-            // the same correction — see AccentColors in Clowd.Shared), so this is the
-            // standalone default only.
-            accent_color: [0x2F as f32 / 255.0, 0x7C as f32 / 255.0, 0xAE as f32 / 255.0, 1.0],
+            // always passes `--accent-color` (the OS accent, or the user's pick), which goes
+            // through the same correction in `into_settings`, so this is the standalone default only.
+            accent_color: contrast_corrected(CLOWD_BLUE_RGBA),
+            picked_accent_color: CLOWD_BLUE_RGBA,
             tips_mode_at_startup: TipsMode::default(),
             obscured_window_peek_enabled: true,
             obscured_window_detection_threshold: 0.80,
@@ -220,8 +226,16 @@ pub struct CliArgs {
 
     /// Accent color for the crosshair, selection borders, and UI
     /// highlights, as hex `#RRGGBB` or `#RRGGBBAA` (leading `#` optional).
-    #[arg(long, value_name = "HEX", default_value = "#2F7CAE", value_parser = parse_hex_color)]
+    /// Pass the color as picked: it is darkened here for the white labels
+    /// drawn on it (see `--no-accent-contrast`), and the hint comet derives
+    /// its own colors from the original.
+    #[arg(long, value_name = "HEX", default_value = "#3B97D2", value_parser = parse_hex_color)]
     pub accent_color: [f32; 4],
+
+    /// Use `--accent-color` exactly as given for the accent fills, rather
+    /// than darkening it until white labels on it are readable (WCAG AA).
+    #[arg(long)]
+    pub no_accent_contrast: bool,
 
     /// Tips/hints overlay mode at startup (cycled at runtime with T).
     #[arg(long, value_enum, default_value_t = TipsMode::Hints)]
@@ -353,7 +367,12 @@ pub struct CliArgs {
 impl CliArgs {
     pub fn into_settings(self) -> CapturerSettings {
         CapturerSettings {
-            accent_color: self.accent_color,
+            accent_color: if self.no_accent_contrast {
+                self.accent_color
+            } else {
+                contrast_corrected(self.accent_color)
+            },
+            picked_accent_color: self.accent_color,
             tips_mode_at_startup: self.tips_mode,
             obscured_window_peek_enabled: !self.no_peek,
             obscured_window_detection_threshold: self.peek_threshold,
@@ -377,6 +396,22 @@ impl CliArgs {
             save_directory: self.save_dir,
         }
     }
+}
+
+/// [`crate::accent::CLOWD_BLUE`] as the floats the settings carry.
+const CLOWD_BLUE_RGBA: [f32; 4] = [
+    crate::accent::CLOWD_BLUE[0] as f32 / 255.0,
+    crate::accent::CLOWD_BLUE[1] as f32 / 255.0,
+    crate::accent::CLOWD_BLUE[2] as f32 / 255.0,
+    1.0,
+];
+
+/// [`crate::accent::ensure_contrast_with_white`] on the 8-bit color the hex
+/// arrived as, alpha untouched.
+fn contrast_corrected(c: [f32; 4]) -> [f32; 4] {
+    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let [r, g, b] = crate::accent::ensure_contrast_with_white([q(c[0]), q(c[1]), q(c[2])]);
+    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, c[3]]
 }
 
 fn parse_hex_color(s: &str) -> Result<[f32; 4], String> {
@@ -410,6 +445,7 @@ mod tests {
         let from_cli = cli.into_settings();
         let default = CapturerSettings::default();
         assert_eq!(from_cli.accent_color, default.accent_color);
+        assert_eq!(from_cli.picked_accent_color, default.picked_accent_color);
         assert_eq!(from_cli.tips_mode_at_startup, default.tips_mode_at_startup);
         assert_eq!(from_cli.obscured_window_peek_enabled, default.obscured_window_peek_enabled);
         assert_eq!(
@@ -598,5 +634,16 @@ mod tests {
         assert_eq!(parse_fraction("0.5").unwrap(), 0.5);
         assert!(parse_fraction("1.5").is_err());
         assert!(parse_fraction("-0.1").is_err());
+    }
+
+    #[test]
+    fn accent_is_contrast_corrected_unless_asked_not_to() {
+        let hex = |c: [f32; 4]| c.map(|v| (v * 255.0).round() as u8);
+        let fixed = CliArgs::parse_from(["clowd_capture", "--accent-color", "#FFFF00"]).into_settings();
+        assert_eq!(hex(fixed.picked_accent_color), [0xFF, 0xFF, 0x00, 0xFF]);
+        assert!(crate::accent::contrast_with_white([0, 1, 2].map(|i| hex(fixed.accent_color)[i])) >= 4.5);
+
+        let exact = CliArgs::parse_from(["clowd_capture", "--accent-color", "#FFFF00", "--no-accent-contrast"]).into_settings();
+        assert_eq!(exact.accent_color, exact.picked_accent_color);
     }
 }

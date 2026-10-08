@@ -49,6 +49,10 @@ namespace Clowd.UI.Controls.Tray
         public bool PreferAboveBeforeVertical { get; init; }
 
         public BoxShadows Shadow { get; init; } = TrayTokens.ShadowCompact;
+
+        /// <summary>Circles the strip with the accent comet (<see cref="TrayComet"/>) when it first
+        /// appears, to draw the eye to a toolbar that has just popped up somewhere on the desktop.</summary>
+        public bool IntroComet { get; init; }
     }
 
     /// <summary>
@@ -109,6 +113,9 @@ namespace Clowd.UI.Controls.Tray
         private Popup _blip;
         private ContentControl _blipContent;
         private DispatcherTimer _blipTimer;
+
+        // the entrance comet; null unless the options asked for it.
+        private readonly TrayComet _comet;
 
         /// <summary>The panel. Subclasses add their controls to its Items before showing the window.</summary>
         public FloatingTray Tray { get; }
@@ -196,6 +203,14 @@ namespace Clowd.UI.Controls.Tray
             // this window so its content resolves the tray themes.
             _root = new Panel { Children = { Tray } };
             Content = _root;
+
+            // laid over the whole window, after the tray so it draws on top; it sizes to nothing, so the
+            // window still sizes to the tray and its margin.
+            if (options.IntroComet)
+            {
+                _comet = new TrayComet(Tray);
+                _root.Children.Add(_comet);
+            }
 
             if (options.HasGrip)
             {
@@ -285,7 +300,31 @@ namespace Clowd.UI.Controls.Tray
                     }
                     QueueReposition();
                 }
+
+                // the comet's outer rings live in the shadow reserve, so a window that lost it has no
+                // room to draw them. Posted so the run starts where the strip is placed, not where it
+                // was parked for the show.
+                else if (_comet != null)
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (IsVisible)
+                            _comet.Start();
+                    }, DispatcherPriority.Background);
+                }
             };
+        }
+
+        /// <summary>
+        /// Plays the entrance comet again on a strip that is already up — for an owner whose entry point
+        /// was used a second time while its strip was showing, so the press visibly lands somewhere.
+        /// Does nothing on a strip without the comet, one that is not visible, or one whose window could
+        /// not go transparent (the same rule the first run follows).
+        /// </summary>
+        public void ReplayIntroComet()
+        {
+            if (_comet != null && IsVisible && ActualTransparencyLevel == WindowTransparencyLevel.Transparent)
+                _comet.Start();
         }
 
         /// <summary>

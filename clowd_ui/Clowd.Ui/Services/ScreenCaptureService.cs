@@ -489,10 +489,12 @@ namespace Clowd.UI
             var settings = root.Capture;
             var general = root.General;
 
-            // the accent follows the OS (or the user's pick) and is contrast-corrected for the white
-            // text drawn on it — see SettingsGeneral.GetEffectiveAccentColor, issue #48. It lives on
+            // the accent follows the OS (or the user's pick). It goes over as picked: the capturer
+            // makes the same contrast correction for the white text drawn on it that
+            // SettingsGeneral.GetEffectiveAccentColor does (issue #48; clowd_capture/src/accent.rs),
+            // and derives its hint comet from the original as the tray comet does. It lives on
             // General rather than Capture because the recording toolbar and border wear it too.
-            var accent = general.GetEffectiveAccentColor();
+            var accent = general.GetPickedAccentColor();
 
             var args = new List<string>
             {
@@ -504,6 +506,9 @@ namespace Clowd.UI
                 // there is no capturer-side default that could stand in for it.
                 "--shell-pid", Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
             };
+
+            if (!general.MaintainMinimumContrast)
+                args.Add("--no-accent-contrast");
 
             // Region is the capturer's default (free selection) and is left implicit;
             // Screen / Window pre-select the active monitor / foreground window.

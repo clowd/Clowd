@@ -162,6 +162,8 @@ namespace Clowd.UI
                 _toolbar.FinishClicked += (s, e) => FinishRecording();
                 _toolbar.CancelClicked += (s, e) => Cancel();
                 _toolbar.SettingsClicked += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsRecording);
+                // the tray item's and hotkey's entry point: opens the drawing toolbar, or points at the open one
+                _toolbar.DrawClicked += (s, e) => DrawOnScreen.DrawOnScreenSession.Toggle();
                 // live mutes only — the toolbar itself persists the toggle settings.
                 _toolbar.MicToggled += (s, enabled) => _obs?.SetMicrophoneMute(!enabled);
                 _toolbar.SpeakerToggled += (s, enabled) => _obs?.SetSpeakerMute(!enabled);

@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod accent;
 mod app;
 mod capture;
 mod capture_output;

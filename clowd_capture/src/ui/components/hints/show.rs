@@ -211,7 +211,7 @@ pub fn notice_inputs(index: usize, monitor: &UiMonitor, c: &InputCtx<'_>) -> Opt
 /// `time` comes from this host's own context, which is legal because no
 /// chip ever straddles a seam; the notice fades off its own anchor, which
 /// it shares with nothing.
-pub fn show(ctx: &Context, p: &Painter, h: &HintsInputs, notice: Option<&NoticeInputs>, screen: Rect, accent: Color32, ppp: f32) {
+pub fn show(ctx: &Context, p: &Painter, h: &HintsInputs, notice: Option<&NoticeInputs>, screen: Rect, comet: (Color32, Color32)) {
     let time = ctx.input(|i| i.time);
     let mut placed: Vec<Rect> = Vec::with_capacity(4);
     let mut animating = false;
@@ -234,7 +234,7 @@ pub fn show(ctx: &Context, p: &Painter, h: &HintsInputs, notice: Option<&NoticeI
         p.add(pill::shadow(rect, a));
         p.add(pill::body(rect, pill::RADIUS, a, !hint.trail));
         if hint.trail {
-            p.add(Shape::mesh(trail::mesh(rect, pill::RADIUS, pill::BORDER_W, ppp, accent, a, time)));
+            p.add(Shape::mesh(trail::mesh(rect, pill::RADIUS, pill::BORDER_W, comet, a, time)));
             animating = true;
         }
         let mut x = rect.left() + pill::PAD_H;
@@ -635,7 +635,7 @@ mod tests {
                 let p = ui
                     .ctx()
                     .layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("hints-order-test")));
-                show(ui.ctx(), &p, &h, None, screen, Color32::RED, 1.0);
+                show(ui.ctx(), &p, &h, None, screen, (Color32::RED, Color32::WHITE));
             },
         );
         let mut shapes = Vec::new();

@@ -1,11 +1,13 @@
 //! The accent comet that orbits a chip's border.
 //!
-//! The old renderer drew this in the rounded-rect shader: a signed
-//! distance field around the pill, lit by a gaussian across the border
-//! band and by a comet tail along the perimeter. egui has no shader to put
-//! that in, so it is built here as a mesh — a strip of seven concentric
-//! rings around the chip's outline, sampled 128 times around, with the
-//! alpha of each vertex carrying both curves.
+//! Built as a mesh — a strip of seven concentric rings around the chip's
+//! outline, sampled 128 times around. It shares its look with the floating
+//! strips' entrance comet in the shell (clowd_ui/Clowd.Ui/Controls/Tray/
+//! TrayComet.cs): a solid core line with a short faint halo rather than a
+//! gaussian haze, a tail that tapers instead of going see-through, and a head
+//! that runs hot — all in colours derived from the user's own accent pick
+//! ([`comet_colors`]). Only the speed and length are the hints' own: a chip is
+//! far smaller than a strip, and the comet orbits it forever.
 //!
 //! Everything below is a pure function of the chip rect and the host's own
 //! clock, so nothing is retained between passes.
@@ -13,15 +15,49 @@
 use egui::epaint::Mesh;
 use egui::{pos2, vec2, Color32, Pos2, Rect, Vec2};
 
+use crate::accent;
+
 /// Orbits per second — one lap every 2.5 s, as the shader had it.
 pub const SPEED: f32 = 0.4;
 /// The comet's length, as a fraction of the perimeter.
 pub const TRAIL_LEN: f32 = 0.4;
 /// Samples around the perimeter.
 pub const N: usize = 128;
-/// Signed offsets of the rings from the chip's edge, in physical pixels;
-/// positive is outward. The band they span is the one the shader lit.
-const RINGS: [f32; 7] = [-7.0, -4.0, -2.0, 0.0, 2.0, 4.0, 7.0];
+/// The band across the rim, as (signed offset from the chip's edge in
+/// points, positive outward; opacity) pairs: a solid core three rings wide
+/// with a short, faint halo either side.
+const BAND: [(f32, f32); 7] = [
+    (-4.5, 0.0),
+    (-2.5, 0.28),
+    (-1.25, 1.0),
+    (0.0, 1.0),
+    (1.25, 1.0),
+    (2.5, 0.28),
+    (4.5, 0.0),
+];
+/// How thin the band gets at the very end of the tail, as a fraction of its
+/// full width.
+pub const TAIL_WIDTH: f32 = 0.10;
+
+/// The comet's body and head colours from the accent as the user picked it
+/// (`CapturerSettings::picked_accent_color`), straight alpha.
+pub fn comet_colors(picked: [f32; 4]) -> (Color32, Color32) {
+    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let (body, head) = accent::comet_colors([q(picked[0]), q(picked[1]), q(picked[2])]);
+    (
+        Color32::from_rgb(body[0], body[1], body[2]),
+        Color32::from_rgb(head[0], head[1], head[2]),
+    )
+}
+
+/// How a sample of `brightness` (0..1, from [`intensity`]) is drawn: the
+/// band's width as a fraction of full, its opacity, and how far its colour has
+/// moved from the body towards the head. Opacity saturates early so most of
+/// the tail is solid colour; the head tint is confined to the very front.
+pub fn look(brightness: f32) -> (f32, f32, f32) {
+    let t = brightness.clamp(0.0, 1.0);
+    (TAIL_WIDTH + (1.0 - TAIL_WIDTH) * t, (2.5 * t).min(1.0), t * t * t * t)
+}
 
 /// The point at normalised arc length `s` around the chip's rounded-rect
 /// outline, and the outward unit normal there.
@@ -82,24 +118,29 @@ pub fn intensity(s: f32, head: f32) -> f32 {
 
 /// The comet as one triangle strip around the chip.
 ///
-/// `border_w` and `ppp` are what put the inner rings a border's width
-/// inside the outline, the way the shader's discard band did; `time` is
-/// the host's own clock, which is legal because a chip never straddles a
-/// monitor seam.
-pub fn mesh(chip: Rect, radius: f32, border_w: f32, ppp: f32, accent: Color32, alpha_mul: f32, time: f64) -> Mesh {
+/// `border_w` puts the inner half of the band a border's width inside the
+/// outline; `alpha_mul` is the chip's own fade; `time` is the host's own
+/// clock, which is legal because a chip never straddles a monitor seam.
+pub fn mesh(chip: Rect, radius: f32, border_w: f32, colors: (Color32, Color32), alpha_mul: f32, time: f64) -> Mesh {
+    let (body, hot) = colors;
     let head = (time * SPEED as f64).fract() as f32;
     let mut m = Mesh::default();
     for i in 0..N {
         let s = i as f32 / N as f32;
         let (pt, n) = perimeter_point(chip, radius, s);
-        let t = intensity(s, head);
-        for d_px in RINGS {
-            let d = if d_px < 0.0 { d_px - border_w * ppp } else { d_px };
-            let a = (t * (-d * d * 0.15).exp() * alpha_mul).clamp(0.0, 1.0);
-            m.colored_vertex(pt + n * (d / ppp), accent.gamma_multiply(a));
+        let (width, opacity, heat) = look(intensity(s, head));
+        let lerp = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * heat).round() as u8;
+        let (r, g, b) = (lerp(body.r(), hot.r()), lerp(body.g(), hot.g()), lerp(body.b(), hot.b()));
+        for (d, band) in BAND {
+            let mut offset = d * width;
+            if offset < 0.0 {
+                offset -= border_w;
+            }
+            let a = (opacity * band * alpha_mul).clamp(0.0, 1.0);
+            m.colored_vertex(pt + n * offset, Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0).round() as u8));
         }
     }
-    let r = RINGS.len() as u32;
+    let r = BAND.len() as u32;
     for i in 0..N as u32 {
         let j = (i + 1) % N as u32;
         for k in 0..r - 1 {
@@ -157,9 +198,19 @@ mod tests {
 
     #[test]
     fn mesh_has_n_times_rings_vertices_and_is_valid() {
-        let m = mesh(chip(), 6.0, 1.0, 1.0, Color32::RED, 1.0, 1.25);
-        assert_eq!(m.vertices.len(), N * RINGS.len());
-        assert_eq!(m.indices.len(), N * (RINGS.len() - 1) * 6);
+        let m = mesh(chip(), 6.0, 1.0, (Color32::RED, Color32::WHITE), 1.0, 1.25);
+        assert_eq!(m.vertices.len(), N * BAND.len());
+        assert_eq!(m.indices.len(), N * (BAND.len() - 1) * 6);
         assert!(m.is_valid());
+    }
+
+    #[test]
+    fn tail_tapers_and_stays_solid_while_the_head_runs_hot() {
+        assert_eq!(look(1.0), (1.0, 1.0, 1.0));
+        let (width, opacity, heat) = look(0.5);
+        assert_eq!(opacity, 1.0);
+        assert!(width > TAIL_WIDTH && width < 1.0);
+        assert!(heat < 0.1);
+        assert_eq!(look(0.0), (TAIL_WIDTH, 0.0, 0.0));
     }
 }

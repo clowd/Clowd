@@ -327,6 +327,10 @@ namespace Clowd.UI
             // changes nothing about what the meeting sees.
             _toolbar.SettingsClicked += (s, e) =>
                 PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsShareRegion);
+
+            // the same entry point as the tray item and hotkey: opens the drawing toolbar, or brings an
+            // open one forward and replays its comet so the click visibly lands.
+            _toolbar.DrawClicked += (s, e) => DrawOnScreen.DrawOnScreenSession.Toggle();
             // The toolbar has no clock of its own and this page deliberately does not grow one: an
             // elapsed timer would need a DispatcherTimer whose only job is to say how long a thing
             // that is plainly still happening has been happening. The helper's once-a-second FPS

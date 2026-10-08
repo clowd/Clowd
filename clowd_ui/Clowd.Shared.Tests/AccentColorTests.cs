@@ -50,6 +50,52 @@ namespace Clowd.Shared.Tests
             Assert.True(adjusted.R > adjusted.G && adjusted.G > adjusted.B);
         }
 
+        [Theory]
+        [InlineData(0x3B, 0x97, 0xD2)] // clowd blue
+        [InlineData(0x00, 0x78, 0xD4)] // the Windows default accent
+        [InlineData(0x7A, 0x1F, 0xA2)] // a deep purple
+        [InlineData(0xFF, 0xFF, 0x00)] // a maximally light-but-saturated accent
+        [InlineData(0xE8, 0x11, 0x23)] // a red
+        public void CometColors_KeepTheHueAtAGlowingLightness(byte r, byte g, byte b)
+        {
+            var picked = Color.FromRgb(r, g, b);
+            var (body, head) = AccentColors.CometColors(picked);
+            var (_, pickedC, pickedH) = AccentColors.ToOkLch(picked);
+            var (bodyL, bodyC, bodyH) = AccentColors.ToOkLch(body);
+            var (headL, headC, _) = AccentColors.ToOkLch(head);
+
+            // light enough to stand off the graphite tray, not so light it washes out
+            Assert.InRange(bodyL, AccentColors.CometMinLightness - 0.01, AccentColors.CometMaxLightness + 0.01);
+
+            // the user's hue, as long as there is chroma for a hue to be read from
+            if (pickedC > 0.05 && bodyC > 0.05)
+                Assert.True(Math.Abs(Math.IEEERemainder(bodyH - pickedH, 2 * Math.PI)) < 0.06, $"hue drifted to #{body.R:X2}{body.G:X2}{body.B:X2}");
+
+            // the head is the hotter, paler core of the same colour
+            Assert.True(headL > bodyL);
+            Assert.True(headC < bodyC + 1e-3);
+        }
+
+        /// <summary>clowd_capture/src/accent.rs pins the same values: the hint comet and the tray
+        /// comet are derived from one pick by two ports of the same maths.</summary>
+        [Fact]
+        public void CometColors_MatchTheCapturer()
+        {
+            Assert.Equal((Color.FromRgb(0x3B, 0x97, 0xD2), Color.FromRgb(0x83, 0xB4, 0xD8)), AccentColors.CometColors(AccentColors.ClowdBlue));
+            Assert.Equal((Color.FromRgb(0xAE, 0x59, 0xDA), Color.FromRgb(0xBE, 0x8E, 0xDA)), AccentColors.CometColors(Color.FromRgb(0x7A, 0x1F, 0xA2)));
+        }
+
+        [Theory]
+        [InlineData(0x3B, 0x97, 0xD2)]
+        [InlineData(0x12, 0x34, 0x56)]
+        [InlineData(0xFF, 0x80, 0x00)]
+        public void OkLch_RoundTrips(byte r, byte g, byte b)
+        {
+            var color = Color.FromRgb(r, g, b);
+            var (l, c, h) = AccentColors.ToOkLch(color);
+            Assert.Equal(color, AccentColors.FromOkLch(l, c, h));
+        }
+
         /// <summary>The capturer carries the same default in its own CLI (clowd_capture/src/settings.rs)
         /// for standalone runs; if this value moves, that one has to move with it.</summary>
         [Fact]
@@ -114,7 +160,7 @@ namespace Clowd.Shared.Tests
         public void DefaultAccent_IsClowdBlueCorrectedToTheDocumentedValue()
         {
             // the stored default is the raw legacy blue; correcting it at use has to land exactly on
-            // the value the capturer compiles in as its own --accent-color default.
+            // the value the capturer corrects its own --accent-color default to (src/accent.rs).
             var settings = new SettingsGeneral { UseSystemAccentColor = false };
 
             Assert.Equal(AccentColors.ClowdBlue, settings.AccentColor);

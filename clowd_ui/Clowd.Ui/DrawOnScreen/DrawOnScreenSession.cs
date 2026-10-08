@@ -73,6 +73,9 @@ namespace Clowd.UI.DrawOnScreen
             if (ActiveInstance is { } active)
             {
                 active.Raise();
+
+                // the press found a session already up: point at its toolbar, wherever it was left
+                active._toolbar?.ReplayIntroComet();
                 return;
             }
 

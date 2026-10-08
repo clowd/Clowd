@@ -410,7 +410,7 @@ namespace Clowd.UI
             private TimeSpan _elapsed = ClockStart;
 
             public GenericTrayWindow(BoxShadows shadow, bool vertical)
-                : base(new FloatingTrayOptions { Title = "Clowd Tray Spike", Shadow = shadow })
+                : base(new FloatingTrayOptions { Title = "Clowd Tray Spike", Shadow = shadow, IntroComet = true })
             {
                 _primary = new TrayPrimaryButton { State = TrayPrimaryState.Idle, Label = "Start" };
                 ToolTip.SetTip(_primary, "Transport · Idle");

@@ -300,7 +300,7 @@ impl EguiHosts {
             let debug = self.debug_inputs(index, monitor, &args);
             let overlays = OverlayInputs {
                 overlays_visible: args.input.overlays_visible,
-                accent: ictx.accent,
+                comet: hints::trail::comet_colors(args.settings.picked_accent_color),
                 area: area::show::inputs(index, &monitor, &ictx),
                 tips: tips::show::inputs(index, &monitor, &ictx),
                 hints: hints::show::inputs(index, &monitor, &ictx),

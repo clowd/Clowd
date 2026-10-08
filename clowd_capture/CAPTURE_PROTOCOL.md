@@ -40,7 +40,8 @@ flags that differ (`CaptureArguments.Build`).
 | Flag | Value | Default | Meaning |
 |---|---|---|---|
 | `--session-dir` | path | none | Directory for the session payload. Omit = standalone mode (no files written, actions handled in-process). |
-| `--accent-color` | `#RRGGBB` / `#RRGGBBAA` (leading `#` optional) | `#2F7CAE` | Accent for crosshair, selection borders, UI highlights. |
+| `--accent-color` | `#RRGGBB` / `#RRGGBBAA` (leading `#` optional) | `#3B97D2` | The accent as the user picked it (the OS accent, or their own). The capturer derives everything it paints from it the same way the shell does (`src/accent.rs` mirrors `AccentColors`): the crosshair, selection borders and UI highlights wear it darkened until white labels on it read at 4.5:1, and the hint comet its own OKLCH-derived body and head. |
+| `--no-accent-contrast` | flag | correction on | Use `--accent-color` exactly as given for the fills, skipping the contrast correction (the shell's "Maintain minimum contrast" setting, off). |
 | `--tips-mode` | `hints` \| `tips` \| `off` | `hints` | Tips/hints overlay at startup (user cycles with `T`). |
 | `--no-peek` | flag | peek on | Disable obstructed-window peek-through capture. |
 | `--peek-threshold` | 0.0–1.0 | `0.80` | Max obstructed fraction before a window is dropped from hit-testing. |

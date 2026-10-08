@@ -2,6 +2,7 @@
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Clowd.Localization;
 using Clowd.UI.Controls.Tray;
 
 namespace Clowd.UI
@@ -25,6 +26,7 @@ namespace Clowd.UI
         private readonly TraySplitToggle _hide;
         private readonly TrayButton _resize;
         private readonly TrayButton _options;
+        private readonly TrayButton _draw;
         private readonly TrayButton _stop;
 
         // whether the helper is currently obscuring the mirrored region, and whether it can at all.
@@ -56,8 +58,11 @@ namespace Clowd.UI
         /// <summary>Options: the page opens the Shared Region settings tab.</summary>
         public event EventHandler SettingsClicked;
 
+        /// <summary>Draw on Screen: the page opens the drawing toolbar, or points at the open one.</summary>
+        public event EventHandler DrawClicked;
+
         public ShareRegionFloatingButtons()
-            : base(new FloatingTrayOptions { Title = "Clowd Share Toolbar", PreferAboveBeforeVertical = true })
+            : base(new FloatingTrayOptions { Title = "Clowd Share Toolbar", PreferAboveBeforeVertical = true, IntroComet = true })
         {
             // The FPS readout, permanently a label (see the class summary for why it is never a
             // button on this strip). The page seeds it with the rate the helper was spawned at and
@@ -100,6 +105,13 @@ namespace Clowd.UI
             AutomationProperties.SetName(_options, "Shared region settings");
             _options.Click += (s, e) => SettingsClicked?.Invoke(this, EventArgs.Empty);
 
+            // annotating the region you are showing is the obvious next move during a share, so the
+            // drawing toolbar is one click away; it sits by Stop, apart from the share's own controls.
+            _draw = new TrayButton { Glyph = TrayGlyphs.Draw };
+            ToolTip.SetTip(_draw, Loc.T("Tray_DrawOnScreen"));
+            AutomationProperties.SetName(_draw, Loc.T("Tray_DrawOnScreen"));
+            _draw.Click += (s, e) => DrawClicked?.Invoke(this, EventArgs.Empty);
+
             // Stop is fixed on this strip: a share has nothing to save, so the trailing tile never
             // morphs the way the recording strip's Cancel becomes Finish.
             _stop = new TrayButton { Glyph = TrayGlyphs.X, Look = TrayButtonLook.Danger };
@@ -111,6 +123,7 @@ namespace Clowd.UI
             Tray.Items.Add(_hide);
             Tray.Items.Add(_resize);
             Tray.Items.Add(_options);
+            Tray.Items.Add(_draw);
             Tray.Items.Add(_stop);
 
             // Seeded HERE, in the constructor, so the tile's glyph, bar and tooltip can never be set

@@ -55,6 +55,7 @@ namespace Clowd.UI.DrawOnScreen
                 HasEmblem = false,
                 GripLayout = TrayGripLayout.Spanning,
                 Shadow = TrayTokens.ShadowCompact,
+                IntroComet = true,
             })
         {
             _controller = controller ?? throw new ArgumentNullException(nameof(controller));

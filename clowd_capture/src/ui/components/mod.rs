@@ -96,8 +96,8 @@ pub struct OverlayInputs {
     /// routing exactly as they did — but paints at opacity 0; every other
     /// overlay folds this into its own rule inside its `inputs` builder.
     pub overlays_visible: bool,
-    /// The accent colour, which the hint comet paints with.
-    pub accent: Color32,
+    /// The hint comet's body and head colours ([`hints::trail::comet_colors`]).
+    pub comet: (Color32, Color32),
     /// The "W x H" pill, on the host holding the cursor while a selection
     /// is being dragged out.
     pub area: Option<area::show::AreaInputs>,
@@ -133,7 +133,6 @@ pub fn compose(ctx: &egui::Context, inputs: &HostInputs, monitor: UiMonitor) -> 
     // egui 0.36 calls the old `screen_rect` the viewport rect; with no
     // safe-area insets on Windows it is the whole monitor, in points.
     let screen = ctx.viewport_rect();
-    let ppp = monitor.dpi_scale.max(0.1);
     let mut out = PanelOutcome::default();
     if let Some(p) = &inputs.panel {
         out = panel::show::show(ctx, p, monitor, o.overlays_visible);
@@ -155,7 +154,7 @@ pub fn compose(ctx: &egui::Context, inputs: &HostInputs, monitor: UiMonitor) -> 
     if let Some(x) = &o.area {
         area::show::show(&painter, x, screen);
     }
-    hints::show::show(ctx, &painter, &o.hints, o.notice.as_ref(), screen, o.accent, ppp);
+    hints::show::show(ctx, &painter, &o.hints, o.notice.as_ref(), screen, o.comet);
     if let Some(x) = &o.tips {
         tips::show::show(&painter, x, screen);
     }

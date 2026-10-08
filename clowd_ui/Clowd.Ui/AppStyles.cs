@@ -38,15 +38,24 @@ namespace Clowd
         /// floating strips' "mode on" button fill (a <c>TrayButton</c> with <c>IsActive</c> set —
         /// today the share strip's Resize tile; the strips themselves are graphite, and the scrolling
         /// HUD never reaches the accent at all). The value is the OS accent (or the user's pick) put
-        /// through <see cref="AccentColors.EnsureContrastWithWhite"/> — the same value
-        /// <see cref="CaptureArguments"/> hands the overlay as <c>--accent-color</c>, so a Clowd
-        /// window sitting beside the overlay is painted the same blue rather than a near-miss.
+        /// through <see cref="AccentColors.EnsureContrastWithWhite"/> — the same correction the overlay
+        /// makes to the pick <see cref="CaptureArguments"/> hands it as <c>--accent-color</c>
+        /// (clowd_capture/src/accent.rs), so a Clowd window sitting beside the overlay is painted the
+        /// same blue rather than a near-miss.
         ///
         /// The correction is not cosmetic. Every one of these surfaces puts white ink — glyphs and
         /// labels — directly on the accent fill, which a light accent leaves unreadable (issue #48).
         /// </summary>
         public static Color CaptureAccentColor
             => SettingsRoot.Current?.General?.GetEffectiveAccentColor() ?? AccentColors.Default;
+
+        /// <summary>
+        /// The accent exactly as the user chose it, before <see cref="CaptureAccentColor"/>'s darkening
+        /// for white text. For light-emitting accents with nothing written on them — the floating strips'
+        /// entrance comet — where the darkened fill reads as muddy rather than as the user's color.
+        /// </summary>
+        public static Color CapturePickedAccentColor
+            => SettingsRoot.Current?.General?.GetPickedAccentColor() ?? AccentColors.ClowdBlue;
 
         public static IBrush CheckerboardBrushSmall => Util.CheckerBrushes.Light;
 

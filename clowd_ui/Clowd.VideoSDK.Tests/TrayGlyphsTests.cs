@@ -31,8 +31,8 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void All_lists_every_glyph_exactly_once()
         {
-            // 18 glyphs in spec §13; the grip dots are generated, not an icon.
-            Assert.Equal(18, TrayGlyphs.All.Count);
+            // 18 glyphs in spec §13 plus the later Draw on Screen tile; the grip dots are generated, not an icon.
+            Assert.Equal(19, TrayGlyphs.All.Count);
             Assert.Equal(TrayGlyphs.All.Count, TrayGlyphs.All.Select(g => g.Name).Distinct().Count());
             Assert.All(TrayGlyphs.All, g => Assert.NotNull(g));
         }
@@ -101,9 +101,9 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Media_glyphs_are_fill_only()
+        public void Media_and_draw_glyphs_are_fill_only()
         {
-            foreach (var glyph in new[] { TrayGlyphs.Play, TrayGlyphs.Pause, TrayGlyphs.Stop, TrayGlyphs.Rec })
+            foreach (var glyph in new[] { TrayGlyphs.Play, TrayGlyphs.Pause, TrayGlyphs.Stop, TrayGlyphs.Rec, TrayGlyphs.Draw })
             {
                 Assert.Empty(glyph.StrokePaths);
                 Assert.NotEmpty(glyph.FillPaths);
@@ -128,7 +128,7 @@ namespace Clowd.VideoSDK.Tests
             var mixed = new[]
             {
                 TrayGlyphs.Spk, TrayGlyphs.SpkOff,
-                TrayGlyphs.Play, TrayGlyphs.Pause, TrayGlyphs.Stop, TrayGlyphs.Rec,
+                TrayGlyphs.Play, TrayGlyphs.Pause, TrayGlyphs.Stop, TrayGlyphs.Rec, TrayGlyphs.Draw,
             };
 
             foreach (var glyph in TrayGlyphs.All)

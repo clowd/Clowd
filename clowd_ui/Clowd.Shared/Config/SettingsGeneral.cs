@@ -306,15 +306,26 @@ namespace Clowd.Config
         /// <summary>
         /// The color the capture surfaces are actually drawn in: the OS accent when the user asked
         /// for it and there is one to read, otherwise their own choice — darkened for legibility
-        /// unless <see cref="MaintainMinimumContrast"/> says not to. This is what the overlay is
-        /// launched with (<c>--accent-color</c>) and what <c>AppStyles.CaptureAccentColor</c>
-        /// paints the recording toolbar and border with, so all of them agree by construction.
+        /// unless <see cref="MaintainMinimumContrast"/> says not to. This is what
+        /// <c>AppStyles.CaptureAccentColor</c> paints the recording toolbar and border with; the
+        /// overlay is launched with the pick (<see cref="GetPickedAccentColor"/>, as
+        /// <c>--accent-color</c>, plus <c>--no-accent-contrast</c> when the correction is off) and
+        /// makes the same correction itself, so all of them agree.
         /// </summary>
         public Color GetEffectiveAccentColor()
         {
-            var color = (UseSystemAccentColor ? AccentColors.GetSystemAccent() : null) ?? AccentColor;
+            var color = GetPickedAccentColor();
             return MaintainMinimumContrast ? AccentColors.EnsureContrastWithWhite(color) : color;
         }
+
+        /// <summary>
+        /// The accent as chosen — the OS accent when the user asked for it and there is one to read,
+        /// otherwise their own pick — before any contrast correction. For surfaces that carry no white
+        /// ink and want the color itself rather than a fill dark enough to write on, such as the
+        /// floating strips' entrance comet (<see cref="AccentColors.CometColors"/>).
+        /// </summary>
+        public Color GetPickedAccentColor()
+            => (UseSystemAccentColor ? AccentColors.GetSystemAccent() : null) ?? AccentColor;
 
         [DisplayName("Tray icon click")]
         [Description("What a single click on the tray icon does. The right-click menu always offers everything.")]

@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Clowd.Config;
 using Clowd.PlatformUtil;
+using Clowd.Localization;
 using Clowd.UI.Controls.Tray;
 
 namespace Clowd.UI
@@ -35,6 +36,9 @@ namespace Clowd.UI
         public event EventHandler CancelClicked;
         public event EventHandler SettingsClicked;
 
+        /// <summary>Draw on Screen: the page opens the drawing toolbar, or points at the open one.</summary>
+        public event EventHandler DrawClicked;
+
         /// <summary>Raised when the microphone toggle flips <see cref="SettingsRecording.CaptureMicrophone"/>
         /// (already written by the time this fires). This is the live mute path while recording — the
         /// page early-outs its settings subscription once frames flow — so it must fire on every
@@ -59,6 +63,7 @@ namespace Clowd.UI
         private readonly TraySplitToggle _spk;
         private readonly TraySplitToggle _cam;
         private readonly TrayButton _options;
+        private readonly TrayButton _draw;
         private readonly TraySplitButton _end;
 
         private bool _recording;
@@ -84,7 +89,7 @@ namespace Clowd.UI
         private IReadOnlyList<int> FpsOptions => FpsCycleRules.Options(_regionHz, _sources?.FpsPresets);
 
         public RecordingFloatingButtons()
-            : base(new FloatingTrayOptions { Title = "Clowd Recording Toolbar" })
+            : base(new FloatingTrayOptions { Title = "Clowd Recording Toolbar", IntroComet = true })
         {
             // the model first: its constructor audits the capture toggles against the attached devices
             // and writes the result back before the recorder is spawned, so the settings file the
@@ -111,6 +116,12 @@ namespace Clowd.UI
             _cam = BuildSource(CaptureSource.Webcam, TrayGlyphs.Cam, TrayGlyphs.CamOff, "Camera");
             // a camera has no level: its bar is a full-width state light, never a meter
             _cam.IsStatusOnly = true;
+
+            // annotating what is being recorded, ahead of Options
+            _draw = new TrayButton { Glyph = TrayGlyphs.Draw };
+            ToolTip.SetTip(_draw, Loc.T("Tray_DrawOnScreen"));
+            AutomationProperties.SetName(_draw, Loc.T("Tray_DrawOnScreen"));
+            _draw.Click += (s, e) => DrawClicked?.Invoke(this, EventArgs.Empty);
 
             _options = new TrayButton { Glyph = TrayGlyphs.Sliders };
             ToolTip.SetTip(_options, "Options");
@@ -143,6 +154,7 @@ namespace Clowd.UI
             Tray.Items.Add(_mic);
             Tray.Items.Add(_spk);
             Tray.Items.Add(_cam);
+            Tray.Items.Add(_draw);
             Tray.Items.Add(_options);
             Tray.Items.Add(_end);
 
