@@ -245,6 +245,7 @@ namespace Clowd.Drawing.Tests
                 tool.OnMouseMove(canvas, Move(new Point(20, 12), pointer, 1016));
                 tool.OnMouseMove(canvas, Move(new Point(30, 15), pointer, 1032));
                 tool.OnMouseMove(canvas, Move(new Point(40, 19), pointer, 1048));
+                Assert.False(stroke.IsSelected);
                 tool.OnMouseUp(canvas, Up(new Point(40, 19), pointer, 1060));
             });
 

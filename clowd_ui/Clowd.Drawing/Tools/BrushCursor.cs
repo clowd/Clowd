@@ -9,7 +9,7 @@ using Avalonia.Platform;
 namespace Clowd.Drawing.Tools
 {
     /// <summary>
-    /// The brush's cursor: a ring the size of the dot a click leaves (GraphicBrush.SizePerLineWidth·LineWidth across, in device
+    /// The brush's cursor: a ring the width of an ordinary stroke (see ToolBrush.CursorPressure; in device
     /// pixels at the current zoom), drawn as a 1px white ring inside a 1px black ring so it reads on
     /// any artwork. Rasterised by hand with analytic coverage rather than through a DrawingContext,
     /// so the result is exact and needs no render pass. Ring cursors are cached per diameter and never

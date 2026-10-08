@@ -31,11 +31,17 @@ namespace Clowd.Drawing.Tools
         public ToolBrush() : base(() => HelperFunctions.DefaultCursor, SnapMode.None)
         { }
 
-        // a ring the size of the dot a click leaves; DrawingCanvas re-applies it when the stroke
+        /// <summary>The simulated pressure the cursor ring is sized at. A click leaves a dot at 0.5
+        /// (1·size across) but an unhurried stroke settles nearer 1 (up to 1.5·size), so the ring
+        /// shows the width of an ordinary stroke (1.25·size) rather than the click's.</summary>
+        internal const double CursorPressure = 0.75;
+
+        // a ring the width of an ordinary stroke; DrawingCanvas re-applies it when the stroke
         // width or the zoom changes (one canvas unit is ContentScale device pixels)
         public override void SetCursor(DrawingCanvas canvas)
         {
-            canvas.Cursor = BrushCursor.Get(GraphicBrush.SizePerLineWidth * canvas.LineWidth * canvas.ContentScale);
+            double size = Math.Max(1, GraphicBrush.SizePerLineWidth * canvas.LineWidth);
+            canvas.Cursor = BrushCursor.Get(2 * Ink.FreehandStroke.Radius(size, CursorPressure) * canvas.ContentScale);
         }
 
         /// <summary>The stroke a press starts, at <paramref name="origin"/>.</summary>
@@ -49,8 +55,8 @@ namespace Clowd.Drawing.Tools
             canvas.CaptureMouse(s.Pointer);
             canvas.UnselectAll();
 
+            // unselected while drawing so no selection border follows the tip; the release selects it
             _stroke = CreateStroke(canvas, s.Position);
-            _stroke.IsSelected = true;
             _lastTimestamp = s.Timestamp;
             _elapsedMs = 0;
             canvas.GraphicsList.Add(_stroke);
@@ -100,6 +106,7 @@ namespace Clowd.Drawing.Tools
                 return;
 
             _stroke.EndStroke();
+            _stroke.IsSelected = true;
             canvas.AddCommandToHistory(false);
             _stroke = null;
         }
