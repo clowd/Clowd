@@ -46,12 +46,12 @@ namespace Clowd.VideoSDK
         /// <summary>The libraries FFmpeg.AutoGen itself opens — the roots of the closure. Named
         /// unversioned, which is how their install names read and therefore how their dependents
         /// ask for them; the directory holds the same code under all three of
-        /// <c>libavcodec.dylib</c>, <c>libavcodec.61.dylib</c> and <c>libavcodec.61.19.101.dylib</c>
+        /// <c>libavcodec.dylib</c>, <c>libavcodec.62.dylib</c> and <c>libavcodec.62.28.100.dylib</c>
         /// (the zip materializes what were symlinks as full copies), and loading more than one of
         /// them would put the same library in the process twice.</summary>
         private static readonly string[] Roots =
         {
-            "libavutil.dylib", "libswresample.dylib", "libswscale.dylib", "libpostproc.dylib",
+            "libavutil.dylib", "libswresample.dylib", "libswscale.dylib",
             "libavcodec.dylib", "libavformat.dylib", "libavfilter.dylib", "libavdevice.dylib",
         };
 

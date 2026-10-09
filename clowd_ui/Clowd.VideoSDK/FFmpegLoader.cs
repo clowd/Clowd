@@ -77,7 +77,7 @@ namespace Clowd.VideoSDK
                     dir = Path.GetFullPath(dir);
 
                     // The FFmpeg DLLs link against siblings that live in the same folder
-                    // (libx264, zlib, srt, ...). The bindings load avcodec-61.dll by absolute
+                    // (libx264, zlib, srt, ...). The bindings load avcodec-62.dll by absolute
                     // path, but Windows resolves *its* imports via the normal search order, which
                     // does not include the DLL's own directory — add it explicitly.
                     if (OperatingSystem.IsWindows())

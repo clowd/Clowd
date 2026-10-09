@@ -278,7 +278,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(names.Count, names.Distinct(StringComparer.Ordinal).Count());
 
             // and the versioned aliases of the same libraries stay out of it.
-            Assert.DoesNotContain(names, n => n.StartsWith("libavcodec.6", StringComparison.Ordinal));
+            Assert.DoesNotContain(names, n => n.StartsWith("libavcodec.", StringComparison.Ordinal) && n != "libavcodec.dylib");
         }
     }
 }

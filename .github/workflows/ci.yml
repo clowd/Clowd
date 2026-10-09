@@ -69,7 +69,7 @@ jobs:
           cargo test -p clowd_shell_ext
         shell: bash
 
-      # The video editor's suite needs FFmpeg 7.1 natives to run its decode/encode/render tests;
+      # The video editor's suite needs FFmpeg 8.1 natives to run its decode/encode/render tests;
       # without them ~100 of them skip. Take them from the same obs-express payload a shipped
       # build uses, so what CI exercises is what users get — including ObsBinaryLocator's own
       # resolution of it, which is why this points CLOWD_OBS_EXPRESS_PATH at the binary rather

@@ -605,7 +605,7 @@ namespace Clowd.VideoSDK.Playback
             long c0 = Stopwatch.GetTimestamp();
 
             _sws = ffmpeg.sws_getCachedContext(_sws, srcW, srcH, (AVPixelFormat)frame->format,
-                dstW, dstH, AVPixelFormat.AV_PIX_FMT_BGRA, ffmpeg.SWS_BILINEAR, null, null, null);
+                dstW, dstH, AVPixelFormat.AV_PIX_FMT_BGRA, (int)SwsFlags.SWS_BILINEAR, null, null, null);
 
             for (uint i = 0; i < 4; i++)
             {
