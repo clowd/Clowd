@@ -263,6 +263,97 @@ namespace Clowd.UI.Helpers
         }
 
         /// <summary>
+        /// macOS: places the traffic lights at an explicit inset from the window's top-left,
+        /// instead of the (9, 9) AppKit gives a bare window. Call once the NSWindow exists, and
+        /// again after anything that relays the title bar out (see the remarks).
+        /// </summary>
+        /// <param name="leftInset">Left edge of the close button, in points from the window's left.</param>
+        /// <param name="topInset">Top edge of all three buttons, in points from the window's top.
+        /// Free to exceed the title bar's own 32pt height: NSTitlebarView does not clip, so a
+        /// button can sit below the bar, over the window's content (verified on macOS 26).</param>
+        /// <remarks>
+        /// This has to be re-applied, which is the whole cost of the approach: AppKit resets all
+        /// three frames to (9, 9) on every title bar relayout, which is a resize, a zoom, a
+        /// minimise and restore, and both fullscreen transitions. The alternative that maintains
+        /// itself is an empty unified NSToolbar, but that one buys its placement by growing the
+        /// title bar to 52pt, which drags the window's own top row down with it.
+        /// </remarks>
+        public static void SetTrafficLightPosition(Window window, double leftInset, double topInset)
+        {
+            if (!OperatingSystem.IsMacOS())
+                return;
+
+            if (window?.TryGetPlatformHandle() is not IMacOSTopLevelPlatformHandle mac || mac.NSWindow == IntPtr.Zero)
+                return;
+
+            var standardWindowButton = sel_registerName("standardWindowButton:");
+            var setFrameOrigin = sel_registerName("setFrameOrigin:");
+
+            // Read all three frames before moving any of them. AppKit's own spacing and button
+            // size are then preserved exactly: the cluster is translated as a unit rather than
+            // laid out again from constants, which matters because neither is fixed. Under a
+            // title bar shorter than 32pt AppKit draws the small variant, where the circles are
+            // 12pt on 20pt centres in 14x16 frames instead of 14pt on 23pt centres.
+            var buttons = new IntPtr[3];
+            var frames = new NSRect[3];
+            var titleBar = IntPtr.Zero;
+
+            for (var i = 0; i < 3; i++)
+            {
+                buttons[i] = objc_msgSend_IntPtr(mac.NSWindow, standardWindowButton, (nuint)i);
+                if (buttons[i] == IntPtr.Zero)
+                    return;
+
+                frames[i] = ViewFrame(buttons[i]);
+
+                if (titleBar == IntPtr.Zero)
+                    titleBar = objc_msgSend_IntPtr(buttons[i], sel_registerName("superview"));
+            }
+
+            if (titleBar == IntPtr.Zero)
+                return;
+
+            // The three share one superview (NSTitlebarView), whose height converts a top inset
+            // into the bottom-up y AppKit wants: the view is not flipped, so y counts up from the
+            // bar's bottom edge and a negative value simply puts a button below the bar.
+            var titleBarHeight = ViewFrame(titleBar).Height;
+            if (titleBarHeight <= 0)
+                return;
+
+            // One shift for all three, taken from the close button. Idempotent: re-running against
+            // frames this method already placed computes a zero shift and the same y.
+            var shift = leftInset - frames[0].X;
+
+            for (var i = 0; i < 3; i++)
+            {
+                var origin = new NSPoint
+                {
+                    X = frames[i].X + shift,
+                    Y = titleBarHeight - frames[i].Height - topInset,
+                };
+
+                objc_msgSend(buttons[i], setFrameOrigin, origin);
+            }
+        }
+
+        /// <summary>A view's frame. The struct is 32 bytes, which the two ABIs return differently:
+        /// arm64 hands back a hidden pointer through plain objc_msgSend, where x86_64 needs the
+        /// _stret entry point (the same split the NSPoint helper above sits on the other side of,
+        /// two doubles being small enough for registers everywhere).</summary>
+        private static NSRect ViewFrame(IntPtr view)
+        {
+            var frame = sel_registerName("frame");
+
+            if (RuntimeInformation.ProcessArchitecture == Architecture.X64)
+            {
+                objc_msgSend_stret(out var rect, view, frame);
+                return rect;
+            }
+
+            return objc_msgSend_NSRect(view, frame);
+        }
+
+        /// <summary>
         /// Windows: sets or clears <paramref name="mask"/> in the live window's extended style and
         /// makes the change take effect now (SWP_FRAMECHANGED). On its own this lasts only until
         /// Avalonia next re-applies window styles; a togglable style must also be re-asserted by a
@@ -387,6 +478,11 @@ namespace Clowd.UI.Helpers
         [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
         private static extern void objc_msgSend(IntPtr receiver, IntPtr selector);
 
+        // Object-returning message (+alloc, -init). nint being IntPtr, the argument overloads
+        // below already carry an object parameter; only the return type needs its own entry.
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
+        private static extern IntPtr objc_msgSend_IntPtr(IntPtr receiver, IntPtr selector);
+
         // ObjC BOOL is a signed char — marshal as I1, not the 4-byte Win32 BOOL default.
         [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
         private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, [MarshalAs(UnmanagedType.I1)] bool arg1);
@@ -396,6 +492,28 @@ namespace Clowd.UI.Helpers
 
         [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
         private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, nuint arg1);
+
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
+        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, NSPoint arg1);
+
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
+        private static extern IntPtr objc_msgSend_IntPtr(IntPtr receiver, IntPtr selector, nuint arg1);
+
+        // NSRect-returning message (-[NSView frame]); see ViewFrame for the ABI split.
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
+        private static extern NSRect objc_msgSend_NSRect(IntPtr receiver, IntPtr selector);
+
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend_stret")]
+        private static extern void objc_msgSend_stret(out NSRect result, IntPtr receiver, IntPtr selector);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NSRect
+        {
+            public double X;
+            public double Y;
+            public double Width;
+            public double Height;
+        }
     }
 
     /// <summary>

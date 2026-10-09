@@ -44,9 +44,9 @@
                   ThemeDictionaries). The checked button keeps white, since its fill is then the
                   accent.  -->
             <Style Selector="Grid.modern controls|ToolButton">
-                <Setter Property="Width" Value="36" />
-                <Setter Property="Height" Value="36" />
-                <Setter Property="Padding" Value="10" />
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="8" />
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Foreground" Value="{DynamicResource ClowdEditorIconBrush}" />
             </Style>
@@ -72,26 +72,28 @@
                 <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
             </Style>
 
-            <!--  45px strips: a 36px item lane, a 4px gutter, and 5px on the edge that faces
-                  the canvas — 4 of gutter plus 1 for the canvas shadow, which falls across the
-                  rest of it. The buttons carry 2px of their own on the flow axis, which is the gap
-                  between one item and the next; the lane stays 36 so the strip width does not move.  -->
+            <!--  42px strips: a 32px item lane with 5px either side of it. The canvas-facing 5 is
+                  4 of gutter plus 1 for the canvas shadow, which falls across the rest of it; the
+                  window-facing edge carries the same 5 so the lane sits centred in the strip
+                  rather than a pixel off it. The buttons carry 2px of their own on the flow axis,
+                  which is the gap between one item and the next.  -->
             <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar">
-                <Setter Property="ItemWidth" Value="36" />
-                <Setter Property="Margin" Value="4,0,5,4" />
+                <Setter Property="ItemWidth" Value="32" />
+                <Setter Property="Margin" Value="5,0,5,4" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar > controls|ToolButton">
                 <Setter Property="Margin" Value="0,1" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#PropertiesBar">
-                <Setter Property="ItemHeight" Value="36" />
-                <Setter Property="Margin" Value="4,4,4,5" />
+                <Setter Property="ItemHeight" Value="32" />
+                <!--  5 top and bottom for the same reason the side strip carries 5 either side.  -->
+                <Setter Property="Margin" Value="4,5,4,5" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#PropertiesBar > controls|ToolButton">
                 <Setter Property="Margin" Value="1,0" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#PropertiesBar &gt; StackPanel">
-                <Setter Property="Height" Value="36" />
+                <Setter Property="Height" Value="32" />
                 <Setter Property="Margin" Value="6,0,6,0" />
             </Style>
 

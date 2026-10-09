@@ -128,6 +128,10 @@ namespace Clowd.UI
             // Under the extended client area (macOS) this bar IS the title bar.
             EnableTitleBarDrag(PropertiesBar);
 
+            // and the traffic lights ride the same bar, centred in it rather than tucked into the
+            // window's corner above it.
+            CenterMacTrafficLightsIn(PropertiesBar);
+
             // the browsers' col-resize (bars + arrows), not the plain SizeWestEast — which
             // GridSplitter assigns to its own Cursor on attach, so the custom cursor has to sit
             // on the template's panel, where the innermost non-null cursor wins

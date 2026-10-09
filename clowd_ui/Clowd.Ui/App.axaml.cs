@@ -127,10 +127,30 @@ namespace Clowd
             _ = Task.Run(() => SparsePackageManager.Sync(enabled));
         }
 
+        /// <summary>Whether the command line asks for one of the hidden dev harnesses, each of
+        /// which takes over startup ahead of the single-instance mutex.</summary>
+        private static bool IsHarnessLaunch(string[] args) =>
+            args != null && args.Any(a =>
+                String.Equals(a, UI.VideoEditor.VideoSpikeWindow.ArgName, StringComparison.OrdinalIgnoreCase)
+                || String.Equals(a, UI.VideoEditor.VideoEditorWindow.ArgName, StringComparison.OrdinalIgnoreCase)
+                || String.Equals(a, UI.TraySpike.ArgName, StringComparison.OrdinalIgnoreCase));
+
         private async void Startup(string[] args)
         {
             try
             {
+                // Each harness below builds a real window, and a real window reads settings: the
+                // editor chrome, the toolbar order, the theme. None of that is loaded this early
+                // (settings wait on the mutex, which a harness deliberately runs ahead of), so a
+                // harness launch reached those constructors with SettingsRoot.Current still null
+                // and died there. Loading is a pure parse, and only a harness launch does it this
+                // early, so production startup keeps the order it had.
+                if (IsHarnessLaunch(args))
+                {
+                    await SetupSettings();
+                    ApplyTheme();
+                }
+
                 // hidden spike harness (`--video-spike file.mp4`): a bare playback window used to
                 // measure the video engine. Must run BEFORE single-instance forwarding — a spike
                 // process must never forward its args to (or be swallowed by) a resident Clowd.

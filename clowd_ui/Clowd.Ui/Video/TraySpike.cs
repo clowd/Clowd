@@ -54,9 +54,9 @@ namespace Clowd.UI
     /// </summary>
     public static class TraySpike
     {
-        // private: App.Startup calls TryHandleArgs, never the literal, and nothing else may take a
-        // dependency on the harness's spelling.
-        private const string ArgName = "--tray-spike";
+        // App.Startup only: it calls TryHandleArgs and tests this constant in its harness gate,
+        // never the literal, and nothing else may take a dependency on the harness's spelling.
+        internal const string ArgName = "--tray-spike";
 
         // one interval for every state walk in the harness: long enough to read a state and to
         // screenshot it between steps, short enough that a six-rung lap finishes in 15 s.

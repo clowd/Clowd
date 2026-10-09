@@ -276,17 +276,17 @@
                   transport bar's sit on a slab neither chrome has moved yet, where theme ink and
                   an accent fill would both be wrong.  -->
             <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton">
-                <Setter Property="Width" Value="36" />
-                <Setter Property="Height" Value="36" />
-                <Setter Property="Padding" Value="10" />
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="8" />
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Foreground" Value="{DynamicResource ClowdEditorIconBrush}" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.wide">
-                <Setter Property="Padding" Value="9" />
+                <Setter Property="Padding" Value="7" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.tight">
-                <Setter Property="Padding" Value="11" />
+                <Setter Property="Padding" Value="9" />
             </Style>
             <!--  The toggles (properties panel, always-on-top, voice-over) wear the accent when
                   they are on, as the image editor's active tool does, and white on top of it.  -->
@@ -307,30 +307,31 @@
                   matching style wins, and this one is restating what that rule just set.  -->
             <Style Selector="Grid.modern controls|ToolButton#btnRender">
                 <Setter Property="Width" Value="NaN" />
-                <Setter Property="Height" Value="36" />
+                <Setter Property="Height" Value="32" />
                 <Setter Property="Padding" Value="14,0" />
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Foreground" Value="White" />
             </Style>
 
-            <!--  The strips: a 36px item lane plus a gutter, and 5px on the edge that faces the
-                  preview — 4 of gutter plus 1 for the preview's shadow, which falls across the rest
-                  of it. The buttons carry 2px of their own on the flow axis, which is the gap
-                  between one item and the next; the lane stays 36 so the strip does not move.  -->
+            <!--  The strips: a 32px item lane with 5px either side of it. The preview-facing 5 is
+                  4 of gutter plus 1 for the preview's shadow, which falls across the rest of it;
+                  the window-facing edge carries the same 5 so the lane sits centred in the strip
+                  rather than a pixel off it. The buttons carry 2px of their own on the flow axis,
+                  which is the gap between one item and the next.  -->
             <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar">
-                <Setter Property="ItemHeight" Value="36" />
-                <Setter Property="Margin" Value="4,4,4,5" />
+                <Setter Property="ItemHeight" Value="32" />
+                <Setter Property="Margin" Value="4,5,4,5" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar &gt; controls|ToolButton">
                 <Setter Property="Margin" Value="1,0" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar &gt; StackPanel">
-                <Setter Property="Height" Value="36" />
+                <Setter Property="Height" Value="32" />
                 <Setter Property="Margin" Value="6,0,6,0" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar">
-                <Setter Property="ItemWidth" Value="36" />
-                <Setter Property="Margin" Value="4,0,5,4" />
+                <Setter Property="ItemWidth" Value="32" />
+                <Setter Property="Margin" Value="5,0,5,4" />
             </Style>
             <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar &gt; controls|ToolButton">
                 <Setter Property="Margin" Value="0,1" />
