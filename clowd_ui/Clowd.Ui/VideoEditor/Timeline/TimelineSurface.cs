@@ -1436,7 +1436,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 // style and the timings live in the properties panel) — the activity preview
                 // under the label is what says what the capture holds.
                 case CursorContent:
-                    (glyph, label) = (TimelineIcons.CursorArrowGeometry, CursorLabel);
+                    (glyph, label) = (TimelineIcons.Find("IconCursorArrow"), CursorLabel);
                     break;
                 case KeyboardContent:
                     (glyph, label) = (TimelineIcons.KeyboardGeometry, KeyboardLabel);

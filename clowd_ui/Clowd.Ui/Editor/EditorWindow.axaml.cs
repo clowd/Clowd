@@ -788,24 +788,17 @@ namespace Clowd.UI
             /// <summary>The demo's file stem under Assets/ToolTips without the "tool-" prefix:
             /// "pen" shows tool-pen.gif. A missing GIF collapses the flyout to header + text.</summary>
             public string DemoName;
-
-            /// <summary>Space-separated style classes for the button's icon: its weight
-            /// ("tight" for a glyph that needs more inset than the default) and any optical
-            /// correction ("iconNudgeRight"). The actual inset is a chrome decision — see the
-            /// rules in ToolButton.axaml and EditorWindow.axaml — so the registry names the
-            /// weight rather than a pixel count that only holds at one button size.</summary>
-            public string IconClasses;
         }
 
-        // Rows mirror the original static XAML 1:1 (icons and the Text tighter-inset
-        // overrides). The shortcut, the flyout copy and the demo names live here; the GIFs come
-        // from tools/tool-tips/generate.py (README there). The shortcut is not in the copy and not
-        // in the GIF: the card draws it as a keycap beside the header from Shortcut.
+        // Rows mirror the original static XAML 1:1. The shortcut, the flyout copy and the demo
+        // names live here; the GIFs come from tools/tool-tips/generate.py (README there). The
+        // shortcut is not in the copy and not in the GIF: the card draws it as a keycap beside
+        // the header from Shortcut.
         private static readonly ToolRegistryEntry[] ToolRegistry =
         {
             new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", Shortcut = Key.Space, IconKey = "IconToolNone", DemoName = "pan",
                 Description = "Drag to move the view around. Hold Space with any tool to pan for a moment." },
-            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", Shortcut = Key.Escape, IconKey = "IconToolPointer", DemoName = "select", IconClasses = "iconNudgeRight",
+            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", Shortcut = Key.Escape, IconKey = "IconToolSelection", DemoName = "select",
                 Description = "Click an object to select it and drag to move it, or drag across empty canvas to select everything inside the box." },
             new ToolRegistryEntry { Tool = ToolType.Rectangle, DisplayName = "Rectangle", Shortcut = Key.R, IconKey = "IconToolRectangle", DemoName = "rectangle",
                 Description = "Drag from one corner to the opposite one to draw an outline. Hold Shift for a perfect square." },
@@ -837,9 +830,9 @@ namespace Clowd.UI
                 Description = "Press and drag to mark over text or detail with translucent ink, flat-tipped like a marker. Stroke in the bar above sets its height." },
             new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", Shortcut = Key.C, IconKey = "IconToolNumericCount", DemoName = "count",
                 Description = "Click to drop the next numbered step. Drag before letting go to pull an arrow out of it." },
-            new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", Shortcut = Key.T, IconKey = "IconToolText", DemoName = "text", IconClasses = "tight",
+            new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", Shortcut = Key.T, IconKey = "IconToolText", DemoName = "text",
                 Description = "Click where the text should go, then type. Enter commits and Shift+Enter starts a new line." },
-            new ToolRegistryEntry { Tool = ToolType.StickyNote, DisplayName = "Sticky Note", Shortcut = Key.N, IconKey = "IconToolStickyNote", DemoName = "note", IconClasses = "tight",
+            new ToolRegistryEntry { Tool = ToolType.StickyNote, DisplayName = "Sticky Note", Shortcut = Key.N, IconKey = "IconToolStickyNote", DemoName = "note",
                 Description = "Click to stick a note, then type into it. Enter commits and Shift+Enter adds a line." },
             new ToolRegistryEntry { Tool = ToolType.Pixelate, DisplayName = "Obscure", Shortcut = Key.O, IconKey = "IconToolPixelate", DemoName = "obscure",
                 Description = "Drag a box over the part of an image to hide. Hold Shift for a square. Only image objects under the box are obscured, not shapes or text." },
@@ -1078,10 +1071,6 @@ namespace Clowd.UI
                 CommandParameter = name,
                 IconPath = FindIconGeometry(entry.IconKey),
             };
-
-            if (entry.IconClasses != null)
-                foreach (var cls in entry.IconClasses.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                    button.Classes.Add(cls);
 
             // The rich tip (header, shortcut keycap, description, demo GIF), the same card the
             // video editor's add-track buttons carry, placed to the right of the strip with a

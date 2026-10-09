@@ -264,7 +264,7 @@
           exactly as the image editor does (live — a window already open follows the setting).
           "compact" is the legacy look this window has always had (30px square buttons on opaque
           #535353 chrome); "modern" floats the two tool bars on the window's own background (Mica
-          on Win11) with 36px rounded buttons, and lifts the preview off it on a rounded, shadowed
+          on Win11) with 32px rounded buttons, and lifts the preview off it on a rounded, shadowed
           surface. The transport bar, the timeline and the properties panel are still the legacy
           dark slabs in both chromes — they pin their own white ink below, since the window's ink
           follows the theme once the bars stop being dark.  -->
@@ -272,35 +272,8 @@
         <Grid.Styles>
             <!--  ===== Modern chrome =====  -->
 
-            <!--  The buttons of the two tool bars, reached through the class the bars carry: the
-                  transport bar's sit on a slab neither chrome has moved yet, where theme ink and
-                  an accent fill would both be wrong.  -->
-            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton">
-                <Setter Property="Width" Value="32" />
-                <Setter Property="Height" Value="32" />
-                <Setter Property="Padding" Value="8" />
-                <Setter Property="CornerRadius" Value="8" />
-                <Setter Property="Foreground" Value="{DynamicResource ClowdEditorIconBrush}" />
-            </Style>
-            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.wide">
-                <Setter Property="Padding" Value="7" />
-            </Style>
-            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.tight">
-                <Setter Property="Padding" Value="9" />
-            </Style>
-            <!--  The toggles (properties panel, always-on-top, voice-over) wear the accent when
-                  they are on, as the image editor's active tool does, and white on top of it.  -->
-            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton:checked /template/ Border#_bg">
-                <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
-            </Style>
-            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton:checked">
-                <Setter Property="Foreground" Value="White" />
-            </Style>
-            <!--  The theme's own hover fill, not the template's white veil: a white veil over
-                  #FAFAFA is no hover at all.  -->
-            <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton /template/ Border#_hover">
-                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
-            </Style>
+            <!--  The tool bar buttons, shared with the image editor.  -->
+            <StyleInclude Source="avares://Clowd.Ui/Assets/EditorChromeStyles.axaml" />
 
             <!--  Render is a labeled accent button, so it takes the bar's height and radius but
                   not its square footprint. After the rule above on purpose — in Avalonia the last
@@ -860,14 +833,12 @@
 
                 <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
                 <controls:ToolButton
-                    Classes="wide"
                     controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding CommandUndo}"
                     IconPath="{StaticResource IconUndo}"
                     ToolTip.Tip="Undo (Ctrl+Z)" />
 
                 <controls:ToolButton
-                    Classes="wide"
                     controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding CommandRedo}"
                     IconPath="{StaticResource IconRedo}"

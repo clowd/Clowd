@@ -368,7 +368,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Background => TimelineIcons.Find("IconBackground"),
             TimelineRowKind.Speed => TimelineIcons.SpeedometerGeometry,
             TimelineRowKind.Zoom => TimelineIcons.MagnifierGeometry,
-            TimelineRowKind.Cursor => TimelineIcons.CursorArrowGeometry,
+            TimelineRowKind.Cursor => TimelineIcons.Find("IconCursorArrow"),
             TimelineRowKind.Keyboard => TimelineIcons.KeyboardGeometry,
             _ => TimelineIcons.Find("IconVideoClip"),
         };
@@ -466,12 +466,6 @@ namespace Clowd.UI.VideoEditor.Timeline
             "8 7 L 8 8 L 7 8 A 1.0001 1.0001 0 1 0 7 10 L 8 10 L 8 11 A 1.0001 1.0001 0 1 0 " +
             "10 11 L 10 10 L 11 10 A 1.0001 1.0001 0 1 0 11 8 L 10 8 L 10 7 A 1.0001 1.0001 " +
             "0 0 0 8.984375 5.9863281 z");
-
-        /// <summary>The classic pointer for the cursor overlay row and its items (24x24 box):
-        /// tip top-left, tail bottom-right. Hand-authored — VectorIcons has no pointer glyph, and
-        /// the row's job is exactly "this is where the mouse was".</summary>
-        public static readonly Geometry CursorArrowGeometry = StreamGeometry.Parse(
-            "M5,2 L5,19.4 L9.4,15.4 L12.1,21.5 L14.6,20.4 L11.9,14.4 L17.6,14.4 Z");
 
         /// <summary>A keyboard for the keystroke overlay row and its items (24x24 box): a slab
         /// with two rows of keys and a space bar punched out of it (even-odd fill, so the keys are

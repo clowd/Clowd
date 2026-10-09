@@ -40,37 +40,8 @@
         <Grid.Styles>
             <!--  ===== Modern chrome =====  -->
 
-            <!--  Icon ink is its own brush, a touch lighter than body text (see the window's
-                  ThemeDictionaries). The checked button keeps white, since its fill is then the
-                  accent.  -->
-            <Style Selector="Grid.modern controls|ToolButton">
-                <Setter Property="Width" Value="32" />
-                <Setter Property="Height" Value="32" />
-                <Setter Property="Padding" Value="8" />
-                <Setter Property="CornerRadius" Value="8" />
-                <Setter Property="Foreground" Value="{DynamicResource ClowdEditorIconBrush}" />
-            </Style>
-            <Style Selector="Grid.modern controls|ToolButton:checked">
-                <Setter Property="Foreground" Value="White" />
-            </Style>
-            <!--  The theme's own hover fill, not the template's white veil: a white veil over
-                  #FAFAFA is no hover at all.  -->
-            <Style Selector="Grid.modern controls|ToolButton /template/ Border#_hover">
-                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
-            </Style>
-            <Style Selector="Grid.modern controls|ToolButton.wide">
-                <Setter Property="Padding" Value="9" />
-            </Style>
-            <Style Selector="Grid.modern controls|ToolButton.tight">
-                <Setter Property="Padding" Value="11" />
-            </Style>
-
-            <!--  The active tool wears the accent rather than the dense look's white veil: on a
-                  backdrop a lighter grey is not a strong enough mark, and the accent is already
-                  what this app means by "selected" everywhere else.  -->
-            <Style Selector="Grid.modern controls|ToolButton:checked /template/ Border#_bg">
-                <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
-            </Style>
+            <!--  The tool bar buttons, shared with the video editor.  -->
+            <StyleInclude Source="avares://Clowd.Ui/Assets/EditorChromeStyles.axaml" />
 
             <!--  42px strips: a 32px item lane with 5px either side of it. The canvas-facing 5 is
                   4 of gutter plus 1 for the canvas shadow, which falls across the rest of it; the
@@ -264,7 +235,7 @@
             x:Name="PropertiesBar"
             HorizontalAlignment="Stretch"
             Background="Transparent"
-            Classes="tipBridge"
+            Classes="chromeBar tipBridge"
             Orientation="Horizontal">
             <controls:DockAndWrapPanel.Styles>
                 <!--  Direct children only: a bare StackPanel selector also reaches the style
@@ -642,7 +613,7 @@
             <controls:DockAndWrapPanel
                 x:Name="ToolBar"
                 Grid.Column="0"
-                Classes="tipBridge"
+                Classes="chromeBar tipBridge"
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 

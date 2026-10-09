@@ -1,0 +1,46 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Clowd.UI.Controls">
+
+    <!--  The modern chrome's tool bar buttons, shared by the image and video editors so an icon
+          reads the same size in both. Each editor includes this at the top of its root grid's
+          styles, and they reach the buttons through the "chromeBar" class their bars carry: the
+          video editor's transport bar sits on a dark slab neither chrome has moved yet, where
+          theme ink and an accent fill would both be wrong.
+
+          The icon weights restate the ToolButton theme's "wide" and "tight" for this 32px button:
+          the default 8px inset draws a 16px glyph, "wide" an 18px one and "tight" a 14px one. A
+          change to the button size has to move all three together.  -->
+
+    <!--  Icon ink is its own brush, a touch lighter than body text (see each window's
+          ThemeDictionaries).  -->
+    <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Foreground" Value="{DynamicResource ClowdEditorIconBrush}" />
+    </Style>
+    <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.wide">
+        <Setter Property="Padding" Value="7" />
+    </Style>
+    <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.tight">
+        <Setter Property="Padding" Value="9" />
+    </Style>
+
+    <!--  The checked button (the active tool, an on toggle) wears the accent rather than the
+          dense look's white veil, with white ink on top: on a backdrop a lighter grey is not a
+          strong enough mark, and the accent is already what this app means by "selected".  -->
+    <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton:checked /template/ Border#_bg">
+        <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+    </Style>
+    <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton:checked">
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!--  The theme's own hover fill, not the template's white veil: a white veil over #FAFAFA is
+          no hover at all.  -->
+    <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton /template/ Border#_hover">
+        <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+    </Style>
+</Styles>
