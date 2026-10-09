@@ -133,15 +133,8 @@ fn build_macos() {
 /// The prebuilt obs-deps `lib` dir (FFmpeg et al.) — same probe as
 /// obs-express's build script.
 fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    let deps_dir = repo_root.join("obs-studio/.deps");
-    for entry in std::fs::read_dir(&deps_dir).ok()?.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let lib = entry.path().join("lib");
-            if lib.exists() {
-                return Some(lib);
-            }
-        }
-    }
-    None
+    obs_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
+        .into_iter()
+        .map(|dir| dir.join("lib"))
+        .find(|lib| lib.exists())
 }

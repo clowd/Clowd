@@ -127,7 +127,7 @@ fn build_macos() {
 /// re-sign is mandatory: `install_name_tool` invalidates the signature, and on
 /// Apple Silicon an invalid signature is a load failure, not a warning.
 ///
-/// The versioned aliases (`libavcodec.dylib`, `libavcodec.61.dylib`) are
+/// The versioned aliases (`libavcodec.dylib`, `libavcodec.62.dylib`) are
 /// symlinks to one real file; they are recreated as symlinks so the payload is
 /// not tripled and the real file is patched exactly once.
 fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
@@ -265,17 +265,10 @@ fn run_checked(cmd: &str, args: &[&str], benign: &[&str]) -> bool {
 }
 
 fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    let deps_dir = repo_root.join("obs-studio/.deps");
-    for entry in std::fs::read_dir(&deps_dir).ok()?.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let lib = entry.path().join("lib");
-            if lib.exists() {
-                return Some(lib);
-            }
-        }
-    }
-    None
+    obs_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
+        .into_iter()
+        .map(|dir| dir.join("lib"))
+        .find(|lib| lib.exists())
 }
 
 // ---------------------------------------------------------------------------
@@ -327,17 +320,17 @@ fn build_windows() {
 
     // Third-party runtime DLLs the (unbuilt) frontend target would have bundled.
     let deps_dlls = [
-        "avcodec-61.dll",
-        "avformat-61.dll",
-        "avutil-59.dll",
-        "avfilter-10.dll",
-        "avdevice-61.dll",
-        "swscale-8.dll",
-        "swresample-5.dll",
+        "avcodec-62.dll",
+        "avformat-62.dll",
+        "avutil-60.dll",
+        "avfilter-11.dll",
+        "avdevice-62.dll",
+        "swscale-9.dll",
+        "swresample-6.dll",
         "zlib.dll",
         "libx264-164.dll",
         "libcurl.dll",
-        // avformat-61.dll imports these two; without them obs-ffmpeg fails to
+        // avformat-62.dll imports these two; without them obs-ffmpeg fails to
         // load with STATUS_DLL_NOT_FOUND.
         "librist.dll",
         "srt.dll",
@@ -451,7 +444,7 @@ fn copy_dir_all(src_dir: &Path, dst_dir: &Path) {
 /// ```text
 /// obs-express, obs-ffmpeg-mux, vid2gif
 /// libobs.so.30, libobs-opengl.so.30        RUNPATH $ORIGIN
-/// libavcodec.so.61, ... (FFmpeg)           RUNPATH $ORIGIN
+/// libavcodec.so.62, ... (FFmpeg)           RUNPATH $ORIGIN
 /// obs-plugins/<plugin>.so                  RUNPATH $ORIGIN/..
 /// data/libobs/*.effect
 /// data/obs-plugins/<plugin>/...

@@ -46,12 +46,12 @@ fn windows() {
 
     // The four linked FFmpeg DLLs plus everything they import.
     let dlls = [
-        "avcodec-61.dll",
-        "avformat-61.dll",
-        "avutil-59.dll",
-        "avfilter-10.dll",
-        "swscale-8.dll",
-        "swresample-5.dll",
+        "avcodec-62.dll",
+        "avformat-62.dll",
+        "avutil-60.dll",
+        "avfilter-11.dll",
+        "swscale-9.dll",
+        "swresample-6.dll",
         "zlib.dll",
         "libx264-164.dll",
         "libcurl.dll",

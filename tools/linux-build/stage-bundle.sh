@@ -32,8 +32,8 @@ cp -a "$src/obs-plugins" "$src/data" "$dist/"
 
 for required in obs-express vid2gif obs-ffmpeg-mux \
     libobs.so.30 libobs-opengl.so.30 \
-    libavcodec.so.61 libavformat.so.61 libavutil.so.59 libavfilter.so.10 \
-    libavdevice.so.61 libswscale.so.8 libswresample.so.5 \
+    libavcodec.so.62 libavformat.so.62 libavutil.so.60 libavfilter.so.11 \
+    libavdevice.so.62 libswscale.so.9 libswresample.so.6 \
     obs-plugins/obs-ffmpeg.so obs-plugins/obs-x264.so obs-plugins/obs-outputs.so \
     obs-plugins/linux-capture.so obs-plugins/linux-pipewire.so \
     obs-plugins/linux-pulseaudio.so obs-plugins/linux-v4l2.so \

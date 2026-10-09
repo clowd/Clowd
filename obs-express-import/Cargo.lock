@@ -197,6 +197,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "obs",
+ "obs-build-support",
  "obs-platform",
  "obs-sys",
  "serde_json",
@@ -557,6 +558,7 @@ dependencies = [
 name = "obs"
 version = "0.1.0"
 dependencies = [
+ "obs-build-support",
  "obs-sys",
 ]
 
@@ -596,6 +598,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-core-graphics",
  "obs",
+ "obs-build-support",
  "obs-sys",
  "windows",
 ]

@@ -64,8 +64,8 @@ mod tests {
 
     #[test]
     fn bindings_link_and_report_matching_version() {
-        // avcodec 61 is the FFmpeg 7.x line the obs-deps bundle pins.
+        // avcodec 62 is the FFmpeg 8.x line the obs-deps bundle pins.
         let version = unsafe { avcodec_version() };
-        assert_eq!(version >> 16, 61, "unexpected libavcodec major: {version}");
+        assert_eq!(version >> 16, 62, "unexpected libavcodec major: {version}");
     }
 }

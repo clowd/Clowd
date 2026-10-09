@@ -2,7 +2,7 @@
 
 A minimal, headless screen recorder backed by [libobs](https://github.com/obsproject/obs-studio) (the OBS Studio core). It records a screen region or a whole monitor straight to an MP4, driven entirely by command-line flags (plus an optional JSON settings file) and a small line-oriented stdin/stdout protocol — no GUI, no OBS install required.
 
-This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-express) (originally C++). libobs 32.1.2 is built from source from the pinned `obs-studio` submodule and bundled next to the binary, so a release is self-contained.
+This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-express) (originally C++). libobs 32.2.2 is built from source from the pinned `obs-studio` submodule and bundled next to the binary, so a release is self-contained.
 
 ## Features
 
@@ -30,7 +30,7 @@ Each release publishes a zipped, self-contained bundle for every supported targe
 
 Unzip and run `obs-express` in place — the bundled OBS runtime (plugins, data, and the FFmpeg/x264 libraries) lives alongside the executable and is fully relocatable.
 
-The bundled FFmpeg/x264 libraries are also usable on their own (e.g. by a host that uses the FFmpeg C API in-process): on Windows they are ordinary DLLs next to the executable (load them from that directory, e.g. via `AddDllDirectory`/`LOAD_WITH_ALTERED_SEARCH_PATH`), and on macOS the dylibs in `Frameworks/` carry an `@loader_path` rpath so they can be `dlopen`ed directly by any program as long as they stay together. On macOS, unzip with a tool that restores symlinks and modes (`unzip`, `ditto -x -k`, `tar`): the versioned aliases (`libavcodec.61.dylib`) are symlinks and the executables rely on their execute bits.
+The bundled FFmpeg/x264 libraries are also usable on their own (e.g. by a host that uses the FFmpeg C API in-process): on Windows they are ordinary DLLs next to the executable (load them from that directory, e.g. via `AddDllDirectory`/`LOAD_WITH_ALTERED_SEARCH_PATH`), and on macOS the dylibs in `Frameworks/` carry an `@loader_path` rpath so they can be `dlopen`ed directly by any program as long as they stay together. On macOS, unzip with a tool that restores symlinks and modes (`unzip`, `ditto -x -k`, `tar`): the versioned aliases (`libavcodec.62.dylib`) are symlinks and the executables rely on their execute bits.
 
 On macOS the binaries are ad-hoc signed but not notarized, so the first launch may need:
 
@@ -278,11 +278,11 @@ The conversion is two in-process passes (fps/scale + `palettegen`, then `palette
 
 ### Requirements
 
-libobs is compiled from the `obs-studio` submodule (pinned to **32.1.2**), so a full native toolchain is needed:
+libobs is compiled from the `obs-studio` submodule (pinned to **32.2.2**), so a full native toolchain is needed:
 
 - `git`, `cmake` (≥ 3.28), and a recent **Rust** toolchain (`cargo`)
 - **Windows** — Visual Studio 2022 or 2026 (the newest installed one picks the CMake generator; set `OBS_CMAKE_GENERATOR` to override) and LLVM/`libclang` (for `bindgen`; point `LIBCLANG_PATH` at it if not on `PATH`)
-- **macOS** — full **Xcode** (not just the Command Line Tools — the Metal renderer and Swift are required)
+- **macOS** — full **Xcode 26.5+** (not just the Command Line Tools — the Metal renderer and Swift are required)
 - **Linux** (x86_64 and aarch64) — build in the reference image, `tools/linux-build/Dockerfile`. It is a manylinux_2_34 (AlmaLinux 9, glibc 2.34) base with clang/`libclang` (for `bindgen`), `ninja`, `nasm`, `patchelf`, Rust, and the development packages of the system libraries the bundle links. CI builds in the same image, and building there is what keeps the result portable to every glibc 2.34+ distribution:
 
   ```sh
@@ -290,7 +290,7 @@ libobs is compiled from the `obs-studio` submodule (pinned to **32.1.2**), so a 
   tools/linux-build/run-in-image.sh cargo build --release --workspace --exclude clowd_share_region
   ```
 
-  A native build on another distribution also works, given the same tools and `-dev` packages; the Dockerfile is the list. Its output then needs that distribution's glibc or newer. Do **not** install the system FFmpeg development packages (`libav*-dev`). The build downloads a pinned FFmpeg 7.1 shared build (BtbN FFmpeg-Builds, SHA-256 verified), builds pinned x264 and Mbed TLS from source, and fetches a pinned SIMDe, all into `obs-studio/.deps`. The first build therefore needs access to github.com. libobs, every plugin and `vid2gif` share that one FFmpeg.
+  A native build on another distribution also works, given the same tools and `-dev` packages; the Dockerfile is the list. Its output then needs that distribution's glibc or newer. Do **not** install the system FFmpeg development packages (`libav*-dev`). The build downloads a pinned FFmpeg 8.1 shared build (BtbN FFmpeg-Builds, SHA-256 verified), builds pinned x264 and Mbed TLS from source, and fetches a pinned SIMDe, all into `obs-studio/.deps`. The first build therefore needs access to github.com. libobs, every plugin and `vid2gif` share that one FFmpeg.
 
 ### Steps
 

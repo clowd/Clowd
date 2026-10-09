@@ -29,7 +29,7 @@ fn main() {
 /// env var if the submodule is bumped or a custom stamp is desired.
 fn obs_version_override() -> String {
     println!("cargo:rerun-if-env-changed=OBS_VERSION_OVERRIDE");
-    env::var("OBS_VERSION_OVERRIDE").unwrap_or_else(|_| "32.1.2".to_string())
+    env::var("OBS_VERSION_OVERRIDE").unwrap_or_else(|_| "32.2.2".to_string())
 }
 
 /// Rust's target arch (`CARGO_CFG_TARGET_ARCH`) drives the native OBS build's
@@ -107,12 +107,13 @@ fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
         .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
         // OBS builds itself with -Werror (via CMAKE_COMPILE_WARNING_AS_ERROR,
         // which it defaults ON). Newer toolchains — e.g. the Xcode 26 clang on
-        // CI — enable warnings OBS 32.1.2 never saw (-Wimplicit-int-float-
+        // CI — enable warnings OBS 32.2.2 never saw (-Wimplicit-int-float-
         // conversion), turning them into hard build failures. OBS is a vendored
         // dependency, so opt out of warnings-as-errors for its tree.
         .arg("-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF")
         .arg(format!("-DCMAKE_OSX_ARCHITECTURES={}", mac_osx_arch()))
         .arg("-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0")
+        .arg("-DENABLE_FRONTEND=OFF")
         .arg("-DENABLE_UI=OFF")
         .arg("-DENABLE_SCRIPTING=OFF")
         .arg("-DENABLE_BROWSER=OFF")
@@ -237,17 +238,10 @@ fn mac_emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
 /// downstream build scripts, but rooted at the obs-studio checkout we already
 /// hold rather than walking up from OUT_DIR.
 fn mac_find_obs_deps_lib(obs_src: &Path) -> Option<PathBuf> {
-    let deps_dir = obs_src.join(".deps");
-    for entry in std::fs::read_dir(&deps_dir).ok()?.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let lib = entry.path().join("lib");
-            if lib.exists() {
-                return Some(lib);
-            }
-        }
-    }
-    None
+    obs_build_support::obs_deps_bundles(obs_src)
+        .into_iter()
+        .map(|dir| dir.join("lib"))
+        .find(|lib| lib.exists())
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +398,7 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
         .arg(win_vs_platform())
         .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
         // See the macOS branch: OBS defaults to -Werror / MSVC /WX. Disable
-        // warnings-as-errors so a newer MSVC toolchain than OBS 32.1.2 was
+        // warnings-as-errors so a newer MSVC toolchain than OBS 32.2.2 was
         // tested against cannot break our build on a stray warning.
         .arg("-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF")
         // Silences VS 2026's hard deprecation error for libobs-winrt's
@@ -539,17 +533,11 @@ fn find_obs_deps_bin(obs_src: &Path) -> Option<PathBuf> {
 /// `obs-deps-*` would ship x64 runtime DLLs in an ARM64 bundle, or generate
 /// bindings against the wrong headers.
 fn find_obs_deps_subdir(obs_src: &Path, sub: &str) -> Option<PathBuf> {
-    let deps_dir = obs_src.join(".deps");
-    std::fs::read_dir(&deps_dir)
-        .ok()?
-        .flatten()
-        .map(|e| e.path())
+    obs_build_support::obs_deps_bundles(obs_src)
+        .into_iter()
         .find(|dir| {
             let name = dir.file_name().unwrap_or_default().to_string_lossy();
-            name.starts_with("obs-deps-")
-                && !name.contains("qt6")
-                && is_target_arch_bundle(&name)
-                && dir.join(sub).exists()
+            is_target_arch_bundle(&name) && dir.join(sub).exists()
         })
         .map(|dir| dir.join(sub))
 }

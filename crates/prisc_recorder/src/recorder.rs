@@ -1237,7 +1237,7 @@ impl Recorder {
         // -- Point of no return: obs_reset_video invalidates the video_t* the
         // current encoder is bound to.
         if video_changed {
-            // CRITICAL invariant (verified in libobs 32.1.2): obs_reset_video
+            // CRITICAL invariant (verified in libobs 32.2.2): obs_reset_video
             // destroys ALL obs_view video mixes — the webcam's included; its
             // encoder would keep a dangling video_t. Tear the webcam chain
             // down first (detaching its encoder), then rebuild and rebind
