@@ -69,7 +69,7 @@ namespace Clowd.VideoSDK.Media
                 Check(ffmpeg.av_opt_set_int(_sws, "dstw", dstWidth, 0), "dstw");
                 Check(ffmpeg.av_opt_set_int(_sws, "dsth", dstHeight, 0), "dsth");
                 Check(ffmpeg.av_opt_set_int(_sws, "dst_format", (int)AVPixelFormat.AV_PIX_FMT_NV12, 0), "dst_format");
-                Check(ffmpeg.av_opt_set_int(_sws, "sws_flags", ffmpeg.SWS_BILINEAR, 0), "sws_flags");
+                Check(ffmpeg.av_opt_set_int(_sws, "sws_flags", (int)SwsFlags.SWS_BILINEAR, 0), "sws_flags");
                 Check(ffmpeg.av_opt_set_int(_sws, "threads", threads, 0), "threads");
                 Check(ffmpeg.sws_init_context(_sws, null, null), "sws_init_context");
 

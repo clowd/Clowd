@@ -281,7 +281,7 @@ namespace Clowd.VideoSDK.Ai
                         {
                             sws = ffmpeg.sws_getCachedContext(sws, srcW, srcH,
                                 AVPixelFormat.AV_PIX_FMT_BGRA, width, height,
-                                AVPixelFormat.AV_PIX_FMT_RGB24, ffmpeg.SWS_BILINEAR, null, null, null);
+                                AVPixelFormat.AV_PIX_FMT_RGB24, (int)SwsFlags.SWS_BILINEAR, null, null, null);
                             if (sws == null)
                                 throw new InvalidOperationException(
                                     $"sws_getCachedContext failed for {srcW}x{srcH} -> {width}x{height}.");

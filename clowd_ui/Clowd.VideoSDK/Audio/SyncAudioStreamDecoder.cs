@@ -182,6 +182,15 @@ namespace Clowd.VideoSDK.Audio
         /// <see cref="SeekableAudioSource"/>).
         ///
         /// <para>
+        /// A negative target is allowed and is how a preroll reaches the start of the stream: an
+        /// AAC track opens with a priming packet stamped before zero, and a seek to exactly zero
+        /// lands after it (FFmpeg 8's mov demuxer does), so the first real frame decodes without
+        /// its overlap and the first ~20 ms come out up to 1.4e-3 off. Asking for a time before
+        /// the first packet finds no packet at or before it, and the forward fallback below then
+        /// lands on the very first one, priming included.
+        /// </para>
+        ///
+        /// <para>
         /// Additive: the render path never calls this and stays strictly forward-only.
         /// </para>
         /// </summary>
@@ -190,17 +199,26 @@ namespace Clowd.VideoSDK.Audio
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             bool tbValid = _timeBase.num > 0 && _timeBase.den > 0;
-            long target = Math.Max(0, targetTicks);
-            long ts = tbValid
-                ? TimeBase.TicksToStreamTime(target + _startTimeTicks, _timeBase.num, _timeBase.den)
-                : TimeBase.Rescale(target, 1, TimeBase.TicksPerSecond, 1, ffmpeg.AV_TIME_BASE);
 
             // without a usable stream time base the seek has to go through the container's
             // AV_TIME_BASE domain (stream index -1), exactly as Demuxer does.
             int seekStream = tbValid ? _streamIndex : -1;
+            long StreamTs(long ticks) => tbValid
+                ? TimeBase.TicksToStreamTime(ticks + _startTimeTicks, _timeBase.num, _timeBase.den)
+                : TimeBase.Rescale(ticks, 1, TimeBase.TicksPerSecond, 1, ffmpeg.AV_TIME_BASE);
+
+            long ts = StreamTs(targetTicks);
             int err = ffmpeg.av_seek_frame(_fmt, seekStream, ts, ffmpeg.AVSEEK_FLAG_BACKWARD);
             if (err < 0)
-                ffmpeg.av_seek_frame(_fmt, seekStream, ts, 0); // some containers reject BACKWARD near 0/EOF
+                err = ffmpeg.av_seek_frame(_fmt, seekStream, ts, 0); // some containers reject BACKWARD near 0/EOF
+
+            // a container that will not seek before its start at all gets the start itself
+            if (err < 0 && targetTicks < 0)
+            {
+                ts = StreamTs(0);
+                if (ffmpeg.av_seek_frame(_fmt, seekStream, ts, ffmpeg.AVSEEK_FLAG_BACKWARD) < 0)
+                    ffmpeg.av_seek_frame(_fmt, seekStream, ts, 0);
+            }
 
             ffmpeg.avcodec_flush_buffers(_ctx);
             ffmpeg.av_packet_unref(_pkt);

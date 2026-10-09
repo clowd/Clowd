@@ -62,7 +62,7 @@ namespace Clowd.VideoSDK.Tests
             if (dh == 0) dh = h;
             using var dst = new Nv12Frame(dw, dh);
             var sws = ffmpeg.sws_getContext(w, h, AVPixelFormat.AV_PIX_FMT_BGRA, dw, dh,
-                AVPixelFormat.AV_PIX_FMT_NV12, ffmpeg.SWS_BILINEAR, null, null, null);
+                AVPixelFormat.AV_PIX_FMT_NV12, (int)SwsFlags.SWS_BILINEAR, null, null, null);
             Assert.True(sws != null, "sws_getContext failed");
             try
             {
@@ -195,7 +195,7 @@ namespace Clowd.VideoSDK.Tests
             planar->height = h;
             Assert.True(ffmpeg.av_frame_get_buffer(planar, 0) >= 0);
             var sws = ffmpeg.sws_getContext(w, h, AVPixelFormat.AV_PIX_FMT_BGRA, w, h,
-                AVPixelFormat.AV_PIX_FMT_YUV420P, ffmpeg.SWS_BILINEAR, null, null, null);
+                AVPixelFormat.AV_PIX_FMT_YUV420P, (int)SwsFlags.SWS_BILINEAR, null, null, null);
             try
             {
                 fixed (byte* src = bgra)

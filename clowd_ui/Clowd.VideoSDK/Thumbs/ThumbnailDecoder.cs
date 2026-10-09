@@ -344,7 +344,7 @@ namespace Clowd.VideoSDK.Thumbs
                 // fast-bilinear leaves fine texture aliased and slightly mushy next to a windowed
                 // sinc, and the scaler is still far from the bottleneck at these output sizes.
                 _sws = ffmpeg.sws_getCachedContext(_sws, width, height, (AVPixelFormat)_frame->format,
-                    ThumbWidth, ThumbHeight, AVPixelFormat.AV_PIX_FMT_BGRA, ffmpeg.SWS_LANCZOS,
+                    ThumbWidth, ThumbHeight, AVPixelFormat.AV_PIX_FMT_BGRA, (int)SwsFlags.SWS_LANCZOS,
                     null, null, null);
                 if (_sws == null)
                     throw new InvalidOperationException("sws_getCachedContext failed for format " + _frame->format);

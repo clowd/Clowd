@@ -25,9 +25,10 @@ namespace Clowd.VideoSDK.Tests
         private static string FindDirectory()
         {
             // the dev layout the app does not know about: a sibling obs-express-rs build tree.
-            string probe = OperatingSystem.IsWindows() ? "avcodec-61.dll"
-                : OperatingSystem.IsMacOS() ? "libavcodec.61.dylib"
-                : "libavcodec.so.61";
+            int major = FFmpeg.AutoGen.Abstractions.ffmpeg.LIBAVCODEC_VERSION_MAJOR;
+            string probe = OperatingSystem.IsWindows() ? $"avcodec-{major}.dll"
+                : OperatingSystem.IsMacOS() ? $"libavcodec.{major}.dylib"
+                : $"libavcodec.so.{major}";
 
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)

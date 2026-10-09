@@ -154,7 +154,9 @@ namespace Clowd.VideoSDK.Audio
         /// new position and decode-discards to the exact sample.</summary>
         private void Reposition(StreamState state, long pos)
         {
-            state.Decoder.Seek(Math.Max(0, AudioTime.TicksFloor(pos, _rate) - SeekPrerollTicks));
+            // not clamped at zero: a preroll that runs off the start must still take in the
+            // stream's priming packet (see SyncAudioStreamDecoder.Seek)
+            state.Decoder.Seek(AudioTime.TicksFloor(pos, _rate) - SeekPrerollTicks);
             _repositions++;
 
             state.OffsetFloats = 0;

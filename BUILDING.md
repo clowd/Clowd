@@ -15,8 +15,8 @@ dotnet build clowd_ui/Clowd.Ui/Clowd.Ui.csproj
 
 ### The video editor's FFmpeg
 
-The editor, the playback engine and `Clowd.VideoRender` all load FFmpeg 7.1 natively (avcodec 61 /
-avformat 61 / avutil 59 / swscale 8 / swresample 5) and refuse to start without it —
+The editor, the playback engine and `Clowd.VideoRender` all load FFmpeg 8.1 natively (avcodec 62 /
+avformat 62 / avutil 60 / swscale 9 / swresample 6) and refuse to start without it —
 `FFmpegLoader.TryInitialize` asserts those majors. A release build takes them from the bundled
 obs-express payload; `ObsBinaryLocator.ResolveFFmpegDirectory` is the one resolver every caller
 goes through, probing in order:

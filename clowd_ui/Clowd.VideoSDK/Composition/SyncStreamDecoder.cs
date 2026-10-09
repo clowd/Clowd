@@ -245,7 +245,7 @@ namespace Clowd.VideoSDK.Composition
                 try
                 {
                     _sws = ffmpeg.sws_getCachedContext(_sws, width, height, (AVPixelFormat)_frame->format,
-                        width, height, AVPixelFormat.AV_PIX_FMT_BGRA, ffmpeg.SWS_BILINEAR, null, null, null);
+                        width, height, AVPixelFormat.AV_PIX_FMT_BGRA, (int)SwsFlags.SWS_BILINEAR, null, null, null);
                     if (_sws == null)
                         throw new InvalidOperationException("sws_getCachedContext failed for format " + _frame->format);
 
