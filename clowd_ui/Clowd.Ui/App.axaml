@@ -24,6 +24,17 @@
         </ResourceDictionary>
     </Application.Resources>
 
+    <!-- macOS app menu. Avalonia.Native fills in an "About Avalonia" item when the Application
+         has no menu of its own, so setting one here replaces it with ours. -->
+    <NativeMenu.Menu>
+        <NativeMenu>
+            <NativeMenuItem Header="About Clowd" Click="AppMenuAbout_Click" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Recents &amp; Uploads" Click="AppMenuRecents_Click" />
+            <NativeMenuItem Header="Settings…" Gesture="Cmd+OemComma" Click="AppMenuSettings_Click" />
+        </NativeMenu>
+    </NativeMenu.Menu>
+
     <!-- The TrayIcon + NativeMenu are created in code (App.axaml.cs SetupTrayIcon) so the
          menu can be rebuilt when hotkey settings change (decision table #48). -->
 

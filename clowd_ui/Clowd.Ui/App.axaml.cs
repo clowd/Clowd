@@ -530,6 +530,15 @@ namespace Clowd
             menu.Add(exit);
         }
 
+        private void AppMenuAbout_Click(object sender, EventArgs e)
+            => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.About);
+
+        private void AppMenuRecents_Click(object sender, EventArgs e)
+            => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
+
+        private void AppMenuSettings_Click(object sender, EventArgs e)
+            => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
+
         public void StartCapture(CaptureMode mode = CaptureMode.Region, RegionIntent intent = RegionIntent.Capture)
         {
             PageManager.Current.GetScreenCapturePage().Open(mode, intent);
