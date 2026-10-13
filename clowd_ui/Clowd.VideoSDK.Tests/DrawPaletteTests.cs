@@ -76,7 +76,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("Draw_Tool_Eraser", DrawPalette.ToolKey(ToolType.Eraser));
             Assert.Equal("Draw_Tool_Pointer", DrawPalette.ToolKey(ToolType.Pointer));
             Assert.Equal(
-                new[] { "IconDrawSelect", "IconToolBrush", "IconToolArrow", "IconToolLine", "IconToolRectangle", "IconToolEllipse", "IconToolText", "IconToolEraser" },
+                new[] { "IconToolSelection", "IconToolBrush", "IconToolArrow", "IconToolLine", "IconToolRectangle", "IconToolEllipse", "IconToolText", "IconToolEraser" },
                 DrawPalette.Tools.Select(DrawPalette.ToolIconKey));
         }
 

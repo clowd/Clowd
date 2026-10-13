@@ -89,9 +89,9 @@ namespace Clowd.UI.DrawOnScreen
         public static string ToolKey(ToolType tool) => "Draw_Tool_" + tool;
 
         /// <summary>Resource key of a tool's icon in Assets/VectorIcons.axaml: <c>IconToolBrush</c>
-        /// and so on. The select tool has its own icon (arrow tip + four-way arrows, after the Move
-        /// cursor): the editor's plain pointer is already the click-through toggle's.</summary>
+        /// and so on. The select tool shares the image editor's Selection icon (a dotted frame under
+        /// a pointer): the plain pointer is already the click-through toggle's.</summary>
         public static string ToolIconKey(ToolType tool) =>
-            tool == ToolType.Pointer ? "IconDrawSelect" : "IconTool" + tool;
+            tool == ToolType.Pointer ? "IconToolSelection" : "IconTool" + tool;
     }
 }
