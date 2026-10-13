@@ -8,6 +8,7 @@
     xmlns:draw="clr-namespace:Clowd.Drawing;assembly=Clowd.Drawing"
     xmlns:graphics="clr-namespace:Clowd.Drawing.Graphics;assembly=Clowd.Drawing"
     xmlns:local="clr-namespace:Clowd.UI"
+    xmlns:tray="clr-namespace:Clowd.UI.Controls.Tray"
     xmlns:util="clr-namespace:Clowd.Util"
     DragDrop.AllowDrop="True"
     Title="Edit - Clowd"
@@ -28,6 +29,46 @@
         <conv:ColorToBrushConverter x:Key="convColorToBrush" />
         <conv:EnumMatchToBooleanConverter x:Key="enumMatch" />
         <conv:StringToFontFamilyConverter x:Key="convFontFamily" />
+
+        <!--  The zoom pill's buttons: the voice recorder pill's icon button (transparent fill,
+              white hover veil, stronger pressed veil, dimmed when disabled), since the two are
+              the same graphite surface floating over arbitrary pixels.  -->
+        <ControlTheme x:Key="ZoomPillButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#DCDCDE" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="6">
+                        <ContentPresenter
+                            Name="PART_ContentPresenter"
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}"
+                            Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="#33FFFFFF" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#_bg">
+                <Setter Property="Background" Value="#55FFFFFF" />
+            </Style>
+            <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Opacity" Value="0.35" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+        </ControlTheme>
     </Window.Resources>
 
     <!--  Classes selects the editor chrome, and ApplyChrome sets it from General.EditorLayout
@@ -270,21 +311,6 @@
                     VerticalAlignment="Center"
                     FontWeight="Bold"
                     Text="{Binding ElementName=drawingCanvas, Path=SubjectName, Mode=OneWay}" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=IsCanvasSubject, Mode=OneWay}">
-                <TextBlock VerticalAlignment="Center" Text="Zoom" />
-                <controls:ThemedSpinner
-                    DisplayScale="100"
-                    Min="0.1"
-                    SpinAmount="0.1"
-                    Suffix="%"
-                    Value="{Binding ElementName=drawingCanvas, Path=ViewportZoom, Mode=TwoWay}" />
-                <controls:ResetDefaultButton
-                    Margin="4,0,0,0"
-                    Command="{Binding ElementName=drawingCanvas, Path=CommandZoomReset}"
-                    CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=OneWay}"
-                    DefaultValue="1" />
             </StackPanel>
 
             <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=IsCanvasSubject, Mode=OneWay}">
@@ -677,10 +703,115 @@
                     x:Name="canvasClip"
                     Background="{DynamicResource ClowdEditorCanvasBrush}"
                     ClipToBounds="True">
-                    <draw:DrawingCanvas
-                        x:Name="drawingCanvas"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch" />
+                    <Panel>
+                        <draw:DrawingCanvas
+                            x:Name="drawingCanvas"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch" />
+
+                        <!--  Zoom, floating in the canvas's corner so it is always there without
+                              costing the properties bar any room. A sibling of the canvas, not a
+                              child: the canvas zooms by transforming itself. Dark whatever the
+                              theme, like the video editor's voice recorder pill, because it sits
+                              over the user's own pixels. Faded until the pointer reaches it, so it
+                              hides as little of the picture as it can. The tooltips and the
+                              readout's menu are filled in from code (InitZoomPill), where the
+                              gestures can name Cmd or Ctrl.  -->
+                        <Border
+                            x:Name="zoomPill"
+                            Margin="12"
+                            Padding="3"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            Background="{x:Static tray:TrayTokens.TrayBrush}"
+                            BorderBrush="{x:Static tray:TrayTokens.Ring}"
+                            BorderThickness="1"
+                            BoxShadow="0 2 8 0 #80000000"
+                            CornerRadius="{x:Static tray:TrayTokens.Corner}">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+                                </Transitions>
+                            </Border.Transitions>
+                            <!--  Both opacities are styles: a local Opacity on the element would
+                                  outrank the hover setter and the pill would never brighten.  -->
+                            <Border.Styles>
+                                <Style Selector="Border#zoomPill">
+                                    <Setter Property="Opacity" Value="0.6" />
+                                </Style>
+                                <Style Selector="Border#zoomPill:pointerover">
+                                    <Setter Property="Opacity" Value="1" />
+                                </Style>
+                                <!--  The bars' tips (tipBridge), but opening above the pill: it sits
+                                      at the bottom of the canvas, so below is off the window.  -->
+                                <Style Selector="StackPanel.tipBridge > :is(Control)">
+                                    <Setter Property="ToolTip.CustomPopupPlacementCallback" Value="{x:Static controls:StripToolTips.PlacementBefore}" />
+                                </Style>
+                            </Border.Styles>
+                            <StackPanel
+                                Classes="tipBridge"
+                                Orientation="Horizontal"
+                                Spacing="2">
+                                <Button
+                                    x:Name="btnZoomOut"
+                                    Command="{Binding ElementName=drawingCanvas, Path=CommandZoomOut}"
+                                    Theme="{StaticResource ZoomPillButtonTheme}">
+                                    <Viewbox Width="16" Height="16">
+                                <Path
+                                    Width="24"
+                                    Height="24"
+                                    Data="{StaticResource IconZoomOut}"
+                                    Fill="{Binding $parent[Button].Foreground}" />
+                            </Viewbox>
+                                </Button>
+                                <!--  The readout opens the presets. Monospace digits and a fixed
+                                      minimum width so the pill does not twitch as the zoom moves.  -->
+                                <Button
+                                    x:Name="btnZoomLevel"
+                                    MinWidth="52"
+                                    Padding="6,0"
+                                    Theme="{StaticResource ZoomPillButtonTheme}">
+                                    <TextBlock
+                                        Margin="0,1,0,0"
+                                        VerticalAlignment="Center"
+                                        FontFamily="{StaticResource MonoFontFamily}"
+                                        FontSize="12"
+                                        Foreground="#F0F0F0"
+                                        Text="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=OneWay, StringFormat={}{0:0%}}" />
+                                </Button>
+                                <Button
+                                    x:Name="btnZoomIn"
+                                    Command="{Binding ElementName=drawingCanvas, Path=CommandZoomIn}"
+                                    Theme="{StaticResource ZoomPillButtonTheme}">
+                                    <Viewbox Width="16" Height="16">
+                                <Path
+                                    Width="24"
+                                    Height="24"
+                                    Data="{StaticResource IconZoomIn}"
+                                    Fill="{Binding $parent[Button].Foreground}" />
+                            </Viewbox>
+                                </Button>
+                                <Rectangle
+                                    Width="1"
+                                    Height="16"
+                                    Margin="2,0"
+                                    VerticalAlignment="Center"
+                                    Fill="{x:Static tray:TrayTokens.GroupDivider}" />
+                                <Button
+                                    x:Name="btnZoomFit"
+                                    Command="{Binding ElementName=drawingCanvas, Path=CommandZoomPanAuto}"
+                                    Theme="{StaticResource ZoomPillButtonTheme}">
+                                    <Viewbox Width="16" Height="16">
+                                <Path
+                                    Width="24"
+                                    Height="24"
+                                    Data="{StaticResource IconZoomFit}"
+                                    Fill="{Binding $parent[Button].Foreground}" />
+                            </Viewbox>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Panel>
                 </Border>
             </Border>
 

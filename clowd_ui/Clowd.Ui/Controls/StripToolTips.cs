@@ -48,7 +48,13 @@ namespace Clowd.UI.Controls
         /// with <see cref="IsEnabledProperty"/> set, and its axis is its longer side, since an editor bar is a
         /// full-length row or column.
         /// </summary>
-        public static readonly CustomPopupPlacementCallback Placement = PlaceOnStrip;
+        public static readonly CustomPopupPlacementCallback Placement = p => PlaceOnStrip(p, before: false);
+
+        /// <summary>
+        /// <see cref="Placement"/> for a strip parked at the bottom of its surface (the image editor's
+        /// zoom pill): the tips open above it instead, toward the content, rather than off its edge.
+        /// </summary>
+        public static readonly CustomPopupPlacementCallback PlacementBefore = p => PlaceOnStrip(p, before: true);
 
         static StripToolTips()
         {
@@ -81,18 +87,19 @@ namespace Clowd.UI.Controls
             return false;
         }
 
-        private static void PlaceOnStrip(CustomPopupPlacement placement)
+        private static void PlaceOnStrip(CustomPopupPlacement placement, bool before)
         {
             var strip = (placement.Target as Visual)?.FindAncestorOfType<Control>();
             while (strip != null && !GetIsEnabled(strip))
                 strip = strip.FindAncestorOfType<Control>();
 
             var horizontal = strip == null || strip.Bounds.Width >= strip.Bounds.Height;
-            Place(placement, strip, horizontal);
+            Place(placement, strip, horizontal, before);
         }
 
         /// <summary>
-        /// Below a horizontal strip or right of a vertical one, centred on the control, its anchor the
+        /// Below a horizontal strip or right of a vertical one (above or left of it when
+        /// <paramref name="before"/> is set), centred on the control, its anchor the
         /// control's span along the strip by the strip's full depth across it. Flipped to the other side
         /// when that one has no room, slid along the strip to stay on screen.
         /// </summary>
@@ -104,7 +111,7 @@ namespace Clowd.UI.Controls
         /// (TrayTokens.TipMargin), not an offset here: an offset is applied in the same direction after a
         /// flip, which would push a flipped tip into the strip.
         /// </remarks>
-        public static void Place(CustomPopupPlacement placement, Visual strip, bool horizontal)
+        public static void Place(CustomPopupPlacement placement, Visual strip, bool horizontal, bool before = false)
         {
             if (placement.Target is not Visual target)
                 return;
@@ -122,8 +129,20 @@ namespace Clowd.UI.Controls
             placement.AnchorRectangle = horizontal
                 ? new Rect(own.X, across.Y, own.Width, across.Height)
                 : new Rect(across.X, own.Y, across.Width, own.Height);
-            placement.Anchor = horizontal ? PopupAnchor.Bottom : PopupAnchor.Right;
-            placement.Gravity = horizontal ? PopupGravity.Bottom : PopupGravity.Right;
+            placement.Anchor = (horizontal, before) switch
+            {
+                (true, false) => PopupAnchor.Bottom,
+                (true, true) => PopupAnchor.Top,
+                (false, false) => PopupAnchor.Right,
+                (false, true) => PopupAnchor.Left,
+            };
+            placement.Gravity = (horizontal, before) switch
+            {
+                (true, false) => PopupGravity.Bottom,
+                (true, true) => PopupGravity.Top,
+                (false, false) => PopupGravity.Right,
+                (false, true) => PopupGravity.Left,
+            };
             placement.ConstraintAdjustment = horizontal
                 ? PopupPositionerConstraintAdjustment.FlipY | PopupPositionerConstraintAdjustment.SlideX
                 : PopupPositionerConstraintAdjustment.FlipX | PopupPositionerConstraintAdjustment.SlideY;

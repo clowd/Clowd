@@ -259,5 +259,9 @@
     <!-- The voice-over recorder tool on the video editor's left strip: a filled mic on the 24 canvas
          (capsule, stand, base bar), drawn to the same weight as its neighbours. -->
     <StreamGeometry x:Key="IconMic">M 12 2 C 10.343 2 9 3.343 9 5 L 9 11 C 9 12.657 10.343 14 12 14 C 13.657 14 15 12.657 15 11 L 15 5 C 15 3.343 13.657 2 12 2 Z M 4 12 C 4 16.418 7.582 20 12 20 C 16.418 20 20 16.418 20 12 L 18 12 C 18 15.314 15.314 18 12 18 C 8.686 18 6 15.314 6 12 Z M 11 20 L 13 20 L 13 21 L 16 21 C 16.552 21 17 21.448 17 22 C 17 22.552 16.552 23 16 23 L 8 23 C 7.448 23 7 22.552 7 22 C 7 21.448 7.448 21 8 21 L 11 21 Z</StreamGeometry>
+    <!--  The canvas zoom pill: out, in, and fit (four corners closing in on the view).  -->
+    <StreamGeometry x:Key="IconZoomOut">M 5 11 L 19 11 L 19 13 L 5 13 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconZoomIn">M 11 5 L 13 5 L 13 11 L 19 11 L 19 13 L 13 13 L 13 19 L 11 19 L 11 13 L 5 13 L 5 11 L 11 11 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconZoomFit">M 3 3 L 9 3 L 9 5 L 5 5 L 5 9 L 3 9 Z M 15 3 L 21 3 L 21 9 L 19 9 L 19 5 L 15 5 Z M 3 15 L 5 15 L 5 19 L 9 19 L 9 21 L 3 21 Z M 19 15 L 21 15 L 21 21 L 15 21 L 15 19 L 19 19 Z M 9 9 L 15 9 L 15 15 L 9 15 Z</StreamGeometry>
 
 </ResourceDictionary>

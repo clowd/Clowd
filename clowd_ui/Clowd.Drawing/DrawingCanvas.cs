@@ -409,6 +409,8 @@ namespace Clowd.Drawing
         public RelayCommand CommandZoomPanAuto { get; }
         public RelayCommand CommandZoomPanActualSize { get; }
         public RelayCommand CommandZoomReset { get; }
+        public RelayCommand CommandZoomIn { get; }
+        public RelayCommand CommandZoomOut { get; }
         public RelayCommand CommandCropImage { get; }
 
         internal ToolPointer ToolPointer { get; }
@@ -681,6 +683,20 @@ namespace Clowd.Drawing
                 Executed = (obj) => ZoomReset(),
                 Text = "Reset zoom",
             };
+            CommandZoomIn = new RelayCommand()
+            {
+                Executed = (obj) => ZoomStepCentered(1),
+                CanExecute = (obj) => NextZoomStop(1) != 0,
+                Text = "Zoom in",
+                GestureText = OperatingSystem.IsMacOS() ? "Cmd+=" : "Ctrl+=",
+            };
+            CommandZoomOut = new RelayCommand()
+            {
+                Executed = (obj) => ZoomStepCentered(-1),
+                CanExecute = (obj) => NextZoomStop(-1) != 0,
+                Text = "Zoom out",
+                GestureText = OperatingSystem.IsMacOS() ? "Cmd+-" : "Ctrl+-",
+            };
             CommandUndo = new RelayCommand()
             {
                 Executed = (obj) => Undo(),
@@ -707,7 +723,7 @@ namespace Clowd.Drawing
                 CommandSelectAll, CommandUnselectAll, CommandDelete, CommandDeleteAll,
                 CommandMoveToFront, CommandMoveToBack, CommandMoveForward, CommandMoveBackward,
                 CommandResetRotation, CommandUndo, CommandRedo, CommandZoomPanAuto,
-                CommandZoomPanActualSize, CommandCropImage,
+                CommandZoomPanActualSize, CommandZoomIn, CommandZoomOut, CommandCropImage,
             };
 
             // decision table #17: ContextMenu opens at the pointer on right-click release.
@@ -881,6 +897,9 @@ namespace Clowd.Drawing
             UpdateScaleTransform();
             UpdateClickableSurface();
             _isAutoFit = false;
+            // zoom in/out disable at either end of the stops
+            CommandZoomIn?.RaiseCanExecuteChanged();
+            CommandZoomOut?.RaiseCanExecuteChanged();
         }
 
         private void OnContentOffsetChanged(Point newValue)
@@ -2082,7 +2101,9 @@ namespace Clowd.Drawing
         private const double MaxZoom = 10;
         private static readonly double[] _zoomStops = { 0.1, 0.25, 0.50, 0.75, 1, 1.5, 2, 3 };
 
-        private void ZoomStep(int direction, Point relativeMouse)
+        /// <summary>The zoom one wheel notch away in <paramref name="direction"/>, or 0 when the
+        /// current zoom is already at that end of the range.</summary>
+        private double NextZoomStop(int direction)
         {
             double newZoom = 0;
 
@@ -2100,10 +2121,27 @@ namespace Clowd.Drawing
                 newZoom = _zoomStops.Where(z => z < ContentScale).Max();
             }
 
+            return newZoom;
+        }
+
+        private void ZoomStep(int direction, Point relativeMouse)
+        {
+            var newZoom = NextZoomStop(direction);
             if (newZoom == 0)
                 return;
 
             ApplyZoomAnchored(newZoom, relativeMouse);
+        }
+
+        /// <summary>One wheel notch of zoom, anchored at the viewport center rather than the
+        /// pointer: what the zoom buttons and keys do, where there is no pointer to anchor to.</summary>
+        public void ZoomStepCentered(int direction)
+        {
+            var newZoom = NextZoomStop(direction);
+            if (newZoom == 0)
+                return;
+
+            ZoomCentered(newZoom);
         }
 
         private void ApplyZoomAnchored(double newZoom, Point relativeMouse)

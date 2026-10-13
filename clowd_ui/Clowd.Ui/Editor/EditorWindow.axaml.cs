@@ -174,6 +174,10 @@ namespace Clowd.UI
             AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad2, 2d);
             AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.D3, 3d);
             AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad3, 3d);
+            AddKeyBinding(drawingCanvas.CommandZoomIn, Key.OemPlus);
+            AddKeyBinding(drawingCanvas.CommandZoomIn, Key.Add);
+            AddKeyBinding(drawingCanvas.CommandZoomOut, Key.OemMinus);
+            AddKeyBinding(drawingCanvas.CommandZoomOut, Key.Subtract);
             AddKeyBinding(CommandSave, Key.S);
             AddKeyBinding(CommandCopy, Key.C);
             AddKeyBinding(CommandCut, Key.X);
@@ -243,6 +247,7 @@ namespace Clowd.UI
             };
 
             InitCustomizePopup();
+            InitZoomPill();
 
             // a tool with a style saved for this window draws (and edits) that; every other tool
             // falls through to the persisted settings
@@ -1117,6 +1122,49 @@ namespace Clowd.UI
         /// <summary>Wires the shared customize flyout to this editor: what the rows are, and
         /// what each change means here. The interaction itself (reorder drag, keyboard, Escape,
         /// light dismiss) is the control's.</summary>
+        /// <summary>
+        /// The zoom pill's tooltips and the readout's preset menu. In code rather than XAML so the
+        /// gestures they show name the modifier this platform uses.
+        /// </summary>
+        private void InitZoomPill()
+        {
+            static string Tip(RelayCommand command) => $"{command.Text} ({command.GestureText})";
+
+            ToolTip.SetTip(btnZoomOut, Tip(drawingCanvas.CommandZoomOut));
+            ToolTip.SetTip(btnZoomIn, Tip(drawingCanvas.CommandZoomIn));
+            ToolTip.SetTip(btnZoomFit, Tip(drawingCanvas.CommandZoomPanAuto));
+            ToolTip.SetTip(btnZoomLevel, "Zoom presets");
+
+            var mod = OperatingSystem.IsMacOS() ? "Cmd" : "Ctrl";
+            var menu = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
+            menu.Items.Add(drawingCanvas.CommandZoomPanAuto.CreateMenuItem());
+            menu.Items.Add(drawingCanvas.CommandZoomPanActualSize.CreateMenuItem());
+            menu.Items.Add(new Separator());
+            // the numbered presets are the same command (and gesture) as Ctrl+2/3. 100% repeats the
+            // actual size item above so the ladder has no hole, without restating its Ctrl+1
+            foreach (var (zoom, key) in new (double, string)[] { (0.25, null), (0.5, null), (1, null), (2, "2"), (3, "3"), (4, null) })
+            {
+                var item = new MenuItem
+                {
+                    Header = zoom.ToString("0%", CultureInfo.CurrentCulture),
+                    Command = drawingCanvas.CommandZoomPanActualSize,
+                    CommandParameter = zoom,
+                };
+                if (key != null)
+                {
+                    // see RelayCommand.CreateMenuItem: a KeyGesture cannot display Ctrl+1
+                    var gestureText = $"{mod}+{key}";
+                    item.TemplateApplied += (_, e) =>
+                    {
+                        if (e.NameScope.Find<TextBlock>("PART_InputGestureText") is { } textBlock)
+                            textBlock.Text = gestureText;
+                    };
+                }
+                menu.Items.Add(item);
+            }
+            btnZoomLevel.Flyout = menu;
+        }
+
         private void InitCustomizePopup()
         {
             customizePopup.FallbackFocus = drawingCanvas;
