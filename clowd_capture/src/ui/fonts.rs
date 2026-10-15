@@ -2,9 +2,10 @@
 //! system faces the bundled ones do not cover.
 //!
 //! Two things live here. The bundled Inter faces and the
-//! [`egui::FontDefinitions`] built from them — the same Inter the C# UI draws
-//! with, so the overlay and the app's own windows read as one product. The
-//! files are not stock Inter: `tools/capture-fonts/build.py` freezes tabular
+//! [`egui::FontDefinitions`] built from them — Inter 4.1's text optical size,
+//! the same release the C# UI embeds, so the overlay and the app's own windows
+//! read as one product. The files are not stock Inter:
+//! `tools/capture-fonts/build.py` freezes tabular
 //! figures into them (live readouts must not shuffle as digits change) and
 //! strips `calt`, whose arrows and multiplication signs would corrupt
 //! recognised OCR text — egui shapes with default features and cannot turn
@@ -309,9 +310,10 @@ mod tests {
             let font = egui::FontId::new(20.0, family.clone());
             let layout = |s: &str| ctx.fonts_mut(|f| f.layout_no_wrap(s.to_owned(), font.clone(), egui::Color32::WHITE));
             let ones = layout("1111").size().x;
-            // Within 0.2 pt, not exact: Inter 3.19 SemiBold's tabular 4 is
-            // 1885 units wide against 1888 for the others, 0.03 pt a digit
-            // here. A proportional 1 is about 6 pt narrower than a 4.
+            // Within 0.2 pt, not exact: a face's tabular digits can differ
+            // by a few units (Inter 3.19 SemiBold's 4 was 1885 against 1888),
+            // a few hundredths of a point here. A proportional 1 is about
+            // 6 pt narrower than a 4.
             for digits in ["0000", "2222", "4444", "7777", "8888"] {
                 assert!((layout(digits).size().x - ones).abs() < 0.2, "{family:?}: {digits} vs 1111");
             }

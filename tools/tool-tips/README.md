@@ -48,7 +48,7 @@ and runs with or without the GIFs.
   - `--sheet PATH.png` also writes a review contact sheet (6 evenly spaced frames per GIF, labelled
     with the frame index); `--frames DIR` writes every output frame as `DIR/<name>-NN.png`; `--out DIR`
     overrides the output folder. The exit code is 1 when any demo failed validation.
-- Fonts: Inter from `clowd_capture/assets/fonts` (the editor's own face) and Cascadia Mono from
+- Fonts: Inter from `clowd_ui/Clowd.Ui/Assets/Fonts/Inter` (the editor's own face) and Cascadia Mono from
   `clowd_ui/Clowd.Ui/Assets/Fonts` (the count badge), falling back to Arial / DejaVu / Helvetica and
   then Pillow's built-in font. Regenerate on the same machine if pixel-identical output matters.
 - Cursors: the real Clowd cursor art, read straight out of the `.cur` files (the 256 px PNG frame

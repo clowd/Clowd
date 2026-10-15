@@ -153,7 +153,7 @@ def unit(dx, dy):
 # ---------------------------------------------------------------------------- fonts
 _FONT_FILES = {
     False: [
-        os.path.join(REPO_ROOT, "clowd_capture", "assets", "fonts", "Inter-Regular.ttf"),
+        os.path.join(REPO_ROOT, "clowd_ui", "Clowd.Ui", "Assets", "Fonts", "Inter", "Inter-Regular.ttf"),
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -161,7 +161,7 @@ _FONT_FILES = {
         "C:/Windows/Fonts/arial.ttf",
     ],
     True: [
-        os.path.join(REPO_ROOT, "clowd_capture", "assets", "fonts", "Inter-SemiBold.ttf"),
+        os.path.join(REPO_ROOT, "clowd_ui", "Clowd.Ui", "Assets", "Fonts", "Inter", "Inter-SemiBold.ttf"),
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",

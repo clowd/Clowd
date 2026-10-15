@@ -16,7 +16,7 @@ namespace Clowd.UI.Preview.Icons
     /// <remarks>
     /// <para>
     /// <b>Never use <c>SKTypeface.FromFamilyName("Inter")</c> here.</b> Inter ships with the app as an Avalonia
-    /// resource and is registered with Avalonia's FontManager by <c>Program.cs</c>'s <c>.WithInterFont()</c>;
+    /// resource and is registered with Avalonia's FontManager by <c>Program.cs</c>'s <c>ConfigureFonts</c> call;
     /// it is not installed with the OS and Skia's font manager cannot see it. That call therefore does not
     /// fail — it silently substitutes the system default (Segoe UI on Windows), whose cap height and side
     /// bearings differ enough that the cap-height-solved lettering in <c>FileIconRenderer</c> would sit at the
@@ -25,7 +25,7 @@ namespace Clowd.UI.Preview.Icons
     /// <para>
     /// Skia keeps reading glyph data out of the stream for the life of the typeface, so both the stream and
     /// the typeface are pinned in statics and never disposed. That is the intent: there is exactly one of
-    /// each per process, ~300 KB, held until exit, and the alternative is a use-after-free in native code.
+    /// each per process, ~400 KB, held until exit, and the alternative is a use-after-free in native code.
     /// </para>
     /// <para>
     /// The load itself opens an embedded resource and decodes font tables, so it sits behind a
@@ -35,9 +35,9 @@ namespace Clowd.UI.Preview.Icons
     /// </remarks>
     public static class IconFonts
     {
-        // Verified against the Avalonia.Fonts.Inter 12.1.0 string table; the package embeds Thin/Light/
-        // Regular/Medium/SemiBold/Bold under /Assets.
-        private const string InterAssetUri = "avares://Avalonia.Fonts.Inter/Assets/Inter-SemiBold.ttf";
+        // Inter 4.1, embedded by this app as Thin/Light/Regular/Medium/SemiBold/Bold under
+        // Assets/Fonts/Inter (written by tools/capture-fonts/build.py).
+        private const string InterAssetUri = "avares://Clowd.Ui/Assets/Fonts/Inter/Inter-SemiBold.ttf";
 
         // Already in this app's resources for the editor's monospace text tool. A last-ditch face that at
         // least has real metrics of its own.

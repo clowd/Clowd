@@ -20,7 +20,6 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
     <PackageReference Include="Semi.Avalonia" Version="12.1.0.1" />
     <PackageReference Include="Irihi.Ursa" Version="2.1.0" />
     <PackageReference Include="Irihi.Ursa.Themes.Semi" Version="2.1.0" />

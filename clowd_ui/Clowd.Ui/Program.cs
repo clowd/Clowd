@@ -2,6 +2,7 @@
 using System.Linq;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Media.Fonts;
 using Avalonia.Skia;
 using Clowd.Config;
 using Clowd.Drawing;
@@ -140,10 +141,15 @@ namespace Clowd
         public static AppBuilder BuildAvaloniaApp()
             => AppBuilder.Configure<App>()
                          .UsePlatformDetect()
-                         .WithInterFont()
-                         // WithInterFont only registers the family; this makes it what every
-                         // control without its own FontFamily draws in, on every OS. The Rust
-                         // capture overlay bundles the same Inter (clowd_capture/assets/fonts),
+                         // Inter 4.1's text cut, embedded from Assets/Fonts/Inter (written by
+                         // tools/capture-fonts/build.py) under the same "fonts:Inter" key the
+                         // Avalonia.Fonts.Inter package used, so "fonts:Inter#Inter" resolves as before.
+                         .ConfigureFonts(fonts => fonts.AddFontCollection(new EmbeddedFontCollection(
+                             new Uri("fonts:Inter", UriKind.Absolute),
+                             new Uri("avares://Clowd.Ui/Assets/Fonts/Inter", UriKind.Absolute))))
+                         // Registering only adds the family; this makes it what every control
+                         // without its own FontFamily draws in, on every OS. The Rust capture
+                         // overlay bundles the same Inter release (clowd_capture/assets/fonts),
                          // so its button panel reads like the C# strips.
                          .With(new FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
                          // tray-resident: launch without a dock icon; MacDockIcon flips the
