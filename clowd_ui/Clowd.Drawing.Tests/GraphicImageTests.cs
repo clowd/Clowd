@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -298,6 +300,133 @@ namespace Clowd.Drawing.Tests
                 Assert.NotSame(first.ImageSource, third.ImageSource);
                 Assert.Equal(20, third.BitmapPixelWidth);
                 Assert.Equal(16, third.BitmapPixelHeight);
+            }
+            finally
+            {
+                dir.Delete(true);
+            }
+        }
+
+        // ====================================================================
+        // Crop mode keys: Enter commits the adjusted bounds as the crop, Escape puts the bounds
+        // back; both leave crop mode with the image still selected
+        // ====================================================================
+
+        private static int CountSteps(Action action)
+        {
+            int steps = 0;
+            Action<UndoManager, SortedSet<string>> hook = (_, changes) => { if (changes.Count > 0) steps++; };
+            UndoManager.DiagnosticCommitBuilt += hook;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                UndoManager.DiagnosticCommitBuilt -= hook;
+            }
+            return steps;
+        }
+
+        private static (DrawingCanvas canvas, GraphicImage img) CropModeFixture(string path)
+        {
+            WritePng(path, 40, 20);
+            var canvas = new DrawingCanvas();
+            var img = new GraphicImage(path, new Rect(0, 0, 40, 20), default);
+            canvas.GraphicsList.Add(img);
+            img.IsSelected = true;
+            canvas.AddCommandToHistory(false);
+
+            canvas.CommandCropImage.Executed(null);
+            Assert.True(img.Editing);
+
+            // what a crop-handle drag leaves behind: the bounds pulled in from the top-left
+            img.Left = 10;
+            img.Top = 5;
+            return (canvas, img);
+        }
+
+        [AvaloniaFact]
+        public void CropMode_Enter_CommitsTheCrop()
+        {
+            var dir = Directory.CreateTempSubdirectory();
+            try
+            {
+                var (canvas, img) = CropModeFixture(Path.Combine(dir.FullName, "img.png"));
+
+                var steps = CountSteps(() => Assert.True(canvas.HandleToolKey(Key.Enter)));
+
+                Assert.Equal(1, steps);
+                Assert.False(img.Editing);
+                Assert.True(img.IsSelected);
+                Assert.Equal(new PixelRect(10, 5, 30, 15), img.Crop);
+                Assert.Equal(new Rect(10, 5, 30, 15), new Rect(img.Left, img.Top, img.Right - img.Left, img.Bottom - img.Top));
+            }
+            finally
+            {
+                dir.Delete(true);
+            }
+        }
+
+        [AvaloniaFact]
+        public void CropMode_Escape_RestoresTheBounds()
+        {
+            var dir = Directory.CreateTempSubdirectory();
+            try
+            {
+                var (canvas, img) = CropModeFixture(Path.Combine(dir.FullName, "img.png"));
+
+                var steps = CountSteps(() => Assert.True(canvas.HandleToolKey(Key.Escape)));
+
+                Assert.Equal(0, steps); // nothing changed since crop mode was entered
+                Assert.False(img.Editing);
+                Assert.True(img.IsSelected);
+                Assert.True(img.Crop.IsEmptyRect());
+                Assert.Equal(new Rect(0, 0, 40, 20), new Rect(img.Left, img.Top, img.Right - img.Left, img.Bottom - img.Top));
+                Assert.Equal(new Point(20, 10), img.CenterOfRotation);
+            }
+            finally
+            {
+                dir.Delete(true);
+            }
+        }
+
+        [AvaloniaFact]
+        public void CropMode_Escape_AfterACommittedDrag_RecordsTheRevert()
+        {
+            var dir = Directory.CreateTempSubdirectory();
+            try
+            {
+                var (canvas, img) = CropModeFixture(Path.Combine(dir.FullName, "img.png"));
+                canvas.AddCommandToHistory(false); // the crop-mode drag's own mouse-up step
+
+                var steps = CountSteps(() => Assert.True(canvas.HandleToolKey(Key.Escape)));
+
+                Assert.Equal(1, steps);
+                Assert.Equal(0, img.Left);
+                Assert.Equal(0, img.Top);
+            }
+            finally
+            {
+                dir.Delete(true);
+            }
+        }
+
+        [AvaloniaFact]
+        public void EnterAndEscape_OutsideCropMode_AreNotConsumed()
+        {
+            var dir = Directory.CreateTempSubdirectory();
+            try
+            {
+                var path = Path.Combine(dir.FullName, "img.png");
+                WritePng(path, 40, 20);
+                var canvas = new DrawingCanvas();
+                var img = new GraphicImage(path, new Rect(0, 0, 40, 20), default);
+                canvas.GraphicsList.Add(img);
+                img.IsSelected = true;
+
+                Assert.False(canvas.HandleToolKey(Key.Enter));
+                Assert.False(canvas.HandleToolKey(Key.Escape));
             }
             finally
             {

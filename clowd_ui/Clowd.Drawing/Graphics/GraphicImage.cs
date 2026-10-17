@@ -178,6 +178,8 @@ namespace Clowd.Drawing.Graphics
         [Transient] private Bitmap _imageSource;
         [Transient] private Bitmap _imageObscured;
         [Transient] private Rect _editingAnchor;
+        // geometry on entering crop mode, put back when the crop is cancelled (see EndCrop)
+        [Transient] private (double Left, double Top, double Right, double Bottom, Point Center) _editingRestore;
         // sub-unit remainder carried between Move calls so pixel-snapping can't drift (see Move)
         [Transient] private double _moveRemainderX;
         [Transient] private double _moveRemainderY;
@@ -471,14 +473,26 @@ namespace Clowd.Drawing.Graphics
             }
 
             _editingAnchor = GetExtendedImageRect();
+            _editingRestore = (Left, Top, Right, Bottom, CenterOfRotation);
             _editingCanvas = canvas;
 
             OnPropertyChanged(nameof(Editing));
         }
 
-        private void EndCrop()
+        /// <summary>Leaves crop mode. Committing turns the adjusted bounds into the new crop;
+        /// cancelling puts the bounds back as they were when crop mode was entered. Either way a
+        /// history step is offered — a cancel after crop-mode drags (each its own step) records
+        /// the revert, and one after no drags at all is a no-op the undo manager drops.</summary>
+        internal void EndCrop(bool commit = true)
         {
             if (!Editing) return;
+
+            if (!commit)
+            {
+                (Left, Top, Right, Bottom, CenterOfRotation) = _editingRestore;
+                FinishCrop();
+                return;
+            }
 
             var renderW = Right - Left;
             var renderH = Bottom - Top;
@@ -491,9 +505,14 @@ namespace Clowd.Drawing.Graphics
             var h = renderH * scaleY;
 
             Crop = new PixelRect((int)x, (int)y, (int)w, (int)h);
+            FinishCrop();
+        }
 
+        private void FinishCrop()
+        {
             _editingCanvas?.AddCommandToHistory(false);
             _editingAnchor = default;
+            _editingRestore = default;
             _editingCanvas = null;
 
             OnPropertyChanged(nameof(Editing));

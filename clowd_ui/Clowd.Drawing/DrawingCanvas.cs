@@ -2283,6 +2283,15 @@ namespace Clowd.Drawing
             if (CurrentTool.Instance.OnKeyDown(this, key))
                 return true;
 
+            // Enter confirms an image's crop and Escape cancels it, leaving the image selected.
+            // Mid-drag, Escape keeps its usual abort-the-gesture path.
+            if ((key == Key.Enter || key == Key.Escape) && !IsToolDragActive && SelectedCount == 1
+                && GraphicsList.SelectedItems[0] is GraphicImage { Editing: true } img)
+            {
+                img.EndCrop(commit: key == Key.Enter);
+                return true;
+            }
+
             if ((key == Key.Delete || key == Key.Back) && SelectedCount == 1
                 && GraphicsList.SelectedItems[0] is GraphicPath path && path.TryRemoveActiveAnchor())
             {
