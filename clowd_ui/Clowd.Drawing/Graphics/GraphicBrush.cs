@@ -323,7 +323,7 @@ namespace Clowd.Drawing.Graphics
             DrawObject(ctx);
 
             // no handles to show, so the selection is the text-style marquee
-            if (IsSelected)
+            if (ShowsHandles)
                 DrawDashedBorder(ctx, Bounds.Inflate(2 * uiscale.DpiScaleX), 1 * uiscale.DpiScaleX);
         }
     }

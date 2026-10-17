@@ -186,7 +186,7 @@ namespace Clowd.Drawing.Graphics
         internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
             var n = _anchors.Length;
-            if (IsSelected && n > 0)
+            if (ShowsHandles && n > 0)
             {
                 // handles before anchors: a handle dot that overlaps its own anchor square must stay
                 // grabbable, and an absent handle sits ON the anchor so it is skipped entirely
@@ -631,7 +631,7 @@ namespace Clowd.Drawing.Graphics
             if (_previewPoint is { } cursor && _anchors.Length >= 1 && !_closed)
                 closing = DrawRubberBand(ctx, cursor, uiscale);
 
-            if (IsSelected)
+            if (ShowsHandles)
                 DrawTrackers(ctx, uiscale);
 
             if (closing)

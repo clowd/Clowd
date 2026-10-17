@@ -199,7 +199,7 @@ namespace Clowd.Drawing.Graphics
             using (context.PushTransform(MatrixHelper.Rotation(Angle, CenterOfRotation)))
             {
                 DrawObjectImpl(context, !Editing);
-                if (IsSelected && !Editing)
+                if (ShowsHandles && !Editing)
                 {
                     DrawRotationTracker(context, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1, uiscale), uiscale);
                     DrawDashedBorder(context, UnrotatedBounds);

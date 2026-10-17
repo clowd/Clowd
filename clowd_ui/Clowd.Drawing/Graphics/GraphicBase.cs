@@ -66,15 +66,19 @@ namespace Clowd.Drawing.Graphics
         }
 
         /// <summary>
-        /// When true the graphic is transparent to canvas hit-testing and marquee selection, so it
-        /// cannot be canvas-selected, moved or resized (it still renders, exports and counts toward
-        /// bounds; the Layers panel can select it programmatically). Persisted — defaults false.
+        /// When true the graphic can still be click-selected (so the context menu can unlock it),
+        /// but shows no handles, does not move with a selection drag or nudge, and is left out of
+        /// marquee selection and the eraser. It still renders, exports and counts toward bounds.
+        /// Persisted — defaults false.
         /// </summary>
         public virtual bool Locked
         {
             get => _locked;
             set => Set(ref _locked, value);
         }
+
+        /// <summary>Whether the selection handles are drawn and hit-tested: selected and not locked.</summary>
+        internal bool ShowsHandles => IsSelected && !Locked;
 
         private string _id = Guid.NewGuid().ToString();
         private Color _objectColor;
@@ -196,7 +200,7 @@ namespace Clowd.Drawing.Graphics
         {
             map[nameof(Id)] = InvalidationAspects.None;
             map[nameof(IsSelected)] = InvalidationAspects.None; // selection never dirties caches (select-all must not churn them)
-            map[nameof(Locked)] = InvalidationAspects.None; // lock is a hit-test-only flag; no visual/bounds change (same idiom as IsSelected)
+            map[nameof(Locked)] = InvalidationAspects.None; // lock only changes selection chrome; no cache or bounds change (same idiom as IsSelected)
             // Hidden is deliberately UNMAPPED: it falls back to the conservative Bounds|Geometry
             // so toggling it dirties content bounds (a hidden graphic drops out of the export size).
             map[nameof(ObjectColor)] = InvalidationAspects.None; // ink and shadow repaint via the view invalidation
@@ -285,7 +289,7 @@ namespace Clowd.Drawing.Graphics
 
         internal virtual int MakeHitTest(Point point, DpiScale uiscale)
         {
-            if (IsSelected)
+            if (ShowsHandles)
                 for (int i = 1; i <= HandleCount; i++)
                     if (GetHandleRectangle(i, uiscale).Contains(point))
                         return i;
@@ -299,7 +303,7 @@ namespace Clowd.Drawing.Graphics
         internal virtual void Draw(DrawingContext ctx, DpiScale uiscale)
         {
             DrawObject(ctx);
-            if (IsSelected)
+            if (ShowsHandles)
                 DrawTrackers(ctx, uiscale);
         }
 
@@ -326,6 +330,12 @@ namespace Clowd.Drawing.Graphics
             ctx.DrawRectangle(null, RenderResources.GetPen(Color.FromArgb(127, 255, 255, 255), lineWidth), rect);
             ctx.DrawRectangle(null, RenderResources.GetPen(Color.FromArgb(127, 0, 0, 0), lineWidth, RenderResources.Dash4x4), rect);
         }
+
+        /// <summary>The selection chrome of a selected, locked graphic: the handle-less dashed
+        /// marquee (the brush stroke's selection style), so the selection still reads without
+        /// offering anything to drag.</summary>
+        internal void DrawLockedSelection(DrawingContext ctx, DpiScale uiscale) =>
+            DrawDashedBorder(ctx, Bounds.Inflate(2 * uiscale.DpiScaleX), 1 * uiscale.DpiScaleX);
 
         protected virtual void DrawTrackers(DrawingContext ctx, DpiScale uiscale)
         {

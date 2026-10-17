@@ -38,6 +38,12 @@ namespace Clowd.Drawing.Tools
         // transform changes mid-drag (e.g. wheel zoom while dragging).
         private Point _lastPointRoot;
 
+        // A press on a locked body starts a marquee (it cannot move), and selects that graphic only
+        // if the press is released without dragging past ClickSlop root-space pixels.
+        private const double ClickSlop = 4;
+        private GraphicBase _lockedPress;
+        private Point _pressRoot;
+
         bool _wasEdit;
 
         public ToolPointer() : base(() => HelperFunctions.DefaultCursor)
@@ -49,7 +55,10 @@ namespace Clowd.Drawing.Tools
         private static Point RootToCanvas(DrawingCanvas canvas, Point rootPt) =>
             ((Visual)TopLevel.GetTopLevel(canvas) ?? canvas).TranslatePoint(rootPt, canvas) ?? rootPt;
 
-        public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
+        /// <summary>The top-most graphic under <paramref name="point"/>, or a selected graphic's
+        /// handle there. Locked graphics are skipped unless <paramref name="includeLocked"/>, in
+        /// which case only their body can hit (<see cref="GraphicBase.ShowsHandles"/> is false).</summary>
+        public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber, bool includeLocked = false)
         {
             // runs on every hover pointer-move, so it is a plain top-most-first loop (no LINQ).
             // a selected graphic's handle wins over any object body, even a body above it in
@@ -62,10 +71,9 @@ namespace Clowd.Drawing.Tools
             {
                 var g = list[i];
 
-                // hidden graphics are invisible to hit-testing; locked graphics are transparent to
-                // canvas selection/move/resize (body and handle both), though the Layers panel can
-                // still select them programmatically.
-                if (g.Hidden || g.Locked)
+                // hidden graphics are invisible to hit-testing; locked graphics only for the callers
+                // that select (the pointer tool, the right-click menu), never for the eraser.
+                if (g.Hidden || (g.Locked && !includeLocked))
                     continue;
 
                 var hit = g.MakeHitTest(point, dpi);
@@ -104,8 +112,16 @@ namespace Clowd.Drawing.Tools
             _lastPointRoot = CanvasToRoot(drawingCanvas, s.Position);
 
             int handleNumber;
-            var graphic = MakeHitTest(drawingCanvas, wpfPt, out handleNumber);
+            var graphic = MakeHitTest(drawingCanvas, wpfPt, out handleNumber, includeLocked: true);
             drawingCanvas.SetHoveredGraphic(null); // the hover cue is for the mouse-up state only
+
+            // a locked graphic cannot be dragged, so its body acts as background (a press there
+            // starts a marquee, as it did when locked graphics were transparent) and only a click
+            // selects it, on release
+            _lockedPress = graphic is { Locked: true } ? graphic : null;
+            _pressRoot = _lastPointRoot;
+            if (_lockedPress != null)
+                graphic = null;
 
             // Capture mouse until MouseUp event is received
             drawingCanvas.CaptureMouse(s.Pointer);
@@ -182,10 +198,10 @@ namespace Clowd.Drawing.Tools
         private void SetHitTest(DrawingCanvas drawingCanvas, Point point)
         {
             int handleNumber;
-            var graphic = MakeHitTest(drawingCanvas, point, out handleNumber);
+            var graphic = MakeHitTest(drawingCanvas, point, out handleNumber, includeLocked: true);
             drawingCanvas.SetHoveredGraphic(graphic);
 
-            if (handleNumber < 0) // hit no objects
+            if (handleNumber < 0 || graphic.Locked) // hit no objects, or one that cannot move
                 drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
             else if (handleNumber == 0) // hit body of object
                 drawingCanvas.Cursor = CursorResources.Move;
@@ -232,7 +248,8 @@ namespace Clowd.Drawing.Tools
             {
                 case SelectionMode.Move:
                     foreach (var o in drawingCanvas.GraphicsList.SelectedItems)
-                        o.Move(dx, dy);
+                        if (!o.Locked)
+                            o.Move(dx, dy);
                     break;
 
                 case SelectionMode.HandleDrag:
@@ -332,8 +349,20 @@ namespace Clowd.Drawing.Tools
 
                 drawingCanvas.GraphicsList.Remove(drawingCanvas[drawingCanvas.Count - 1]);
 
-                foreach (var g in GraphicsInMarquee(drawingCanvas.GraphicsList, rect))
-                    g.IsSelected = true;
+                var root = CanvasToRoot(drawingCanvas, s.Position);
+                var clicked = _lockedPress != null
+                              && Math.Abs(root.X - _pressRoot.X) <= ClickSlop && Math.Abs(root.Y - _pressRoot.Y) <= ClickSlop;
+                if (clicked)
+                {
+                    _lockedPress.IsSelected = true;
+                }
+                else
+                {
+                    foreach (var g in GraphicsInMarquee(drawingCanvas.GraphicsList, rect))
+                        g.IsSelected = true;
+                }
+
+                _lockedPress = null;
             }
 
             drawingCanvas.ReleaseMouseCapture();
@@ -350,6 +379,8 @@ namespace Clowd.Drawing.Tools
                 // per-read getter; the export offset for a screenshot doc stays integral.
                 foreach (var g in drawingCanvas.GraphicsList.SelectedItems)
                 {
+                    if (g.Locked)
+                        continue; // never moved
                     g.RenderCache.Clear(InvalidationAspects.Bounds);
                     g.OnGestureCompleted();
                 }

@@ -116,7 +116,7 @@ namespace Clowd.Drawing.Graphics
 
             var rotatedPt = UnapplyRotation(point);
 
-            if (IsSelected)
+            if (ShowsHandles)
             {
                 for (int i = 1; i <= HandleCount; i++)
                 {

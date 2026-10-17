@@ -133,7 +133,9 @@ namespace Clowd.Drawing.Rendering
 
                 // the outline means "a click selects this", so a selected graphic never shows it
                 // (a click there keeps the selection). Also only while the graphic is still in the
-                // list, visible and canvas-selectable, and not open in the in-place text editor.
+                // list, visible, unlocked (a locked one is selectable, but outlining it on hover
+                // would light up a locked background under every pointer move), and not open in the
+                // in-place text editor.
                 if (o.DrawChrome && !g.IsSelected && !g.Locked && g is not GraphicText { Editing: true })
                 {
                     if (ReferenceEquals(g, o.Hovered))
@@ -152,7 +154,11 @@ namespace Clowd.Drawing.Rendering
                     DrawShadow(ctx, g); // under the ink
 
                 if (o.DrawChrome)
+                {
                     g.Draw(ctx, o.UiScale); // object + selection chrome
+                    if (g.IsSelected && g.Locked)
+                        g.DrawLockedSelection(ctx, o.UiScale); // Draw skipped the handles
+                }
                 else
                     g.DrawObject(ctx); // export: ink only
             }

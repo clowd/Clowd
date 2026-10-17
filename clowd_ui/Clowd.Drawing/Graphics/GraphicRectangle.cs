@@ -193,7 +193,7 @@ namespace Clowd.Drawing.Graphics
 
         internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
-            if (IsSelected)
+            if (ShowsHandles)
             {
                 var rotated = UnapplyRotation(point);
                 for (int i = 1; i <= HandleCount; i++)
@@ -354,7 +354,7 @@ namespace Clowd.Drawing.Graphics
             using (ctx.PushTransform(MatrixHelper.Rotation(Angle, CenterOfRotation)))
             {
                 DrawRectangle(ctx);
-                if (IsSelected)
+                if (ShowsHandles)
                     DrawTrackers(ctx, uiscale);
             }
         }

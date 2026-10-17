@@ -278,7 +278,7 @@ namespace Clowd.Drawing.Graphics
             }
             else
             {
-                Action<DrawingContext> trackers = IsSelected ? (c => DrawTrackers(c, uiscale)) : null;
+                Action<DrawingContext> trackers = ShowsHandles ? (c => DrawTrackers(c, uiscale)) : null;
                 DrawTransformed(ctx, DrawImageBody, trackers);
             }
         }

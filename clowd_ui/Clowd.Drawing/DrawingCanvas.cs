@@ -404,6 +404,8 @@ namespace Clowd.Drawing
         public RelayCommand CommandMoveForward { get; }
         public RelayCommand CommandMoveBackward { get; }
         public RelayCommand CommandResetRotation { get; }
+        public RelayCommand CommandLock { get; }
+        public RelayCommand CommandUnlock { get; }
         public RelayCommand CommandUndo { get; }
         public RelayCommand CommandRedo { get; }
         public RelayCommand CommandZoomPanAuto { get; }
@@ -664,6 +666,18 @@ namespace Clowd.Drawing
                 CanExecute = (obj) => SelectedCount > 0,
                 Text = "Reset rotation",
             };
+            CommandLock = new RelayCommand()
+            {
+                Executed = (obj) => SetSelectionLocked(true),
+                CanExecute = (obj) => GraphicsList.SelectedItems.Any(g => !g.Locked),
+                Text = "Lock",
+            };
+            CommandUnlock = new RelayCommand()
+            {
+                Executed = (obj) => SetSelectionLocked(false),
+                CanExecute = (obj) => GraphicsList.SelectedItems.Any(g => g.Locked),
+                Text = "Unlock",
+            };
             CommandZoomPanAuto = new RelayCommand()
             {
                 Executed = (obj) => ZoomPanAuto(),
@@ -722,7 +736,7 @@ namespace Clowd.Drawing
             {
                 CommandSelectAll, CommandUnselectAll, CommandDelete, CommandDeleteAll,
                 CommandMoveToFront, CommandMoveToBack, CommandMoveForward, CommandMoveBackward,
-                CommandResetRotation, CommandUndo, CommandRedo, CommandZoomPanAuto,
+                CommandResetRotation, CommandLock, CommandUnlock, CommandUndo, CommandRedo, CommandZoomPanAuto,
                 CommandZoomPanActualSize, CommandZoomIn, CommandZoomOut, CommandCropImage,
             };
 
@@ -739,6 +753,8 @@ namespace Clowd.Drawing
             contextMenu.Items.Add(CommandMoveBackward.CreateMenuItem());
             contextMenu.Items.Add(new Separator());
             contextMenu.Items.Add(CommandResetRotation.CreateMenuItem());
+            contextMenu.Items.Add(CommandLock.CreateMenuItem());
+            contextMenu.Items.Add(CommandUnlock.CreateMenuItem());
             contextMenu.Items.Add(new Separator());
             contextMenu.Items.Add(CommandZoomPanAuto.CreateMenuItem());
             contextMenu.Items.Add(CommandZoomPanActualSize.CreateMenuItem());
@@ -1104,6 +1120,22 @@ namespace Clowd.Drawing
             GraphicsList.RequestValidation();
         }
 
+        /// <summary>Locks or unlocks every selected graphic. The selection is kept, so the
+        /// handles come and go in place. One history step; a no-op when nothing would change.</summary>
+        public void SetSelectionLocked(bool locked)
+        {
+            var selected = GraphicsList.SelectedItems;
+            if (selected.All(g => g.Locked == locked))
+                return;
+
+            CommitPendingToolWork();
+            foreach (var g in selected)
+                g.Locked = locked;
+            AddCommandToHistory(false);
+            GraphicsList.RequestValidation();
+            RequeryCommands(); // Lock/Unlock CanExecute read the flags, which raise no selection change
+        }
+
         /// <summary>
         /// Panel-driven selection: additive toggles the graphic's selection, non-additive makes it
         /// the sole selection. Deliberately bypasses the canvas hit-test rules so the panel can
@@ -1240,7 +1272,8 @@ namespace Clowd.Drawing
                 CommitPendingToolWork();
                 foreach (var obj in GraphicsList.SelectedItems)
                 {
-                    obj.Move(offsetX, offsetY);
+                    if (!obj.Locked)
+                        obj.Move(offsetX, offsetY);
                 }
                 // route through AddCommandToHistory so the _syncingState re-entrancy guard is
                 // enforced uniformly at the single commit choke point
@@ -1977,8 +2010,9 @@ namespace Clowd.Drawing
                     // on double click, execute GraphicBase.Activate().
                     // this allows GraphicText to launch an editor etc.
                     Point point = s.Position;
-                    var clicked = ToolPointer.MakeHitTest(this, point, out var handleNum);
-                    if (clicked != null)
+                    // a locked graphic still takes the double-click (it is on top), but opens no editor
+                    var clicked = ToolPointer.MakeHitTest(this, point, out var handleNum, includeLocked: true);
+                    if (clicked is { Locked: false })
                         clicked.Activate(this, point);
                 }
                 else
@@ -2002,7 +2036,7 @@ namespace Clowd.Drawing
 
                 // Change current selection if necessary
                 Point point = s.Position;
-                var hitObject = ToolPointer.MakeHitTest(this, point, out var _hn);
+                var hitObject = ToolPointer.MakeHitTest(this, point, out var _hn, includeLocked: true); // so the menu can unlock it
                 if (hitObject == null)
                 {
                     UnselectAll();

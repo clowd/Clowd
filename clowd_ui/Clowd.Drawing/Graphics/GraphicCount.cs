@@ -168,7 +168,7 @@ namespace Clowd.Drawing.Graphics
 
         internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
-            if (IsSelected)
+            if (ShowsHandles)
                 for (int i = 1; i <= HandleCount; i++)
                     if (GetHandleRectangle(i, uiscale).Contains(point))
                         return i;
@@ -201,7 +201,7 @@ namespace Clowd.Drawing.Graphics
         {
             // while the in-place editor is open it shows the number, so the badge draws without it
             DrawObjectImpl(context, !Editing);
-            if (IsSelected && !Editing)
+            if (ShowsHandles && !Editing)
                 DrawTrackers(context, uiscale);
         }
 
