@@ -60,12 +60,30 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Count_badge_medium_matches_the_editor_default()
+        {
+            // the badge rings at 1.5·LineWidth and is 1.9 font sizes across, so it takes a third of the
+            // stroke and 0.6 of the text size; medium is the editor's LineWidth 3 / font 20 badge
+            var widths = DrawPalette.Sizes.Select(s => DrawPalette.LineWidthFor(ToolType.Count, s)).ToArray();
+            Assert.Equal(new[] { 1.0, 3, 5, 7 }, widths);
+            var fonts = DrawPalette.Sizes.Select(s => System.Math.Round(DrawPalette.FontSizeFor(ToolType.Count, s), 6)).ToArray();
+            Assert.Equal(new[] { 10.8, 20.4, 30, 39.6 }, fonts);
+        }
+
+        [Fact]
+        public void Text_font_size_is_the_text_size()
+        {
+            var fonts = DrawPalette.Sizes.Select(s => DrawPalette.FontSizeFor(ToolType.Text, s)).ToArray();
+            Assert.Equal(new[] { 18.0, 34, 50, 66 }, fonts);
+        }
+
+        [Fact]
         public void Tools_in_toolbar_order_with_eraser_last()
         {
             Assert.Equal(new[]
             {
                 ToolType.Pointer, ToolType.Brush, ToolType.Arrow, ToolType.Line, ToolType.Rectangle,
-                ToolType.Ellipse, ToolType.Text, ToolType.Eraser,
+                ToolType.Ellipse, ToolType.Text, ToolType.Count, ToolType.Eraser,
             }, DrawPalette.Tools);
         }
 
@@ -76,7 +94,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("Draw_Tool_Eraser", DrawPalette.ToolKey(ToolType.Eraser));
             Assert.Equal("Draw_Tool_Pointer", DrawPalette.ToolKey(ToolType.Pointer));
             Assert.Equal(
-                new[] { "IconToolSelection", "IconToolBrush", "IconToolArrow", "IconToolLine", "IconToolRectangle", "IconToolEllipse", "IconToolText", "IconToolEraser" },
+                new[] { "IconToolSelection", "IconToolBrush", "IconToolArrow", "IconToolLine", "IconToolRectangle", "IconToolEllipse", "IconToolText", "IconToolNumericCount", "IconToolEraser" },
                 DrawPalette.Tools.Select(DrawPalette.ToolIconKey));
         }
 

@@ -376,14 +376,14 @@ namespace Clowd.UI.DrawOnScreen
         {
             canvas.ObjectColor = color;
             canvas.LineWidth = DrawPalette.LineWidthFor(State.Tool, size);
-            canvas.TextFontSize = size.TextSize;
+            canvas.TextFontSize = DrawPalette.FontSizeFor(State.Tool, size);
         }
 
         private static void Style(ToolType tool, SavedToolSettings settings, Color color, DrawPalette.DrawSize size)
         {
             settings.ObjectColor = color;
             settings.LineWidth = DrawPalette.LineWidthFor(tool, size);
-            settings.FontSize = size.TextSize;
+            settings.FontSize = DrawPalette.FontSizeFor(tool, size);
         }
 
         /// <summary>The canvases' settings lookup: a fresh default entry per tool, styled with the

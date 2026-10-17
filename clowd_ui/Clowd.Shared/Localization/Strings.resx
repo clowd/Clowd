@@ -147,6 +147,10 @@
     <value>Brush</value>
     <comment>Draw on Screen tool button tooltip: freehand drawing.</comment>
   </data>
+  <data name="Draw_Tool_Count" xml:space="preserve">
+    <value>Step Count</value>
+    <comment>Draw on Screen tool button tooltip: click to drop the next numbered step badge; drag to pull an arrow out of it.</comment>
+  </data>
   <data name="Draw_Tool_Ellipse" xml:space="preserve">
     <value>Ellipse</value>
     <comment>Draw on Screen tool button tooltip: draws an ellipse outline.</comment>

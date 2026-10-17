@@ -6,7 +6,7 @@ namespace Clowd.UI.DrawOnScreen
 {
     /// <summary>
     /// The fixed choices the draw-on-screen toolbar offers: eight colours, four sizes and the
-    /// eight tools, with the localisation and icon keys that go with them. Pure tables, so the
+    /// nine tools, with the localisation and icon keys that go with them. Pure tables, so the
     /// values the approved mockup pins are tested (<c>DrawPaletteTests</c>) rather than eyeballed
     /// at a smoke check.
     /// </summary>
@@ -61,6 +61,7 @@ namespace Clowd.UI.DrawOnScreen
             ToolType.Rectangle,
             ToolType.Ellipse,
             ToolType.Text,
+            ToolType.Count,
             ToolType.Eraser,
         };
 
@@ -80,18 +81,37 @@ namespace Clowd.UI.DrawOnScreen
         /// beside it. Rectangle, ellipse and line stroke their outline with a pen LineWidth wide,
         /// so they take the stroke as is. The arrow's tapered shaft treats LineWidth as its nominal
         /// weight (thinner at the tail, heavier toward the head) and takes it as is too, matching
-        /// the mockup, where every shape is outlined at the size's stroke.
+        /// the mockup, where every shape is outlined at the size's stroke. The step badge rings
+        /// itself at 1.5·LineWidth and grows with it, so it takes a third: medium lands on the
+        /// image editor's default badge (LineWidth 3).
         /// </remarks>
-        public static double LineWidthFor(ToolType tool, DrawSize size) =>
-            tool == ToolType.Brush ? size.Stroke / 2 : size.Stroke;
+        public static double LineWidthFor(ToolType tool, DrawSize size) => tool switch
+        {
+            ToolType.Brush => size.Stroke / 2,
+            ToolType.Count => size.Stroke / 3,
+            _ => size.Stroke,
+        };
+
+        /// <summary>
+        /// The canvas font size for <paramref name="tool"/> at <paramref name="size"/>. Text takes
+        /// <see cref="DrawSize.TextSize"/>; the step badge's circle is 1.9 font sizes across, so it
+        /// takes 0.6 of that, which puts medium at the image editor's default badge (20).
+        /// </summary>
+        public static double FontSizeFor(ToolType tool, DrawSize size) =>
+            tool == ToolType.Count ? size.TextSize * 0.6 : size.TextSize;
 
         /// <summary>Tooltip key for a tool: <c>Draw_Tool_Brush</c> and so on.</summary>
         public static string ToolKey(ToolType tool) => "Draw_Tool_" + tool;
 
         /// <summary>Resource key of a tool's icon in Assets/VectorIcons.axaml: <c>IconToolBrush</c>
         /// and so on. The select tool shares the image editor's Selection icon (a dotted frame under
-        /// a pointer): the plain pointer is already the click-through toggle's.</summary>
-        public static string ToolIconKey(ToolType tool) =>
-            tool == ToolType.Pointer ? "IconToolSelection" : "IconTool" + tool;
+        /// a pointer): the plain pointer is already the click-through toggle's. The step badge's
+        /// icon keeps its editor name.</summary>
+        public static string ToolIconKey(ToolType tool) => tool switch
+        {
+            ToolType.Pointer => "IconToolSelection",
+            ToolType.Count => "IconToolNumericCount",
+            _ => "IconTool" + tool,
+        };
     }
 }

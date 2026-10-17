@@ -14,8 +14,9 @@ namespace Clowd.UI.DrawOnScreen
 {
     /// <summary>
     /// The draw-on-screen toolbar: a two-lane strip behind a full-height grip. The primary lane is
-    /// the emblem, the three modes (click-through, hide, show keys) and the eight tools at full size; the compact
-    /// secondary lane is the colours, the sizes and the ways out (undo, clear, close).
+    /// the emblem, the two modes (click-through, hide) and the nine tools at full size; the compact
+    /// secondary lane is the colours, the sizes, the show-keys toggle and the ways out (undo, clear,
+    /// close).
     /// <para>
     /// It owns no state. Everything it shows is read off <see cref="IDrawOnScreenController"/> in
     /// <see cref="Refresh"/>, which runs on every <see cref="IDrawOnScreenController.Changed"/>, and
@@ -61,7 +62,7 @@ namespace Clowd.UI.DrawOnScreen
         {
             _controller = controller ?? throw new ArgumentNullException(nameof(controller));
 
-            // ---- primary lane: emblem · click-through · hide · keys | tools ----
+            // ---- primary lane: emblem · click-through · hide | tools ----
             // the emblem lives in the lane rather than on the chassis (HasEmblem is off) so it opens
             // the first row instead of standing beside both. Its margin is set per axis, see
             // ApplyAxisMargins.
@@ -80,18 +81,10 @@ namespace Clowd.UI.DrawOnScreen
             _hide = new TrayButton();
             _hide.Click += (s, e) => _controller.ToggleHide();
 
-            // shows the keys being pressed over the screen; lit while on, like hide
-            _keys = new TrayButton
-            {
-                Icon = (Geometry)Application.Current.FindResource("IconKeyboard"),
-            };
-            _keys.Click += (s, e) => _controller.ToggleKeys();
-
             var primary = new DrawLanePanel { Spacing = TrayTokens.Gap };
             primary.Children.Add(_emblem);
             primary.Children.Add(_clickThrough);
             primary.Children.Add(_hide);
-            primary.Children.Add(_keys);
             primary.Children.Add(new TrayDivider());
 
             foreach (var tool in DrawPalette.Tools)
@@ -105,7 +98,7 @@ namespace Clowd.UI.DrawOnScreen
                 primary.Children.Add(button);
             }
 
-            // ---- secondary lane: colours | sizes | undo · clear · close ----
+            // ---- secondary lane: colours | sizes | keys · undo · clear · close ----
             // the mockup's 2 px between neighbouring colours and sizes; the ways out sit 4 px apart,
             // which ApplyAxisMargins tops up
             var secondary = new TrayZonePanel { Spacing = DotSpacing };
@@ -130,6 +123,11 @@ namespace Clowd.UI.DrawOnScreen
                 secondary.Children.Add(size);
             }
 
+            // shows the keys being pressed over the screen; lit while on, like hide
+            _keys = NewMini();
+            _keys.Icon = (Geometry)Application.Current.FindResource("IconKeyboard");
+            _keys.Click += (s, e) => _controller.ToggleKeys();
+
             _undo = NewMini();
             _undo.Icon = (Geometry)Application.Current.FindResource("IconUndo");
             _undo.Click += (s, e) => _controller.Undo();
@@ -144,7 +142,7 @@ namespace Clowd.UI.DrawOnScreen
             _close.Look = TrayButtonLook.Danger;
             _close.Click += (s, e) => _controller.Close();
 
-            foreach (var way in new[] { _undo, _clear, _close })
+            foreach (var way in new[] { _keys, _undo, _clear, _close })
             {
                 TrayZonePanel.SetZone(way, TrayZone.End);
                 secondary.Children.Add(way);
@@ -256,6 +254,7 @@ namespace Clowd.UI.DrawOnScreen
             // ordinary 4 px gap between them, as in the mockup
             var lead = TrayTokens.Gap - DotSpacing;
             var miniMargin = horizontal ? new Thickness(lead, 0, 0, 0) : new Thickness(0, lead, 0, 0);
+            _undo.Margin = miniMargin;
             _clear.Margin = miniMargin;
             _close.Margin = miniMargin;
         }
