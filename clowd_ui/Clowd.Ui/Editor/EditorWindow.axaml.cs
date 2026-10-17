@@ -527,6 +527,12 @@ namespace Clowd.UI
                     origPx.Width + ToScreenWH(toolBarWidth) + padding * 2,
                     origPx.Height + ToScreenWH(propBarHeight) + padding * 2);
 
+                // a tiny capture would ask for less than the window minimum, which the platform
+                // then enforces by growing right/down past the work area; grow it about its centre here.
+                int growW = Math.Max(0, ToScreenWH(wnd.MinWidth) - rect.Width);
+                int growH = Math.Max(0, ToScreenWH(wnd.MinHeight) - rect.Height);
+                rect = new PixelRect(rect.X - growW / 2, rect.Y - growH / 2, rect.Width + growW, rect.Height + growH);
+
                 // we shuffle the rect around each edge if it is off screen to try and
                 // achieve a window location that can show with 100% zoom.
                 if (rect.X < workArea.X) rect = rect.Translate(new PixelVector(workArea.X - rect.X, 0));
