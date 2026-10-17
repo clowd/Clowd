@@ -738,44 +738,6 @@ namespace Clowd.VideoSDK.Composition
 
         // ---------------------------------------------------------------------------- keyboard
 
-        /// <summary>
-        /// The pill geometry of one keyboard row, derived from the font size in canvas pixels:
-        /// the padding round the text, the gap between stacked rows, the row's own height and the
-        /// pill's corner radius. It lives in one place because two callers measure with it — the
-        /// drawing below, and the editor's transform gizmo, which boxes the block through
-        /// <see cref="MeasureKeyboardHeight"/> and would otherwise drift from the drawn pills the
-        /// first time a proportion here was touched.
-        /// </summary>
-        internal readonly struct KeyboardMetrics
-        {
-            public KeyboardMetrics(float fontPx, float lineSpacing)
-            {
-                PadH = fontPx * 0.55f;
-                PadV = fontPx * 0.30f;
-                Gap = fontPx * 0.25f;
-                RowHeight = lineSpacing + 2 * PadV;
-            }
-
-            /// <summary>Horizontal padding inside a pill, each side.</summary>
-            public float PadH { get; }
-
-            /// <summary>Vertical padding inside a pill, above and below the line.</summary>
-            public float PadV { get; }
-
-            /// <summary>Vertical space between two stacked pills.</summary>
-            public float Gap { get; }
-
-            /// <summary>One pill's height: the line pitch plus its vertical padding.</summary>
-            public float RowHeight { get; }
-
-            public float CornerRadius => RowHeight * 0.3f;
-
-            /// <summary>The block height of <paramref name="rows"/> stacked pills, gaps
-            /// included.</summary>
-            public float BlockHeight(int rows) =>
-                rows <= 0 ? 0 : rows * RowHeight + (rows - 1) * Gap;
-        }
-
         /// <summary><see cref="KeyboardContent.FontSize"/> — output pixels, mapped onto this canvas
         /// by <paramref name="textScale"/> exactly as <see cref="TextContent"/> is — with the
         /// model's default standing in for a non-positive size.</summary>
@@ -806,86 +768,19 @@ namespace Clowd.VideoSDK.Composition
 
             using var typeface = SKTypeface.CreateDefault();
             using var font = new SKFont(typeface, fontPx) { Subpixel = true };
-            return new KeyboardMetrics(fontPx, font.Spacing).BlockHeight(rows);
-        }
-
-        /// <summary>Row animation length in ms for one of the item's transitions, or 0 when the
-        /// row is to appear/vanish instantly. A kind that animates but carries no duration (hand
-        /// written json, or an older project) gets a sane one rather than snapping.</summary>
-        private const int DefaultKeyboardRowMs = 250;
-
-        private static int KeyboardRowMs(Transition transition)
-        {
-            if (transition == null || !TransitionMath.IsAnimated(transition.Kind))
-                return 0;
-            return transition.DurationTicks > 0
-                ? (int)(transition.DurationTicks / TimeSpan.TicksPerMillisecond)
-                : DefaultKeyboardRowMs;
-        }
-
-        /// <summary>
-        /// Widths for the wrap and the drawing alike: typed words measure in the row font, keycaps
-        /// in their own geometry, and neighbors are spaced by what sits between them — a typed
-        /// space inside a pill, a wider gap wherever a keycap breaks the row into separate
-        /// segments.
-        ///
-        /// The typing pill's horizontal padding is carried <b>here</b>, not added by the drawing:
-        /// a row is one pill per contiguous run of typed words, so the padding falls at the run's
-        /// two ends — in <see cref="Edge"/> when the run starts or ends the line, and folded into
-        /// <see cref="Gap"/> at every word↔keycap boundary. Measuring and drawing therefore walk
-        /// the identical arithmetic, which is what keeps a wrapped line inside its box.
-        /// </summary>
-        private sealed class KeyboardAtomMetrics : IKeyAtomMetrics
-        {
-            private readonly SKFont _font;
-            private readonly Keycap _caps;
-            private readonly float _space;
-            private readonly float _capGap;
-            private readonly float _plusGap;
-            private readonly float _padH;
-
-            public KeyboardAtomMetrics(SKFont font, Keycap caps, float fontPx, KeyboardMetrics metrics)
-            {
-                _font = font;
-                _caps = caps;
-                _space = font.MeasureText(" ");
-                _capGap = fontPx * 0.16f;
-                _plusGap = fontPx * 0.05f;
-                _padH = metrics.PadH;
-            }
-
-            public float Width(KeyAtom atom) => atom.Kind == KeyAtomKind.Cap
-                ? _caps.Width(atom.Text)
-                : _font.MeasureText(atom.Text);
-
-            public float Gap(KeyAtom left, KeyAtom right)
-            {
-                if (left.Kind == KeyAtomKind.Word && right.Kind == KeyAtomKind.Word)
-                    return _space;
-
-                // a pill ends and/or begins here, so its padding is part of the gap
-                float pad = Edge(left) + Edge(right);
-                bool plus = left.Kind == KeyAtomKind.Plus || right.Kind == KeyAtomKind.Plus;
-                return pad + (plus ? _plusGap : _capGap);
-            }
-
-            public float Edge(KeyAtom atom) => atom.Kind == KeyAtomKind.Word ? _padH : 0;
+            return new KeystrokeRenderer.KeyboardMetrics(fontPx, font.Spacing).BlockHeight(rows);
         }
 
         /// <summary>
         /// A keyboard-track item: the capture's keystroke runs stacked as rows, the active run at
         /// the anchored bottom (<see cref="Transform.X"/>/<see cref="Transform.Y"/> = the block
-        /// bottom center), finished runs pushed up. Typing draws as text in a pill colored by
-        /// <see cref="KeyboardContent.BackgroundColor"/>/<see cref="KeyboardContent.TextColor"/>;
-        /// every special key and every chord member draws as a <see cref="Keycap"/> instead,
-        /// <b>outside</b> any pill — a row is one pill per run of typed words with the caps free
-        /// between them (see <see cref="DrawKeyboardLine"/>).
+        /// bottom center), finished runs pushed up — drawn by <see cref="KeystrokeRenderer"/>, the
+        /// pipeline Draw on Screen's live overlay shares.
         ///
         /// Rows animate individually with the item's <see cref="Item.Entry"/>/<see cref="Item.Exit"/>
         /// — a new row plays the entry as it arrives, a finished one plays the exit once its
         /// <see cref="KeyboardContent.LingerMs"/> is up — which is why <see cref="ComposeItem"/>
-        /// does not apply them to the block. A vertically sliding entry also takes only its eased
-        /// share of the stack, so the rows above glide up as the new one lands rather than jumping.
+        /// does not apply them to the block.
         ///
         /// Text wraps at <see cref="Transform.Scale"/> · canvas width;
         /// <see cref="KeyboardContent.FontSize"/> is output pixels, mapped by
@@ -916,142 +811,16 @@ namespace Clowd.VideoSDK.Composition
             }
             double sourceMs = sourceTicks / (double)TimeSpan.TicksPerMillisecond;
 
-            var rows = KeyboardLayout.VisibleRowsAt(runs, sourceMs, speed,
-                Math.Max(0, keyboard.LingerMs), KeyboardRowMs(item.Entry), KeyboardRowMs(item.Exit));
+            var rows = KeyboardLayout.VisibleRowsAt(runs, sourceMs, speed, Math.Max(0, keyboard.LingerMs),
+                KeystrokeRenderer.RowMs(item.Entry), KeystrokeRenderer.RowMs(item.Exit));
             if (rows.Count == 0)
                 return;
 
-            float fontPx = KeyboardFontPx(keyboard, textScale);
-            if (fontPx <= 0)
-                return;
-
-            using var typeface = SKTypeface.CreateDefault();
-            using var font = new SKFont(typeface, fontPx) { Subpixel = true };
-            var metrics = new KeyboardMetrics(fontPx, font.Spacing);
-            using var caps = new Keycap(typeface, fontPx, metrics.RowHeight);
-            var atomMetrics = new KeyboardAtomMetrics(font, caps, fontPx, metrics);
-            // the wrap box is the transform's box outright: the pills' padding is measured inside
-            // the line now, so subtracting it here would reserve it twice
-            float wrapWidth = Math.Max(fontPx, (float)(transform.Scale * canvasWidth));
-
-            // flatten runs into drawn lines, oldest first: a wrapped run animates as one
-            var lines = new List<(IReadOnlyList<KeyAtom> Atoms, ItemEffects Fx, float Advance)>();
-            foreach (var row in rows)
-            {
-                var (fx, advance) = KeyboardRowEffects(item, row);
-                if (fx.Opacity <= 0)
-                    continue;
-                foreach (var line in KeyboardLayout.WrapAtoms(row.Atoms, atomMetrics, wrapWidth))
-                    lines.Add((line, fx, advance));
-            }
-            if (lines.Count == 0)
-                return;
-
-            float centerX = (float)(transform.X * canvasWidth);
-            float bottom = (float)(transform.Y * canvasHeight);
-
-            for (int i = lines.Count - 1; i >= 0; i--)
-            {
-                var (atoms, fx, advance) = lines[i];
-                double alpha = opacity * fx.Opacity;
-                float width = KeyboardLayout.LineWidth(atoms, atomMetrics);
-                float dx = (float)(fx.OffsetXFrac * width);
-                float dy = (float)(fx.OffsetYFrac * metrics.RowHeight);
-                var rect = new SKRect(
-                    centerX - width / 2 + dx, bottom - metrics.RowHeight + dy,
-                    centerX + width / 2 + dx, bottom + dy);
-
-                if (alpha > 0)
-                    DrawKeyboardLine(target, atoms, atomMetrics, font, caps, metrics, rect, keyboard, alpha);
-
-                bottom -= advance * (metrics.RowHeight + metrics.Gap);
-            }
-        }
-
-        /// <summary>One row's animation state: what to multiply/offset it by, and the share of its
-        /// slot the stack above it should already have moved into.</summary>
-        private static (ItemEffects Fx, float Advance) KeyboardRowEffects(Item item, KeyboardRow row)
-        {
-            var entryKind = item.Entry?.Kind ?? TransitionKind.None;
-            var exitKind = item.Exit?.Kind ?? TransitionKind.None;
-            double entryShown = TransitionMath.IsAnimated(entryKind)
-                ? Easing.Apply(item.Entry.Easing, row.EntryRaw) : 1;
-            double exitShown = TransitionMath.IsAnimated(exitKind)
-                ? Easing.Apply(item.Exit.Easing, row.ExitRaw) : 1;
-
-            // only a vertical slide compresses the stack; the others settle their slot at once
-            float advance = entryKind is TransitionKind.SlideUp or TransitionKind.SlideDown
-                ? (float)Math.Clamp(entryShown, 0, 1)
-                : 1f;
-
-            return (TransitionMath.EvaluateShown(entryKind, entryShown, exitKind, exitShown), advance);
-        }
-
-        /// <summary>
-        /// Draws one laid-out line inside <paramref name="rect"/>. A keycap never sits inside a
-        /// pill: the line is split into segments, one pill per contiguous run of typed words with
-        /// its own padding at both ends, and every keycap (and every chord "+") standing free
-        /// between them. <c>somt⌫e</c> is therefore pill·cap·pill, and a line that starts or ends
-        /// on a keycap grows no empty pill beside it.
-        ///
-        /// Positions come from the very arithmetic <see cref="KeyboardLayout.LineWidth"/> measured
-        /// the line with, so the segments cannot drift out of the rect the wrap sized. Everything
-        /// centers on the row's midline by the font's real metrics.
-        /// </summary>
-        private static void DrawKeyboardLine(SKCanvas target, IReadOnlyList<KeyAtom> atoms,
-            IKeyAtomMetrics atomMetrics, SKFont font, Keycap caps, KeyboardMetrics metrics,
-            SKRect rect, KeyboardContent keyboard, double alpha)
-        {
-            var pen = new float[atoms.Count];
-            float x = rect.Left + atomMetrics.Edge(atoms[0]);
-            for (int i = 0; i < atoms.Count; i++)
-            {
-                if (i > 0)
-                    x += atomMetrics.Width(atoms[i - 1]) + atomMetrics.Gap(atoms[i - 1], atoms[i]);
-                pen[i] = x;
-            }
-
-            using var paint = new SKPaint { IsAntialias = true };
-
-            // pills first, behind their words
-            paint.Color = Keycap.Fade(new SKColor(keyboard.BackgroundColor), alpha);
-            for (int i = 0; i < atoms.Count;)
-            {
-                if (atoms[i].Kind != KeyAtomKind.Word)
-                {
-                    i++;
-                    continue;
-                }
-
-                int end = i;
-                while (end < atoms.Count && atoms[end].Kind == KeyAtomKind.Word)
-                    end++;
-
-                var pill = new SKRect(
-                    pen[i] - metrics.PadH, rect.Top,
-                    pen[end - 1] + atomMetrics.Width(atoms[end - 1]) + metrics.PadH, rect.Bottom);
-                using (var rr = new SKRoundRect(pill, metrics.CornerRadius, metrics.CornerRadius))
-                    target.DrawRoundRect(rr, paint);
-
-                i = end;
-            }
-
-            var ink = Keycap.Fade(new SKColor(keyboard.TextColor), alpha);
-            float baseline = Keycap.Baseline(font, rect.MidY);
-
-            for (int i = 0; i < atoms.Count; i++)
-            {
-                var atom = atoms[i];
-                if (atom.Kind == KeyAtomKind.Cap)
-                {
-                    caps.Draw(target, atom.Text, pen[i], rect.MidY, alpha);
-                    continue;
-                }
-
-                // a chord's "+" belongs to the keycaps' fixed livery, not to the typing colors
-                paint.Color = atom.Kind == KeyAtomKind.Plus ? Keycap.Fade(SKColors.White, alpha) : ink;
-                target.DrawText(atom.Text, pen[i], baseline, SKTextAlign.Left, font, paint);
-            }
+            KeystrokeRenderer.Draw(target, rows, keyboard, item.Entry, item.Exit,
+                KeyboardFontPx(keyboard, textScale),
+                (float)(transform.X * canvasWidth), (float)(transform.Y * canvasHeight),
+                (float)(transform.Scale * canvasWidth),
+                KeystrokeAlignment.Center, KeystrokeStacking.Up, opacity);
         }
 
         // ------------------------------------------------------------------------------- solid

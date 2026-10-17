@@ -1284,7 +1284,7 @@ namespace Clowd.VideoSDK.Tests
         /// measurement below is taken against.
         ///
         /// Not a sampled scanline, and the distinction is the bug: a cap's face height, seat depth
-        /// and corner radius all fall out of <see cref="FrameComposer.KeyboardMetrics"/>, whose
+        /// and corner radius all fall out of <see cref="KeystrokeRenderer.KeyboardMetrics"/>, whose
         /// row height is the measured typeface's line spacing — Helvetica on macOS, Arial/Segoe UI
         /// on Windows — so the same fixed row offset sits inside the black seat on one platform
         /// and past the whole cap on the other. A projection has no row to be wrong about.

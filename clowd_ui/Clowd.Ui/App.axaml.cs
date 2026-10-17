@@ -228,6 +228,7 @@ namespace Clowd
                 WatchFeatureMode(SettingsRoot.Current.Recording, nameof(SettingsRecording.Mode));
                 WatchFeatureMode(SettingsRoot.Current.Uploads, nameof(SettingsUpload.Mode));
                 WatchFeatureMode(SettingsRoot.Current.ShareRegion, nameof(SettingsShareRegion.Mode));
+                WatchFeatureMode(SettingsRoot.Current.DrawOnScreen, nameof(SettingsDrawOnScreen.Mode));
 
                 void WatchFeatureMode(INotifyPropertyChanged settings, string property)
                 {
@@ -469,16 +470,20 @@ namespace Clowd
                 menu.Add(share);
             }
 
-            // no feature switch: always on the menu
-            var draw = new NativeMenuItem(Loc.T("Tray_DrawOnScreen"));
-            ApplyGesture(draw, SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut);
-            draw.Click += async (s, e) =>
+            // Draw on Screen Off (SettingsDrawOnScreen.Mode) removes it here, from the hotkeys and
+            // from the recording and share strips.
+            if (SettingsRoot.Current.DrawOnScreen.IsEnabled)
             {
-                // let the tray menu disappear first, or it is still on screen under the new overlay
-                await Task.Delay(400);
-                ToggleDrawOnScreen();
-            };
-            menu.Add(draw);
+                var draw = new NativeMenuItem(Loc.T("Tray_DrawOnScreen"));
+                ApplyGesture(draw, SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut);
+                draw.Click += async (s, e) =>
+                {
+                    // let the tray menu disappear first, or it is still on screen under the new overlay
+                    await Task.Delay(400);
+                    ToggleDrawOnScreen();
+                };
+                menu.Add(draw);
+            }
 
             var colorp = new NativeMenuItem("Color Picker");
             colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
@@ -634,8 +639,8 @@ namespace Clowd
             };
         }
 
-        /// <summary>A hotkey for a feature the user switched off (Uploads, Recording or Shared
-        /// Region Off) is
+        /// <summary>A hotkey for a feature the user switched off (Uploads, Recording, Shared
+        /// Region or Draw on Screen Off) is
         /// unregistered rather than left to fire into a guard: it must not swallow its key, and
         /// the Hotkeys page hides its row for the same reason. Called at startup and again
         /// whenever either mode changes.</summary>
@@ -649,6 +654,7 @@ namespace Clowd
             _hotkeys.SetEnabled(HotkeyId.ClipboardUpload, uploads);
             _hotkeys.SetEnabled(HotkeyId.StartStopRecording, SettingsRoot.Current.Recording.IsEnabled);
             _hotkeys.SetEnabled(HotkeyId.ShareRegion, SettingsRoot.Current.ShareRegion.IsEnabled);
+            _hotkeys.SetEnabled(HotkeyId.DrawOnScreen, SettingsRoot.Current.DrawOnScreen.IsEnabled);
         }
 
         /// <summary>

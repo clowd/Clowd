@@ -26,6 +26,7 @@ namespace Clowd.UI
     {
         private readonly object _gate = new object();
         private readonly List<Registration> _registrations = new List<Registration>();
+        private Action<GlobalKeyEvent>[] _observers = Array.Empty<Action<GlobalKeyEvent>>();
         private SimpleGlobalHook _hook;
         private string _hookError; // non-null once the hook failed to start
         private bool _disposed;
@@ -68,6 +69,52 @@ namespace Clowd.UI
             }
         }
 
+        public IDisposable ObserveKeys(Action<GlobalKeyEvent> observer)
+        {
+            if (observer == null) throw new ArgumentNullException(nameof(observer));
+
+            lock (_gate)
+            {
+                if (_disposed)
+                    return new ObserverHandle(null, null);
+
+                EnsureHookStarted();
+                // copy-on-write: the hook thread reads the array without taking the lock
+                _observers = [.. _observers, observer];
+                return new ObserverHandle(this, observer);
+            }
+        }
+
+        private void Unobserve(Action<GlobalKeyEvent> observer)
+        {
+            lock (_gate)
+            {
+                _observers = Array.FindAll(_observers, o => o != observer);
+            }
+        }
+
+        private void NotifyObservers(KeyboardHookEventArgs e, bool down)
+        {
+            var observers = _observers;
+            if (observers.Length == 0)
+                return;
+
+            var key = new GlobalKeyEvent(down, e.Data.RawCode, SharpHookKeyMap.ToKeyModifiers(e.RawEvent.Mask));
+            foreach (var observer in observers)
+            {
+                try
+                {
+                    observer(key);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[GlobalHotkeyHost] key observer threw: " + ex);
+                }
+            }
+        }
+
+        private void OnKeyReleased(object sender, KeyboardHookEventArgs e) => NotifyObservers(e, false);
+
         // must be called while holding _gate.
         private void EnsureHookStarted()
         {
@@ -78,6 +125,7 @@ namespace Clowd.UI
             {
                 var hook = new SimpleGlobalHook(GlobalHookType.Keyboard);
                 hook.KeyPressed += OnKeyPressed;
+                hook.KeyReleased += OnKeyReleased;
                 _hook = hook;
 
                 hook.RunAsync().ContinueWith(t =>
@@ -128,6 +176,9 @@ namespace Clowd.UI
 
         private void OnKeyPressed(object sender, KeyboardHookEventArgs e)
         {
+            // observers see every press, the paused ones and the ones a hotkey swallows included
+            NotifyObservers(e, true);
+
             // while a gesture is being edited in settings, hotkeys must neither fire nor swallow keys.
             if (_isPaused)
                 return;
@@ -186,6 +237,7 @@ namespace Clowd.UI
 
                 _disposed = true;
                 _registrations.Clear();
+                _observers = Array.Empty<Action<GlobalKeyEvent>>();
                 hook = _hook;
                 _hook = null;
             }
@@ -199,6 +251,7 @@ namespace Clowd.UI
                 return;
 
             hook.KeyPressed -= OnKeyPressed;
+            hook.KeyReleased -= OnKeyReleased;
             try
             {
                 hook.Dispose();
@@ -218,6 +271,25 @@ namespace Clowd.UI
             {
                 Debug.WriteLine("[GlobalHotkeyHost] hook dispose threw: " + ex);
                 SentryConfig.CaptureHandled(ex, "hotkey.dispose");
+            }
+        }
+
+        private sealed class ObserverHandle : IDisposable
+        {
+            private GlobalHotkeyHost _host;
+            private readonly Action<GlobalKeyEvent> _observer;
+
+            public ObserverHandle(GlobalHotkeyHost host, Action<GlobalKeyEvent> observer)
+            {
+                _host = host;
+                _observer = observer;
+            }
+
+            public void Dispose()
+            {
+                var host = _host;
+                _host = null;
+                host?.Unobserve(_observer);
             }
         }
 

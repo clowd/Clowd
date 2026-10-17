@@ -20,11 +20,19 @@ namespace Clowd.UI.DrawOnScreen
 
         /// <summary><see cref="Initial"/> with a remembered colour and size (null for the default),
         /// clamped to the palette: the stored indices may predate a palette change.</summary>
-        public static DrawOnScreenState Restored(int? colorIndex, int? sizeIndex) => Initial with
+        public static DrawOnScreenState Restored(int? colorIndex, int? sizeIndex, bool showKeys = false) => Initial with
         {
             ColorIndex = Math.Clamp(colorIndex ?? DrawPalette.DefaultColorIndex, 0, DrawPalette.Colors.Count - 1),
             SizeIndex = Math.Clamp(sizeIndex ?? DrawPalette.DefaultSizeIndex, 0, DrawPalette.Sizes.Count - 1),
+            ShowKeys = showKeys,
         };
+
+        /// <summary>Whether the keys being pressed are shown on screen. Independent of every other
+        /// part of the mode: the keys are not ink, so hiding, click-through and the tools leave
+        /// them alone, and they show whether or not the user is drawing.</summary>
+        public bool ShowKeys { get; init; }
+
+        public DrawOnScreenState ToggleKeys() => this with { ShowKeys = !ShowKeys };
 
         /// <summary>Picking a tool always resumes drawing: the ink comes back and the canvas takes the mouse.</summary>
         public DrawOnScreenState PickTool(ToolType tool) => this with { Tool = tool, ClickThrough = false, Hidden = false };

@@ -152,6 +152,30 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Restored_carries_the_remembered_keys_button()
+        {
+            Assert.False(DrawOnScreenState.Restored(null, null).ShowKeys);
+            Assert.True(DrawOnScreenState.Restored(null, null, showKeys: true).ShowKeys);
+        }
+
+        [Fact]
+        public void Keys_toggle_alone_and_survive_every_other_transition()
+        {
+            foreach (var start in new[] { Drawing, Through, Hidden })
+            {
+                var on = start.ToggleKeys();
+                Assert.Equal(start with { ShowKeys = true }, on);
+                Assert.Equal(start, on.ToggleKeys());
+
+                Assert.True(on.PickTool(ToolType.Arrow).ShowKeys);
+                Assert.True(on.ToggleClickThrough().ShowKeys);
+                Assert.True(on.ToggleHide().ShowKeys);
+                Assert.True(on.AfterUndoOrClear().ShowKeys);
+                Assert.True(on.SelectColor(2).ShowKeys);
+            }
+        }
+
+        [Fact]
         public void IsToolLit_only_for_the_picked_tool_while_drawing()
         {
             Assert.True(Drawing.IsToolLit(ToolType.Brush));

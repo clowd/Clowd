@@ -67,6 +67,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Draw on Screen")]
+        [VisibleWhen(nameof(SettingsDrawOnScreen.Mode), DrawOnScreenMode.On, Section = nameof(SettingsRoot.DrawOnScreen))]
         public SimpleKeyGesture DrawOnScreenShortcut
         {
             get => _drawOnScreenShortcut;

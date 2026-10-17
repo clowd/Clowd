@@ -1055,6 +1055,7 @@ namespace Clowd.UI
             public void PickTool(ToolType tool) => Set(State.PickTool(tool));
             public void ToggleClickThrough() => Set(State.ToggleClickThrough());
             public void ToggleHide() => Set(State.ToggleHide());
+            public void ToggleKeys() => Set(State.ToggleKeys());
             public void SelectColor(int index) => Set(State.SelectColor(index));
             public void SelectSize(int index) => Set(State.SelectSize(index));
 

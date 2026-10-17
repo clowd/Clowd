@@ -14,7 +14,7 @@ namespace Clowd.UI.DrawOnScreen
 {
     /// <summary>
     /// The draw-on-screen toolbar: a two-lane strip behind a full-height grip. The primary lane is
-    /// the emblem, the two modes (click-through, hide) and the eight tools at full size; the compact
+    /// the emblem, the three modes (click-through, hide, show keys) and the eight tools at full size; the compact
     /// secondary lane is the colours, the sizes and the ways out (undo, clear, close).
     /// <para>
     /// It owns no state. Everything it shows is read off <see cref="IDrawOnScreenController"/> in
@@ -41,6 +41,7 @@ namespace Clowd.UI.DrawOnScreen
         private readonly TrayEmblem _emblem;
         private readonly TrayButton _clickThrough;
         private readonly TrayButton _hide;
+        private readonly TrayButton _keys;
         private readonly List<(ToolType Tool, TrayButton Button)> _tools = new();
         private readonly List<TraySwatch> _swatches = new();
         private readonly List<TrayDotButton> _sizes = new();
@@ -60,7 +61,7 @@ namespace Clowd.UI.DrawOnScreen
         {
             _controller = controller ?? throw new ArgumentNullException(nameof(controller));
 
-            // ---- primary lane: emblem · click-through · hide | tools ----
+            // ---- primary lane: emblem · click-through · hide · keys | tools ----
             // the emblem lives in the lane rather than on the chassis (HasEmblem is off) so it opens
             // the first row instead of standing beside both. Its margin is set per axis, see
             // ApplyAxisMargins.
@@ -79,10 +80,18 @@ namespace Clowd.UI.DrawOnScreen
             _hide = new TrayButton();
             _hide.Click += (s, e) => _controller.ToggleHide();
 
+            // shows the keys being pressed over the screen; lit while on, like hide
+            _keys = new TrayButton
+            {
+                Icon = (Geometry)Application.Current.FindResource("IconKeyboard"),
+            };
+            _keys.Click += (s, e) => _controller.ToggleKeys();
+
             var primary = new DrawLanePanel { Spacing = TrayTokens.Gap };
             primary.Children.Add(_emblem);
             primary.Children.Add(_clickThrough);
             primary.Children.Add(_hide);
+            primary.Children.Add(_keys);
             primary.Children.Add(new TrayDivider());
 
             foreach (var tool in DrawPalette.Tools)
@@ -198,6 +207,9 @@ namespace Clowd.UI.DrawOnScreen
             _hide.Icon = (Geometry)Application.Current.FindResource(state.Hidden ? "IconEyeOff" : "IconEye");
             _hide.IsActive = state.Hidden;
             SetLabel(_hide, state.Hidden ? "Draw_ShowInk" : "Draw_HideInk");
+
+            _keys.IsActive = state.ShowKeys;
+            SetLabel(_keys, state.ShowKeys ? "Draw_HideKeys" : "Draw_ShowKeys");
 
             foreach (var (tool, button) in _tools)
             {

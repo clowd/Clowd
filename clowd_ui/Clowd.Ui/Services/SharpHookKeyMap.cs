@@ -123,6 +123,17 @@ namespace Clowd.UI
             _ => null,
         };
 
+        /// <summary>The modifiers held in a hook event's mask, either side of the board.</summary>
+        public static AvMods ToKeyModifiers(EventMask mask)
+        {
+            var mods = AvMods.None;
+            if ((mask & EventMask.Ctrl) != EventMask.None) mods |= AvMods.Control;
+            if ((mask & EventMask.Shift) != EventMask.None) mods |= AvMods.Shift;
+            if ((mask & EventMask.Alt) != EventMask.None) mods |= AvMods.Alt;
+            if ((mask & EventMask.Meta) != EventMask.None) mods |= AvMods.Meta;
+            return mods;
+        }
+
         /// <summary>
         /// Returns true if <paramref name="incoming"/> (the mask on a live key event) matches the
         /// modifier set <paramref name="expected"/> from a stored gesture — treating Left/Right

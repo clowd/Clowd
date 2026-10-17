@@ -111,9 +111,17 @@
     <value>Hide drawing</value>
     <comment>Draw on Screen toolbar button tooltip: temporarily hides the drawing without deleting it.</comment>
   </data>
+  <data name="Draw_HideKeys" xml:space="preserve">
+    <value>Stop showing keystrokes</value>
+    <comment>Draw on Screen toolbar button tooltip while keystrokes are shown: stops displaying the keys the user presses on screen.</comment>
+  </data>
   <data name="Draw_ShowInk" xml:space="preserve">
     <value>Show drawing</value>
     <comment>Draw on Screen toolbar button tooltip: shows the drawing again after it was hidden.</comment>
+  </data>
+  <data name="Draw_ShowKeys" xml:space="preserve">
+    <value>Show keystrokes</value>
+    <comment>Draw on Screen toolbar button tooltip: displays the keys the user presses on screen, e.g. for a presentation or recording.</comment>
   </data>
   <data name="Draw_Size_Huge" xml:space="preserve">
     <value>Huge</value>

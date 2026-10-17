@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.Localization;
@@ -122,6 +123,10 @@ namespace Clowd.UI
             ToolTip.SetTip(_draw, Loc.T("Tray_DrawOnScreen"));
             AutomationProperties.SetName(_draw, Loc.T("Tray_DrawOnScreen"));
             _draw.Click += (s, e) => DrawClicked?.Invoke(this, EventArgs.Empty);
+            // gone while Draw on Screen is switched off (SettingsDrawOnScreen.Mode); a binding, so
+            // flipping the setting with the strip up takes effect at once
+            if (SettingsRoot.Current?.DrawOnScreen is { } drawSettings)
+                _draw.Bind(IsVisibleProperty, new Binding(nameof(SettingsDrawOnScreen.IsEnabled)) { Source = drawSettings });
 
             _options = new TrayButton { Glyph = TrayGlyphs.Sliders };
             ToolTip.SetTip(_options, "Options");

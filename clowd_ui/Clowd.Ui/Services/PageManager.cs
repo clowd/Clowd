@@ -17,6 +17,7 @@ namespace Clowd
         SettingsCapture,
         SettingsRecording,
         SettingsShareRegion,
+        SettingsDrawOnScreen,
         SettingsEditor,
         SettingsUploads,
         About,

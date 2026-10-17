@@ -16,6 +16,7 @@ namespace Clowd.UI.DrawOnScreen
         void PickTool(ToolType tool);
         void ToggleClickThrough();
         void ToggleHide();
+        void ToggleKeys();
         void SelectColor(int index);
         void SelectSize(int index);
         void Undo();

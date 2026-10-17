@@ -27,6 +27,8 @@ namespace Clowd.Config
 
         public SettingsShareRegion ShareRegion { get; set; } = new SettingsShareRegion();
 
+        public SettingsDrawOnScreen DrawOnScreen { get; set; } = new SettingsDrawOnScreen();
+
         public SettingsEditor Editor { get; set; } = new SettingsEditor();
 
         public SettingsVideoEditor VideoEditor { get; set; } = new SettingsVideoEditor();

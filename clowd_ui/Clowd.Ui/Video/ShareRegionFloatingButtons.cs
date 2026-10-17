@@ -1,7 +1,9 @@
 ﻿using System;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Interactivity;
+using Clowd.Config;
 using Clowd.Localization;
 using Clowd.UI.Controls.Tray;
 
@@ -111,6 +113,10 @@ namespace Clowd.UI
             ToolTip.SetTip(_draw, Loc.T("Tray_DrawOnScreen"));
             AutomationProperties.SetName(_draw, Loc.T("Tray_DrawOnScreen"));
             _draw.Click += (s, e) => DrawClicked?.Invoke(this, EventArgs.Empty);
+            // gone while Draw on Screen is switched off (SettingsDrawOnScreen.Mode); a binding, so
+            // flipping the setting with the strip up takes effect at once
+            if (SettingsRoot.Current?.DrawOnScreen is { } drawSettings)
+                _draw.Bind(IsVisibleProperty, new Binding(nameof(SettingsDrawOnScreen.IsEnabled)) { Source = drawSettings });
 
             // Stop is fixed on this strip: a share has nothing to save, so the trailing tile never
             // morphs the way the recording strip's Cancel becomes Finish.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -12,6 +13,8 @@ using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.Drawing;
 using Clowd.UI.Helpers;
+using Clowd.VideoSDK.Composition;
+using Clowd.VideoSDK.Model;
 
 namespace Clowd.UI.DrawOnScreen
 {
@@ -27,6 +30,12 @@ namespace Clowd.UI.DrawOnScreen
     /// <see cref="DrawOnScreenState"/> goes through it and lands on every canvas, so the toolbar
     /// (which only reads <see cref="State"/>) can never show a mode the canvases are not in. Nothing
     /// here is a keyboard shortcut; the canvas windows swallow every key but the text tool's.
+    /// </para>
+    /// <para>
+    /// With <see cref="DrawOnScreenState.ShowKeys"/> on, the keys pressed anywhere on the system are
+    /// fed (<see cref="KeystrokeFeed"/>) into one <see cref="LiveKeystrokes"/> and drawn by the
+    /// <see cref="KeystrokeOverlay"/> of the screen the mouse was on at the last press, styled live
+    /// by <see cref="SettingsDrawOnScreen"/>.
     /// </para>
     /// </summary>
     public sealed class DrawOnScreenSession : IDrawOnScreenController
@@ -49,6 +58,13 @@ namespace Clowd.UI.DrawOnScreen
 
         // the window that had the keyboard before the text tool took it (see OnTextEditingChanged)
         private IntPtr _prevForeground;
+
+        // the keystroke overlay: the rows, the hook feeding them, the settings styling them, and
+        // the one screen drawing them
+        private readonly LiveKeystrokes _keys = new(OperatingSystem.IsMacOS());
+        private KeystrokeFeed _feed;
+        private SettingsDrawOnScreen _keySettings;
+        private Overlay _keysOverlay;
 
         private DrawOnScreenSession()
         {
@@ -80,6 +96,11 @@ namespace Clowd.UI.DrawOnScreen
                 return;
             }
 
+            // switched off in settings: the entry points are gone, and this backstops any caller
+            // that still holds one (a strip built before the switch)
+            if (SettingsRoot.Current?.DrawOnScreen is { IsEnabled: false })
+                return;
+
             new DrawOnScreenSession().Open();
         }
 
@@ -93,7 +114,13 @@ namespace Clowd.UI.DrawOnScreen
             // before anything is built, so every canvas and the toolbar's first frame use the last
             // session's brush
             var general = SettingsRoot.Current?.General;
-            State = DrawOnScreenState.Restored(general?.DrawOnScreenColorIndex, general?.DrawOnScreenSizeIndex);
+            _keySettings = SettingsRoot.Current?.DrawOnScreen;
+            State = DrawOnScreenState.Restored(general?.DrawOnScreenColorIndex, general?.DrawOnScreenSizeIndex,
+                _keySettings?.ShowKeystrokes ?? false);
+
+            ApplyKeystrokeStyle();
+            if (_keySettings != null)
+                _keySettings.PropertyChanged += OnKeySettingsChanged;
 
             try
             {
@@ -125,6 +152,7 @@ namespace Clowd.UI.DrawOnScreen
                     _toolbar.Show();
                 WindowNativeExtensions.RaiseTopmostNoActivate(_toolbar);
 
+                UpdateKeystrokes();
                 OnChanged();
             }
             catch
@@ -157,6 +185,8 @@ namespace Clowd.UI.DrawOnScreen
             CommitTextEdits();
             Apply(State.ToggleHide());
         }
+
+        public void ToggleKeys() => Apply(State.ToggleKeys());
 
         public void SelectColor(int index)
         {
@@ -225,6 +255,11 @@ namespace Clowd.UI.DrawOnScreen
             _hotplug?.Stop();
             _hotplug = null;
 
+            _feed?.Dispose();
+            _feed = null;
+            if (_keySettings != null)
+                _keySettings.PropertyChanged -= OnKeySettingsChanged;
+
             if (_toolbar != null)
             {
                 _toolbar.Closed -= OnToolbarClosed;
@@ -272,6 +307,12 @@ namespace Clowd.UI.DrawOnScreen
                 RememberColorAndSize();
             }
 
+            if (prev.ShowKeys != next.ShowKeys)
+            {
+                UpdateKeystrokes();
+                RememberShowKeys();
+            }
+
             OnChanged();
         }
 
@@ -285,6 +326,17 @@ namespace Clowd.UI.DrawOnScreen
 
             general.DrawOnScreenColorIndex = State.ColorIndex;
             general.DrawOnScreenSizeIndex = State.SizeIndex;
+            try { SettingsService.Save(SettingsRoot.Current); }
+            catch { }
+        }
+
+        /// <summary>Stores the keys button for the next session, at the press like the colour.</summary>
+        private void RememberShowKeys()
+        {
+            if (_keySettings == null)
+                return;
+
+            _keySettings.ShowKeystrokes = State.ShowKeys;
             try { SettingsService.Save(SettingsRoot.Current); }
             catch { }
         }
@@ -391,6 +443,122 @@ namespace Clowd.UI.DrawOnScreen
         }
 
         // ====================================================================
+        // Keystrokes
+        // ====================================================================
+
+        /// <summary>Starts or stops the keystroke overlay to match <see cref="State"/>. Turning it
+        /// off forgets every key, so turning it back on starts clean.</summary>
+        private void UpdateKeystrokes()
+        {
+            if (_closing)
+                return;
+
+            if (State.ShowKeys)
+            {
+                _feed ??= new KeystrokeFeed(OnKeystroke);
+                _feed.Start();
+                TargetKeystrokes(_keysOverlay ?? OverlayUnderCursor());
+            }
+            else
+            {
+                _feed?.Stop();
+                _keys.Clear();
+                TargetKeystrokes(null);
+            }
+        }
+
+        /// <summary>Points the one live overlay at the keys and blanks the others.</summary>
+        private void TargetKeystrokes(Overlay target)
+        {
+            _keysOverlay = target;
+            foreach (var overlay in _overlays)
+            {
+                if (overlay == target)
+                    overlay.Window.Keystrokes.SetSource(_keys, () => _feed?.NowMs ?? 0, _keySettings ?? new SettingsDrawOnScreen());
+                else
+                    overlay.Window.Keystrokes.SetSource(null, null, null);
+            }
+        }
+
+        /// <summary>The canvas of the monitor the mouse is on, the screen the user is working on;
+        /// the first canvas when that cannot be told.</summary>
+        private Overlay OverlayUnderCursor()
+        {
+            if (_toolbar != null && CursorPosition.TryGet(_toolbar, out var cursor)
+                && DesktopScreens.FromPoint(_toolbar, cursor) is { } screen)
+            {
+                var match = _overlays.FirstOrDefault(o => o.Window.Screen.Bounds == screen.Bounds);
+                if (match != null)
+                    return match;
+            }
+
+            return _overlays.FirstOrDefault();
+        }
+
+        /// <summary>One key edge from the hook, on the UI thread. A press moves the rows to the
+        /// screen the mouse is on now, so the keys follow the user between monitors.</summary>
+        private void OnKeystroke(KeystrokeEdge edge)
+        {
+            if (_closing || !State.ShowKeys)
+                return;
+
+            if (edge.IsDown)
+            {
+                _keys.KeyDown(edge.Code, edge.Character, edge.TimeMs);
+                var target = OverlayUnderCursor();
+                if (target != _keysOverlay)
+                    TargetKeystrokes(target);
+            }
+            else
+            {
+                _keys.KeyUp(edge.Code, edge.TimeMs);
+            }
+
+            _keysOverlay?.Window.Keystrokes.Refresh();
+        }
+
+        private void OnKeySettingsChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (_closing)
+                return;
+
+            ApplyKeystrokeStyle();
+            _keysOverlay?.Window.Keystrokes.Refresh();
+        }
+
+        /// <summary>Copies the settings into the keyboard track's own style objects, which is what
+        /// the shared renderer reads.</summary>
+        private void ApplyKeystrokeStyle()
+        {
+            var s = _keySettings ?? new SettingsDrawOnScreen();
+            _keys.Style = new KeyboardContent
+            {
+                FontSize = s.FontSize,
+                LingerMs = s.LingerMs,
+                PauseBreakMs = s.PauseBreakMs,
+                Filter = s.Filter switch
+                {
+                    DrawKeystrokeFilter.Special => KeystrokeFilter.Special,
+                    DrawKeystrokeFilter.Shortcuts => KeystrokeFilter.Shortcuts,
+                    _ => KeystrokeFilter.None,
+                },
+                TextColor = s.TextColor.ToUInt32(),
+                BackgroundColor = s.FillColor.ToUInt32(),
+            };
+            _keys.Entry = RowTransition(s.EntryKind, s.EntryDurationMs, s.EntryEasing);
+            _keys.Exit = RowTransition(s.ExitKind, s.ExitDurationMs, s.ExitEasing);
+        }
+
+        /// <summary>A settings animation as the SDK's <see cref="Transition"/>; the settings enums
+        /// mirror the SDK's by name (Clowd.Shared cannot reference it).</summary>
+        private static Transition RowTransition(DrawKeystrokeAnimation kind, int durationMs, DrawKeystrokeEasing easing) => new()
+        {
+            Kind = Enum.TryParse<TransitionKind>(kind.ToString(), out var k) ? k : TransitionKind.None,
+            DurationTicks = Math.Max(0, durationMs) * TimeSpan.TicksPerMillisecond,
+            Easing = Enum.TryParse<TransitionEasing>(easing.ToString(), out var e) ? e : TransitionEasing.Linear,
+        };
+
+        // ====================================================================
         // Canvas windows
         // ====================================================================
 
@@ -407,6 +575,11 @@ namespace Clowd.UI.DrawOnScreen
             overlay.Attach();
 
             window.Show();
+
+            // the first canvas of a session with keys on, or a monitor plugged in with none showing
+            if (State.ShowKeys && _keysOverlay == null)
+                TargetKeystrokes(overlay);
+
             return overlay;
         }
 
@@ -417,6 +590,10 @@ namespace Clowd.UI.DrawOnScreen
             overlay.Detach();
             _overlays.Remove(overlay);
             _history.Forget(overlay.Target);
+
+            // its monitor is gone: the keys move to a screen that is still there
+            if (overlay == _keysOverlay)
+                TargetKeystrokes(State.ShowKeys ? _overlays.FirstOrDefault() : null);
 
             try { overlay.Window.Close(); }
             catch { }

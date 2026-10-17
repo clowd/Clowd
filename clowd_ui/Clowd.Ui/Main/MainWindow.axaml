@@ -151,6 +151,11 @@
                         <PathIcon Width="16" Height="16" Data="{StaticResource IconNavShareRegion}" />
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
+                <u:NavMenuItem Header="Draw on Screen" Tag="SettingsDrawOnScreen">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavDrawOnScreen}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
                 <u:NavMenuItem Header="Editor" Tag="SettingsEditor">
                     <u:NavMenuItem.Icon>
                         <PathIcon Width="16" Height="16" Data="{StaticResource IconEditScreenshot}" />

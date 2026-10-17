@@ -61,6 +61,12 @@ namespace Clowd.Shared.Tests
             original.Recording.CaptureMethod = ScreenCaptureMethod.Wgc;
             original.Capture.ObscuredWindowDetectionThreshold = 0.55; // invariant double
             original.Editor.StartupPadding = 42;
+            original.DrawOnScreen.Mode = DrawOnScreenMode.Off; // enum by name (non-default)
+            original.DrawOnScreen.Region = DrawKeystrokeRegion.TopRight;
+            original.DrawOnScreen.Margin = 12;
+            original.DrawOnScreen.ShowKeystrokes = true;
+            original.DrawOnScreen.FillColor = Color.FromArgb(0x33, 0x01, 0x02, 0x03);
+            original.DrawOnScreen.EntryKind = DrawKeystrokeAnimation.None;
 
             // Color ("#AARRGGBB")
             original.Editor.CanvasBackground = Color.FromArgb(0x80, 0x12, 0x34, 0x56);
@@ -108,6 +114,14 @@ namespace Clowd.Shared.Tests
             Assert.Equal(ScreenCaptureMethod.Wgc, loaded.Recording.CaptureMethod);
             Assert.Equal(0.55, loaded.Capture.ObscuredWindowDetectionThreshold);
             Assert.Equal(42, loaded.Editor.StartupPadding);
+            Assert.Equal(DrawOnScreenMode.Off, loaded.DrawOnScreen.Mode);
+            Assert.False(loaded.DrawOnScreen.IsEnabled);
+            Assert.Equal(DrawKeystrokeRegion.TopRight, loaded.DrawOnScreen.Region);
+            Assert.Equal(12, loaded.DrawOnScreen.Margin);
+            Assert.True(loaded.DrawOnScreen.ShowKeystrokes);
+            Assert.Equal(Color.FromArgb(0x33, 0x01, 0x02, 0x03), loaded.DrawOnScreen.FillColor);
+            Assert.Equal(DrawKeystrokeAnimation.None, loaded.DrawOnScreen.EntryKind);
+            Assert.False(loaded.DrawOnScreen.EntryAnimates);
 
             Assert.Equal(Color.FromArgb(0x80, 0x12, 0x34, 0x56), loaded.Editor.CanvasBackground);
 

@@ -66,10 +66,13 @@ namespace Clowd.UI.DrawOnScreen
                     new DoubleTransition { Property = OpacityProperty, Duration = HideFade },
                 },
             };
+            // the keystroke rows ride above the ink as a sibling, outside the canvas: hiding the ink
+            // fades the canvas alone, and the keys are never a graphic the user could erase
+            Keystrokes = new KeystrokeOverlay();
             Content = new Panel
             {
                 Background = Brushes.Transparent,
-                Children = { Canvas },
+                Children = { Canvas, Keystrokes },
             };
 
             // pre-show geometry from the monitor's own scaling as a best guess; Opened re-applies it
@@ -98,6 +101,10 @@ namespace Clowd.UI.DrawOnScreen
         }
 
         public DrawingCanvas Canvas { get; }
+
+        /// <summary>The keystroke rows over this screen (blank unless the session points it at its
+        /// keys).</summary>
+        public KeystrokeOverlay Keystrokes { get; }
 
         /// <summary>The monitor this window covers (capture-space bounds, see <see cref="DesktopScreens"/>).</summary>
         public DesktopScreen Screen { get; private set; }
@@ -208,6 +215,12 @@ namespace Clowd.UI.DrawOnScreen
         {
             var scaling = OperatingSystem.IsMacOS() ? 1.0 : RenderScaling;
             WindowNativeExtensions.SetPhysicalBounds(this, Screen.Bounds.Position, Screen.Bounds.Width, Screen.Bounds.Height, scaling);
+
+            // the working area in the window's own DIPs: the window's origin is the monitor's
+            var work = Screen.WorkingArea;
+            Keystrokes.SetWorkArea(new Rect(
+                (work.X - Screen.Bounds.X) / scaling, (work.Y - Screen.Bounds.Y) / scaling,
+                work.Width / scaling, work.Height / scaling));
         }
 
         private static void OnPreviewKey(object sender, KeyEventArgs e)
