@@ -20,6 +20,21 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Restored_is_initial_with_the_remembered_colour_and_size()
+        {
+            Assert.Equal(DrawOnScreenState.Initial, DrawOnScreenState.Restored(null, null));
+            Assert.Equal(DrawOnScreenState.Initial with { ColorIndex = 4, SizeIndex = 3 }, DrawOnScreenState.Restored(4, 3));
+        }
+
+        [Fact]
+        public void Restored_clamps_out_of_range_indices()
+        {
+            var s = DrawOnScreenState.Restored(99, -1);
+            Assert.Equal(DrawPalette.Colors.Count - 1, s.ColorIndex);
+            Assert.Equal(0, s.SizeIndex);
+        }
+
+        [Fact]
         public void PickTool_resumes_drawing_from_any_mode()
         {
             foreach (var from in new[] { Drawing, Through, Hidden })

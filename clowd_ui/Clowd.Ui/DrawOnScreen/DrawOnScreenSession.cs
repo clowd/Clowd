@@ -19,7 +19,8 @@ namespace Clowd.UI.DrawOnScreen
     /// A draw-on-screen session: one <see cref="DrawOnScreenWindow"/> per monitor, the
     /// <see cref="DrawOnScreenToolbar"/> that drives them, one <see cref="DrawHistory"/> across their
     /// separate undo stacks, and the per-tool settings the canvases draw with (the session's own
-    /// table — the editor's persisted tool settings are never read or written). Single-instance via
+    /// table — the editor's persisted tool settings are never read or written; only the palette
+    /// colour and size are remembered across sessions, in <see cref="SettingsGeneral"/>). Single-instance via
     /// <see cref="ActiveInstance"/>, UI thread only, like the recording and share pages.
     /// <para>
     /// <see cref="Apply"/> is the one place the mode is written: every transition of
@@ -88,6 +89,11 @@ namespace Clowd.UI.DrawOnScreen
                 return;
 
             ActiveInstance = this;
+
+            // before anything is built, so every canvas and the toolbar's first frame use the last
+            // session's brush
+            var general = SettingsRoot.Current?.General;
+            State = DrawOnScreenState.Restored(general?.DrawOnScreenColorIndex, general?.DrawOnScreenSizeIndex);
 
             try
             {
@@ -261,9 +267,26 @@ namespace Clowd.UI.DrawOnScreen
                 PushState(overlay);
 
             if (prev.ColorIndex != next.ColorIndex || prev.SizeIndex != next.SizeIndex)
+            {
                 ApplyColorAndSize();
+                RememberColorAndSize();
+            }
 
             OnChanged();
+        }
+
+        /// <summary>Stores the colour and size for the next session (see <see cref="Open"/>). Saved at
+        /// the pick rather than at close, so a crash or a kill still keeps it.</summary>
+        private void RememberColorAndSize()
+        {
+            // null before App startup assigns SettingsRoot.Current (and in harnesses that never do)
+            if (SettingsRoot.Current?.General is not { } general)
+                return;
+
+            general.DrawOnScreenColorIndex = State.ColorIndex;
+            general.DrawOnScreenSizeIndex = State.SizeIndex;
+            try { SettingsService.Save(SettingsRoot.Current); }
+            catch { }
         }
 
         /// <summary>Lands <see cref="State"/> on one window. Click-through first: turning it on

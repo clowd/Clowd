@@ -98,6 +98,23 @@ namespace Clowd.Config
         }
 
 
+        /// <summary>The draw-on-screen toolbar's last colour and size, as indices into its fixed
+        /// palette (<c>DrawPalette</c>), so the next session opens with the same brush. Null until
+        /// one is first picked; out-of-range values are clamped by the reader.</summary>
+        [Browsable(false)]
+        public int? DrawOnScreenColorIndex
+        {
+            get => _drawOnScreenColorIndex;
+            set => Set(ref _drawOnScreenColorIndex, value);
+        }
+
+        [Browsable(false)]
+        public int? DrawOnScreenSizeIndex
+        {
+            get => _drawOnScreenSizeIndex;
+            set => Set(ref _drawOnScreenSizeIndex, value);
+        }
+
         [Browsable(false)]
         public string LastSavePath
         {
@@ -356,6 +373,8 @@ namespace Clowd.Config
         private bool _maintainMinimumContrast = true;
         private string _lastSavePath;
         private string _mainWindowBounds;
+        private int? _drawOnScreenColorIndex;
+        private int? _drawOnScreenSizeIndex;
         private string _language;
         private bool _confirmClose = true;
         private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;

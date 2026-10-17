@@ -18,6 +18,14 @@ namespace Clowd.UI.DrawOnScreen
         public static DrawOnScreenState Initial { get; } =
             new(DrawPalette.DefaultTool, true, false, DrawPalette.DefaultColorIndex, DrawPalette.DefaultSizeIndex);
 
+        /// <summary><see cref="Initial"/> with a remembered colour and size (null for the default),
+        /// clamped to the palette: the stored indices may predate a palette change.</summary>
+        public static DrawOnScreenState Restored(int? colorIndex, int? sizeIndex) => Initial with
+        {
+            ColorIndex = Math.Clamp(colorIndex ?? DrawPalette.DefaultColorIndex, 0, DrawPalette.Colors.Count - 1),
+            SizeIndex = Math.Clamp(sizeIndex ?? DrawPalette.DefaultSizeIndex, 0, DrawPalette.Sizes.Count - 1),
+        };
+
         /// <summary>Picking a tool always resumes drawing: the ink comes back and the canvas takes the mouse.</summary>
         public DrawOnScreenState PickTool(ToolType tool) => this with { Tool = tool, ClickThrough = false, Hidden = false };
 
