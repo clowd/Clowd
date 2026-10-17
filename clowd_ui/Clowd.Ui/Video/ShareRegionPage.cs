@@ -567,10 +567,10 @@ namespace Clowd.UI
         /// <summary>Shows the overlay. Gated on the helper's Hide ack (or the arm timer) because the
         /// wash and the handles are drawn INSIDE the mirrored rectangle — this is the one
         /// deliberate, bounded exception to the rule that this page draws nothing into the pixels
-        /// being broadcast. The overlay also excludes itself from screen capture
-        /// (<c>WindowNativeExtensions.ExcludeFromScreenCapture</c>), which on Windows 10 2004+ and
-        /// macOS keeps its pixels out of the meeting on its own; the hide gate stays because that
-        /// exclusion is best-effort and the builds it cannot help are the ones this must hold on. It
+        /// being broadcast. The overlay is also excluded from screen capture whenever tooltips are
+        /// (<see cref="CaptureExclusion"/>), which on Windows 10 2004+ and macOS keeps its pixels out
+        /// of the meeting on its own; the hide gate stays because that exclusion is best-effort, can
+        /// be switched off, and the builds it cannot help are the ones this must hold on. It
         /// does not close the window: the ack is emitted by the helper's command drain BEFORE the
         /// graphics thread has drawn the hidden frame, so roughly one frame (~33 ms at the default
         /// 30 fps, and longer on a session configured slower) is still exposed. It bounds the

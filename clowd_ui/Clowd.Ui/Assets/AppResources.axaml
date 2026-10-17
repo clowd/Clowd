@@ -1,6 +1,7 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Clowd.UI.Controls"
+        xmlns:helpers="using:Clowd.UI.Helpers"
         xmlns:tray="using:Clowd.UI.Controls.Tray">
 
     <Styles.Resources>
@@ -87,6 +88,8 @@
                   video editor (ve:TrackTip in VideoEditorWindow.axaml) and the image editor
                   (EditorWindow.CreateToolButton) wear it.  -->
             <ControlTheme x:Key="RichTipToolTipTheme" TargetType="ToolTip">
+                <!-- hidden from screen capture with the other tips (CaptureExclusion) -->
+                <Setter Property="helpers:CaptureExclusion.Role" Value="Tooltip" />
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />

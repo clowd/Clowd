@@ -272,6 +272,16 @@
                                    TextWrapping="Wrap"
                                    Text="What starting Clowd yourself does - the desktop or start menu shortcut, the taskbar, the dock - whether or not Clowd is already running." />
                     </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Hide Clowd windows from screen capture" />
+                            <ComboBox x:Name="HideFromCaptureCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="Which of Clowd's own windows are left out of screenshots, recordings and screen shares. Each choice includes the ones before it: Tooltips also covers the border around a recorded or shared region, Toolbars adds the floating button bars, and All windows hides every Clowd window except draw-on-screen ink." />
+                    </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>
         </StackPanel>

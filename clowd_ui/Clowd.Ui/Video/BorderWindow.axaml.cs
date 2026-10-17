@@ -12,7 +12,8 @@ namespace Clowd.UI
     /// topmost transparent Window (not SystemThemedWindow): the 3px accent + 2px white inner
     /// border are inflated OUTSIDE the capture region so no border pixel can ever appear in the
     /// recording, the window is excluded from screen capture outright as a second line of defence
-    /// (WindowNativeExtensions.ExcludeFromScreenCapture), and it is made input-invisible natively
+    /// unless the user turned that off (it is a CaptureRole.Tooltip, see CaptureExclusion), and it
+    /// is made input-invisible natively
     /// (WS_EX_TRANSPARENT + layered + WM_NCHITTEST->HTTRANSPARENT on Windows;
     /// setIgnoresMouseEvents: on macOS).
     /// </summary>
@@ -62,6 +63,11 @@ namespace Clowd.UI
             var accent = new SolidColorBrush(AppStyles.CaptureAccentColor);
             AccentBorder.BorderBrush = accent;
             OverlayText.Stroke = accent;
+
+            // Backstop under the outward inflation in ApplyGeometry: hidden from every capture API
+            // whenever tooltips are, so neither the frame nor the in-region indicators can land in
+            // the recording or the meeting, whatever the DPI rounding does.
+            CaptureExclusion.SetRole(this, CaptureRole.Tooltip);
 
             // Ex-styles must be registered before Show() so they apply from the first frame:
             // click-through (TRANSPARENT), layered (see the mandatory Opened call below), no
@@ -203,10 +209,6 @@ namespace Clowd.UI
             // SetLayeredWindowAttributes call is never repainted (design §4.2).
             WindowNativeExtensions.SetLayeredFullyOpaque(this);
             WindowNativeExtensions.SetIgnoresMouseEvents(this);
-            // Backstop under the outward inflation in ApplyGeometry: the whole window is hidden
-            // from every capture API, so neither the frame nor the in-region indicators can ever
-            // land in the recording or the meeting, whatever the DPI rounding does.
-            WindowNativeExtensions.ExcludeFromScreenCapture(this);
             // Raise above the menu bar BEFORE re-applying geometry: at the default level AppKit
             // constrains the frame away from the menu bar at Show(), so the position set below
             // only sticks once the level is lifted (issue #56).

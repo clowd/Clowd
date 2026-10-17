@@ -59,6 +59,25 @@ namespace Clowd.Config
         DoNothing,
     }
 
+    /// <summary>Which of Clowd's own windows are kept out of screen capture (screenshots, recordings,
+    /// meeting shares). Each step adds to the one before it, so the order is the point: a window is
+    /// hidden when its kind's step is at or below the chosen one (<c>CaptureExclusion</c>). The
+    /// member names are what lands in the settings file.</summary>
+    public enum HideFromCapture
+    {
+        [Description("Hide none")]
+        None,
+
+        [Description("Tooltips")]
+        Tooltips,
+
+        [Description("Toolbars")]
+        Toolbars,
+
+        [Description("All windows")]
+        AllWindows,
+    }
+
     /// <summary>How often Clowd polls the release feed while running. Values are minutes — the
     /// update scheduler converts them straight to a <see cref="System.TimeSpan"/>.</summary>
     public enum UpdateInterval
@@ -360,6 +379,19 @@ namespace Clowd.Config
             set => Set(ref _shortcutClick, value);
         }
 
+        /// <summary>
+        /// Which Clowd windows screen capture cannot see, applied live to every open window by
+        /// <c>CaptureExclusion</c>. Tooltips by default: the tips and the region border are
+        /// transient chrome nobody wants in a recording, while the toolbars stay visible unless asked.
+        /// </summary>
+        [DisplayName("Hide Clowd windows from screen capture")]
+        [Description("Keep Clowd's own windows out of screenshots, recordings and screen shares.")]
+        public HideFromCapture HideFromScreenCapture
+        {
+            get => _hideFromScreenCapture;
+            set => Set(ref _hideFromScreenCapture, value);
+        }
+
         [DisplayName("Confirm before exit")]
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose
@@ -388,6 +420,7 @@ namespace Clowd.Config
         private bool _extendIntoTitleBar = true;
         private ClickAction _trayClick = ClickAction.OpenSettings;
         private ClickAction _shortcutClick = ClickAction.OpenSettings;
+        private HideFromCapture _hideFromScreenCapture = HideFromCapture.Tooltips;
 
         private bool _autoDownloadUpdates = true;
         private UpdateInterval _updateCheckInterval = UpdateInterval.ThreeHourly;

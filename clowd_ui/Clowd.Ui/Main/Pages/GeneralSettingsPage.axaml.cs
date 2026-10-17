@@ -23,6 +23,7 @@ namespace Clowd.UI.Pages
             BindEnumCombo(OverflowCombo, nameof(SettingsGeneral.EditorToolbarOverflow), typeof(ToolbarOverflow));
             BindEnumCombo(TrayClickCombo, nameof(SettingsGeneral.TrayClick), typeof(ClickAction));
             BindEnumCombo(ShortcutClickCombo, nameof(SettingsGeneral.ShortcutClick), typeof(ClickAction));
+            BindEnumCombo(HideFromCaptureCombo, nameof(SettingsGeneral.HideFromScreenCapture), typeof(HideFromCapture));
             BindEnumCombo(UpdateIntervalCombo, nameof(SettingsGeneral.UpdateCheckInterval), typeof(UpdateInterval));
 
             InitializeUpdateGroup();

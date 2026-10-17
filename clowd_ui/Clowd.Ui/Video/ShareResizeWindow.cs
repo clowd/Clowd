@@ -40,9 +40,10 @@ namespace Clowd.UI
     /// helper has acknowledged an <c>obscure hide</c> — or after its 400 ms arm timer gives up —
     /// so the wash and the handles are drawn over a region the meeting is already being shown as a
     /// black card, and the window is closed again before the hide is lifted. Underneath that, the
-    /// window is also excluded from screen capture outright in <see cref="OnOpened"/>
-    /// (<c>WindowNativeExtensions.ExcludeFromScreenCapture</c>), so on Windows 10 2004+ and macOS
-    /// none of its pixels reach the meeting even where the hide did not arm.</para>
+    /// window is also excluded from screen capture outright whenever tooltips are (it stands in for
+    /// the border, so it shares the border's <see cref="CaptureRole.Tooltip"/> role), so on
+    /// Windows 10 2004+ and macOS none of its pixels reach the meeting even where the hide did not
+    /// arm.</para>
     /// </summary>
     internal sealed class ShareResizeWindow : Window
     {
@@ -126,6 +127,12 @@ namespace Clowd.UI
             Region = ShareRegionGeometry.Clamp(region);
 
             Title = "Clowd Region Resize";
+
+            // This window sits ON the mirrored region — the wash and the handles are inside it by
+            // design — so unlike the border it cannot stay out of the meeting by geometry. The page
+            // shows it over an obscure-hide black card for that reason; the capture exclusion is the
+            // second line under that, and the only one if the hide never armed (400 ms timeout).
+            CaptureExclusion.SetRole(this, CaptureRole.Tooltip);
             WindowDecorations = WindowDecorations.None;
             Background = Brushes.Transparent;
             TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
@@ -183,11 +190,6 @@ namespace Clowd.UI
             // so a position set below would not stick and the handles would sit off the region
             // near the top of the screen (issue #56).
             WindowNativeExtensions.SetCanCoverMenuBar(this);
-            // This window sits ON the mirrored region — the wash and the handles are inside it by
-            // design — so unlike the border it cannot stay out of the meeting by geometry. The page
-            // shows it over an obscure-hide black card for that reason; the capture exclusion is the
-            // second line under that, and the only one if the hide never armed (400 ms timeout).
-            WindowNativeExtensions.ExcludeFromScreenCapture(this);
             ApplyGeometry(RenderScaling);
 
             // Activation is the page's job (Activate() right after Show(), because ShowActivated

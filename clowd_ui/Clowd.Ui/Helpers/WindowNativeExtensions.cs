@@ -8,7 +8,8 @@ namespace Clowd.UI.Helpers
 {
     /// <summary>
     /// Native window-style helpers for the recording UI windows (BorderWindow,
-    /// ShareResizeWindow and FloatingTrayWindow, design §4.2). Every member is safe to call on any OS —
+    /// ShareResizeWindow and FloatingTrayWindow, design §4.2), and the capture exclusion every
+    /// Clowd top level is subject to (CaptureExclusion). Every member is safe to call on any OS —
     /// each one is a no-op off its own platform, so callers need no cfg guards.
     /// </summary>
     internal static class WindowNativeExtensions
@@ -25,10 +26,12 @@ namespace Clowd.UI.Helpers
         // SetWindowDisplayAffinity values. WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+) removes the
         // window from every capture path; the older WDA_MONITOR only paints it black, which is
         // worse than nothing for a frame, so it is deliberately not used as a fallback.
+        private const uint WDA_NONE = 0x00000000;
         private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
 
-        // NSWindowSharingNone
+        // NSWindowSharingType: None hides the window from capture, ReadOnly is AppKit's default
         private const nuint NSWindowSharingNone = 0;
+        private const nuint NSWindowSharingReadOnly = 1;
 
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private const uint SWP_NOSIZE = 0x0001;
@@ -204,39 +207,40 @@ namespace Clowd.UI.Helpers
         }
 
         /// <summary>
-        /// Hides the window from screen capture: DXGI desktop duplication, Windows Graphics Capture
-        /// (monitor and window), GDI BitBlt of the screen, PrintScreen and the Snipping Tool all
-        /// render whatever is behind it instead. For a window drawn over the region being recorded
-        /// or shared this is the backstop under the geometry: no accent pixel, wash, handle or
-        /// indicator can reach the recording or the meeting even if a DPI rounding puts it inside
-        /// the region. Call from the window's Opened handler — the native handle must exist.
+        /// Hides the top level from screen capture, or shows it again: while hidden, DXGI desktop
+        /// duplication, Windows Graphics Capture (monitor and window), GDI BitBlt of the screen,
+        /// PrintScreen and the Snipping Tool all render whatever is behind it instead. Which windows
+        /// are hidden is the user's choice (<see cref="CaptureExclusion"/> decides and is the only
+        /// caller). The native handle must exist, so this runs from Opened or later.
         /// </summary>
         /// <remarks>
         /// Windows: <c>SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)</c>, honoured from Windows 10
-        /// 2004 (build 19041) by DWM for every capture API, layered windows included. Older builds
-        /// reject the value and the call returns false; that is swallowed, because the window's own
-        /// geometry keeps it out of the recording on its own and the alternative (WDA_MONITOR) would
-        /// black the window out rather than remove it. The affinity is a property of the HWND and
-        /// survives Avalonia's style re-applications, unlike an extended style.
-        /// <para>macOS: <c>NSWindow.sharingType = NSWindowSharingNone</c>, the per-window opt-out
-        /// that the CGWindowList capture path and ScreenCaptureKit honour. Untested here —
-        /// compile-guarded per design §4.2.</para>
+        /// 2004 (build 19041) by DWM for every capture API, layered windows included, and
+        /// <c>WDA_NONE</c> to undo it. Older builds reject the exclude value and the call returns
+        /// false; that is swallowed, because the alternative (WDA_MONITOR) would black the window out
+        /// rather than remove it. The affinity is a property of the HWND and survives Avalonia's style
+        /// re-applications, unlike an extended style.
+        /// <para>macOS: <c>NSWindow.sharingType</c>, <c>NSWindowSharingNone</c> to hide and AppKit's
+        /// default <c>NSWindowSharingReadOnly</c> to show; the per-window opt-out that the
+        /// CGWindowList capture path and ScreenCaptureKit honour. Untested here — compile-guarded per
+        /// design §4.2.</para>
         /// </remarks>
-        public static void ExcludeFromScreenCapture(Window window)
+        public static void SetExcludedFromScreenCapture(TopLevel topLevel, bool excluded)
         {
-            var handle = window?.TryGetPlatformHandle();
+            var handle = topLevel?.TryGetPlatformHandle();
             if (handle == null)
                 return;
 
             if (OperatingSystem.IsWindows())
             {
                 if (handle.Handle != IntPtr.Zero)
-                    SetWindowDisplayAffinity(handle.Handle, WDA_EXCLUDEFROMCAPTURE);
+                    SetWindowDisplayAffinity(handle.Handle, excluded ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
             }
             else if (OperatingSystem.IsMacOS())
             {
                 if (handle is IMacOSTopLevelPlatformHandle mac && mac.NSWindow != IntPtr.Zero)
-                    objc_msgSend(mac.NSWindow, sel_registerName("setSharingType:"), NSWindowSharingNone);
+                    objc_msgSend(mac.NSWindow, sel_registerName("setSharingType:"),
+                                 excluded ? NSWindowSharingNone : NSWindowSharingReadOnly);
             }
         }
 

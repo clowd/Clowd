@@ -1,6 +1,7 @@
 ﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:tray="using:Clowd.UI.Controls.Tray"
+                    xmlns:helpers="using:Clowd.UI.Helpers">
 
         <!-- Spec §10. One look, two users: the hover tooltip and the 6 s status blip are the same little
              dark chip, so they are the same theme; a blip that looked different would read as a second
@@ -8,6 +9,8 @@
              can point from, and these are re-aimed on every rotation) and no wrapping: a tip long
              enough to wrap belongs in the window, not over the desktop. -->
         <ControlTheme x:Key="TrayTipTheme" TargetType="ContentControl">
+            <!-- both users hide from screen capture as tips (CaptureExclusion): the blip reads as one -->
+            <Setter Property="helpers:CaptureExclusion.Role" Value="Tooltip" />
             <Setter Property="Background" Value="{x:Static tray:TrayTokens.TipFill}" />
             <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
             <Setter Property="FontSize" Value="11" />

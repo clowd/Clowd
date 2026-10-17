@@ -179,6 +179,10 @@ namespace Clowd
                 // buttons, labels and focus rings all follow it.
                 AccentTheme.Attach();
 
+                // keeps the windows the user chose out of screen capture, from the first one shown
+                // (General > Behavior; see CaptureExclusion)
+                CaptureExclusion.Install();
+
                 // must run before anything resolves a string. An empty Language setting keeps the
                 // OS UI language, which Loc captured on first touch just now.
                 Loc.ApplyCulture(SettingsRoot.Current.General.Language);

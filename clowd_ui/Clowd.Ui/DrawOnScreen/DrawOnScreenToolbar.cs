@@ -167,10 +167,6 @@ namespace Clowd.UI.DrawOnScreen
             _controller.Changed += OnControllerChanged;
             Loc.CultureChanged += OnCultureChanged;
             Refresh();
-
-            // subscribed after the chassis's own Opened handler (registered in the base constructor),
-            // so the native window is fully set up before its display affinity is changed.
-            Opened += (s, e) => WindowNativeExtensions.ExcludeFromScreenCapture(this);
         }
 
         protected override void OnClosed(EventArgs e)

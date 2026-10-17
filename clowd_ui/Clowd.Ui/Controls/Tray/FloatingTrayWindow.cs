@@ -150,6 +150,9 @@ namespace Clowd.UI.Controls.Tray
             // whose owner must know the size before the window exists, which declares it up front.
             SizeToContent = IsFixedSize ? SizeToContent.Manual : SizeToContent.WidthAndHeight;
 
+            // hidden from capture with the other toolbars when the user asks for it (CaptureExclusion)
+            CaptureExclusion.SetRole(this, CaptureRole.Toolbar);
+
             Topmost = true;
             // load-bearing on macOS, not cosmetic: the dock icon appears for any visible window that is
             // in the taskbar, and a dock resize mid-capture shifts the very content being captured.

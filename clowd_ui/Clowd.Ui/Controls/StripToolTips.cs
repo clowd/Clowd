@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Clowd.UI.Helpers;
 
 namespace Clowd.UI.Controls
 {
@@ -314,6 +315,8 @@ namespace Clowd.UI.Controls
                         WindowManagerAddShadowHint = false,
                         Child = _frame = new Decorator(),
                     };
+                    // whatever it hosts, this popup only ever shows tips (CaptureExclusion)
+                    CaptureExclusion.SetRole(_popup, CaptureRole.Tooltip);
                     // the strip as logical parent, so the tip resolves the strip window's styles and
                     // theme variant (Avalonia parents a tip's popup to its owner for the same reason);
                     // it never changes, since leaving the logical tree closes a popup

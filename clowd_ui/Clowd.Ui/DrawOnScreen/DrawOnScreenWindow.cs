@@ -53,6 +53,9 @@ namespace Clowd.UI.DrawOnScreen
             CanResize = false;
             SizeToContent = SizeToContent.Manual;
 
+            // the ink is what the user wants recorded, so no capture setting hides it
+            CaptureExclusion.SetRole(this, CaptureRole.Content);
+
             // the resolver and the mode go in before the tool: picking the tool binds its settings,
             // and those must come from the session's own table, never the editor's persisted ones
             Canvas = new DrawingCanvas
