@@ -20,6 +20,8 @@ namespace Clowd.UI.Helpers
         public const uint WS_EX_NOACTIVATE = 0x08000000;
 
         private const uint WM_NCHITTEST = 0x0084;
+        private const uint WM_SYSCOMMAND = 0x0112;
+        private const long SC_KEYMENU = 0xF100;
         private const int HTTRANSPARENT = -1;
         private const uint LWA_ALPHA = 0x00000002;
 
@@ -106,6 +108,35 @@ namespace Clowd.UI.Helpers
             {
                 handled = true;
                 return new IntPtr(HTTRANSPARENT);
+            }
+
+            return IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// Restores Alt+Space (the window's system menu) on Windows, issue #108. Avalonia's WndProc
+        /// swallows every <c>SC_KEYMENU</c> whose lParam has no high word, to stop a bare Alt or
+        /// F10 from entering the native menu loop — but Alt+Space arrives as <c>SC_KEYMENU</c> with
+        /// lParam = ' ', so it is swallowed too (AvaloniaUI/Avalonia#14545). Hooks run before
+        /// Avalonia's own handler, so this one hands just that case to DefWindowProc and leaves the
+        /// bare-Alt suppression alone. Idempotent; App installs it on every window as it opens.
+        /// </summary>
+        public static void AddSystemMenuKeyHook(Window window)
+        {
+            if (!OperatingSystem.IsWindows())
+                return;
+
+            // WindowOpened fires on every Show; keep one registration per window
+            Win32Properties.RemoveWndProcHookCallback(window, SystemMenuKeyHook);
+            Win32Properties.AddWndProcHookCallback(window, SystemMenuKeyHook);
+        }
+
+        private static IntPtr SystemMenuKeyHook(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_SYSCOMMAND && ((long)wParam & 0xFFF0) == SC_KEYMENU && (long)lParam == ' ')
+            {
+                handled = true;
+                return DefWindowProcW(hWnd, msg, wParam, lParam);
             }
 
             return IntPtr.Zero;
@@ -446,6 +477,9 @@ namespace Clowd.UI.Helpers
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr SetWindowLongPtrW(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr DefWindowProcW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();

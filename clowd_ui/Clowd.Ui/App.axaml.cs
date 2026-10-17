@@ -88,6 +88,9 @@ namespace Clowd
             // for every dialog in the app — see ModalDim for why no call site has to opt in.
             ModalDim.Install();
 
+            // Alt+Space opens the window's system menu, which Avalonia otherwise swallows (#108).
+            Window.WindowOpenedEvent.AddClassHandler<Window>((window, _) => WindowNativeExtensions.AddSystemMenuKeyHook(window));
+
             // the SDK's AI generators resolve the inference binary through this delegate on every
             // run — installed before Startup so the --video-edit/--video-spike harnesses (which
             // return before the tray lifetime is set up) get it too.
