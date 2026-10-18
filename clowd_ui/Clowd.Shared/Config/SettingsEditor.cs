@@ -206,7 +206,7 @@ namespace Clowd.Config
     {
         [Category("Sessions")]
         [DisplayName("Restore sessions on startup")]
-        [Description("Reopen image and video editors that were still open when Clowd was restarted for an update or the computer shut down")]
+        [Description("Reopen editors left open when Clowd restarts or the computer shuts down.")]
         public bool RestoreSessionsOnClowdStart
         {
             get => _restoreSessionsOnClowdStart;
@@ -219,7 +219,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Toolbars")]
         [DisplayName("Layout")]
-        [Description("Modern floats rounded tool bars on the window background; Compact is the denser, flat look. Editors already open follow the change straight away.")]
+        [Description("Modern uses floating rounded toolbars, Compact a denser flat look.")]
         public EditorLayout EditorLayout
         {
             get => _editorLayout;
@@ -232,7 +232,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Toolbars")]
         [DisplayName("Toolbar overflow")]
-        [Description("What the editor tool bars do with tools that do not fit. Wrap adds a second column; Hide keeps one and puts the rest behind a more button, where the last tool you pick stays on the bar.")]
+        [Description("What toolbars do with tools that do not fit.")]
         public ToolbarOverflow EditorToolbarOverflow
         {
             get => _editorToolbarOverflow;
@@ -241,7 +241,7 @@ namespace Clowd.Config
 
         [Category("Image Editor")]
         [DisplayName("Canvas background")]
-        [Description("Color drawn behind transparent areas of the image in the editor")]
+        [Description("Color shown behind transparent areas of an image.")]
         public Color CanvasBackground
         {
             get => _canvasBackground;
@@ -257,7 +257,7 @@ namespace Clowd.Config
 
         [Category("Image Editor")]
         [DisplayName("Tool preferences")]
-        [Description("Every drawing tool remembers the color, line width and font last used with it")]
+        [Description("Every drawing tool remembers the color, line width and font last used with it.")]
         [ConfigurationKeyName("ToolsV2"), JsonPropertyName("ToolsV2")] // V2: reset for everyone after the tool rework
         public Dictionary<ToolType, SavedToolSettings> Tools
         {
@@ -267,7 +267,7 @@ namespace Clowd.Config
 
         [Category("Sessions")]
         [DisplayName("Delete sessions after")]
-        [Description("Captures older than this are removed from Recent sessions automatically. Starred items — and anything linked to them — are kept forever, for as long as they stay starred")]
+        [Description("Remove captures older than this from Recent, except starred items.")]
         public TimeOption DeleteSessionsAfter
         {
             get => _deleteSessionsAfter;
@@ -279,7 +279,7 @@ namespace Clowd.Config
         [Category("Video Editor")]
         [VisibleWhen(nameof(SettingsRecording.Mode), RecordingMode.Studio, Section = nameof(SettingsRoot.Recording))]
         [DisplayName("Capture media keys in video editor")]
-        [Description("Let the keyboard's media keys drive the video editor while its window is focused: play/pause toggles playback, next track steps one frame forward and previous track one frame back. Those keys are swallowed while the editor is focused, so nothing else playing on the machine reacts to them; in every other window they keep doing what they always did.")]
+        [Description("Use the media keys to play, pause and step frames while the video editor is focused.")]
         public bool CaptureMediaKeys
         {
             get => _captureMediaKeys;

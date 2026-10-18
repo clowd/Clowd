@@ -30,7 +30,7 @@ namespace Clowd.Upload
     public class AzureUploadProvider : UploadProviderBase, IAccelerateProvider
     {
         public override string Name => "Azure Storage";
-        public override string Description => "Uploads any file as a BlockBlob to a public container";
+        public override string Description => "Uploads any file to a public Azure container";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.All;
         public override Stream Icon => new Resource().AzureIcon;
         public override bool SupportsUnseekableUpload => true;
@@ -74,15 +74,14 @@ namespace Clowd.Upload
             }
         }
 
-        [Description("Route uploads through clwd.app so a shareable link is ready immediately, "
-                    + "while the file relays to this container in the background.")]
+        [Description("Route uploads through clwd.app so the link is ready immediately.")]
         public bool AccelerateUploads
         {
             get => _accelerateUploads;
             set => Set(ref _accelerateUploads, value);
         }
 
-        [Description("The accelerate server to route uploads through when the toggle above is on.")]
+        [Description("Server used for accelerated uploads.")]
         public string AccelerateServerUrl
         {
             get => _accelerateServerUrl;

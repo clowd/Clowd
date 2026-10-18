@@ -64,8 +64,8 @@ namespace Clowd.UI
             {
                 var gesture = Clowd.Config.SettingsRoot.Current?.Hotkeys?.CaptureRegionShortcut?.ToString();
                 return String.IsNullOrEmpty(gesture)
-                    ? "Use the tray icon to take your first screenshot — it will show up here."
-                    : $"Press {gesture} or use the tray icon to take your first screenshot — it will show up here.";
+                    ? "Use the tray icon to take your first screenshot."
+                    : $"Press {gesture} or use the tray icon to take your first screenshot.";
             }
         }
 
@@ -126,8 +126,8 @@ namespace Clowd.UI
                     Segment("All", RecentFilter.All, "Show everything"),
                     Segment("Images", RecentFilter.Image, "Screenshots and images"),
                     Segment("Recordings", RecentFilter.Recording, "Recordings and GIFs"),
-                    Segment("Uploads", RecentFilter.Upload, "Anything uploaded, or waiting to be"),
-                    Segment("Starred", RecentFilter.Starred, "Items you starred — and whatever they are linked to"),
+                    Segment("Uploads", RecentFilter.Upload, "Uploaded or waiting to upload"),
+                    Segment("Starred", RecentFilter.Starred, "Starred items and anything linked to them"),
                 },
             };
 
@@ -468,8 +468,8 @@ namespace Clowd.UI
             // the starred list is the one an empty page can be *fixed* from, so it says how rather
             // than pointing back at "All".
             EmptyDetail.Text = _filter == RecentFilter.Starred
-                ? "Hover an item in Recent and click its star to keep it here — starred items are never removed by the automatic cleanup."
-                : "Nothing in your recent captures matches this filter — choose \"All\" to see everything.";
+                ? "Star an item to keep it here and protect it from automatic cleanup."
+                : "Nothing matches this filter.";
         }
 
         /// <summary>Selects a session's row and scrolls it into view — used to walk the user to the
@@ -765,7 +765,7 @@ namespace Clowd.UI
             if (session.OpenEditor != null)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Information,
-                    "The selected item is currently open and can not be deleted.");
+                    "This item is open and cannot be deleted.");
                 return;
             }
 
@@ -1064,7 +1064,7 @@ namespace Clowd.UI
                 {
                     await clipboard.SetTextAsync(record.Url);
                     if (TopLevel.GetTopLevel(this) is Window window)
-                        Toast.Show(window, "Upload URL Copied to Clipboard");
+                        Toast.Show(window, "Upload link copied");
                 }
             }
             catch (Exception ex)

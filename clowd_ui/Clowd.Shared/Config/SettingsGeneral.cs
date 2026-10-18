@@ -138,7 +138,7 @@ namespace Clowd.Config
 #endif
 
         [DisplayName("Start Clowd when your computer starts up")]
-        [Description("Launches Clowd automatically when you log in.")]
+        [Description("Clowd starts quietly in the notification area when you log in.")]
         public bool RegisterAutoStart
         {
             get => _registerAutoStart;
@@ -158,7 +158,7 @@ namespace Clowd.Config
 #endif
 
         [DisplayName("Add 'Upload with Clowd' to the Explorer context menu")]
-        [Description("Adds a right-click entry for files and folders that uploads them with Clowd.")]
+        [Description("Adds a right-click entry that uploads files and folders with Clowd.")]
         public bool RegisterExplorerContextMenu
         {
             get => _registerExplorerContextMenu;
@@ -166,7 +166,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Automatically check for and download updates")]
-        [Description("Periodically looks for a newer release while Clowd is running, and downloads it ready to be applied.")]
+        [Description("Look for new releases while Clowd is running and download them in the background.")]
         public bool AutoDownloadUpdates
         {
             get => _autoDownloadUpdates;
@@ -182,7 +182,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Automatically restart Clowd to apply updates in the background")]
-        [Description("Silently restarts Clowd to finish installing a downloaded update, but only once the computer has been idle for a while.")]
+        [Description("Only restarts after 10 minutes of inactivity, never during a capture, recording or upload.")]
         public bool AutoApplyUpdates
         {
             get => _autoApplyUpdates;
@@ -194,8 +194,8 @@ namespace Clowd.Config
         /// this only widens the update feed to also include releases still flagged as
         /// pre-releases on GitHub (see UpdateService), so the newest release wins either way.
         /// </summary>
-        [DisplayName("Opt-in to experimental builds")]
-        [Description("Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases.")]
+        [DisplayName("Opt in to experimental builds")]
+        [Description("Experimental builds get new features first but may have more bugs.")]
         public bool IncludePrereleaseUpdates
         {
             get => _includePrereleaseUpdates;
@@ -218,7 +218,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Theme")]
-        [Description("Choose the light or dark appearance, or follow the Windows setting.")]
+        [Description("Choose light or dark, or follow the system setting.")]
         public AppTheme Theme
         {
             get => _theme;
@@ -234,8 +234,7 @@ namespace Clowd.Config
         /// </summary>
         [HiddenOnWindows]
         [DisplayName("Extend windows into the title bar")]
-        [Description("Run window content up under a transparent title bar, the way most modern " +
-                     "Mac apps look. Takes effect for windows opened from now on.")]
+        [Description("Run window content under a transparent title bar, like most modern Mac apps.")]
         public bool ExtendIntoTitleBar
         {
             get => _extendIntoTitleBar;
@@ -248,7 +247,7 @@ namespace Clowd.Config
         /// out on a platform that hides this checkbox.
         /// </summary>
         [DisplayName("Use system accent color")]
-        [Description("Draw Clowd's capture surfaces in the accent color chosen in Windows settings")]
+        [Description("Use the accent color chosen in Windows settings.")]
         [HiddenOnMacOS]
         public bool UseSystemAccentColor
         {
@@ -263,9 +262,7 @@ namespace Clowd.Config
         /// <see cref="GetEffectiveAccentColor"/>.
         /// </summary>
         [DisplayName("Accent color")]
-        [Description("Clowd's accent color: the crosshair, selection border and primary buttons in the " +
-                     "capture overlay, the recording toolbar and border, and the highlighted controls " +
-                     "throughout the app.")]
+        [Description("Colors the capture overlay, the recording toolbar and highlighted controls.")]
         [DisabledWhen(nameof(UseSystemAccentColor))]
         public Color AccentColor
         {
@@ -281,8 +278,7 @@ namespace Clowd.Config
         /// exact color and has decided they can live with that.
         /// </summary>
         [DisplayName("Maintain minimum contrast")]
-        [Description("Darken the accent color until the white labels drawn on it stay readable. " +
-                     "Turning this off uses your color exactly as picked, which may make those labels hard to read.")]
+        [Description("Darken the accent color so white labels on it stay readable.")]
         public bool MaintainMinimumContrast
         {
             get => _maintainMinimumContrast;
@@ -314,7 +310,7 @@ namespace Clowd.Config
             => (UseSystemAccentColor ? AccentColors.GetSystemAccent() : null) ?? AccentColor;
 
         [DisplayName("Tray icon click")]
-        [Description("What a single click on the tray icon does. The right-click menu always offers everything.")]
+        [Description("What a single click on the tray icon does.")]
         public ClickAction TrayClick
         {
             get => _trayClick;
@@ -322,7 +318,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Shortcut click")]
-        [Description("What starting Clowd yourself does — the desktop/start menu shortcut, the taskbar or the dock — whether or not Clowd is already running. An automatic startup launch is unaffected: it always stays in the notification area.")]
+        [Description("What launching Clowd from a shortcut, the taskbar or the dock does.")]
         public ClickAction ShortcutClick
         {
             get => _shortcutClick;
@@ -343,7 +339,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Confirm before exit")]
-        [Description("If true, Clowd will prompt for confirmation before closing.")]
+        [Description("Ask before Clowd closes.")]
         public bool ConfirmClose
         {
             get => _confirmClose;

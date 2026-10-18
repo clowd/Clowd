@@ -54,7 +54,7 @@ namespace Clowd.UI.Config
                 HorizontalContentAlignment = HorizontalAlignment.Center,
             };
             _button.Click += OnButtonClick;
-            ToolTip.SetTip(_button, "Click, then press the new key combination (Esc cancels)");
+            ToolTip.SetTip(_button, "Click, then press a new key combination");
             grid.Children.Add(_button);
 
             _clearButton = new Button

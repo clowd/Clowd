@@ -126,20 +126,20 @@ namespace Clowd.UI
             var intro = tab switch
             {
                 SettingsPageTab.SettingsSystem =>
-                    "Choose how Clowd looks and behaves, including its appearance, close confirmation, and tray icon action.",
+                    "Choose how Clowd looks and behaves.",
                 SettingsPageTab.SettingsHotkeys =>
-                    "Click a shortcut, then press the new key combination — Esc cancels. Use ✕ to remove a shortcut.",
+                    "Click a shortcut and press a new key combination, or Esc to cancel.",
                 SettingsPageTab.SettingsCapture => GetCaptureIntroText(),
                 SettingsPageTab.SettingsRecording =>
-                    "Recording settings apply to your next recording. If a recording is waiting to start, changes are applied to it automatically. Changes made while a recording is in progress take effect only after it finishes.",
+                    "Changes apply to your next recording.",
                 SettingsPageTab.SettingsShareRegion =>
-                    "A shared region mirrors part of your screen into a window a meeting app can share. The obscure settings apply immediately, including to a region you are sharing right now; the frame rate applies to the next region you share.",
+                    "A shared region mirrors part of your screen into a window a meeting app can share.",
                 SettingsPageTab.SettingsDrawOnScreen =>
-                    "Draw on Screen puts ink over your whole desktop. Its toolbar's keyboard button shows the keys you press on screen, styled by the settings below; changes apply right away, including to a drawing that is already open.",
+                    "These settings style the keys shown by the Draw on Screen toolbar's keyboard button.",
                 SettingsPageTab.SettingsEditor =>
-                    "Choose how the image and video editors look, how their sessions are restored and cleaned up, and reset saved drawing-tool preferences.",
+                    "Choose how the image and video editors look and how long their sessions are kept.",
                 SettingsPageTab.SettingsUploads =>
-                    "Enable the upload destinations you wish to use, then click a category chip (e.g. Image) to make a provider the default destination for that kind of file.",
+                    "Enable the destinations you want, then click a file type to make one the default for it.",
                 _ => null,
             };
 
@@ -151,8 +151,8 @@ namespace Clowd.UI
         {
             var gesture = SettingsRoot.Current.Hotkeys.CaptureRegionShortcut?.ToString();
             return String.IsNullOrEmpty(gesture)
-                ? "These settings apply to the live capture opened from Clowd's tray menu. No Capture Region shortcut is currently assigned; you can add one on the Hotkeys page."
-                : $"These settings apply to the live capture opened when you press {gesture}. You can change this shortcut on the Hotkeys page.";
+                ? "These settings apply to the capture overlay, opened from the tray menu."
+                : $"These settings apply to the capture overlay, opened with {gesture}.";
         }
 
         /// <summary>The nav's status badges: the System entry turns into a red alert reading

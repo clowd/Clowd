@@ -60,9 +60,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), ShareRegionMode.On)]
         [DisplayName("Frame rate")]
-        [Description("Frame rate of the shared region's mirror window. Lower costs less GPU and less " +
-                     "of the meeting's bandwidth; higher is smoother for motion and video. Applies to " +
-                     "the next region you share, not one already being shared.")]
+        [Description("Frame rate of the mirror window, applied to the next region you share.")]
         [Range(1, 240)]
         public int Fps
         {
@@ -78,7 +76,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), ShareRegionMode.On)]
         [DisplayName("Capture method")]
-        [Description("Which Windows API captures the screen. DXGI avoids the yellow capture border on Windows 10; WGC works where DXGI captures black frames. Applies to the next region you share.")]
+        [Description("Which Windows API captures the screen, applied to the next region you share.")]
         [HiddenOnMacOS]
         public ScreenCaptureMethod CaptureMethod
         {
@@ -89,10 +87,7 @@ namespace Clowd.Config
         [Category("Obscure")]
         [VisibleWhen(nameof(Mode), ShareRegionMode.On)]
         [DisplayName("Mode")]
-        [Description("How the shared region is obscured while the HIDE button is on. Hide covers it " +
-                     "completely; blur and pixelate leave shapes and movement visible. If the sharing " +
-                     "helper's GPU effect fails to build, obscuring is unavailable for that session " +
-                     "whatever this says.")]
+        [Description("How the region is obscured while the HIDE button is on.")]
         public ShareRegionObscureStyle ObscureStyle
         {
             get => _obscureStyle;
@@ -105,8 +100,7 @@ namespace Clowd.Config
         [Category("Obscure")]
         [VisibleWhen(nameof(Mode), ShareRegionMode.On)]
         [DisplayName("Strength")]
-        [Description("How strong the blur or pixelation is (1-100). Not used by Hide. Pixelate blocks " +
-                     "stay small even at 100, so it obscures detail rather than censoring content.")]
+        [Description("How strong the blur or pixelation is.")]
         [Range(1, 100)]
         [DisabledWhen(nameof(ObscureUsesStrength), false)]
         public int ObscureStrength

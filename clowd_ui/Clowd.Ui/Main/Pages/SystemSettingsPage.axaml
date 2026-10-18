@@ -110,7 +110,7 @@
                             <ComboBox x:Name="ThemeCombo" MinWidth="160" />
                         </StackPanel>
                         <TextBlock Classes="Caption"
-                                   Text="Choose the light or dark appearance, or follow the Windows setting." />
+                                   Text="Choose light or dark, or follow the system setting." />
                     </StackPanel>
 
                     <!-- macOS only (hidden in the code-behind): the window chrome choice. Read
@@ -123,7 +123,7 @@
                         </CheckBox>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="Run window content up under a transparent title bar, the way most modern Mac apps look. Windows already open keep their current look until you close them." />
+                                   Text="Run window content under a transparent title bar, like most modern Mac apps." />
                     </StackPanel>
 
                     <!-- The accent of the capture surfaces: the overlay, and the recording toolbar
@@ -136,7 +136,7 @@
                             <TextBlock Text="Use system accent color" />
                         </CheckBox>
                         <TextBlock Classes="Caption"
-                                   Text="Follow the accent color chosen in Windows settings instead of picking one here." />
+                                   Text="Use the accent color chosen in Windows settings." />
                     </StackPanel>
 
                     <StackPanel x:Name="AccentColorSetting" Classes="Setting">
@@ -169,7 +169,7 @@
                         </CheckBox>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="Darken the accent color until the white labels drawn on it stay readable. Turning this off uses your color exactly as picked, which may make those labels hard to read." />
+                                   Text="Darken the accent color so white labels on it stay readable." />
                     </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>
@@ -181,13 +181,13 @@
                         </CheckBox>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="A startup launch goes straight to the notification area. Starting Clowd yourself does whatever 'Shortcut click' below says." />
+                                   Text="Clowd starts quietly in the notification area." />
                         <TextBlock x:Name="AutoStartStatusText" Classes="Caption" IsVisible="False" />
                     </StackPanel>
 
                     <StackPanel Classes="Setting">
                         <CheckBox IsChecked="{Binding ConfirmClose}">
-                            <TextBlock Text="Ask/confirm before exiting" />
+                            <TextBlock Text="Confirm before exiting" />
                         </CheckBox>
                     </StackPanel>
 
@@ -197,7 +197,7 @@
                             <ComboBox x:Name="TrayClickCombo" MinWidth="160" />
                         </StackPanel>
                         <TextBlock Classes="Caption"
-                                   Text="What a single click on the tray icon does. The right-click menu always offers everything." />
+                                   Text="What a single click on the tray icon does." />
                     </StackPanel>
 
                     <StackPanel Classes="Setting">
@@ -207,7 +207,7 @@
                         </StackPanel>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="What starting Clowd yourself does - the desktop or start menu shortcut, the taskbar, the dock - whether or not Clowd is already running." />
+                                   Text="What launching Clowd from a shortcut, the taskbar or the dock does." />
                     </StackPanel>
 
                     <StackPanel Classes="Setting">
@@ -217,7 +217,7 @@
                         </StackPanel>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="Which of Clowd's own windows are left out of screenshots, recordings and screen shares. Each choice includes the ones before it: Tooltips also covers the border around a recorded or shared region, Toolbars adds the floating button bars, and All windows hides every Clowd window except draw-on-screen ink." />
+                                   Text="Keep Clowd's own windows out of screenshots, recordings and screen shares." />
                     </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>

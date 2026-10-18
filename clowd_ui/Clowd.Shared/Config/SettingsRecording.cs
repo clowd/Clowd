@@ -182,7 +182,7 @@ namespace Clowd.Config
         [Category("Output")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Output folder")]
-        [Description("Folder that finished recordings are saved to. If it is empty or unavailable, your Videos folder is used.")]
+        [Description("Where recordings are saved, falling back to your Videos folder.")]
         public string OutputDirectory
         {
             get => _outputDirectory;
@@ -192,7 +192,7 @@ namespace Clowd.Config
         [Category("Output")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Filename pattern")]
-        [Description("Date format used to name saved recordings (.NET date format string). A number is appended if the name is already taken.")]
+        [Description("The .NET date format used to name saved recordings.")]
         public string FilenamePattern
         {
             get => _filenamePattern;
@@ -205,7 +205,7 @@ namespace Clowd.Config
         [Category("Output")]
         [VisibleWhen(nameof(Mode), Instant)]
         [DisplayName("File format")]
-        [Description("Container the recording is saved as. MP4 plays everywhere; MKV survives a crash or forced stop with everything recorded so far intact, but fewer players and sites accept it.")]
+        [Description("MP4 plays everywhere, while MKV keeps the recording intact after a crash.")]
         public VideoContainer Container
         {
             get => _container;
@@ -215,7 +215,7 @@ namespace Clowd.Config
         [Category("Output")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Open when finished")]
-        [Description("What to show when a recording finishes: the video editor (to trim it and place the webcam), the Recents page (to play or upload it), the folder it was saved to, or nothing")]
+        [Description("What to open when a recording finishes.")]
         public RecordingFinishAction OpenWhenFinished
         {
             get => _openWhenFinished;
@@ -224,8 +224,8 @@ namespace Clowd.Config
 
         [Category("Output")]
         [VisibleWhen(nameof(Mode), Studio)]
-        [DisplayName("Render automatically when capture finished")]
-        [Description("Flatten the recording to a single shareable video as soon as capture stops, without waiting for you to open the editor. The multi-track original is kept, so you can still edit and re-render it.")]
+        [DisplayName("Render automatically when recording finishes")]
+        [Description("Render a shareable video as soon as recording stops, keeping the editable original.")]
         public bool RenderWhenFinished
         {
             get => _renderWhenFinished;
@@ -246,7 +246,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Frame rate presets")]
-        [Description("The frame rates the FPS tile on the recording toolbar cycles through, also offered in the video editor's render dialog. A preset above the monitor refresh rate (or above 360) is skipped when recording; a render is never encoded faster than its fastest clip. Set a box to 0 to drop that preset.")]
+        [Description("The frame rates the FPS tile on the recording toolbar cycles through, also offered in the video editor's render dialog. Presets above the monitor's refresh rate are skipped when recording. Set a box to 0 to remove that preset.")]
         public FpsPresets FpsPresets
         {
             get => _fpsPresets;
@@ -259,7 +259,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Instant)]
         [DisplayName("Quality")]
-        [Description("Encoder quality preset — higher quality produces larger files")]
+        [Description("Higher quality makes larger files.")]
         public VideoQuality Quality
         {
             get => _quality;
@@ -278,7 +278,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Max output width")]
-        [Description("Downscale the recording so its width does not exceed this many pixels (0 = no limit). Aspect ratio is preserved.")]
+        [Description("Downscale recordings wider than this, or 0 for no limit.")]
         [Range(0, 16384)]
         public int MaxResolutionWidth
         {
@@ -289,7 +289,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Max output height")]
-        [Description("Downscale the recording so its height does not exceed this many pixels (0 = no limit). Aspect ratio is preserved.")]
+        [Description("Downscale recordings taller than this, or 0 for no limit.")]
         [Range(0, 16384)]
         public int MaxResolutionHeight
         {
@@ -300,7 +300,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Hardware acceleration")]
-        [Description("Prefer a hardware H.264 encoder (NVENC/AMF/QSV) when available, falling back to software x264")]
+        [Description("Prefer a hardware H.264 encoder (NVENC/AMF/QSV) when available.")]
         public bool HardwareAccelerated
         {
             get => _hardwareAccelerated;
@@ -310,7 +310,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Lower CPU usage")]
-        [Description("Use a lighter encoder configuration that costs less CPU while recording, at some expense of quality and file size. Turn on if recording makes the machine stutter.")]
+        [Description("Use a lighter encoder setting that trades some quality and file size for less CPU.")]
         public bool LowCpuUsage
         {
             get => _lowCpuUsage;
@@ -320,7 +320,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Capture method")]
-        [Description("Which Windows API captures the screen. DXGI avoids the yellow capture border on Windows 10; WGC works where DXGI records black frames.")]
+        [Description("Which Windows API captures the screen.")]
         [HiddenOnMacOS]
         public ScreenCaptureMethod CaptureMethod
         {
@@ -341,7 +341,7 @@ namespace Clowd.Config
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Instant)]
         [DisplayName("Highlight mouse clicks")]
-        [Description("Show an expanding highlight at the pointer on every click — visible only in the recording, not on your screen")]
+        [Description("Show a highlight on every click, visible only in the recording.")]
         public bool HighlightClicks
         {
             get => _highlightClicks;
@@ -351,7 +351,7 @@ namespace Clowd.Config
         [Category("Audio")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Capture speakers")]
-        [Description("Record system/speaker output audio")]
+        [Description("Record system audio.")]
         public bool CaptureSpeaker
         {
             get => _captureSpeaker;
@@ -361,7 +361,7 @@ namespace Clowd.Config
         [Category("Audio")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Speaker device")]
-        [Description("Speaker/output device to record")]
+        [Description("Output device to record.")]
         [AudioDeviceSelector("speaker")]
         [HiddenOnMacOS]
         public string SpeakerDeviceId
@@ -373,7 +373,7 @@ namespace Clowd.Config
         [Category("Audio")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Compensate for speaker volume")]
-        [Description("Boost captured speaker audio to undo the system volume slider on devices that apply it in software (common for USB audio), so recordings are not quieter than what you heard. Devices with hardware volume control are left untouched.")]
+        [Description("Undo software volume control on devices that use it, so recordings are as loud as what you heard.")]
         [HiddenOnMacOS]
         public bool SpeakerVolumeCompensation
         {
@@ -384,7 +384,7 @@ namespace Clowd.Config
         [Category("Audio")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Capture microphone")]
-        [Description("Record microphone/input audio")]
+        [Description("Record microphone audio.")]
         public bool CaptureMicrophone
         {
             get => _captureMicrophone;
@@ -394,7 +394,7 @@ namespace Clowd.Config
         [Category("Audio")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Microphone device")]
-        [Description("Microphone/input device to record")]
+        [Description("Microphone to record.")]
         [AudioDeviceSelector("microphone")]
         public string MicrophoneDeviceId
         {
@@ -405,7 +405,7 @@ namespace Clowd.Config
         [Category("Webcam")]
         [VisibleWhen(nameof(Mode), Studio)]
         [DisplayName("Capture webcam")]
-        [Description("Record a webcam alongside the screen as a second video track. Nothing is composited into the recording itself — the track is only shown once you open the recording in the video editor, where the overlay can be positioned, shaped or dropped entirely.")]
+        [Description("Record the webcam as a separate track that can be positioned in the video editor.")]
         public bool CaptureWebcam
         {
             get => _captureWebcam;
@@ -415,7 +415,7 @@ namespace Clowd.Config
         [Category("Webcam")]
         [VisibleWhen(nameof(Mode), Studio)]
         [DisplayName("Webcam device")]
-        [Description("Camera to record. Empty means no camera, which is also what an unplugged one falls back to.")]
+        [Description("Camera to record.")]
         [CameraDeviceSelector]
         public string WebcamDeviceId
         {
@@ -426,7 +426,7 @@ namespace Clowd.Config
         [Category("GIF")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Quality")]
-        [Description("Quality preset used when converting a recording to a GIF — higher quality means a higher frame rate and finer dithering, and a much larger file")]
+        [Description("Higher quality GIFs are smoother but much larger.")]
         public GifQuality GifQuality
         {
             get => _gifQuality;
@@ -436,7 +436,7 @@ namespace Clowd.Config
         [Category("GIF")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Max width")]
-        [Description("Downscale the GIF so its width does not exceed this many pixels (0 = no limit). Aspect ratio is preserved and a recording is never upscaled; if a max height is set too, whichever limit is more restrictive wins.")]
+        [Description("Downscale GIFs wider than this, or 0 for no limit.")]
         [Range(0, 16384)]
         public int GifMaxWidth
         {
@@ -447,7 +447,7 @@ namespace Clowd.Config
         [Category("GIF")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Max height")]
-        [Description("Downscale the GIF so its height does not exceed this many pixels (0 = no limit). Aspect ratio is preserved and a recording is never upscaled; if a max width is set too, whichever limit is more restrictive wins.")]
+        [Description("Downscale GIFs taller than this, or 0 for no limit.")]
         [Range(0, 16384)]
         public int GifMaxHeight
         {

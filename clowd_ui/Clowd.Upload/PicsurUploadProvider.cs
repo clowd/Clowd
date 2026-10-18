@@ -16,7 +16,7 @@ namespace Clowd.Upload
 
         public override string Name => "Picsur";
 
-        public override string Description => "Open source / self-hosted image sharing software";
+        public override string Description => "Open source, self-hosted image sharing";
 
         public override Stream Icon => new Resource().PicsurIcon;
 

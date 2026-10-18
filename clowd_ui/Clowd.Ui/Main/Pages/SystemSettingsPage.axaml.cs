@@ -97,12 +97,12 @@ namespace Clowd.UI.Pages
 
             var corrected = effective != general.AccentColor && !general.UseSystemAccentColor;
             AccentColorCaption.Text = general.UseSystemAccentColor
-                ? "Currently following the Windows accent color."
+                ? "Following the Windows accent color."
                 : corrected
-                    ? $"Used by the capture overlay, and the recording toolbar and border. Darkened from "
+                    ? $"Used by the capture overlay and the recording toolbar. Darkened from "
                       + $"#{general.AccentColor.R:X2}{general.AccentColor.G:X2}{general.AccentColor.B:X2} "
-                      + "so the white labels drawn on it stay readable."
-                    : "Used by the capture overlay, and the recording toolbar and border.";
+                      + "to keep white labels readable."
+                    : "Used by the capture overlay and the recording toolbar.";
         }
 
         // ---- Permissions group (macOS only) ----
@@ -184,12 +184,10 @@ namespace Clowd.UI.Pages
         {
             RenderPermission(MacPermission.ScreenRecording, ScreenRecordingStatus, ScreenRecordingButton,
                              ScreenRecordingCaption,
-                             "Lets Clowd capture screenshots, record video, and pick colors from the screen with the "
-                             + "eyedropper. Without it, captures and the eyedropper are unavailable.");
+                             "Lets Clowd capture screenshots, record video and pick colors from the screen.");
 
             RenderPermission(MacPermission.Accessibility, AccessibilityStatus, AccessibilityButton, AccessibilityCaption,
-                             "Lets Clowd listen for its global hotkeys while other apps are in the foreground. Without "
-                             + "it, hotkeys do nothing and every action has to be started from the menu bar.");
+                             "Lets Clowd's hotkeys work while other apps are in the foreground.");
 
             RenderPermissionsCollapse();
         }

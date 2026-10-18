@@ -25,15 +25,14 @@ namespace Clowd.Upload
         // uploads delegate to S3UploadProvider, which handles non-seekable streams via multipart
         public override bool SupportsUnseekableUpload => true;
 
-        [Description("Your Cloudflare account ID (the 32-character hex string shown in the R2 dashboard). "
-                    + "You can also paste the bucket's full S3 endpoint, e.g. <account>.r2.cloudflarestorage.com.")]
+        [Description("Your Cloudflare account ID from the R2 dashboard, or the bucket's S3 endpoint.")]
         public string AccountId
         {
             get => _accountId;
             set => Set(ref _accountId, value);
         }
 
-        [Description("The Access Key ID of an R2 API token with read & write access to the bucket.")]
+        [Description("The Access Key ID of an R2 API token with read and write access to the bucket.")]
         public string AccessKeyId
         {
             get => _accessKeyId;
@@ -47,31 +46,28 @@ namespace Clowd.Upload
             set => Set(ref _secretAccessKey, value);
         }
 
-        [Description("The name of the bucket to upload into. It must already exist.")]
+        [Description("An existing bucket to upload into.")]
         public string BucketName
         {
             get => _bucketName;
             set => Set(ref _bucketName, value);
         }
 
-        [Description("The bucket's public base URL — its r2.dev development URL (https://pub-….r2.dev) or a "
-                    + "custom domain connected to the bucket. R2's S3 endpoint is not publicly readable, so "
-                    + "shared links will not work without this.")]
+        [Description("The bucket's public r2.dev URL or custom domain, needed for links to work.")]
         public string PublicUrl
         {
             get => _publicUrl;
             set => Set(ref _publicUrl, value);
         }
 
-        [Description("Route uploads through clwd.app so a shareable link is ready immediately, "
-                    + "while the file relays to this bucket in the background.")]
+        [Description("Route uploads through clwd.app so the link is ready immediately.")]
         public bool AccelerateUploads
         {
             get => _accelerateUploads;
             set => Set(ref _accelerateUploads, value);
         }
 
-        [Description("The accelerate server to route uploads through when the toggle above is on.")]
+        [Description("Server used for accelerated uploads.")]
         public string AccelerateServerUrl
         {
             get => _accelerateServerUrl;

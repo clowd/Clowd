@@ -382,7 +382,7 @@ namespace Clowd.UI
 
                 var session = CreateSession();
 
-                // "Render automatically when capture finished": the flattened video appears as its
+                // "Render automatically when recording finishes": the flattened video appears as its
                 // own Recents entry with a progress bar, exactly as a GIF conversion does. Started
                 // before the finish action so the row is already there when Recents opens; it runs
                 // in the background, so nothing here waits on it.

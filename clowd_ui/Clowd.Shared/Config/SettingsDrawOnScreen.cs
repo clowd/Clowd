@@ -18,7 +18,7 @@ namespace Clowd.Config
         On,
 
         [Description("Off")]
-        [ModeCaption("Turns Draw on Screen off entirely. Its tray item, hotkey and draw buttons disappear.")]
+        [ModeCaption("Turns Draw on Screen off entirely.")]
         Off,
     }
 
@@ -106,7 +106,7 @@ namespace Clowd.Config
         [Category("Keystroke placement")]
         [VisibleWhen(nameof(Mode), DrawOnScreenMode.On)]
         [DisplayName("Screen region")]
-        [Description("Where on the screen pressed keys are shown. They appear on the screen the mouse is on.")]
+        [Description("Where on the screen pressed keys are shown.")]
         public DrawKeystrokeRegion Region
         {
             get => _region;
@@ -116,7 +116,7 @@ namespace Clowd.Config
         [Category("Keystroke placement")]
         [VisibleWhen(nameof(Mode), DrawOnScreenMode.On)]
         [DisplayName("Margin")]
-        [Description("Gap between the keys and the edge of the screen, in pixels. The taskbar or menu bar is already kept clear.")]
+        [Description("Gap between the keys and the screen edge, in pixels.")]
         [Range(0, 1000)]
         public int Margin
         {
@@ -127,7 +127,7 @@ namespace Clowd.Config
         [Category("Keystroke placement")]
         [VisibleWhen(nameof(Mode), DrawOnScreenMode.On)]
         [DisplayName("Width")]
-        [Description("How wide a row of keys may grow, as a share of the screen width, before it wraps.")]
+        [Description("Maximum row width as a share of the screen width.")]
         [Range(0.0, 1.0)]
         public double Width
         {
@@ -148,7 +148,7 @@ namespace Clowd.Config
         [Category("Keystrokes")]
         [VisibleWhen(nameof(Mode), DrawOnScreenMode.On)]
         [DisplayName("Filter")]
-        [Description("Which keys are shown: everything typed, only special keys and shortcuts (Esc, F5, Ctrl+C…), or only shortcuts.")]
+        [Description("Show every key, only special keys and shortcuts, or only shortcuts.")]
         public DrawKeystrokeFilter Filter
         {
             get => _filter;
@@ -191,7 +191,7 @@ namespace Clowd.Config
         [Category("Keystrokes")]
         [VisibleWhen(nameof(Mode), DrawOnScreenMode.On)]
         [DisplayName("Text")]
-        [Description("Color of typed text. Special keys keep their own keycap look.")]
+        [Description("Color of typed text.")]
         public Color TextColor
         {
             get => _textColor;
@@ -201,7 +201,7 @@ namespace Clowd.Config
         [Category("Keystrokes")]
         [VisibleWhen(nameof(Mode), DrawOnScreenMode.On)]
         [DisplayName("Fill")]
-        [Description("Background behind typed text. Its transparency is part of the color.")]
+        [Description("Background behind typed text.")]
         public Color FillColor
         {
             get => _fillColor;

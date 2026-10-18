@@ -83,8 +83,7 @@ namespace Clowd.Config
         public Dictionary<string, UploadProviderConfig> ProviderConfig { get; set; } = new(StringComparer.Ordinal);
 
         [DisplayName("Zip risky file types before uploading")]
-        [Description("Wraps executables, scripts and similar files in a zip archive before uploading, "
-                    + "because browsers block direct downloads of these types.")]
+        [Description("Wrap executables and scripts in a zip, since browsers block downloading them directly.")]
         public bool WrapDangerousUploadsInZip
         {
             get => _wrapDangerousUploadsInZip;

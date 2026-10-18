@@ -26,8 +26,7 @@ namespace Clowd.Upload
         // uploads delegate to S3UploadProvider, which handles non-seekable streams via multipart
         public override bool SupportsUnseekableUpload => true;
 
-        [Description("The keyID of a B2 application key. The account master key does not work with "
-                    + "the S3-compatible API — create an application key instead.")]
+        [Description("The keyID of a B2 application key, not the account master key.")]
         public string KeyId
         {
             get => _keyId;
@@ -41,30 +40,28 @@ namespace Clowd.Upload
             set => Set(ref _applicationKey, value);
         }
 
-        [Description("The name of the bucket to upload into. It must already exist.")]
+        [Description("An existing bucket to upload into.")]
         public string BucketName
         {
             get => _bucketName;
             set => Set(ref _bucketName, value);
         }
 
-        [Description("The S3 endpoint shown on your B2 bucket page, e.g. s3.us-west-004.backblazeb2.com. "
-                    + "The bucket's region is derived from it.")]
+        [Description("The S3 endpoint shown on your B2 bucket page, like s3.us-west-004.backblazeb2.com.")]
         public string Endpoint
         {
             get => _endpoint;
             set => Set(ref _endpoint, value);
         }
 
-        [Description("Route uploads through clwd.app so a shareable link is ready immediately, "
-                    + "while the file relays to this bucket in the background.")]
+        [Description("Route uploads through clwd.app so the link is ready immediately.")]
         public bool AccelerateUploads
         {
             get => _accelerateUploads;
             set => Set(ref _accelerateUploads, value);
         }
 
-        [Description("The accelerate server to route uploads through when the toggle above is on.")]
+        [Description("Server used for accelerated uploads.")]
         public string AccelerateServerUrl
         {
             get => _accelerateServerUrl;

@@ -122,8 +122,8 @@ namespace Clowd.UI.Pages
             // control reads as a missing feature.
             PrereleaseSection.IsEnabled = update.IsSupported;
             PrereleaseHelpText.Text = update.IsSupported
-                ? "Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases."
-                : "Experimental builds can only be opted into in an installed build.";
+                ? "Experimental builds get new features first but may have more bugs."
+                : "Experimental builds are only available in an installed copy of Clowd.";
         }
 
         private async void OnUpdateButtonClick(object sender, RoutedEventArgs e)

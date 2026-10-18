@@ -92,30 +92,30 @@
                                        TextWrapping="Wrap" />
                         </CheckBox>
                         <TextBlock Classes="Caption"
-                                   Text="The restart happens only once you have been away from the computer for 10 minutes, and never while a capture, recording or upload is running." />
+                                   Text="Only restarts after 10 minutes of inactivity, never during a capture, recording or upload." />
                     </StackPanel>
 
                     <StackPanel x:Name="PrereleaseSection" Classes="Setting">
                         <CheckBox x:Name="PrereleaseCheck" IsChecked="{Binding IncludePrereleaseUpdates}">
-                            <TextBlock Text="Opt-in to experimental builds" TextWrapping="Wrap" />
+                            <TextBlock Text="Opt in to experimental builds" TextWrapping="Wrap" />
                         </CheckBox>
                         <TextBlock x:Name="PrereleaseHelpText" Classes="Caption"
-                                   Text="Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases." />
+                                   Text="Experimental builds get new features first but may have more bugs." />
                     </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>
 
             <TextBlock Classes="Body"
-                       Text="Ever wanted a screen capturing tool that just had everything you needed and doesn't need to be tweaked endlessly? This is what Clowd strives to be." />
+                       Text="Ever wanted a screen capture tool that has everything you need and doesn't need endless tweaking? That is what Clowd strives to be." />
             <TextBlock Classes="Body"
-                       Text="From quick but powerful pixel-perfect screen selection and extremely fast 1-button screen recording, to editing/composing images and uploading to share." />
+                       Text="It covers everything from quick, pixel-perfect selection and one-click screen recording to editing images and uploading them to share." />
             <TextBlock Classes="Body"
-                       Text="My settings (this window) can be accessed from the tray icon. Explore to see what I can do!" />
+                       Text="Open this window any time from the tray icon." />
 
             <HyperlinkButton Padding="0" Content="Read more online" NavigateUri="https://github.com/clowd/Clowd" />
 
             <TextBlock Classes="Body"
-                       Text="Clowd is made possible in part by each of the following open source projects. Click any entry to open its project page." />
+                       Text="Clowd is made possible in part by these open source projects." />
 
             <!-- One section per component (UI / capture engine); rows are generated from
                  Assets/credits.json — regenerate with tools/gen-credits.sh. -->

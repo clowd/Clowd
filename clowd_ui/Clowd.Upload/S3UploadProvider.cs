@@ -32,7 +32,7 @@ namespace Clowd.Upload
 
         public override bool SupportsUnseekableUpload => true;
 
-        [Description("Your AWS access key ID (or the equivalent key for your S3-compatible provider).")]
+        [Description("Your AWS access key ID, or your S3-compatible provider's equivalent.")]
         public string AccessKeyId
         {
             get => _accessKeyId;
@@ -46,7 +46,7 @@ namespace Clowd.Upload
             set => Set(ref _secretAccessKey, value);
         }
 
-        [Description("The name of the bucket to upload into. It must already exist.")]
+        [Description("An existing bucket to upload into.")]
         public string BucketName
         {
             get => _bucketName;
@@ -54,72 +54,63 @@ namespace Clowd.Upload
         }
 
         [SuggestedValues(typeof(S3UploadProvider), nameof(GetKnownRegions))]
-        [Description("The bucket's region, e.g. eu-west-2. With a custom endpoint, enter the region string "
-                    + "your provider expects (e.g. 'auto' for Cloudflare R2, 'us-east-1' for many others).")]
+        [Description("The bucket's region, like eu-west-2, or the region your custom endpoint expects.")]
         public string Region
         {
             get => _region;
             set => Set(ref _region, value);
         }
 
-        [Description("Send to a non-AWS, S3-compatible service instead of Amazon S3. Enables the endpoint URL below.")]
+        [Description("Upload to an S3-compatible service instead of Amazon S3.")]
         public bool UseCustomEndpoint
         {
             get => _useCustomEndpoint;
             set => Set(ref _useCustomEndpoint, value);
         }
 
-        [Description("The S3 endpoint URL of your provider, e.g. https://<account>.r2.cloudflarestorage.com. "
-                    + "Only used when 'Use custom endpoint' is enabled.")]
+        [Description("Your provider's S3 endpoint URL.")]
         public string CustomEndpoint
         {
             get => _customEndpoint;
             set => Set(ref _customEndpoint, value);
         }
 
-        [Description("Use virtual-hosted-style URLs (bucket.endpoint/key) instead of path-style (endpoint/bucket/key). "
-                    + "Leave off for most third-party providers, which expect path-style addressing.")]
+        [Description("Use bucket.endpoint/key URLs instead of endpoint/bucket/key. Leave off for most third-party providers.")]
         public bool DisablePathStyle
         {
             get => _disablePathStyle;
             set => Set(ref _disablePathStyle, value);
         }
 
-        [Description("Use UNSIGNED-PAYLOAD and don't send or require the extra data-integrity checksums added by newer AWS SDKs. "
-                    + "Turn on if your provider rejects uploads with a checksum or streaming-signature error.")]
+        [Description("Turn on if your provider rejects uploads with a checksum or signature error.")]
         public bool DisableChecksumValidation
         {
             get => _disableChecksumValidation;
             set => Set(ref _disableChecksumValidation, value);
         }
 
-        [Description("Set a public-read ACL on each uploaded object so its link works without signing in. "
-                    + "Requires a bucket with ACLs enabled (Object Ownership: 'bucket owner preferred'). "
-                    + "On buckets with ACLs disabled (the AWS default), leave this off and grant public "
-                    + "read with a bucket policy instead — an ACL here will be rejected.")]
+        [Description("Set a public-read ACL on each upload so its link works without signing in. Requires a bucket with ACLs enabled.")]
         public bool MakeObjectsPublic
         {
             get => _makeObjectsPublic;
             set => Set(ref _makeObjectsPublic, value);
         }
 
-        [Description("Optional. Return links under this domain (a CDN or custom domain mapped to the bucket root) "
-                    + "instead of the raw S3 URL.")]
+        [Description("Optional domain for links, such as a CDN mapped to the bucket root.")]
         public string CustomDomain
         {
             get => _customDomain;
             set => Set(ref _customDomain, value);
         }
 
-        [Description("Route uploads through clwd.app so a shareable link is ready immediately, "
-                    + "while the file relays to this bucket in the background.")]
+        [Description("Route uploads through clwd.app so the link is ready immediately.")]
         public bool AccelerateUploads
         {
             get => _accelerateUploads;
             set => Set(ref _accelerateUploads, value);
         }
 
-        [Description("The accelerate server to route uploads through when the toggle above is on.")]
+        [Description("Server used for accelerated uploads.")]
         public string AccelerateServerUrl
         {
             get => _accelerateServerUrl;

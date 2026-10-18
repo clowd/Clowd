@@ -39,8 +39,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Upload")]
-        [Description("Show the UPLOAD button in the capture window, which uploads the capture and " +
-                     "copies its link to the clipboard")]
+        [Description("Show the UPLOAD button, which uploads the capture and copies its link.")]
         [VisibleWhen(nameof(SettingsUpload.Mode), UploadsMode.On, Section = nameof(SettingsRoot.Uploads))]
         public bool UploadButtonVisible
         {
@@ -57,8 +56,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Share region")]
-        [Description("Show the SHARE button in the capture window, which mirrors the selected region " +
-                     "into a window a meeting app can share")]
+        [Description("Show the SHARE button, which mirrors the selection into a window a meeting app can share.")]
         [VisibleWhen(nameof(SettingsShareRegion.Mode), ShareRegionMode.On, Section = nameof(SettingsRoot.ShareRegion))]
         public bool ShareRegionEnabled
         {
@@ -73,8 +71,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Scrolling capture")]
-        [Description("Show the SCROLL button in the capture window, which captures a whole scrolling " +
-                     "page by scrolling it and stitching the frames together")]
+        [Description("Show the SCROLL button, which captures a whole scrolling page.")]
         public bool ScrollingCaptureEnabled
         {
             get => _scrollingCaptureEnabled;
@@ -88,8 +85,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Text recognition (OCR)")]
-        [Description("Show the OCR button in the capture window, which lifts the text out of the " +
-                     "selection so it can be copied, searched or uploaded")]
+        [Description("Show the OCR button, which extracts the text in the selection.")]
         public bool OcrEnabled
         {
             get => _ocrEnabled;
@@ -105,8 +101,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Reverse image search")]
-        [Description("Show the SEARCH button in the capture window, which looks the selected image " +
-                     "up with a reverse image search and opens the results in your browser")]
+        [Description("Show the SEARCH button, which runs a reverse image search on the selection.")]
         public bool ImageSearchEnabled
         {
             get => _imageSearchEnabled;
@@ -124,9 +119,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Behavior")]
         [DisplayName("Keep capturer warm")]
-        [Description("Keep the capture overlay ready in the background so it opens with the lowest " +
-                     "possible latency. Turn this off if it causes problems; captures then start " +
-                     "the overlay on demand, which is slightly slower.")]
+        [Description("Keep the capture overlay ready in the background so it opens instantly.")]
         public bool KeepCapturerWarm
         {
             get => _keepCapturerWarm;
@@ -135,7 +128,7 @@ namespace Clowd.Config
 
         [Category("Behavior")]
         [DisplayName("Capture with cursor")]
-        [Description("If this is enabled, the cursor will be shown in screenshots")]
+        [Description("Include the mouse cursor in screenshots.")]
         public bool ScreenshotWithCursor
         {
             get => _screenshotWithCursor;
@@ -152,7 +145,7 @@ namespace Clowd.Config
 
         [Category("Behavior")]
         [DisplayName("Tips overlay")]
-        [Description("Which tips/hints overlay the capture window shows at startup (cycled at runtime with T)")]
+        [Description("Tips shown when the capture overlay opens. Press T to cycle.")]
         public CapturerTipsMode TipsMode
         {
             get => _tipsMode;
@@ -169,9 +162,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Behavior")]
         [DisplayName("Rounded window corners")]
-        [Description("When a window is selected, match its rounded corners: the selection border " +
-                     "follows the window's corner radius and the corners are transparent in the " +
-                     "copied or saved image. Dragged selections are always square.")]
+        [Description("Match a selected window's rounded corners and make them transparent in the image.")]
         public bool RoundedWindowCorners
         {
             get => _roundedWindowCorners;
@@ -180,7 +171,7 @@ namespace Clowd.Config
 
         [Category("Behavior")]
         [DisplayName("Obscured window peek")]
-        [Description("Capture obstructed windows and show a peek-through composite when hovering them")]
+        [Description("Show partly covered windows in full when hovering them.")]
         public bool ObscuredWindowPeek
         {
             get => _obscuredWindowPeek;
@@ -189,7 +180,7 @@ namespace Clowd.Config
 
         [Category("Behavior")]
         [DisplayName("Obscured window threshold")]
-        [Description("How much of a window may be covered by other windows before it can no longer be selected")]
+        [Description("How much of a window can be covered before it can no longer be selected.")]
         [Range(0.0, 1.0)]
         public double ObscuredWindowDetectionThreshold
         {
@@ -211,8 +202,7 @@ namespace Clowd.Config
         /// </summary>
         [Category("Behavior")]
         [DisplayName("Scroll to top first")]
-        [Description("Before a scrolling capture starts, wind the page back to the top so the whole " +
-                     "document is captured. Turn this off to capture from wherever the page is sitting.")]
+        [Description("Scroll to the top before a scrolling capture starts so the whole page is captured.")]
         [DisabledWhen(nameof(ScrollingCaptureEnabled), false)]
         public bool ScrollCaptureRewindToTop
         {
@@ -222,7 +212,7 @@ namespace Clowd.Config
 
         [Category("Saving")]
         [DisplayName("Open saved files in Explorer")]
-        [Description("Reveal the file in Explorer after a capture is saved to disk")]
+        [Description("Show the file in Explorer after saving a capture.")]
         public bool OpenSavedInExplorer
         {
             get => _openSavedInExplorer;
@@ -238,7 +228,7 @@ namespace Clowd.Config
 
         [Category("Saving")]
         [DisplayName("Filename pattern")]
-        [Description("Date format used to name saved captures and uploads (.NET date format string)")]
+        [Description("The .NET date format used to name saved captures and uploads.")]
         public string FilenamePattern
         {
             get => _filenamePattern;

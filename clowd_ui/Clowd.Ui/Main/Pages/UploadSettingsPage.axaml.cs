@@ -76,8 +76,8 @@ namespace Clowd.UI.Pages
                 // default (NSRequiredContext); its on/off switch is system-managed, so there is
                 // nothing for a checkbox here to do — just say where the entry lives.
                 ContextMenuCheck.IsVisible = false;
-                ContextMenuCaption.Text = "'Upload with Clowd' appears when right-clicking files in Finder, under Services. "
-                    + "It can be turned off in System Settings → Keyboard → Keyboard Shortcuts → Services.";
+                ContextMenuCaption.Text = "'Upload with Clowd' appears under Services when you right-click files in Finder. "
+                    + "Turn it off in System Settings → Keyboard → Keyboard Shortcuts → Services.";
                 ContextMenuSettingsButton.IsVisible = true;
                 return;
             }
@@ -130,7 +130,7 @@ namespace Clowd.UI.Pages
             // has no place on the UI thread) and StateChanged re-renders this when it settles.
             if (SparsePackageManager.LastKnownIsEnabled)
             {
-                ContextMenuCaption.Text = "Appears in the right-click menu. On older Windows versions it's under \"Show more options\".";
+                ContextMenuCaption.Text = "Appears when you right-click a file or folder.";
                 return;
             }
 
@@ -190,9 +190,8 @@ namespace Clowd.UI.Pages
             var chosen = await ProviderMultiSelectDialog.ShowAsync(
                 window,
                 "Export upload providers",
-                "Choose which providers to copy to the clipboard. The copied text is scrambled so it "
-                + "means nothing to anyone who stumbles across it, but it is not encrypted with a "
-                + "password — it still carries your credentials, so only pass it to people you trust.",
+                "Choose which providers to copy to the clipboard. The copied text includes your "
+                + "credentials, so only share it with people you trust.",
                 "Copy",
                 items);
 
@@ -284,9 +283,7 @@ namespace Clowd.UI.Pages
             var chosen = await ProviderMultiSelectDialog.ShowAsync(
                 window,
                 "Import upload providers",
-                "Choose which providers to import. Each one you tick has all of its settings "
-                + "replaced by what is in the clipboard — including whether it is enabled and which "
-                + "uploads it is the default for.",
+                "Choose which providers to import. Their current settings will be replaced.",
                 "Import",
                 items);
 

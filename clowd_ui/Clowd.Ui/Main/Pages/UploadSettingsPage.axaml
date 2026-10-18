@@ -112,7 +112,7 @@
                                 <TextBlock Text="Zip risky file types before uploading" TextWrapping="Wrap" />
                             </CheckBox>
                             <TextBlock Classes="Caption"
-                                       Text="Executables, scripts and similar files (.exe, .msi, .bat, …) are wrapped in a zip archive first, because browsers block direct downloads of these types." />
+                                       Text="Wrap executables and scripts in a zip, since browsers block downloading them directly." />
                         </StackPanel>
 
                         <!-- The shell entry only ever starts an upload, so it belongs to this page and is
@@ -259,7 +259,7 @@
                                             <ToggleButton Classes="lightning"
                                                           IsVisible="{Binding SupportsAcceleration}"
                                                           IsChecked="{Binding Provider.AccelerateUploads}"
-                                                          ToolTip.Tip="Accelerate uploads through clwd.app — the shareable link is ready instantly while the file transfers to your storage in the background"
+                                                          ToolTip.Tip="Route uploads through clwd.app so the link is ready instantly"
                                                           AutomationProperties.Name="Accelerate uploads">
                                                 <!-- no explicit Width: Avalonia pins uniformly-stretched geometry to the
                                                      top-left of a fixed box, so a square box leaves this narrow glyph

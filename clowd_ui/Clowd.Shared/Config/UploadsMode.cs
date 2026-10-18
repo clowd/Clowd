@@ -12,11 +12,11 @@ namespace Clowd.Config
     public enum UploadsMode
     {
         [Description("On")]
-        [ModeCaption("Captures, recordings and files can be uploaded to the destinations enabled below, and their links copied to the clipboard.")]
+        [ModeCaption("Uploads captures, recordings and files to the destinations enabled below.")]
         On,
 
         [Description("Off")]
-        [ModeCaption("Turns uploading off entirely. The upload buttons, tray items and hotkeys disappear; anything already uploaded stays in Recents.")]
+        [ModeCaption("Turns uploading off entirely.")]
         Off,
     }
 }

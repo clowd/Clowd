@@ -14,12 +14,11 @@ namespace Clowd.Upload
     public class CatboxUploadProvider : UploadProviderBase
     {
         public override string Name => "catbox.moe";
-        public override string Description => "Anonymous file host with timed expiry options (max 200mb)";
+        public override string Description => "Anonymous file host with optional expiry";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.All;
         public override Stream Icon => new Resource().CatboxIcon;
 
-        [Description("With expiry set to Never, files are uploaded to catbox.moe, which allows uploads up to 200MB. "
-                    + "Any other expiry uploads to litterbox.catbox.moe instead, which allows uploads up to 1GB.")]
+        [Description("Never uploads to catbox.moe, up to 200 MB. Any other expiry uses litterbox.catbox.moe, up to 1 GB.")]
         public CatBoxExpiry ExpireUploads
         {
             get => _expireUploads;

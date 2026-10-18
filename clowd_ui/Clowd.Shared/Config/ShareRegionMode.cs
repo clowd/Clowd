@@ -12,11 +12,11 @@ namespace Clowd.Config
     public enum ShareRegionMode
     {
         [Description("On")]
-        [ModeCaption("Part of your screen can be mirrored into a window a meeting app can share, from the capture overlay, the tray menu or a hotkey.")]
+        [ModeCaption("Mirrors part of your screen into a window a meeting app can share.")]
         On,
 
         [Description("Off")]
-        [ModeCaption("Turns region sharing off entirely. The SHARE button, tray item and hotkey disappear.")]
+        [ModeCaption("Turns region sharing off entirely.")]
         Off,
     }
 }
