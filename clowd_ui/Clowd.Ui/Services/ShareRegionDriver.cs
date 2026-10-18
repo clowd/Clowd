@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.PlatformUtil;
@@ -240,9 +241,11 @@ namespace Clowd.UI
         /// <param name="fps">Mirror frame rate; clamped to at least 1.</param>
         /// <param name="captureMethod">Which OS API backs the capture. Windows only — the helper
         /// ignores it on macOS.</param>
+        /// <param name="accent">Fill of the prompt's OK button, or null for the helper's own blue.
+        /// Windows only — on macOS the button is a native one in the system accent.</param>
         /// <param name="exePath">The helper binary, from <see cref="ResolveBinary"/>.</param>
         public async Task InitializeAsync(ScreenRect region, string title, bool captureCursor, int fps,
-            ScreenCaptureMethod captureMethod, string exePath)
+            ScreenCaptureMethod captureMethod, Color? accent, string exePath)
         {
             if (_proc != null)
                 throw new InvalidOperationException(
@@ -251,7 +254,7 @@ namespace Clowd.UI
             if (String.IsNullOrEmpty(exePath))
                 throw new ArgumentException("The screen sharing helper could not be located.", nameof(exePath));
 
-            _proc = HelperProcess.Start(exePath, BuildArguments(region, title, captureCursor, fps, captureMethod));
+            _proc = HelperProcess.Start(exePath, BuildArguments(region, title, captureCursor, fps, captureMethod, accent));
 
             // the prompt window is the whole point of the spawn; hand it our foreground rights
             // before it tries to show itself.
@@ -277,11 +280,11 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// The command line the helper accepts, and nothing else — it has no other flags, and
+        /// The command line the helper accepts, and nothing else — it has no other flags we use, and
         /// <c>--help</c>/<c>--version</c> would make it print and exit instead of sharing.
         /// </summary>
         public static IReadOnlyList<string> BuildArguments(ScreenRect region, string title, bool captureCursor, int fps,
-            ScreenCaptureMethod captureMethod)
+            ScreenCaptureMethod captureMethod, Color? accent = null)
         {
             var args = new List<string>
             {
@@ -305,6 +308,14 @@ namespace Clowd.UI
             // the flag is the opt-OUT; the helper draws the cursor by default.
             if (!captureCursor)
                 args.Add("--no-cursor");
+
+            // the effective (contrast-corrected) accent, unlike the capturer's pick: the helper makes
+            // no correction of its own, it only flips the label to black on a light fill.
+            if (accent is { } a)
+            {
+                args.Add("--accent-color");
+                args.Add($"#{a.R:X2}{a.G:X2}{a.B:X2}");
+            }
 
             return args;
         }

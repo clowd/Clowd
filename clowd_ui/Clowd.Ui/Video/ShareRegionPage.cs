@@ -242,7 +242,7 @@ namespace Clowd.UI
                 // spawned by a background app is refused the foreground — the prompt would only
                 // blink in the taskbar and the user would never see the thing they are meant to pick.
                 await _driver.InitializeAsync(region, MirrorWindowTitle, MirrorCaptureCursor, _mirrorFps,
-                    _mirrorCaptureMethod, binary);
+                    _mirrorCaptureMethod, SettingsRoot.Current?.General?.GetEffectiveAccentColor(), binary);
 
                 if (_closing)
                     return;

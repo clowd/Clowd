@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Avalonia.Media;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI;
@@ -653,6 +654,21 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("auto", MethodArg(ScreenCaptureMethod.Auto));
             Assert.Equal("dxgi", MethodArg(ScreenCaptureMethod.Dxgi));
             Assert.Equal("wgc", MethodArg(ScreenCaptureMethod.Wgc));
+        }
+
+        /// <summary>The accent goes over as <c>#RRGGBB</c>, the only spelling the helper's parser
+        /// takes besides the bare hex — alpha would be a spawn failure. No accent omits the flag, so
+        /// the helper's own blue stands.</summary>
+        [Fact]
+        public void The_accent_is_passed_as_rrggbb_or_omitted()
+        {
+            var args = new List<string>(ShareRegionDriver.BuildArguments(
+                new ScreenRect(0, 0, 640, 480), "t", true, 30, ScreenCaptureMethod.Auto, Color.FromArgb(0x80, 0x0A, 0xB1, 0xFF)));
+            Assert.Equal("#0AB1FF", args[args.IndexOf("--accent-color") + 1]);
+
+            var none = ShareRegionDriver.BuildArguments(
+                new ScreenRect(0, 0, 640, 480), "t", true, 30, ScreenCaptureMethod.Auto);
+            Assert.DoesNotContain("--accent-color", none);
         }
     }
 }
