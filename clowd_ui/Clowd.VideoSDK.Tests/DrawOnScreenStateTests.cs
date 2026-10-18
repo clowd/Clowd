@@ -203,5 +203,38 @@ namespace Clowd.VideoSDK.Tests
             Assert.False(Through.AreHotkeysLive(focused: false));
             Assert.False(Hidden.AreHotkeysLive(focused: false));
         }
+
+        [Fact]
+        public void Freeze_opens_drawing_with_the_keys_off()
+        {
+            var s = DrawOnScreenState.Restored(4, 3, showKeys: true).Freeze();
+            Assert.True(s.Frozen);
+            Assert.True(s.IsDrawing);
+            Assert.False(s.ShowKeys);
+            Assert.Equal(4, s.ColorIndex);
+            Assert.Equal(3, s.SizeIndex);
+        }
+
+        [Fact]
+        public void Frozen_never_leaves_drawing()
+        {
+            var frozen = DrawOnScreenState.Initial.Freeze();
+            foreach (var s in new[]
+            {
+                frozen.StopDrawing(), frozen.ToggleClickThrough(), frozen.ToggleHide(), frozen.AfterUndoOrClear(),
+                frozen.PickTool(ToolType.Eraser), frozen.SelectColor(2), frozen.SelectSize(0),
+            })
+            {
+                Assert.True(s.Frozen);
+                Assert.True(s.IsDrawing);
+            }
+        }
+
+        [Fact]
+        public void Frozen_ignores_the_keys_toggle()
+        {
+            var frozen = DrawOnScreenState.Initial.Freeze();
+            Assert.Same(frozen, frozen.ToggleKeys());
+        }
     }
 }

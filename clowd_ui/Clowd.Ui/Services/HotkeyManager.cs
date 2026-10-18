@@ -17,6 +17,7 @@ namespace Clowd.UI
         StartStopRecording,
         ShareRegion,
         DrawOnScreen,
+        DrawOnScreenshot,
     }
 
     /// <summary>
@@ -150,6 +151,7 @@ namespace Clowd.UI
                 Entry(HotkeyId.ShareRegion, nameof(SettingsHotkey.ShareRegionShortcut), s => s.ShareRegionShortcut, (s, g) => s.ShareRegionShortcut = g),
                 // no default gesture either (see SettingsHotkey)
                 Entry(HotkeyId.DrawOnScreen, nameof(SettingsHotkey.DrawOnScreenShortcut), s => s.DrawOnScreenShortcut, (s, g) => s.DrawOnScreenShortcut = g),
+                Entry(HotkeyId.DrawOnScreenshot, nameof(SettingsHotkey.DrawOnScreenshotShortcut), s => s.DrawOnScreenshotShortcut, (s, g) => s.DrawOnScreenshotShortcut = g),
             };
 
             HotkeyEntry Entry(HotkeyId id, string prop, Func<SettingsHotkey, SimpleKeyGesture> get, Action<SettingsHotkey, SimpleKeyGesture> set) =>

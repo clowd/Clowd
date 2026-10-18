@@ -19,7 +19,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
     /// Pointer capture is what makes this work past the window edge: Avalonia maps it to Win32
     /// SetCapture, so moves outside the owning window (or popup) keep arriving here.
     ///
-    /// Hidden entirely where <see cref="ScreenColorReader"/> cannot sample the screen at all
+    /// Hidden entirely where <see cref="ScreenPixels"/> cannot sample the screen at all
     /// (Linux), but only disabled — with a tooltip saying why — when the platform could sample and
     /// macOS Screen Recording permission is what's missing. That's a state the user can fix, and a
     /// vanished button reads as a feature Clowd doesn't have.
@@ -66,7 +66,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
             // no screen sampling on this platform — an eyedropper that cannot sample is worse
             // than no eyedropper, so take it out of the layout entirely
-            if (!ScreenColorReader.IsSupported)
+            if (!ScreenPixels.IsSupported)
                 IsVisible = false;
 
             // permission can be granted while a picker is open, and this control is created fresh
@@ -79,10 +79,10 @@ namespace Clowd.UI.Dialogs.ColorPicker
         /// Recording is missing.</summary>
         private void ApplyPermissionState()
         {
-            if (!ScreenColorReader.IsSupported)
+            if (!ScreenPixels.IsSupported)
                 return;
 
-            var permitted = ScreenColorReader.IsPermitted;
+            var permitted = ScreenPixels.IsPermitted;
             IsEnabled = permitted;
 
             // ShowOnDisabled is off by default, and the tooltip is the only thing explaining why the
@@ -112,7 +112,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             ToolTip.SetIsOpen(this, false);
             ToolTip.SetServiceEnabled(this, false);
 
-            if (!ScreenColorReader.IsAvailable)
+            if (!ScreenPixels.IsAvailable)
                 return;
 
             _dragging = true;
@@ -187,7 +187,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             // PointToScreen applies the top level's scaling, so the result is the physical pixel
             // GDI addresses even on a mixed-DPI desktop
             var screenPoint = topLevel.PointToScreen(e.GetPosition(topLevel));
-            var color = ScreenColorReader.GetColorAt(screenPoint);
+            var color = ScreenPixels.GetColorAt(screenPoint);
 
             return color;
         }

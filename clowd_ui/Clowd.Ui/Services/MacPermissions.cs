@@ -9,7 +9,7 @@ namespace Clowd.UI
     /// The two macOS privacy permissions Clowd cannot work without, and the only place that talks
     /// to TCC. Backs the Permissions group on the General settings page, the gate in front of the
     /// capture overlay (<see cref="ScreenCapturePage"/>) and the eyedropper
-    /// (<see cref="Clowd.Util.ScreenColorReader"/>).
+    /// (<see cref="Clowd.Util.ScreenPixels"/>).
     /// </summary>
     /// <remarks>
     /// Every member is safe to call on any platform: off macOS <see cref="IsRelevant"/> is false

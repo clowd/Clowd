@@ -592,6 +592,10 @@ namespace Clowd
         /// </summary>
         public void ToggleDrawOnScreen() => DrawOnScreenSession.Toggle();
 
+        /// <summary>Opens Draw on Screen over a screenshot taken now (issue #111), or brings the open
+        /// session back to the front as <see cref="ToggleDrawOnScreen"/> does.</summary>
+        public void ToggleDrawOnScreenshot() => DrawOnScreenSession.ToggleOnScreenshot();
+
         private void ApplyTheme()
         {
             RequestedThemeVariant = SettingsRoot.Current?.General?.Theme switch
@@ -634,6 +638,7 @@ namespace Clowd
             _hotkeys.SetAction(HotkeyId.StartStopRecording, ToggleRecording);
             _hotkeys.SetAction(HotkeyId.ShareRegion, ToggleShareRegion);
             _hotkeys.SetAction(HotkeyId.DrawOnScreen, ToggleDrawOnScreen);
+            _hotkeys.SetAction(HotkeyId.DrawOnScreenshot, ToggleDrawOnScreenshot);
 
             HotkeyManager.Current = _hotkeys;
             ApplyFeatureHotkeys();
@@ -662,6 +667,7 @@ namespace Clowd
             _hotkeys.SetEnabled(HotkeyId.StartStopRecording, SettingsRoot.Current.Recording.IsEnabled);
             _hotkeys.SetEnabled(HotkeyId.ShareRegion, SettingsRoot.Current.ShareRegion.IsEnabled);
             _hotkeys.SetEnabled(HotkeyId.DrawOnScreen, SettingsRoot.Current.DrawOnScreen.IsEnabled);
+            _hotkeys.SetEnabled(HotkeyId.DrawOnScreenshot, SettingsRoot.Current.DrawOnScreen.IsEnabled);
         }
 
         /// <summary>

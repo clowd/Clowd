@@ -118,6 +118,14 @@ namespace Clowd.VideoSDK.Tests
         // Control, or ⌘ on macOS, where the table reads Control as Meta
         private static KeyModifiers AppControl => OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
 
+        [Fact]
+        public void Escape_closes_a_frozen_session()
+        {
+            var controller = new RecordingController { State = DrawOnScreenState.Initial.Freeze() };
+            new DrawHotkeys(controller).KeyDown(Key.Escape, KeyModifiers.None);
+            Assert.Equal(new[] { "Close" }, controller.Calls);
+        }
+
         private static void AssertRuns(SimpleKeyGesture gesture, string call)
         {
             var controller = new RecordingController();
@@ -129,7 +137,7 @@ namespace Clowd.VideoSDK.Tests
         private sealed class RecordingController : IDrawOnScreenController
         {
             public List<string> Calls { get; } = new();
-            public DrawOnScreenState State => DrawOnScreenState.Initial;
+            public DrawOnScreenState State { get; init; } = DrawOnScreenState.Initial;
             public bool IsFocused => true;
             public bool CanUndo => true;
             public bool CanClear => true;

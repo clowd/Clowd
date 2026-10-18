@@ -30,6 +30,11 @@ namespace Clowd.UI.DrawOnScreen
     /// It is the only draw-on-screen window kept
     /// out of screen captures: the ink must stay in the picture, the toolbar must not.
     /// </para>
+    /// <para>
+    /// Over a frozen screen (<see cref="DrawOnScreenState.Frozen"/>, fixed for the session's life and
+    /// known before the strip is built) the click-through, hide and show-keys tiles are left out, and
+    /// the divider after the modes with them: none of them applies, and Esc closes instead.
+    /// </para>
     /// </summary>
     public sealed class DrawOnScreenToolbar : FloatingTrayWindow
     {
@@ -94,19 +99,25 @@ namespace Clowd.UI.DrawOnScreen
             // the mockup's 1.5 px optical shift for the pointer's lopsided silhouette
             _clickThrough.Classes.Add("nudge");
             _clickThrough.Click += (s, e) => _controller.ToggleClickThrough();
-            Hint(_clickThrough, DrawHotkeys.ClickThrough);
-            // the solid pointer reads heavier than its outlined neighbours at the shared size
-            _clickThrough.GlyphSize = PointerGlyphSize;
 
             _hide = new TrayButton();
             _hide.Click += (s, e) => _controller.ToggleHide();
-            Hint(_hide, DrawHotkeys.Hide);
 
+            var frozen = _controller.State.Frozen;
             var primary = new DrawLanePanel { Spacing = TrayTokens.Gap };
             primary.Children.Add(_emblem);
-            primary.Children.Add(_clickThrough);
-            primary.Children.Add(_hide);
-            primary.Children.Add(new TrayDivider());
+            if (!frozen)
+            {
+                Hint(_clickThrough, DrawHotkeys.ClickThrough);
+                // the solid pointer reads heavier than its outlined neighbours at the shared size
+                _clickThrough.GlyphSize = PointerGlyphSize;
+                Hint(_hide, DrawHotkeys.Hide);
+                primary.Children.Add(_clickThrough);
+                primary.Children.Add(_hide);
+
+                // it parts the modes from the tools; with no modes the emblem leads straight into them
+                primary.Children.Add(new TrayDivider());
+            }
 
             foreach (var tool in DrawPalette.Tools)
             {
@@ -169,7 +180,7 @@ namespace Clowd.UI.DrawOnScreen
             _close.Look = TrayButtonLook.Danger;
             _close.Click += (s, e) => _controller.Close();
 
-            foreach (var way in new[] { _keys, _undo, _clear, _close })
+            foreach (var way in frozen ? new[] { _undo, _clear, _close } : new[] { _keys, _undo, _clear, _close })
             {
                 TrayZonePanel.SetZone(way, TrayZone.End);
                 secondary.Children.Add(way);
@@ -301,7 +312,8 @@ namespace Clowd.UI.DrawOnScreen
             _clear.IsEnabled = _controller.CanClear;
             SetLabel(_clear, "Draw_ClearAll", DrawHotkeys.ClearAll);
 
-            SetLabel(_close, "Draw_Close", DrawHotkeys.Close);
+            // over a frozen screen Esc closes too, and is the key worth naming
+            SetLabel(_close, "Draw_Close", state.Frozen ? DrawHotkeys.ClickThrough : DrawHotkeys.Close);
         }
 
         /// <summary>

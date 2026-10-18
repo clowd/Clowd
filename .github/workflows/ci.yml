@@ -212,7 +212,7 @@ jobs:
       # Only gates above the currently declared 15.5 are newly opted into, which in practice means
       # the macOS 26 ones, so behaviour on macOS 12 through 15 is unchanged. Worth knowing that
       # this also opts the process into any future runtime cutoff for the screen capture APIs
-      # deprecated in favour of ScreenCaptureKit: ScreenColorReader still calls
+      # deprecated in favour of ScreenCaptureKit: ScreenPixels still calls
       # CGWindowListCreateImage, which the SDK headers mark obsoleted=15.0 (compile time only,
       # and still returning images at runtime on 26.6, but Apple has signalled the intent).
       #

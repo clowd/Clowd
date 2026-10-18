@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Clowd.Config;
@@ -31,6 +32,11 @@ namespace Clowd.UI.DrawOnScreen
     /// tool, is the session's business. Unlike the recording chrome it is NOT excluded from screen capture: the ink is
     /// meant to appear in screenshots, recordings and shares.
     /// </para>
+    /// <para>
+    /// A frozen session (Draw on Instant Screenshot) hands each window its monitor's picture, shown
+    /// under the canvas rather than added to it as a graphic: the eraser, the select tool, Clear all
+    /// and the undo history only ever see the ink.
+    /// </para>
     /// </summary>
     internal sealed class DrawOnScreenWindow : Window
     {
@@ -38,8 +44,11 @@ namespace Clowd.UI.DrawOnScreen
         private static readonly TimeSpan HideFade = TimeSpan.FromMilliseconds(150);
 
         private readonly ToggleableExStyles _styles;
+        private readonly Bitmap _backdrop;
 
-        public DrawOnScreenWindow(DesktopScreen screen, Func<ToolType, SavedToolSettings> resolver)
+        /// <param name="backdrop">The monitor's frozen picture, owned (and disposed) by the window from
+        /// here on; null to draw over the live desktop.</param>
+        public DrawOnScreenWindow(DesktopScreen screen, Func<ToolType, SavedToolSettings> resolver, Bitmap backdrop = null)
         {
             Screen = screen ?? throw new ArgumentNullException(nameof(screen));
 
@@ -72,11 +81,17 @@ namespace Clowd.UI.DrawOnScreen
             // the keystroke rows ride above the ink as a sibling, outside the canvas: hiding the ink
             // fades the canvas alone, and the keys are never a graphic the user could erase
             Keystrokes = new KeystrokeOverlay();
-            Content = new Panel
+            var root = new Panel
             {
                 Background = Brushes.Transparent,
                 Children = { Canvas, Keystrokes },
             };
+
+            // the bitmap's DPI makes its DIP size the monitor's, so filling the window maps it 1:1
+            _backdrop = backdrop;
+            if (backdrop != null)
+                root.Children.Insert(0, new Image { Source = backdrop, Stretch = Stretch.Fill });
+            Content = root;
 
             // pre-show geometry from the monitor's own scaling as a best guess; Opened re-applies it
             // from the window's actual RenderScaling, the only value that is trustworthy
@@ -174,6 +189,12 @@ namespace Clowd.UI.DrawOnScreen
                 e.Cancel = true;
 
             base.OnClosing(e);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            _backdrop?.Dispose();
         }
 
         private void OnOpened(object sender, EventArgs e)

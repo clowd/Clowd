@@ -18,7 +18,8 @@ namespace Clowd.UI.DrawOnScreen
     /// </summary>
     public sealed class DrawHotkeys
     {
-        /// <summary>Stops drawing: the ink stays up and the mouse goes to the desktop, while the keys stay ours.</summary>
+        /// <summary>Stops drawing: the ink stays up and the mouse goes to the desktop, while the keys stay ours.
+        /// A frozen session has no desktop to go to, so there it closes.</summary>
         public static SimpleKeyGesture ClickThrough { get; } = new(Key.Escape);
         public static SimpleKeyGesture Hide { get; } = new(Key.H);
         public static SimpleKeyGesture ToggleKeys { get; } = new(Key.K, KeyModifiers.Control);
@@ -117,7 +118,13 @@ namespace Clowd.UI.DrawOnScreen
         {
             var bindings = new List<(SimpleKeyGesture, Action<IDrawOnScreenController>)>
             {
-                (ClickThrough, c => c.StopDrawing()),
+                (ClickThrough, c =>
+                {
+                    if (c.State.Frozen)
+                        c.Close();
+                    else
+                        c.StopDrawing();
+                }),
                 (Hide, c => c.ToggleHide()),
                 (ToggleKeys, c => c.ToggleKeys()),
                 (Undo, c => c.Undo()),

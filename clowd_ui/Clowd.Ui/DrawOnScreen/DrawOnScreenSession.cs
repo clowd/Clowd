@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -8,11 +9,13 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Reactive;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.Drawing;
 using Clowd.UI.Helpers;
+using Clowd.Util;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Model;
 
@@ -42,6 +45,12 @@ namespace Clowd.UI.DrawOnScreen
     /// fed (<see cref="KeystrokeFeed"/>) into one <see cref="LiveKeystrokes"/> and drawn by the
     /// <see cref="KeystrokeOverlay"/> of the screen the mouse was on at the last press, styled live
     /// by <see cref="SettingsDrawOnScreen"/>.
+    /// </para>
+    /// <para>
+    /// A frozen session (<see cref="ToggleOnScreenshot"/>, issue #111) grabs every monitor before
+    /// anything is shown and draws over those pictures instead of the live desktop. It is drawing for
+    /// its whole life (<see cref="DrawOnScreenState.Frozen"/>): with no desktop to click through to,
+    /// Esc and the keyboard leaving close it instead.
     /// </para>
     /// </summary>
     public sealed class DrawOnScreenSession : IDrawOnScreenController
@@ -78,8 +87,12 @@ namespace Clowd.UI.DrawOnScreen
         private SettingsDrawOnScreen _keySettings;
         private Overlay _keysOverlay;
 
-        private DrawOnScreenSession()
+        // over a screenshot taken as the session opened (see ToggleOnScreenshot)
+        private readonly bool _frozen;
+
+        private DrawOnScreenSession(bool frozen)
         {
+            _frozen = frozen;
             _canvasHotkeys = new DrawHotkeys(this);
         }
 
@@ -100,7 +113,17 @@ namespace Clowd.UI.DrawOnScreen
         /// are topmost, but a later topmost window — another Clowd overlay, say — can have covered
         /// them). Only the toolbar's Close discards the ink.
         /// </summary>
-        public static void Toggle()
+        public static void Toggle() => Start(frozen: false);
+
+        /// <summary>
+        /// The Draw on Instant Screenshot action: starts a session drawn over a picture of every
+        /// monitor taken right now, so whatever was on screen holds still to be drawn on. A session
+        /// already up, frozen or not, is brought back to the front as by <see cref="Toggle"/>: its
+        /// ink is never thrown away for a new one.
+        /// </summary>
+        public static void ToggleOnScreenshot() => Start(frozen: true);
+
+        private static void Start(bool frozen)
         {
             Dispatcher.UIThread.VerifyAccess();
 
@@ -120,7 +143,15 @@ namespace Clowd.UI.DrawOnScreen
             if (SettingsRoot.Current?.DrawOnScreen is { IsEnabled: false })
                 return;
 
-            new DrawOnScreenSession().Open();
+            // unpermitted, macOS would freeze the bare desktop picture; Linux cannot grab at all
+            if (frozen && !ScreenPixels.IsAvailable)
+            {
+                if (ScreenPixels.IsSupported)
+                    _ = ScreenCapturePage.EnsureScreenRecordingPermissionAsync();
+                return;
+            }
+
+            new DrawOnScreenSession(frozen).Open();
         }
 
         private void Open()
@@ -136,6 +167,8 @@ namespace Clowd.UI.DrawOnScreen
             _keySettings = SettingsRoot.Current?.DrawOnScreen;
             State = DrawOnScreenState.Restored(general?.DrawOnScreenColorIndex, general?.DrawOnScreenSizeIndex,
                 _keySettings?.ShowKeystrokes ?? false);
+            if (_frozen)
+                State = State.Freeze();
 
             ApplyKeystrokeStyle();
             if (_keySettings != null)
@@ -158,8 +191,16 @@ namespace Clowd.UI.DrawOnScreen
                 if (screens.Count == 0 && DesktopScreens.Primary(_toolbar) is { } primary)
                     screens = new[] { primary };
 
-                foreach (var screen in screens)
-                    AddOverlay(screen);
+                // grabbed before the first canvas shows, which would otherwise be in the picture
+                var backdrops = _frozen ? GrabScreens(screens) : null;
+                if (_frozen && backdrops == null)
+                {
+                    _ = ShutdownAsync();
+                    return;
+                }
+
+                for (var i = 0; i < screens.Count; i++)
+                    AddOverlay(screens[i], backdrops?[i]);
 
                 // the strip goes to the monitor the user is looking at, which the mouse is the best
                 // guess of before any pointer event has reached us
@@ -622,11 +663,33 @@ namespace Clowd.UI.DrawOnScreen
         // Canvas windows
         // ====================================================================
 
-        /// <summary>Creates, wires and shows the window for <paramref name="screen"/>, already in the
-        /// current mode so its first frame is right.</summary>
-        private Overlay AddOverlay(DesktopScreen screen)
+        /// <summary>Every monitor's picture, in <paramref name="screens"/>' order, or null (with none
+        /// left undisposed) if any of them could not be taken: a frozen session with a live monitor
+        /// in it would be neither one thing nor the other.</summary>
+        private static Bitmap[] GrabScreens(IReadOnlyList<DesktopScreen> screens)
         {
-            var window = new DrawOnScreenWindow(screen, ResolveSettings);
+            var shots = new Bitmap[screens.Count];
+            for (var i = 0; i < screens.Count; i++)
+            {
+                shots[i] = ScreenPixels.Grab(screens[i].Bounds, screens[i].Scaling);
+                if (shots[i] == null)
+                {
+                    Debug.WriteLine($"Draw on Instant Screenshot: could not grab the screen at {screens[i].Bounds}");
+                    foreach (var shot in shots)
+                        shot?.Dispose();
+                    return null;
+                }
+            }
+
+            return shots;
+        }
+
+        /// <summary>Creates, wires and shows the window for <paramref name="screen"/>, already in the
+        /// current mode so its first frame is right. A frozen session passes the monitor's picture,
+        /// which the window owns from here on.</summary>
+        private Overlay AddOverlay(DesktopScreen screen, Bitmap backdrop = null)
+        {
+            var window = new DrawOnScreenWindow(screen, ResolveSettings, backdrop);
             var overlay = new Overlay(this, window);
             _overlays.Add(overlay);
 
@@ -769,11 +832,19 @@ namespace Clowd.UI.DrawOnScreen
         /// The keyboard has really gone: the hotkeys stop (the strip disengages and its hints fly away),
         /// and a session that was drawing drops to click-through, so a tool is never left in hand with
         /// keys that do nothing. The keyboard is not fought for — a window the user switched to keeps it.
+        /// A frozen session closes instead: it has no click-through, and its picture is of a moment the
+        /// user has moved on from.
         /// </summary>
         private void OnFocusSettled()
         {
             if (_closing || HasKeyboard)
                 return;
+
+            if (State.Frozen)
+            {
+                Close();
+                return;
+            }
 
             _canvasHotkeys.Reset();
             var changed = _focused;
@@ -854,7 +925,7 @@ namespace Clowd.UI.DrawOnScreen
         /// <summary>
         /// Matches the windows to the monitors by bounds: a window whose monitor is still there keeps
         /// its ink (re-covering it if the scaling changed), a window whose monitor is gone is closed
-        /// and forgotten by the history, and a new monitor gets an empty window.
+        /// and forgotten by the history, and a new monitor gets an empty window (unless frozen).
         /// </summary>
         private void ReconcileScreens()
         {
@@ -883,7 +954,9 @@ namespace Clowd.UI.DrawOnScreen
             var added = false;
             foreach (var screen in screens)
             {
-                if (matched.Add(screen))
+                // a frozen session has no picture of a monitor that arrived after it opened, so
+                // nothing to draw on there: that monitor stays the live desktop
+                if (matched.Add(screen) && !State.Frozen)
                 {
                     AddOverlay(screen);
                     added = true;

@@ -11,6 +11,8 @@ namespace Clowd.UI.DrawOnScreen
     /// <remarks>
     /// Hidden implies click-through: invisible ink must not swallow clicks. Click-through without
     /// hiding is the "use the desktop, keep the ink up" state a right-click on a canvas drops to.
+    /// A <see cref="Frozen"/> session has neither: the canvases cover a picture of the screen, not
+    /// the live desktop, so there is nothing to click through to.
     /// </remarks>
     public sealed record DrawOnScreenState(ToolType Tool, bool ClickThrough, bool Hidden, int ColorIndex, int SizeIndex)
     {
@@ -32,26 +34,36 @@ namespace Clowd.UI.DrawOnScreen
         /// them alone, and they show whether or not the user is drawing.</summary>
         public bool ShowKeys { get; init; }
 
-        public DrawOnScreenState ToggleKeys() => this with { ShowKeys = !ShowKeys };
+        public DrawOnScreenState ToggleKeys() => Frozen ? this : this with { ShowKeys = !ShowKeys };
+
+        /// <summary>Whether the canvases are drawn over a screenshot taken as the session opened (Draw
+        /// on Instant Screenshot, issue #111) rather than over the live desktop. Set once, by
+        /// <see cref="Freeze"/>: the session is drawing for its whole life, and click-through, hiding
+        /// and the keys are not offered.</summary>
+        public bool Frozen { get; init; }
+
+        /// <summary>A frozen session opens with the tool in hand: the picture is there to be drawn on.</summary>
+        public DrawOnScreenState Freeze() => this with { Frozen = true, ClickThrough = false, Hidden = false, ShowKeys = false };
 
         /// <summary>Picking a tool always resumes drawing: the ink comes back and the canvas takes the mouse.</summary>
         public DrawOnScreenState PickTool(ToolType tool) => this with { Tool = tool, ClickThrough = false, Hidden = false };
 
         /// <summary>Leaving click-through also unhides, since hidden ink cannot be drawn on.</summary>
         public DrawOnScreenState ToggleClickThrough() =>
-            ClickThrough ? this with { ClickThrough = false, Hidden = false } : this with { ClickThrough = true };
+            Frozen ? this : ClickThrough ? this with { ClickThrough = false, Hidden = false } : this with { ClickThrough = true };
 
         /// <summary>Esc, a right-click on a canvas, or the keyboard leaving the session: the ink stays up
         /// and the mouse goes back to the desktop. The tool stays picked, for when drawing resumes.</summary>
-        public DrawOnScreenState StopDrawing() => this with { ClickThrough = true };
+        public DrawOnScreenState StopDrawing() => Frozen ? this : this with { ClickThrough = true };
 
         /// <summary>Hiding forces click-through; unhiding resumes the tool.</summary>
         public DrawOnScreenState ToggleHide() =>
-            Hidden ? this with { Hidden = false, ClickThrough = false } : this with { Hidden = true, ClickThrough = true };
+            Frozen ? this : Hidden ? this with { Hidden = false, ClickThrough = false } : this with { Hidden = true, ClickThrough = true };
 
         /// <summary>Undo and clear show the ink so their effect can be seen, and hand the mouse back
-        /// to the desktop: tidying up is the end of a drawing, not the start of the next one.</summary>
-        public DrawOnScreenState AfterUndoOrClear() => this with { Hidden = false, ClickThrough = true };
+        /// to the desktop: tidying up is the end of a drawing, not the start of the next one. A frozen
+        /// session has no desktop to hand it to, so it keeps drawing.</summary>
+        public DrawOnScreenState AfterUndoOrClear() => Frozen ? this : this with { Hidden = false, ClickThrough = true };
 
         /// <summary>Picking a colour means "draw with this": from click-through, hidden ink, the
         /// select tool or the eraser it takes up the brush; any drawing tool already in hand keeps

@@ -74,6 +74,14 @@ namespace Clowd.Config
             set => Set(ref _drawOnScreenShortcut, Normalize(value));
         }
 
+        [DisplayName("Draw on Instant Screenshot")]
+        [VisibleWhen(nameof(SettingsDrawOnScreen.Mode), DrawOnScreenMode.On, Section = nameof(SettingsRoot.DrawOnScreen))]
+        public SimpleKeyGesture DrawOnScreenshotShortcut
+        {
+            get => _drawOnScreenshotShortcut;
+            set => Set(ref _drawOnScreenshotShortcut, Normalize(value));
+        }
+
         /// <summary>
         /// Canonicalizes "not set": a Key.None gesture and null are the same state, stored as null.
         /// (A cleared gesture is persisted as "None" because the configuration binder never assigns
@@ -100,5 +108,9 @@ namespace Clowd.Config
         // No default either, for the same reason: the PrintScreen family is taken, and anything
         // else risks colliding with the user's other tools. The tray menu has the action.
         private SimpleKeyGesture _drawOnScreenShortcut;
+
+        // No default, for the same reason. Unlike the rest it has no tray item either: a screenshot
+        // taken from the menu would have to wait out the menu's own fade.
+        private SimpleKeyGesture _drawOnScreenshotShortcut;
     }
 }
