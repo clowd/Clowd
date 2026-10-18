@@ -12,7 +12,8 @@ namespace Clowd.UI
 {
     /// <summary>
     /// The floating recording strip: grip · FPS (target to cycle before, measured readout after) ·
-    /// primary (Start / timer) · microphone · system audio · camera (Studio mode only) · options ·
+    /// primary (Start / timer) · microphone · system audio · camera (Studio mode only) · draw ·
+    /// options (Instant mode only) ·
     /// end (Cancel before the recording starts, Finish after).
     /// A thin composition over the generic tray chassis: every window, placement, drag, rotate and
     /// tooltip behaviour is <see cref="FloatingTrayWindow"/>'s, the settings mirror and device audit
@@ -402,16 +403,19 @@ namespace Clowd.UI
 
         /// <summary>The camera slot exists only in Studio mode: an Instant recording is one flattened
         /// track with nowhere for a camera to go, and the settings page hides the webcam rows for
-        /// the same reason. Collapsed rather than disabled — it is not "unavailable right now", it
-        /// is not part of this mode at all. The strip's width changes with it, so a change re-centres
-        /// the strip on the region once the new layout has settled.</summary>
+        /// the same reason. Options is the reverse — Instant only: a Studio recording's look is
+        /// decided afterwards in the editor, so the settings worth a detour are Instant's. Collapsed
+        /// rather than disabled — neither is "unavailable right now", it is not part of this mode at
+        /// all. The strip's width changes with them, so a change re-centres the strip on the region
+        /// once the new layout has settled.</summary>
         private void ApplyMode()
         {
-            var visible = _sources.Mode == RecordingMode.Studio;
-            if (_cam.IsVisible == visible)
+            var studio = _sources.Mode == RecordingMode.Studio;
+            if (_cam.IsVisible == studio && _options.IsVisible == !studio)
                 return;
 
-            _cam.IsVisible = visible;
+            _cam.IsVisible = studio;
+            _options.IsVisible = !studio;
             QueueReposition();
         }
 
