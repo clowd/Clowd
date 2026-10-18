@@ -1,4 +1,5 @@
-﻿using Avalonia;
+﻿using System;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
@@ -33,7 +34,8 @@ namespace Clowd.UI.Controls.Tray
     /// tray radius. The theme's <c>mini</c>, <c>ringed</c> and <c>nudge</c> classes are the compact 26 px
     /// tile, the accent-ring "on" and the 1.5 px optical icon shift.
     /// <para>
-    /// Everything visual lives in <c>TrayButton.axaml</c>. This class is three styled properties and
+    /// Everything visual lives in <c>TrayButton.axaml</c> (the accelerator hint's motion lives in
+    /// <see cref="TrayKeyHint"/>, which the template hosts). This class is styled properties and
     /// nothing else on purpose — a button whose fills are written from code cannot be styled, cannot
     /// animate, and drifts out of step with the rest of the tray the first time a call site forgets a
     /// case. <see cref="Look"/> and <see cref="IsActive"/> are the two facts the theme needs, and they
@@ -75,6 +77,19 @@ namespace Clowd.UI.Controls.Tray
         public static readonly StyledProperty<double> GlyphSizeProperty =
             AvaloniaProperty.Register<TrayButton, double>(nameof(GlyphSize), TrayTokens.IconSize);
 
+        /// <summary>The accelerator key to hint in the tile's bottom-right corner (<see cref="TrayKeyHint"/>),
+        /// as it should read: "B", "Esc". Null hints nothing.</summary>
+        public static readonly StyledProperty<string> AccessKeyProperty =
+            AvaloniaProperty.Register<TrayButton, string>(nameof(AccessKey));
+
+        /// <summary>Whether the <see cref="AccessKey"/> hint is up. Changing it flies the hint in or away.</summary>
+        public static readonly StyledProperty<bool> IsAccessKeyShownProperty =
+            AvaloniaProperty.Register<TrayButton, bool>(nameof(IsAccessKeyShown));
+
+        /// <summary>How long the hint waits before it moves, so the owner can ripple a row of them.</summary>
+        public static readonly StyledProperty<TimeSpan> AccessKeyDelayProperty =
+            AvaloniaProperty.Register<TrayButton, TimeSpan>(nameof(AccessKeyDelay));
+
         static TrayButton()
         {
             ControlThemes.EnsureRegistered();
@@ -108,6 +123,24 @@ namespace Clowd.UI.Controls.Tray
         {
             get => GetValue(GlyphSizeProperty);
             set => SetValue(GlyphSizeProperty, value);
+        }
+
+        public string AccessKey
+        {
+            get => GetValue(AccessKeyProperty);
+            set => SetValue(AccessKeyProperty, value);
+        }
+
+        public bool IsAccessKeyShown
+        {
+            get => GetValue(IsAccessKeyShownProperty);
+            set => SetValue(IsAccessKeyShownProperty, value);
+        }
+
+        public TimeSpan AccessKeyDelay
+        {
+            get => GetValue(AccessKeyDelayProperty);
+            set => SetValue(AccessKeyDelayProperty, value);
         }
     }
 }

@@ -959,6 +959,11 @@ namespace Clowd.UI
             {
                 _strip = new DrawOnScreenToolbar(_controller);
                 _controller.CloseRequested += (s, e) => ExitSpike();
+                _strip.PropertyChanged += (s, e) =>
+                {
+                    if (e.Property == WindowBase.IsActiveProperty)
+                        _controller.SetFocused(_strip.IsActive);
+                };
 
                 Apply(cycle ? Walk[0] : state ?? "drawing");
 
@@ -1040,6 +1045,10 @@ namespace Clowd.UI
             private int _strokes = 3;
 
             public DrawOnScreenState State { get; private set; } = DrawOnScreenState.Initial;
+
+            /// <summary>The strip's own focus: the spike has no canvases to share it with.</summary>
+            public bool IsFocused { get; private set; }
+
             public bool CanUndo => _strokes > 0;
             public bool CanClear => _strokes > 0;
             public event EventHandler Changed;
@@ -1053,8 +1062,16 @@ namespace Clowd.UI
                 Changed?.Invoke(this, EventArgs.Empty);
             }
 
+            public void SetFocused(bool focused)
+            {
+                IsFocused = focused;
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+
             public void PickTool(ToolType tool) => Set(State.PickTool(tool));
             public void ToggleClickThrough() => Set(State.ToggleClickThrough());
+            public void StopDrawing() => Set(State.StopDrawing());
+            public void DeleteSelection() { }
             public void ToggleHide() => Set(State.ToggleHide());
             public void ToggleKeys() => Set(State.ToggleKeys());
             public void SelectColor(int index) => Set(State.SelectColor(index));

@@ -105,12 +105,14 @@ namespace Clowd.UI.DrawOnScreen
 
         /// <summary>Resource key of a tool's icon in Assets/VectorIcons.axaml: <c>IconToolBrush</c>
         /// and so on. The select tool shares the image editor's Selection icon (a dotted frame under
-        /// a pointer): the plain pointer is already the click-through toggle's. The step badge's
-        /// icon keeps its editor name.</summary>
+        /// a pointer): a pointer is already the click-through toggle's. The step badge drops the
+        /// editor icon's leader arrowhead, which crowded the accelerator hint in the tile's corner, and
+        /// the rectangle rounds its corners off for the same reason.</summary>
         public static string ToolIconKey(ToolType tool) => tool switch
         {
             ToolType.Pointer => "IconToolSelection",
-            ToolType.Count => "IconToolNumericCount",
+            ToolType.Rectangle => "IconToolRectangleRounded",
+            ToolType.Count => "IconToolNumericCountPlain",
             _ => "IconTool" + tool,
         };
     }

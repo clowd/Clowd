@@ -24,9 +24,10 @@ namespace Clowd.UI.DrawOnScreen
     /// <see cref="Refresh"/>, which runs on every <see cref="IDrawOnScreenController.Changed"/>, and
     /// every click is a controller command — so the session stays the one writer of the mode and the
     /// toolbar can never show a state the canvases are not in. Unlike the other strips a click gives it
-    /// the keyboard (<see cref="FloatingTrayOptions.TakesFocus"/>): while it is focused, or a tool is in
-    /// hand, the strip is engaged — lit with the engaged frame — which is when its hotkeys are live
-    /// (issue #110). It is the only draw-on-screen window kept
+    /// the keyboard (<see cref="FloatingTrayOptions.TakesFocus"/>): while the session has the keyboard, or
+    /// a tool is in hand, the strip is engaged — lit with the engaged frame, the primary lane's keys
+    /// hinted on its tiles — which is when its hotkeys (<see cref="DrawHotkeys"/>) are live (issue #110).
+    /// It is the only draw-on-screen window kept
     /// out of screen captures: the ink must stay in the picture, the toolbar must not.
     /// </para>
     /// </summary>
@@ -38,16 +39,24 @@ namespace Clowd.UI.DrawOnScreen
         private const double MiniStrokeGlyphSize = 16;
         private static readonly TrayGlyph MiniX = new TrayGlyph("x-mini", TrayGlyphs.X.StrokePaths.ToArray(), null, 2.0);
 
+        // the text tool's and the click-through pointer's glyphs, below the other hinted tiles'
+        // (TrayTokens.KeyHintGlyphSize, 17)
+        private const double TextGlyphSize = 14, PointerGlyphSize = 15.5;
+
         // the mockup's gap between neighbouring colour and size tiles (its `.seg { gap: 2px }`)
         private const double DotSpacing = 2;
 
         private readonly IDrawOnScreenController _controller;
+        private readonly DrawHotkeys _hotkeys;
 
         private readonly TrayEmblem _emblem;
         private readonly TrayButton _clickThrough;
         private readonly TrayButton _hide;
         private readonly TrayButton _keys;
         private readonly List<(ToolType Tool, TrayButton Button)> _tools = new();
+
+        // the primary lane's tiles, the ones whose keys are hinted, in strip order
+        private readonly List<TrayButton> _hinted = new();
         private readonly List<TraySwatch> _swatches = new();
         private readonly List<TrayDotButton> _sizes = new();
         private readonly TrayButton _undo;
@@ -67,6 +76,7 @@ namespace Clowd.UI.DrawOnScreen
             })
         {
             _controller = controller ?? throw new ArgumentNullException(nameof(controller));
+            _hotkeys = new DrawHotkeys(controller);
 
             // ---- primary lane: emblem · click-through · hide | tools ----
             // the emblem lives in the lane rather than on the chassis (HasEmblem is off) so it opens
@@ -75,17 +85,22 @@ namespace Clowd.UI.DrawOnScreen
             _emblem = new TrayEmblem();
 
             // click-through is a mode the strip shows with a ring rather than the accent fill: the
-            // fill belongs to the lit tool, and both can be read at once (see Refresh).
+            // fill belongs to the lit tool, and both can be read at once (see Refresh). The pointer
+            // has no tail, which would run into the accelerator hint in the tile's corner.
             _clickThrough = new TrayButton
             {
-                Icon = (Geometry)Application.Current.FindResource("IconToolPointerFilled"),
+                Icon = (Geometry)Application.Current.FindResource("IconToolPointerTailless"),
             };
             // the mockup's 1.5 px optical shift for the pointer's lopsided silhouette
             _clickThrough.Classes.Add("nudge");
             _clickThrough.Click += (s, e) => _controller.ToggleClickThrough();
+            Hint(_clickThrough, DrawHotkeys.ClickThrough);
+            // the solid pointer reads heavier than its outlined neighbours at the shared size
+            _clickThrough.GlyphSize = PointerGlyphSize;
 
             _hide = new TrayButton();
             _hide.Click += (s, e) => _controller.ToggleHide();
+            Hint(_hide, DrawHotkeys.Hide);
 
             var primary = new DrawLanePanel { Spacing = TrayTokens.Gap };
             primary.Children.Add(_emblem);
@@ -100,6 +115,12 @@ namespace Clowd.UI.DrawOnScreen
                     Icon = (Geometry)Application.Current.FindResource(DrawPalette.ToolIconKey(tool)),
                 };
                 button.Click += (s, e) => _controller.PickTool(tool);
+                Hint(button, DrawHotkeys.Tool(tool));
+
+                // the T fills its whole box edge to edge, so at the shared size it looms over its
+                // neighbours and over its hint
+                if (tool == ToolType.Text)
+                    button.GlyphSize = TextGlyphSize;
                 _tools.Add((tool, button));
                 primary.Children.Add(button);
             }
@@ -170,10 +191,10 @@ namespace Clowd.UI.DrawOnScreen
             };
             ApplyAxisMargins();
 
-            // a focused toolbar has no keys of its own yet, and a key must not fall through to the button
-            // the last click focused: Space would press Clear all again
-            AddHandler(KeyDownEvent, OnPreviewKey, RoutingStrategies.Tunnel);
-            AddHandler(KeyUpEvent, OnPreviewKey, RoutingStrategies.Tunnel);
+            // every key is the strip's own while it is focused: a hotkey, or nothing — a key must never
+            // fall through to the button the last click focused, or Space would press Clear all again
+            AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+            AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
 
             _controller.Changed += OnControllerChanged;
             Loc.CultureChanged += OnCultureChanged;
@@ -181,15 +202,17 @@ namespace Clowd.UI.DrawOnScreen
         }
 
         /// <summary>
-        /// Follows the strip's focus. Not the Activated event: Avalonia raises it before it sets
-        /// <see cref="WindowBase.IsActive"/>, so a handler reading IsActive still sees false.
+        /// A strip losing the keyboard forgets the keys held on it: their key-ups land elsewhere. Whether
+        /// the strip is engaged is the session's to say (<see cref="IDrawOnScreenController.IsFocused"/>),
+        /// as the keyboard can be in a canvas window instead. Not the Deactivated event: Avalonia raises
+        /// it before it clears <see cref="WindowBase.IsActive"/>.
         /// </summary>
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
 
-            if (change.Property == IsActiveProperty && _controller != null)
-                UpdateEngaged();
+            if (change.Property == IsActiveProperty && !IsActive)
+                _hotkeys?.Reset();
         }
 
         protected override void OnClosed(EventArgs e)
@@ -201,11 +224,27 @@ namespace Clowd.UI.DrawOnScreen
 
         private void OnControllerChanged(object sender, EventArgs e) => Refresh();
 
-        private static void OnPreviewKey(object sender, KeyEventArgs e) => e.Handled = true;
+        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            _hotkeys.KeyDown(e.Key, e.KeyModifiers);
+            e.Handled = true;
+        }
 
-        /// <summary>Engaged while the strip has the keyboard or a tool is in hand: the times its hotkeys
-        /// are live (<see cref="DrawOnScreenState.AreHotkeysLive"/>).</summary>
-        private void UpdateEngaged() => IsEngaged = _controller.State.AreHotkeysLive(IsActive);
+        private void OnPreviewKeyUp(object sender, KeyEventArgs e)
+        {
+            _hotkeys.KeyUp(e.Key);
+            e.Handled = true;
+        }
+
+        /// <summary>Engaged while the session has the keyboard or a tool is in hand: the times its hotkeys
+        /// are live (<see cref="DrawOnScreenState.AreHotkeysLive"/>), and the primary lane's hints are up.</summary>
+        private void UpdateEngaged()
+        {
+            var engaged = _controller.State.AreHotkeysLive(_controller.IsFocused);
+            IsEngaged = engaged;
+            foreach (var button in _hinted)
+                button.IsAccessKeyShown = engaged;
+        }
 
         private void OnCultureChanged(object sender, EventArgs e)
         {
@@ -226,26 +265,26 @@ namespace Clowd.UI.DrawOnScreen
             UpdateEngaged();
 
             _clickThrough.Classes.Set("ringed", state.ClickThrough);
-            SetLabel(_clickThrough, "Draw_ClickThrough");
+            SetLabel(_clickThrough, "Draw_ClickThrough", DrawHotkeys.ClickThrough);
 
             // lit while hidden, as in the mockup; the tip names what a press will do
             _hide.Icon = (Geometry)Application.Current.FindResource(state.Hidden ? "IconEyeOff" : "IconEye");
             _hide.IsActive = state.Hidden;
-            SetLabel(_hide, state.Hidden ? "Draw_ShowInk" : "Draw_HideInk");
+            SetLabel(_hide, state.Hidden ? "Draw_ShowInk" : "Draw_HideInk", DrawHotkeys.Hide);
 
             _keys.IsActive = state.ShowKeys;
-            SetLabel(_keys, state.ShowKeys ? "Draw_HideKeys" : "Draw_ShowKeys");
+            SetLabel(_keys, state.ShowKeys ? "Draw_HideKeys" : "Draw_ShowKeys", DrawHotkeys.ToggleKeys);
 
             foreach (var (tool, button) in _tools)
             {
                 button.IsActive = state.IsToolLit(tool);
-                SetLabel(button, DrawPalette.ToolKey(tool));
+                SetLabel(button, DrawPalette.ToolKey(tool), DrawHotkeys.Tool(tool));
             }
 
             for (var i = 0; i < _swatches.Count; i++)
             {
                 _swatches[i].IsSelected = i == state.ColorIndex;
-                SetLabel(_swatches[i], DrawPalette.ColorKeys[i]);
+                SetLabel(_swatches[i], DrawPalette.ColorKeys[i], DrawHotkeys.Color(i));
             }
 
             var color = DrawPalette.Colors[state.ColorIndex];
@@ -253,16 +292,16 @@ namespace Clowd.UI.DrawOnScreen
             {
                 _sizes[i].DotColor = color;
                 _sizes[i].IsActive = i == state.SizeIndex;
-                SetLabel(_sizes[i], DrawPalette.Sizes[i].Key);
+                SetLabel(_sizes[i], DrawPalette.Sizes[i].Key, DrawHotkeys.Size(i));
             }
 
             _undo.IsEnabled = _controller.CanUndo;
-            SetLabel(_undo, "Draw_Undo");
+            SetLabel(_undo, "Draw_Undo", DrawHotkeys.Undo);
 
             _clear.IsEnabled = _controller.CanClear;
-            SetLabel(_clear, "Draw_ClearAll");
+            SetLabel(_clear, "Draw_ClearAll", DrawHotkeys.ClearAll);
 
-            SetLabel(_close, "Draw_Close");
+            SetLabel(_close, "Draw_Close", DrawHotkeys.Close);
         }
 
         /// <summary>
@@ -293,12 +332,25 @@ namespace Clowd.UI.DrawOnScreen
             return button;
         }
 
-        /// <summary>The tile's tooltip and accessible name: the localised name only, never a shortcut.</summary>
-        private static void SetLabel(Control control, string key)
+        /// <summary>Gives a primary-lane tile its key's hint, rippling in strip order, and draws its glyph
+        /// a size down to make room for it.</summary>
+        private void Hint(TrayButton button, SimpleKeyGesture gesture)
         {
-            var text = Loc.T(key);
-            ToolTip.SetTip(control, text);
-            AutomationProperties.SetName(control, text);
+            button.GlyphSize = TrayTokens.KeyHintGlyphSize;
+            button.AccessKey = DrawHotkeys.Hint(gesture);
+            button.AccessKeyDelay = TrayTokens.KeyHintStagger * _hinted.Count;
+            _hinted.Add(button);
+        }
+
+        /// <summary>The tile's tooltip, the localised name with its hotkey ("Undo (Ctrl+Z)", as the image
+        /// editor writes them), and its accessible name, with the hotkey as its accelerator key.</summary>
+        private static void SetLabel(Control control, string key, SimpleKeyGesture gesture)
+        {
+            var name = Loc.T(key);
+            var shortcut = DrawHotkeys.Label(gesture);
+            ToolTip.SetTip(control, $"{name} ({shortcut})");
+            AutomationProperties.SetName(control, name);
+            AutomationProperties.SetAcceleratorKey(control, shortcut);
         }
 
         /// <summary>The primary lane: a plain stack that takes the strip's axis from the deck.

@@ -89,6 +89,18 @@
                             </Transitions>
                         </Border.Transitions>
                     </Border>
+                    <!-- the accelerator hint, over the hover veil so hovering never dims it; it places,
+                         styles and animates itself (TrayKeyHint). The rounded clip is what it flies up
+                         through and drops back past: the tile's bottom edge. -->
+                    <Border CornerRadius="{TemplateBinding CornerRadius}"
+                            ClipToBounds="True"
+                            IsHitTestVisible="False"
+                            IsVisible="{TemplateBinding AccessKey, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <tray:TrayKeyHint Name="_key"
+                                          Text="{TemplateBinding AccessKey}"
+                                          IsShown="{TemplateBinding IsAccessKeyShown}"
+                                          Delay="{TemplateBinding AccessKeyDelay}" />
+                    </Border>
                 </Panel>
             </ControlTemplate>
         </Setter>

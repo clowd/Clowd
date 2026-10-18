@@ -41,7 +41,9 @@ namespace Clowd.UI.DrawOnScreen
         public DrawOnScreenState ToggleClickThrough() =>
             ClickThrough ? this with { ClickThrough = false, Hidden = false } : this with { ClickThrough = true };
 
-        public DrawOnScreenState CanvasRightClick() => this with { ClickThrough = true };
+        /// <summary>Esc, a right-click on a canvas, or the keyboard leaving the session: the ink stays up
+        /// and the mouse goes back to the desktop. The tool stays picked, for when drawing resumes.</summary>
+        public DrawOnScreenState StopDrawing() => this with { ClickThrough = true };
 
         /// <summary>Hiding forces click-through; unhiding resumes the tool.</summary>
         public DrawOnScreenState ToggleHide() =>
@@ -67,10 +69,10 @@ namespace Clowd.UI.DrawOnScreen
         /// <summary>Whether the canvases are taking the mouse: the ink is up and not passed through.</summary>
         public bool IsDrawing => !ClickThrough && !Hidden;
 
-        /// <summary>Whether the session's hotkeys are live: while the toolbar is focused
-        /// (<paramref name="toolbarFocused"/>), or a tool is in hand. A canvas window only ever has the
-        /// keyboard while it is drawing, so its focus needs no case of its own.</summary>
-        public bool AreHotkeysLive(bool toolbarFocused) => toolbarFocused || IsDrawing;
+        /// <summary>Whether the session's hotkeys are live: while the session has the keyboard
+        /// (<paramref name="focused"/>: the toolbar or a canvas window), or a tool is in hand. The two
+        /// part only for a moment: a session that loses the keyboard stops drawing.</summary>
+        public bool AreHotkeysLive(bool focused) => focused || IsDrawing;
 
         /// <summary>Whether <paramref name="tool"/>'s button shows as active: picked, and actually drawing.</summary>
         public bool IsToolLit(ToolType tool) => Tool == tool && IsDrawing;

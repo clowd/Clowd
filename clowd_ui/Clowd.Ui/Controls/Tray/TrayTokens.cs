@@ -203,6 +203,34 @@ namespace Clowd.UI.Controls.Tray
                                         Pulse = TimeSpan.FromMilliseconds(1400),
                                         BlipDuration = TimeSpan.FromSeconds(6);
 
+        // the accelerator key hint (TrayKeyHint): a semibold letter tucked into a tile's bottom-right
+        // corner that flies in while the strip's hotkeys are live (issue #110, mockup C). 9 px is the
+        // mockup's size (tried up to 14 on screen: 10 and up crowd the tile); a hinted tile draws its
+        // glyph a size down (KeyHintGlyphSize) to make room, and the hint's dark halo separates the two
+        // where they meet.
+
+        public const double KeyHintFontSize = 9;
+
+        /// <summary>The glyph size of a tile that carries a key hint, down from <see cref="IconSize"/>.</summary>
+        public const double KeyHintGlyphSize = 17;
+
+        /// <summary>The hint's inset from the tile's bottom-right corner: clear of both edges, so it reads
+        /// as inside the tile rather than pressed into its corner.</summary>
+        public static readonly Thickness KeyHintMargin = new Thickness(0, 0, 5, 4);
+
+        /// <summary>How far below its resting place a hidden hint sits: its inset, its line and its halo,
+        /// so it is wholly past the tile's bottom edge (the template clips it there).</summary>
+        public const double KeyHintTravel = 20;
+
+        /// <summary>White .92: as legible as the glyph, a hair behind it.</summary>
+        public static readonly IBrush KeyHintBrush = new ImmutableSolidColorBrush(Fg, 0.92);
+
+        /// <summary>The fly-in, the fly-away, and the step between neighbouring tiles' starts, so the
+        /// hints ripple along the strip rather than landing all at once.</summary>
+        public static readonly TimeSpan KeyHintIn = TimeSpan.FromMilliseconds(340),
+                                        KeyHintOut = TimeSpan.FromMilliseconds(180),
+                                        KeyHintStagger = TimeSpan.FromMilliseconds(28);
+
         /// <summary>
         /// The spec's shadow. Not the default: every transparent pixel of the window rect eats clicks
         /// (WM_NCHITTEST/HTTRANSPARENT only forwards within one thread, so no hook can pass them to the

@@ -26,9 +26,9 @@ namespace Clowd.UI.DrawOnScreen
     /// is WS_EX_TRANSPARENT toggled live through <see cref="ToggleableExStyles"/> — never
     /// <see cref="WindowNativeExtensions.AddExStyles"/>, which is one-way, and never a WM_NCHITTEST
     /// hook, whose HTTRANSPARENT only forwards within one thread; on macOS it is
-    /// setIgnoresMouseEvents:. The window is never activated by a click (WS_EX_NOACTIVATE), so the
-    /// user's foreground app keeps the keyboard; the one exception, the text tool, is the session's
-    /// business. Unlike the recording chrome it is NOT excluded from screen capture: the ink is
+    /// setIgnoresMouseEvents:. On Windows the window is never activated by a click (WS_EX_NOACTIVATE),
+    /// so drawing leaves the keyboard with the toolbar and its hotkeys; the one exception, the text
+    /// tool, is the session's business. Unlike the recording chrome it is NOT excluded from screen capture: the ink is
     /// meant to appear in screenshots, recordings and shares.
     /// </para>
     /// </summary>
@@ -89,11 +89,11 @@ namespace Clowd.UI.DrawOnScreen
                 WindowNativeExtensions.WS_EX_TRANSPARENT,
                 initiallyOn: false);
 
-            // keyboard defence: this window has no shortcuts, and a key that reached the canvas
-            // while the user thinks they are typing into the app underneath would be a surprise.
-            // Only the text tool's TextBox may see keys.
-            AddHandler(KeyDownEvent, OnPreviewKey, RoutingStrategies.Tunnel);
-            AddHandler(KeyUpEvent, OnPreviewKey, RoutingStrategies.Tunnel);
+            // keyboard defence: no key reaches the canvas, whose own shortcuts are the image editor's.
+            // Only the text tool's TextBox may see keys; every other key is the session's hotkeys'
+            // (HotkeyDown/HotkeyUp), for while this window has the keyboard.
+            AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+            AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
 
             // the right button belongs to the session (it drops to click-through); the canvas's own
             // overlay-mode right-press return is only a backstop under this
@@ -117,6 +117,11 @@ namespace Clowd.UI.DrawOnScreen
 
         /// <summary>A right press anywhere on the window. Marked handled before the canvas sees it.</summary>
         public event EventHandler RightClicked;
+
+        /// <summary>A key edge outside the text tool's edit box, while this window has the keyboard (the
+        /// text tool's edit, or on macOS any click, gives it the keyboard). Marked handled before
+        /// anything else sees it.</summary>
+        public event EventHandler<KeyEventArgs> HotkeyDown, HotkeyUp;
 
         /// <summary>
         /// Switches the window between taking the mouse and letting it through. Turning
@@ -226,14 +231,27 @@ namespace Clowd.UI.DrawOnScreen
                 work.Width / scaling, work.Height / scaling));
         }
 
-        private static void OnPreviewKey(object sender, KeyEventArgs e)
+        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
-            // the text tool's in-place TextBox is the one place keys are meant to land
-            if (e.Source is Visual source && source.FindAncestorOfType<TextBox>(includeSelf: true) != null)
+            if (IsForTextBox(e))
                 return;
 
             e.Handled = true;
+            HotkeyDown?.Invoke(this, e);
         }
+
+        private void OnPreviewKeyUp(object sender, KeyEventArgs e)
+        {
+            if (IsForTextBox(e))
+                return;
+
+            e.Handled = true;
+            HotkeyUp?.Invoke(this, e);
+        }
+
+        // the text tool's in-place TextBox is the one place keys are meant to land
+        private static bool IsForTextBox(KeyEventArgs e) =>
+            e.Source is Visual source && source.FindAncestorOfType<TextBox>(includeSelf: true) != null;
 
         private void OnPreviewPointerPressed(object sender, PointerPressedEventArgs e)
         {

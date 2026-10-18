@@ -28,8 +28,14 @@ namespace Clowd.UI.DrawOnScreen
     /// <para>
     /// <see cref="Apply"/> is the one place the mode is written: every transition of
     /// <see cref="DrawOnScreenState"/> goes through it and lands on every canvas, so the toolbar
-    /// (which only reads <see cref="State"/>) can never show a mode the canvases are not in. Nothing
-    /// here is a keyboard shortcut; the canvas windows swallow every key but the text tool's.
+    /// (which only reads <see cref="State"/>) can never show a mode the canvases are not in.
+    /// </para>
+    /// <para>
+    /// The hotkeys (<see cref="DrawHotkeys"/>) are live while the session has the keyboard — its toolbar
+    /// or one of its canvases is focused (<see cref="IsFocused"/>) — and drawing never goes on without
+    /// it: the keyboard leaving for another window drops the session to click-through
+    /// (<see cref="OnFocusSettled"/>), so a tool in hand always means the keys work. Only clicking away
+    /// from click-through, or closing, gives the keyboard up for good.
     /// </para>
     /// <para>
     /// With <see cref="DrawOnScreenState.ShowKeys"/> on, the keys pressed anywhere on the system are
@@ -42,6 +48,10 @@ namespace Clowd.UI.DrawOnScreen
     {
         // display changes arrive in bursts (one per monitor, then the work areas); settle first
         private static readonly TimeSpan HotplugSettle = TimeSpan.FromMilliseconds(500);
+
+        // the keyboard moves between the session's own windows (into the text tool's edit and back out)
+        // by deactivating one before activating the other: a loss is only believed once this has passed
+        private static readonly TimeSpan FocusSettle = TimeSpan.FromMilliseconds(150);
 
         /// <summary>The live session, or null. UI thread only.</summary>
         public static DrawOnScreenSession ActiveInstance { get; private set; }
@@ -56,8 +66,10 @@ namespace Clowd.UI.DrawOnScreen
         // calls, or a late canvas event, cannot start a second teardown
         private bool _closing;
 
-        // the window that had the keyboard before the text tool took it (see OnTextEditingChanged)
-        private IntPtr _prevForeground;
+        // the canvases' hotkeys (the toolbar routes its own); see IsFocused for the settled focus
+        private readonly DrawHotkeys _canvasHotkeys;
+        private bool _focused;
+        private DispatcherTimer _focusLoss;
 
         // the keystroke overlay: the rows, the hook feeding them, the settings styling them, and
         // the one screen drawing them
@@ -68,9 +80,14 @@ namespace Clowd.UI.DrawOnScreen
 
         private DrawOnScreenSession()
         {
+            _canvasHotkeys = new DrawHotkeys(this);
         }
 
         public DrawOnScreenState State { get; private set; } = DrawOnScreenState.Initial;
+
+        /// <summary>Whether the session has the keyboard, settled: a gain counts at once, a loss only once
+        /// <see cref="FocusSettle"/> has shown it is not the keyboard moving between our own windows.</summary>
+        public bool IsFocused => _focused;
 
         public bool CanUndo => _history.CanUndo;
 
@@ -134,6 +151,7 @@ namespace Clowd.UI.DrawOnScreen
                 _toolbar = new DrawOnScreenToolbar(this);
                 _toolbar.Closed += OnToolbarClosed;
                 _toolbar.Opened += (s, e) => KeepToolbarOnTop();
+                _toolbar.PropertyChanged += OnToolbarPropertyChanged;
                 _toolbar.Screens.Changed += OnScreensChanged;
 
                 var screens = DesktopScreens.All(_toolbar);
@@ -185,6 +203,12 @@ namespace Clowd.UI.DrawOnScreen
         {
             CommitTextEdits();
             Apply(State.ToggleClickThrough());
+        }
+
+        public void StopDrawing()
+        {
+            CommitTextEdits();
+            Apply(State.StopDrawing());
         }
 
         public void ToggleHide()
@@ -245,6 +269,32 @@ namespace Clowd.UI.DrawOnScreen
             Apply(State.AfterUndoOrClear());
         }
 
+        /// <summary>The select tool's Delete. Unlike clear, the mode is left alone: the select tool stays
+        /// in hand for the next pick. A selection only lives while that tool is (see <see cref="PushState"/>).</summary>
+        public void DeleteSelection()
+        {
+            if (_closing || !_overlays.Any(o => o.Canvas.SelectedCount > 0))
+                return;
+
+            // a selection on several monitors is one undo, as for clear
+            _history.BeginGroup();
+            try
+            {
+                foreach (var overlay in _overlays)
+                {
+                    if (overlay.Canvas.SelectedCount > 0)
+                        overlay.Canvas.Delete();
+                }
+            }
+            finally
+            {
+                _history.EndGroup();
+            }
+
+            RecomputeCanClear();
+            OnChanged();
+        }
+
         public void Close() => _ = ShutdownAsync();
 
         /// <summary>
@@ -261,6 +311,8 @@ namespace Clowd.UI.DrawOnScreen
 
             _hotplug?.Stop();
             _hotplug = null;
+            _focusLoss?.Stop();
+            _focusLoss = null;
 
             _feed?.Dispose();
             _feed = null;
@@ -270,6 +322,7 @@ namespace Clowd.UI.DrawOnScreen
             if (_toolbar != null)
             {
                 _toolbar.Closed -= OnToolbarClosed;
+                _toolbar.PropertyChanged -= OnToolbarPropertyChanged;
                 _toolbar.Screens.Changed -= OnScreensChanged;
                 try { _toolbar.Close(); }
                 catch { }
@@ -621,7 +674,7 @@ namespace Clowd.UI.DrawOnScreen
             if (_closing)
                 return;
 
-            Apply(State.CanvasRightClick());
+            Apply(State.StopDrawing());
         }
 
         /// <summary>
@@ -640,9 +693,11 @@ namespace Clowd.UI.DrawOnScreen
         /// <summary>
         /// The text tool needs the keyboard, and a WS_EX_NOACTIVATE window never gets it from a click.
         /// Activate() is an explicit request (NOACTIVATE blocks only click activation), so the window
-        /// is made foreground for the edit and the keyboard handed back afterwards to whoever had it,
-        /// if the edit's end still finds this window in front (the user may have clicked elsewhere
-        /// meanwhile, which is what ended the edit — leave that alone).
+        /// is made foreground for the edit and the keyboard handed back to the toolbar afterwards, so
+        /// the hotkeys carry on — if the edit's end still finds this window focused (the keyboard may
+        /// have gone elsewhere meanwhile, which is what ended the edit; <see cref="OnFocusSettled"/>
+        /// deals with that). The hand-over in both directions is between the session's own windows,
+        /// so <see cref="IsFocused"/> holds throughout.
         /// </summary>
         /// <remarks>
         /// TODO(smoke): if Activate() proves ineffective against the foreground lock, fall back to
@@ -654,25 +709,103 @@ namespace Clowd.UI.DrawOnScreen
             if (_closing)
                 return;
 
-            var self = overlay.Window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-
             if (overlay.Canvas.IsTextEditing)
             {
-                var foreground = WindowNativeExtensions.GetForegroundWindowHandle();
-                // a chained edit can find this window still in front; never hand the keyboard "back"
-                // to ourselves
-                _prevForeground = foreground == self ? _prevForeground : foreground;
-
                 overlay.Window.Activate();
                 WindowNativeExtensions.RaiseTopmostNoActivate(_toolbar);
             }
-            else
+            else if (overlay.Window.IsActive)
             {
-                if (self != IntPtr.Zero && WindowNativeExtensions.GetForegroundWindowHandle() == self)
-                    WindowNativeExtensions.TryRestoreForeground(_prevForeground);
-                _prevForeground = IntPtr.Zero;
+                _toolbar?.Activate();
             }
         }
+
+        // ====================================================================
+        // Focus
+        // ====================================================================
+
+        /// <summary>Whether the toolbar or a canvas has the keyboard right now (unsettled).</summary>
+        private bool HasKeyboard => _toolbar?.IsActive == true || _overlays.Any(o => o.Window.IsActive);
+
+        private void OnToolbarPropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == WindowBase.IsActiveProperty)
+                OnFocusMoved();
+        }
+
+        /// <summary>One of the session's windows gained or lost the keyboard. Not the Activated and
+        /// Deactivated events: Avalonia raises them before it updates <see cref="WindowBase.IsActive"/>.</summary>
+        private void OnFocusMoved()
+        {
+            if (_closing)
+                return;
+
+            if (HasKeyboard)
+            {
+                _focusLoss?.Stop();
+                if (!_focused)
+                {
+                    _focused = true;
+                    OnChanged();
+                }
+                return;
+            }
+
+            if (_focusLoss == null)
+            {
+                _focusLoss = new DispatcherTimer { Interval = FocusSettle };
+                _focusLoss.Tick += (s, e) =>
+                {
+                    _focusLoss.Stop();
+                    OnFocusSettled();
+                };
+            }
+
+            _focusLoss.Stop();
+            _focusLoss.Start();
+        }
+
+        /// <summary>
+        /// The keyboard has really gone: the hotkeys stop (the strip disengages and its hints fly away),
+        /// and a session that was drawing drops to click-through, so a tool is never left in hand with
+        /// keys that do nothing. The keyboard is not fought for — a window the user switched to keeps it.
+        /// </summary>
+        private void OnFocusSettled()
+        {
+            if (_closing || HasKeyboard)
+                return;
+
+            _canvasHotkeys.Reset();
+            var changed = _focused;
+            _focused = false;
+
+            if (State.IsDrawing)
+                StopDrawing();
+            else if (changed)
+                OnChanged();
+        }
+
+        /// <summary>
+        /// A press on a canvas re-asserts the strip above the canvases and, should the session be drawing
+        /// without the keyboard (inside <see cref="FocusSettle"/>), takes it back for the toolbar: a press
+        /// is input this process received, which is what lets it take the foreground. Windows only: a
+        /// macOS canvas is made the key window by its own click, which already keeps the keyboard ours.
+        /// </summary>
+        private void OnCanvasPressed()
+        {
+            KeepToolbarOnTop();
+
+            if (OperatingSystem.IsWindows() && State.IsDrawing && !HasKeyboard)
+                _toolbar?.Activate();
+        }
+
+        private void OnCanvasHotkeyDown(KeyEventArgs e)
+        {
+            if (!_closing)
+                _canvasHotkeys.KeyDown(e.Key, e.KeyModifiers);
+        }
+
+        private void OnCanvasHotkeyUp(KeyEventArgs e) => _canvasHotkeys.KeyUp(e.Key);
 
         /// <summary>A canvas window closed by something other than this session (App.CloseAllWindows
         /// at exit): the session cannot carry on with a hole in it.</summary>
@@ -790,6 +923,9 @@ namespace Clowd.UI.DrawOnScreen
                 Canvas.HistoryAppended += OnHistoryAppended;
                 Canvas.TextEditingChanged += OnTextEditingChanged;
                 Window.RightClicked += OnRightClicked;
+                Window.HotkeyDown += OnHotkeyDown;
+                Window.HotkeyUp += OnHotkeyUp;
+                Window.PropertyChanged += OnWindowPropertyChanged;
                 Window.Closed += OnClosed;
                 Window.Opened += OnOpened;
                 Window.AddHandler(InputElement.PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -801,6 +937,9 @@ namespace Clowd.UI.DrawOnScreen
                 Canvas.HistoryAppended -= OnHistoryAppended;
                 Canvas.TextEditingChanged -= OnTextEditingChanged;
                 Window.RightClicked -= OnRightClicked;
+                Window.HotkeyDown -= OnHotkeyDown;
+                Window.HotkeyUp -= OnHotkeyUp;
+                Window.PropertyChanged -= OnWindowPropertyChanged;
                 Window.Closed -= OnClosed;
                 Window.Opened -= OnOpened;
                 Window.RemoveHandler(InputElement.PointerPressedEvent, OnPressed);
@@ -813,7 +952,15 @@ namespace Clowd.UI.DrawOnScreen
             private void OnRightClicked(object sender, EventArgs e) => _session.OnRightClicked(this);
             private void OnClosed(object sender, EventArgs e) => _session.OnWindowClosed(this);
             private void OnOpened(object sender, EventArgs e) => _session.KeepToolbarOnTop();
-            private void OnPressed(object sender, PointerPressedEventArgs e) => _session.KeepToolbarOnTop();
+            private void OnPressed(object sender, PointerPressedEventArgs e) => _session.OnCanvasPressed();
+            private void OnHotkeyDown(object sender, KeyEventArgs e) => _session.OnCanvasHotkeyDown(e);
+            private void OnHotkeyUp(object sender, KeyEventArgs e) => _session.OnCanvasHotkeyUp(e);
+
+            private void OnWindowPropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
+            {
+                if (e.Property == WindowBase.IsActiveProperty)
+                    _session.OnFocusMoved();
+            }
             private void OnToolChanged(ToolType tool) => _session.OnCanvasToolChanged(this, tool);
         }
     }

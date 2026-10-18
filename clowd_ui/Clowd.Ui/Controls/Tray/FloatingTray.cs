@@ -104,7 +104,7 @@ namespace Clowd.UI.Controls.Tray
         }
 
         /// <summary>Windows' "Animation effects" setting. Every other platform animates.</summary>
-        private static bool AnimationsEnabled()
+        internal static bool AnimationsEnabled()
         {
             if (!OperatingSystem.IsWindows())
                 return true;

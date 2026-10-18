@@ -71,11 +71,11 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void CanvasRightClick_drops_to_click_through()
+        public void StopDrawing_drops_to_click_through()
         {
-            Assert.Equal(Through, Drawing.CanvasRightClick());
-            Assert.Equal(Through, Through.CanvasRightClick());
-            Assert.Equal(Hidden, Hidden.CanvasRightClick());
+            Assert.Equal(Through, Drawing.StopDrawing());
+            Assert.Equal(Through, Through.StopDrawing());
+            Assert.Equal(Hidden, Hidden.StopDrawing());
         }
 
         [Fact]
@@ -195,13 +195,13 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Hotkeys_are_live_while_the_toolbar_is_focused_or_a_tool_is_in_hand()
+        public void Hotkeys_are_live_while_the_session_is_focused_or_a_tool_is_in_hand()
         {
-            Assert.True(Drawing.AreHotkeysLive(toolbarFocused: false));
-            Assert.True(Through.AreHotkeysLive(toolbarFocused: true));
-            Assert.True(Hidden.AreHotkeysLive(toolbarFocused: true));
-            Assert.False(Through.AreHotkeysLive(toolbarFocused: false));
-            Assert.False(Hidden.AreHotkeysLive(toolbarFocused: false));
+            Assert.True(Drawing.AreHotkeysLive(focused: false));
+            Assert.True(Through.AreHotkeysLive(focused: true));
+            Assert.True(Hidden.AreHotkeysLive(focused: true));
+            Assert.False(Through.AreHotkeysLive(focused: false));
+            Assert.False(Hidden.AreHotkeysLive(focused: false));
         }
     }
 }
