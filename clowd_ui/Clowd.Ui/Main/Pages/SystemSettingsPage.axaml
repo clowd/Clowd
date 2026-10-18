@@ -2,7 +2,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Clowd.UI.Controls"
-    x:Class="Clowd.UI.Pages.GeneralSettingsPage">
+    x:Class="Clowd.UI.Pages.SystemSettingsPage">
 
     <UserControl.Styles>
         <!-- Vertical rhythm matched to the generated settings pages (SettingsControlFactory
@@ -52,7 +52,7 @@
             <!-- macOS only, and deliberately first: until Screen Recording is granted Clowd cannot
                  capture anything at all, so on a fresh Mac install this is the one thing on the page
                  that matters. Collapsed entirely on Windows/Linux, where there is nothing to grant
-                 (MacPermissions.IsRelevant), leaving Updates first as before. Status is re-read on
+                 (MacPermissions.IsRelevant), leaving Appearance first. Status is re-read on
                  every window activation, since the user grants these over in System Settings and
                  then comes back. -->
             <HeaderedContentControl x:Name="PermissionsGroup"
@@ -102,49 +102,6 @@
                 </StackPanel>
             </HeaderedContentControl>
 
-            <HeaderedContentControl Header="Updates" Theme="{StaticResource GroupBox}">
-                <StackPanel Classes="SettingsGroup">
-                    <StackPanel Classes="Setting" Spacing="8">
-                        <TextBlock x:Name="VersionText" />
-                        <StackPanel Classes="SettingRow">
-                            <Button x:Name="UpdateButton" Content="Check for Updates" Click="OnUpdateButtonClick" />
-                            <ProgressBar x:Name="UpdateProgress"
-                                         Width="180"
-                                         VerticalAlignment="Center"
-                                         Minimum="0" Maximum="100"
-                                         IsVisible="False" />
-                        </StackPanel>
-                        <TextBlock x:Name="UpdateStatusText" Classes="Caption" />
-                    </StackPanel>
-
-                    <StackPanel Classes="Setting" Spacing="8">
-                        <CheckBox x:Name="AutoDownloadCheck" IsChecked="{Binding AutoDownloadUpdates}">
-                            <TextBlock Text="Automatically check for and download updates" TextWrapping="Wrap" />
-                        </CheckBox>
-                        <StackPanel Classes="SettingRow" IsEnabled="{Binding AutoDownloadUpdates}">
-                            <TextBlock VerticalAlignment="Center" Text="Check" />
-                            <ComboBox x:Name="UpdateIntervalCombo" MinWidth="160" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <StackPanel Classes="Setting">
-                        <CheckBox x:Name="AutoApplyCheck" IsChecked="{Binding AutoApplyUpdates}">
-                            <TextBlock Text="Automatically restart Clowd to apply updates in the background"
-                                       TextWrapping="Wrap" />
-                        </CheckBox>
-                        <TextBlock Classes="Caption"
-                                   Text="The restart happens only once you have been away from the computer for 10 minutes, and never while a capture, recording or upload is running." />
-                    </StackPanel>
-
-                    <StackPanel x:Name="PrereleaseSection" Classes="Setting">
-                        <CheckBox x:Name="PrereleaseCheck" IsChecked="{Binding IncludePrereleaseUpdates}">
-                            <TextBlock Text="Opt-in to experimental builds" TextWrapping="Wrap" />
-                        </CheckBox>
-                        <TextBlock x:Name="PrereleaseHelpText" Classes="Caption"
-                                   Text="Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases." />
-                    </StackPanel>
-                </StackPanel>
-            </HeaderedContentControl>
             <HeaderedContentControl Header="Appearance" Theme="{StaticResource GroupBox}">
                 <StackPanel Classes="SettingsGroup">
                     <StackPanel Classes="Setting">
@@ -154,26 +111,6 @@
                         </StackPanel>
                         <TextBlock Classes="Caption"
                                    Text="Choose the light or dark appearance, or follow the Windows setting." />
-                    </StackPanel>
-
-                    <StackPanel Classes="Setting">
-                        <StackPanel Classes="SettingRow">
-                            <TextBlock VerticalAlignment="Center" Text="Layout" />
-                            <ComboBox x:Name="LayoutCombo" MinWidth="160" />
-                        </StackPanel>
-                        <TextBlock Classes="Caption"
-                                   TextWrapping="Wrap"
-                                   Text="Chrome for the image and video editors. Modern floats rounded tool bars on the window background; Compact is the denser, flat look. Editors already open follow the change straight away." />
-                    </StackPanel>
-
-                    <StackPanel Classes="Setting">
-                        <StackPanel Classes="SettingRow">
-                            <TextBlock VerticalAlignment="Center" Text="Toolbar overflow" />
-                            <ComboBox x:Name="OverflowCombo" MinWidth="160" />
-                        </StackPanel>
-                        <TextBlock Classes="Caption"
-                                   TextWrapping="Wrap"
-                                   Text="What the editor tool bars do with tools that do not fit. Wrap adds a second column; Hide keeps one and puts the rest behind a more button, where the last tool you pick stays on the bar." />
                     </StackPanel>
 
                     <!-- macOS only (hidden in the code-behind): the window chrome choice. Read

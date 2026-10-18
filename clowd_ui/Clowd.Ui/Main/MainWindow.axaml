@@ -24,22 +24,9 @@
         <Style Selector="u|NavMenuItem:selected /template/ Border#PART_Border">
             <Setter Property="Background" Value="{DynamicResource ClowdNavSelectedBrush}" />
         </Style>
-        <!-- The glyphs sit a touch behind the labels. Even with both slots centered (below) the
-             glyph's middle lands a pixel above the capitals' middle — measured, not eyeballed —
-             so it is nudged down by a render pixel rather than a layout margin, which would
-             only move it half that. -->
+        <!-- The glyphs sit a touch behind the labels. -->
         <Style Selector="u|NavMenuItem PathIcon">
             <Setter Property="Opacity" Value="0.8" />
-            <Setter Property="RenderTransform" Value="translateY(1px)" />
-        </Style>
-        <!-- Ursa's icon slot is 16px of glyph in 8px padding (32 tall) beside a 14px label in
-             the same padding (~35 tall), and neither presenter is centered in the row, so the
-             glyph lands above the text's middle. Center both on the same axis. -->
-        <Style Selector="u|NavMenuItem /template/ ContentPresenter#PART_IconPresenter">
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-        <Style Selector="u|NavMenuItem /template/ ContentPresenter#PART_HeaderPresenter">
-            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
     </ui:SystemThemedWindow.Styles>
 
@@ -126,9 +113,12 @@
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
                 <u:NavMenuItem IsSeparator="True" />
-                <u:NavMenuItem Header="General" Tag="SettingsGeneral">
+                <!-- the System and About icons double as status badges (MainWindow.RenderNavBadges):
+                     a red alert while a macOS permission is missing, a yellow About renamed
+                     "Update Available" while there is an update to take. -->
+                <u:NavMenuItem x:Name="SystemNavItem" Header="System" Tag="SettingsSystem">
                     <u:NavMenuItem.Icon>
-                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavGeneral}" />
+                        <PathIcon x:Name="SystemNavIcon" Width="16" Height="16" Data="{StaticResource IconNavGeneral}" />
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
                 <u:NavMenuItem Header="Hotkeys" Tag="SettingsHotkeys">
@@ -146,6 +136,11 @@
                         <PathIcon Width="16" Height="16" Data="{StaticResource IconNavRecording}" />
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
+                <u:NavMenuItem Header="Editor &amp; Sessions" Tag="SettingsEditor">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconEditScreenshot}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
                 <u:NavMenuItem Header="Shared Region" Tag="SettingsShareRegion">
                     <u:NavMenuItem.Icon>
                         <PathIcon Width="16" Height="16" Data="{StaticResource IconNavShareRegion}" />
@@ -156,20 +151,15 @@
                         <PathIcon Width="16" Height="16" Data="{StaticResource IconNavDrawOnScreen}" />
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
-                <u:NavMenuItem Header="Editor" Tag="SettingsEditor">
-                    <u:NavMenuItem.Icon>
-                        <PathIcon Width="16" Height="16" Data="{StaticResource IconEditScreenshot}" />
-                    </u:NavMenuItem.Icon>
-                </u:NavMenuItem>
                 <u:NavMenuItem Header="Uploads" Tag="SettingsUploads">
                     <u:NavMenuItem.Icon>
                         <PathIcon Width="16" Height="16" Data="{StaticResource IconNavUploads}" />
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
                 <u:NavMenuItem IsSeparator="True" />
-                <u:NavMenuItem Header="About" Tag="About">
+                <u:NavMenuItem x:Name="AboutNavItem" Header="About" Tag="About">
                     <u:NavMenuItem.Icon>
-                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavAbout}" />
+                        <PathIcon x:Name="AboutNavIcon" Width="16" Height="16" Data="{StaticResource IconNavAbout}" />
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
             </u:NavMenu>

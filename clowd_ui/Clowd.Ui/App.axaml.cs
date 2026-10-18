@@ -292,11 +292,13 @@ namespace Clowd
 
                 if (!Program.IsAutoStarted && !startedForCliWork)
                 {
-                    // first launch after an install, or the restart the user asked for with
-                    // "Restart to Update", opens on General regardless — where the startup options
-                    // and the version number that just changed are.
-                    if (firstRun || Program.IsUpdateRestart)
-                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
+                    // first launch after an install opens on System regardless — where the startup
+                    // options are — and the restart the user asked for with "Restart to Update"
+                    // opens on About, where the version number that just changed is.
+                    if (firstRun)
+                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsSystem);
+                    else if (Program.IsUpdateRestart)
+                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.About);
                     else
                         switch (SettingsRoot.Current.General.ShortcutClick)
                         {
@@ -532,7 +534,7 @@ namespace Clowd
             menu.Add(uploads);
 
             var settings = new NativeMenuItem("Settings");
-            settings.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
+            settings.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsSystem);
             menu.Add(settings);
 
             menu.Add(new NativeMenuItemSeparator());
@@ -549,7 +551,7 @@ namespace Clowd
             => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
 
         private void AppMenuSettings_Click(object sender, EventArgs e)
-            => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
+            => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsSystem);
 
         public void StartCapture(CaptureMode mode = CaptureMode.Region, RegionIntent intent = RegionIntent.Capture)
         {

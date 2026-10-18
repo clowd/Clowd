@@ -12,7 +12,7 @@ namespace Clowd
     public enum SettingsPageTab
     {
         RecentSessions,
-        SettingsGeneral,
+        SettingsSystem,
         SettingsHotkeys,
         SettingsCapture,
         SettingsRecording,

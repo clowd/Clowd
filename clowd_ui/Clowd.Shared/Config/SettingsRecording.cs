@@ -423,16 +423,6 @@ namespace Clowd.Config
             set => Set(ref _webcamDeviceId, value);
         }
 
-        [Category("Editor")]
-        [VisibleWhen(nameof(Mode), Studio)]
-        [DisplayName("Capture media keys in video editor")]
-        [Description("Let the keyboard's media keys drive the video editor while its window is focused: play/pause toggles playback, next track steps one frame forward and previous track one frame back. Those keys are swallowed while the editor is focused, so nothing else playing on the machine reacts to them; in every other window they keep doing what they always did.")]
-        public bool CaptureMediaKeys
-        {
-            get => _captureMediaKeys;
-            set => Set(ref _captureMediaKeys, value);
-        }
-
         [Category("GIF")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Quality")]
@@ -503,7 +493,6 @@ namespace Clowd.Config
         private bool _captureWebcam = false;
         private string _webcamDeviceId = "";
         private bool _renderWhenFinished = false;
-        private bool _captureMediaKeys = false;
         private string _outputDirectory = DefaultOutputDirectory;
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private VideoContainer _container = VideoContainer.Mp4;

@@ -11,7 +11,7 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!-- setting/caption rhythm copied from GeneralSettingsPage so the options group above
+        <!-- setting/caption rhythm copied from SystemSettingsPage so the options group above
              the provider list matches the rest of the settings pages: 24px between one setting
              and the next, 2px between a control and its own caption -->
         <Style Selector="StackPanel.SettingsGroup">
@@ -100,7 +100,7 @@
             <ContentControl x:Name="ModeHost" />
 
             <StackPanel x:Name="Body" Spacing="4">
-                <!-- The page's own options, framed like the groups on the General page
+                <!-- The page's own options, framed like the groups on the System page
                      (HeaderedContentControl + Semi's keyed GroupBox theme); the provider list below
                      is the page's real subject and stays unframed. -->
                 <HeaderedContentControl Header="Upload Options"

@@ -6,6 +6,32 @@ using Avalonia.Media;
 
 namespace Clowd.Config
 {
+    /// <summary>
+    /// Which chrome the image and video editors wear. Not a theme (that is light/dark, and this
+    /// is orthogonal to it) — it is how much room the editors' own tool surfaces take.
+    /// </summary>
+    public enum EditorLayout
+    {
+        [Description("Modern")]
+        Modern,
+
+        [Description("Compact")]
+        Compact,
+    }
+
+    /// <summary>
+    /// What an editor's tool strip does when it has more tools than room: wrap them onto a second
+    /// lane (the original behaviour), or keep one lane and move the rest behind a "more" button.
+    /// </summary>
+    public enum ToolbarOverflow
+    {
+        [Description("Wrap")]
+        Wrap,
+
+        [Description("Hide")]
+        Hide,
+    }
+
     public class SavedToolSettings : SimpleNotifyObject
     {
         public Color ObjectColor
@@ -187,7 +213,33 @@ namespace Clowd.Config
             set => Set(ref _restoreSessionsOnClowdStart, value);
         }
 
-        [Category("Drawing")]
+        /// <summary>
+        /// Chrome for the image and video editors. Not a theme — this is picked up live by editors
+        /// that are already open, so the two looks can be compared side by side.
+        /// </summary>
+        [Category("Toolbars")]
+        [DisplayName("Layout")]
+        [Description("Modern floats rounded tool bars on the window background; Compact is the denser, flat look. Editors already open follow the change straight away.")]
+        public EditorLayout EditorLayout
+        {
+            get => _editorLayout;
+            set => Set(ref _editorLayout, value);
+        }
+
+        /// <summary>
+        /// What the editors' tool strips do with tools that do not fit. Picked up live, like
+        /// <see cref="EditorLayout"/>, which it sits beside in both editors' customize flyouts.
+        /// </summary>
+        [Category("Toolbars")]
+        [DisplayName("Toolbar overflow")]
+        [Description("What the editor tool bars do with tools that do not fit. Wrap adds a second column; Hide keeps one and puts the rest behind a more button, where the last tool you pick stays on the bar.")]
+        public ToolbarOverflow EditorToolbarOverflow
+        {
+            get => _editorToolbarOverflow;
+            set => Set(ref _editorToolbarOverflow, value);
+        }
+
+        [Category("Image Editor")]
         [DisplayName("Canvas background")]
         [Description("Color drawn behind transparent areas of the image in the editor")]
         public Color CanvasBackground
@@ -203,7 +255,7 @@ namespace Clowd.Config
             set => Set(ref _startupPadding, value);
         }
 
-        [Category("Drawing")]
+        [Category("Image Editor")]
         [DisplayName("Tool preferences")]
         [Description("Every drawing tool remembers the color, line width and font last used with it")]
         [ConfigurationKeyName("ToolsV2"), JsonPropertyName("ToolsV2")] // V2: reset for everyone after the tool rework
@@ -220,6 +272,18 @@ namespace Clowd.Config
         {
             get => _deleteSessionsAfter;
             set => Set(ref _deleteSessionsAfter, value);
+        }
+
+        /// <summary>The video editor only exists in Studio recording mode, so the row follows the
+        /// Recording page's mode.</summary>
+        [Category("Video Editor")]
+        [VisibleWhen(nameof(SettingsRecording.Mode), RecordingMode.Studio, Section = nameof(SettingsRoot.Recording))]
+        [DisplayName("Capture media keys in video editor")]
+        [Description("Let the keyboard's media keys drive the video editor while its window is focused: play/pause toggles playback, next track steps one frame forward and previous track one frame back. Those keys are swallowed while the editor is focused, so nothing else playing on the machine reacts to them; in every other window they keep doing what they always did.")]
+        public bool CaptureMediaKeys
+        {
+            get => _captureMediaKeys;
+            set => Set(ref _captureMediaKeys, value);
         }
 
         // NOTE: there is deliberately no SidebarVisible setting. The layers sidebar is per-editor-
@@ -250,7 +314,7 @@ namespace Clowd.Config
         }
 
         /// <summary>The tool last picked from the strip's "more" menu, by key. With
-        /// <see cref="SettingsGeneral.EditorToolbarOverflow"/> set to Hide, it keeps the last slot
+        /// <see cref="EditorToolbarOverflow"/> set to Hide, it keeps the last slot
         /// on the strip whenever its own place in the order has been cut off. Null for none.</summary>
         [Browsable(false)]
         public string PinnedOverflowTool
@@ -277,5 +341,8 @@ namespace Clowd.Config
         private List<string> _toolbarOrder;
         private List<string> _hiddenTools;
         private string _pinnedOverflowTool;
+        private EditorLayout _editorLayout = EditorLayout.Modern;
+        private ToolbarOverflow _editorToolbarOverflow = ToolbarOverflow.Wrap;
+        private bool _captureMediaKeys;
     }
 }

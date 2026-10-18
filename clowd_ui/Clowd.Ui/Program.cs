@@ -24,7 +24,7 @@ namespace Clowd
         public const string AutoStartedArg = "--autostarted";
 
         /// <summary>Restart argument for an explicit "Restart to Update": the relaunched process
-        /// opens the General page, where the freshly installed version is shown.</summary>
+        /// opens the About page, where the freshly installed version is shown.</summary>
         public const string UpdatedRestartArg = "--updated";
 
         /// <summary>What builds before <see cref="AutoStartedArg"/> passed for a background update

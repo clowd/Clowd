@@ -76,7 +76,7 @@ namespace Clowd.UI.Config
             var rows = all.Except(selectors).ToList();
 
             // pages whose properties carry [Category] render as GroupBox sections (matching the
-            // hand-written General page); pages without categories (Hotkeys, upload provider
+            // hand-written System page); pages without categories (Hotkeys, upload provider
             // settings) keep the flat list.
             var grouped = rows.Any(r => GetFirstAttributeOrDefault<CategoryAttribute>(r.Pd) != null);
 

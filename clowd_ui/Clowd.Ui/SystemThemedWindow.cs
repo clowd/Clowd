@@ -79,7 +79,7 @@ namespace Clowd.UI
                     Resources["MacTitleBarGutterVert"] = 28d;
                 }
 
-                // No Windows branch yet, and the row is hidden there (GeneralSettingsPage), so the
+                // No Windows branch yet, and the row is hidden there (SystemSettingsPage), so the
                 // setting cannot be turned on without one. Building it means more than flipping the
                 // hint: extending the client area on Win32 hands Avalonia the drag region,
                 // double-click-to-maximize and the Win11 snap layouts flyout.

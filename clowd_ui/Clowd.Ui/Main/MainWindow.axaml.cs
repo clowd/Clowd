@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Config;
@@ -31,6 +33,7 @@ namespace Clowd.UI
             SettingsRoot.Current.Hotkeys.PropertyChanged += OnHotkeyPropertyChanged;
             SettingsRoot.Current.General.PropertyChanged += OnGeneralPropertyChanged;
             BindRecordingMode();
+            InitializeNavBadges();
             NavList.SelectionChanged += OnNavSelectionChanged;
             NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => !i.IsSeparator);
 
@@ -100,7 +103,14 @@ namespace Clowd.UI
                 return;
 
             _selectedTab = tab;
-            PageTitle.Text = item.Header as string ?? tab.ToString();
+            // System's and About's nav entries are renamed while they carry a badge (RenderNavBadges);
+            // the pages themselves keep their own names.
+            PageTitle.Text = tab switch
+            {
+                SettingsPageTab.SettingsSystem => "System",
+                SettingsPageTab.About => "About",
+                _ => item.Header as string ?? tab.ToString(),
+            };
             SetPageIntro(tab);
 
             var page = GetPageForTab(tab);
@@ -115,7 +125,7 @@ namespace Clowd.UI
         {
             var intro = tab switch
             {
-                SettingsPageTab.SettingsGeneral =>
+                SettingsPageTab.SettingsSystem =>
                     "Choose how Clowd looks and behaves, including its appearance, close confirmation, and tray icon action.",
                 SettingsPageTab.SettingsHotkeys =>
                     "Click a shortcut, then press the new key combination — Esc cancels. Use ✕ to remove a shortcut.",
@@ -127,7 +137,7 @@ namespace Clowd.UI
                 SettingsPageTab.SettingsDrawOnScreen =>
                     "Draw on Screen puts ink over your whole desktop. Its toolbar's keyboard button shows the keys you press on screen, styled by the settings below; changes apply right away, including to a drawing that is already open.",
                 SettingsPageTab.SettingsEditor =>
-                    "Choose how editor sessions are restored and cleaned up, set the canvas appearance, or reset saved drawing-tool preferences.",
+                    "Choose how the image and video editors look, how their sessions are restored and cleaned up, and reset saved drawing-tool preferences.",
                 SettingsPageTab.SettingsUploads =>
                     "Enable the upload destinations you wish to use, then click a category chip (e.g. Image) to make a provider the default destination for that kind of file.",
                 _ => null,
@@ -143,6 +153,79 @@ namespace Clowd.UI
             return String.IsNullOrEmpty(gesture)
                 ? "These settings apply to the live capture opened from Clowd's tray menu. No Capture Region shortcut is currently assigned; you can add one on the Hotkeys page."
                 : $"These settings apply to the live capture opened when you press {gesture}. You can change this shortcut on the Hotkeys page.";
+        }
+
+        /// <summary>The nav's status badges: the System entry turns into a red alert reading
+        /// "Permission Needed" while a macOS permission is missing (the Permissions group heads that
+        /// page), and About turns yellow and reads "Update Available" while there is an update to
+        /// download or restart into. A badged entry's label is semibold in a softer step of the icon's
+        /// color (ClowdNav*TextBrush), and its icon drops the nav's 0.8 dimming.
+        /// Both sources are static and outlive this window, so the handlers come off in
+        /// <see cref="OnClosed"/>; permissions are also re-read on activation, since they are
+        /// granted over in System Settings.</summary>
+        private void InitializeNavBadges()
+        {
+            UpdateService.Default.StateChanged += OnNavBadgeSourceChanged;
+            if (MacPermissions.IsRelevant)
+            {
+                MacPermissions.StateChanged += OnNavBadgeSourceChanged;
+                Activated += OnActivatedRenderNavBadges;
+            }
+
+            RenderNavBadges();
+        }
+
+        private void OnNavBadgeSourceChanged(object sender, EventArgs e) => Dispatcher.UIThread.Post(RenderNavBadges);
+
+        private void OnActivatedRenderNavBadges(object sender, EventArgs e) => RenderNavBadges();
+
+        private IDisposable _systemIconBrush;
+        private IDisposable _aboutIconBrush;
+
+        private void RenderNavBadges()
+        {
+            var permissionMissing = MacPermissions.IsRelevant
+                                    && !(MacPermissions.IsGranted(MacPermission.ScreenRecording)
+                                         && MacPermissions.IsGranted(MacPermission.Accessibility));
+            SystemNavItem.Header = NavHeader(permissionMissing ? "Permission Needed" : "System", permissionMissing ? "ClowdNavDangerTextBrush" : null);
+            SystemNavIcon.Data = (Geometry)this.FindResource(permissionMissing ? "IconNavAttention" : "IconNavGeneral");
+            SetIconBrush(SystemNavIcon, ref _systemIconBrush, permissionMissing ? "SemiColorDanger" : null);
+
+            var updateWaiting = UpdateService.Default.State
+                is UpdateState.UpdateAvailable or UpdateState.Downloading or UpdateState.ReadyToRestart;
+            AboutNavItem.Header = NavHeader(updateWaiting ? "Update Available" : "About", updateWaiting ? "ClowdNavWarningTextBrush" : null);
+            AboutNavIcon.Data = (Geometry)this.FindResource(updateWaiting ? "IconNavUpdate" : "IconNavAbout");
+            SetIconBrush(AboutNavIcon, ref _aboutIconBrush, updateWaiting ? "SemiYellow5" : null);
+        }
+
+        /// <summary>A nav entry's label: the plain string normally, or — badged — a semibold TextBlock
+        /// in the badge brush. A TextBlock rather than styling the item, because Ursa's header
+        /// presenter sets its own foreground per state and would win over the item's. The brush is a
+        /// dynamic resource so it follows the theme, and is released when the block leaves the tree.</summary>
+        private static object NavHeader(string text, string brushKey)
+        {
+            if (brushKey == null)
+                return text;
+
+            var block = new TextBlock { Text = text, FontWeight = FontWeight.SemiBold };
+            block.Bind(TextBlock.ForegroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(brushKey));
+            return block;
+        }
+
+        /// <summary>Tints a nav icon with a theme brush (followed across light/dark) at full opacity,
+        /// or hands it back to the nav's own styling when <paramref name="resourceKey"/> is null.</summary>
+        private void SetIconBrush(PathIcon icon, ref IDisposable binding, string resourceKey)
+        {
+            binding?.Dispose();
+            binding = null;
+            icon.ClearValue(TemplatedControl.ForegroundProperty);
+            icon.ClearValue(OpacityProperty);
+
+            if (resourceKey != null)
+            {
+                binding = icon.Bind(TemplatedControl.ForegroundProperty, this.GetResourceObservable(resourceKey));
+                icon.Opacity = 1;
+            }
         }
 
         /// <summary>Recording Off hides the video editor everywhere, this window's "Video" button
@@ -179,7 +262,7 @@ namespace Clowd.UI
             Control created = tab switch
             {
                 SettingsPageTab.RecentSessions => new RecentSessionsPage(),
-                SettingsPageTab.SettingsGeneral => CreateGeneralPage(),
+                SettingsPageTab.SettingsSystem => CreateSystemPage(),
                 SettingsPageTab.SettingsHotkeys => CreateFactoryPage(getWindow, SettingsRoot.Current.Hotkeys),
                 SettingsPageTab.SettingsCapture => CreateFactoryPage(getWindow, SettingsRoot.Current.Capture),
                 SettingsPageTab.SettingsRecording => CreateFactoryPage(getWindow, SettingsRoot.Current.Recording),
@@ -187,7 +270,7 @@ namespace Clowd.UI
                 SettingsPageTab.SettingsDrawOnScreen => CreateFactoryPage(getWindow, SettingsRoot.Current.DrawOnScreen),
                 SettingsPageTab.SettingsEditor => CreateFactoryPage(getWindow, SettingsRoot.Current.Editor),
                 SettingsPageTab.SettingsUploads => CreateUploadsPage(),
-                SettingsPageTab.About => new AboutPage(),
+                SettingsPageTab.About => CreateAboutPage(),
                 _ => null,
             };
 
@@ -197,10 +280,17 @@ namespace Clowd.UI
             return created;
         }
 
-        private Control CreateGeneralPage()
+        private Control CreateSystemPage()
         {
             AttachAutoSave(SettingsRoot.Current.General);
-            return new GeneralSettingsPage();
+            return new SystemSettingsPage();
+        }
+
+        private Control CreateAboutPage()
+        {
+            // the Updates group edits the update options, which are persisted in SettingsGeneral.
+            AttachAutoSave(SettingsRoot.Current.General);
+            return new AboutPage();
         }
 
         private Control CreateUploadsPage()
@@ -279,6 +369,8 @@ namespace Clowd.UI
         {
             SettingsRoot.Current.Hotkeys.PropertyChanged -= OnHotkeyPropertyChanged;
             SettingsRoot.Current.General.PropertyChanged -= OnGeneralPropertyChanged;
+            UpdateService.Default.StateChanged -= OnNavBadgeSourceChanged;
+            MacPermissions.StateChanged -= OnNavBadgeSourceChanged;
             base.OnClosed(e);
         }
 

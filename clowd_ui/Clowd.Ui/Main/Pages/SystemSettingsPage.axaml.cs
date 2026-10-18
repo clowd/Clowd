@@ -11,22 +11,18 @@ using Clowd.UI.Helpers;
 
 namespace Clowd.UI.Pages
 {
-    public partial class GeneralSettingsPage : UserControl
+    public partial class SystemSettingsPage : UserControl
     {
-        public GeneralSettingsPage()
+        public SystemSettingsPage()
         {
             InitializeComponent();
             DataContext = SettingsRoot.Current.General;
 
             BindEnumCombo(ThemeCombo, nameof(SettingsGeneral.Theme), typeof(AppTheme));
-            BindEnumCombo(LayoutCombo, nameof(SettingsGeneral.EditorLayout), typeof(EditorLayout));
-            BindEnumCombo(OverflowCombo, nameof(SettingsGeneral.EditorToolbarOverflow), typeof(ToolbarOverflow));
             BindEnumCombo(TrayClickCombo, nameof(SettingsGeneral.TrayClick), typeof(ClickAction));
             BindEnumCombo(ShortcutClickCombo, nameof(SettingsGeneral.ShortcutClick), typeof(ClickAction));
             BindEnumCombo(HideFromCaptureCombo, nameof(SettingsGeneral.HideFromScreenCapture), typeof(HideFromCapture));
-            BindEnumCombo(UpdateIntervalCombo, nameof(SettingsGeneral.UpdateCheckInterval), typeof(UpdateInterval));
 
-            InitializeUpdateGroup();
             InitializeAutoStart();
             InitializePermissions();
             InitializeAccent();
@@ -135,7 +131,7 @@ namespace Clowd.UI.Pages
 
             // MacPermissions is static and this page is rebuilt on every settings open (PageManager
             // evicts the window on close), so the subscriptions are tied to the visual tree — same
-            // shape as the auto-start and update groups above.
+            // shape as the auto-start group below.
             AttachedToVisualTree += (s, e) =>
             {
                 MacPermissions.StateChanged += OnPermissionsChanged;
@@ -302,80 +298,6 @@ namespace Clowd.UI.Pages
                 ? "Could not change the startup setting: " + err
                 : null;
             AutoStartStatusText.IsVisible = AutoStartStatusText.Text != null;
-        }
-
-        // ---- Updates group ----
-
-        /// <summary>The update group renders <see cref="UpdateService"/>'s state rather than owning
-        /// any of its own: the background scheduler can check, download and stage an update while
-        /// this page is closed, or while it is open and untouched.</summary>
-        private void InitializeUpdateGroup()
-        {
-            RenderUpdateState();
-
-            // UpdateService outlives the settings window (PageManager evicts the window on close), so
-            // like AutoStartManager the subscription is tied to the visual tree.
-            AttachedToVisualTree += (s, e) =>
-            {
-                UpdateService.Default.StateChanged += OnUpdateStateChanged;
-                RenderUpdateState();
-            };
-
-            DetachedFromVisualTree += (s, e) => UpdateService.Default.StateChanged -= OnUpdateStateChanged;
-        }
-
-        private void OnUpdateStateChanged(object sender, EventArgs e) =>
-            Dispatcher.UIThread.Post(RenderUpdateState);
-
-        private void RenderUpdateState()
-        {
-            var update = UpdateService.Default;
-
-            VersionText.Text = "Current version: " + update.CurrentVersion;
-
-            UpdateStatusText.Text = update.StatusMessage;
-            UpdateStatusText.IsVisible = !String.IsNullOrEmpty(update.StatusMessage);
-
-            UpdateProgress.IsVisible = update.State == UpdateState.Downloading;
-            UpdateProgress.Value = update.DownloadProgress;
-
-            UpdateButton.Content = update.State switch
-            {
-                UpdateState.ReadyToRestart => "Restart to Update",
-                UpdateState.UpdateAvailable => "Download Update",
-                _ => "Check for Updates",
-            };
-
-            UpdateButton.IsEnabled = update.IsSupported
-                                     && update.State != UpdateState.Checking
-                                     && update.State != UpdateState.Downloading;
-
-            // shown even where it cannot be used (a loose build cannot update at all) — a missing
-            // control reads as a missing feature.
-            PrereleaseSection.IsEnabled = update.IsSupported;
-            PrereleaseHelpText.Text = update.IsSupported
-                ? "Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases."
-                : "Experimental builds can only be opted into in an installed build.";
-        }
-
-        private async void OnUpdateButtonClick(object sender, RoutedEventArgs e)
-        {
-            var update = UpdateService.Default;
-
-            switch (update.State)
-            {
-                case UpdateState.ReadyToRestart:
-                    update.ApplyUpdatesAndRestart();
-                    break;
-
-                case UpdateState.UpdateAvailable:
-                    await update.DownloadAvailableUpdateAsync();
-                    break;
-
-                default:
-                    await update.CheckForUpdatesAsync();
-                    break;
-            }
         }
 
         /// <summary>Enum ComboBox with [Description] display names, same as the generated

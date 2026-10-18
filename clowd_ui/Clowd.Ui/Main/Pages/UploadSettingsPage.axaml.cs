@@ -52,7 +52,7 @@ namespace Clowd.UI.Pages
         // ---- "Upload with Clowd" shell entry ----
 
         /// <summary>
-        /// The Explorer/Finder context menu entry. It lives on this page rather than under General
+        /// The Explorer/Finder context menu entry. It lives on this page rather than under System
         /// because the verb does one thing — upload the selection — so it is meaningless while
         /// uploads are off; sitting inside <c>Body</c> it disappears with the rest of the page, and
         /// App drops the registration itself so the entry leaves Explorer too.

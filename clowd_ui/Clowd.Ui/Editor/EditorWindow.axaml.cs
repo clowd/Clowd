@@ -122,8 +122,8 @@ namespace Clowd.UI
 
             ApplyChrome();
             ApplyToolbarOverflow();
-            _settings.General.PropertyChanged += OnGeneralSettingChanged;
-            Closed += (_, _) => _settings.General.PropertyChanged -= OnGeneralSettingChanged;
+            _settings.Editor.PropertyChanged += OnEditorSettingChanged;
+            Closed += (_, _) => _settings.Editor.PropertyChanged -= OnEditorSettingChanged;
 
             // Under the extended client area (macOS) this bar IS the title bar.
             EnableTitleBarDrag(PropertiesBar);
@@ -948,17 +948,17 @@ namespace Clowd.UI
         // a plain assignment would sit underneath a live binding and never show.
         private IDisposable _foregroundBinding;
 
-        private void OnGeneralSettingChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        private void OnEditorSettingChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            if (e.PropertyName is null or nameof(SettingsGeneral.EditorLayout))
+            if (e.PropertyName is null or nameof(SettingsEditor.EditorLayout))
                 ApplyChrome();
-            if (e.PropertyName is null or nameof(SettingsGeneral.EditorToolbarOverflow))
+            if (e.PropertyName is null or nameof(SettingsEditor.EditorToolbarOverflow))
                 ApplyToolbarOverflow();
         }
 
         private void ApplyToolbarOverflow()
         {
-            ToolBar.HideOverflow = _settings.General.EditorToolbarOverflow == ToolbarOverflow.Hide;
+            ToolBar.HideOverflow = _settings.Editor.EditorToolbarOverflow == ToolbarOverflow.Hide;
         }
 
         /// <summary>
@@ -975,7 +975,7 @@ namespace Clowd.UI
             if (rootGrid == null)
                 return;
 
-            var modern = _settings.General.EditorLayout != EditorLayout.Compact;
+            var modern = _settings.Editor.EditorLayout != EditorLayout.Compact;
 
             rootGrid.Classes.Set("modern", modern);
             rootGrid.Classes.Set("compact", !modern);

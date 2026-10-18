@@ -7,7 +7,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows.Input;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
+using Avalonia.Interactivity;
 using Avalonia.Platform;
+using Avalonia.Threading;
+using Clowd.Config;
+using Clowd.UI.Config;
 using Clowd.UI.Helpers;
 using Clowd.Util;
 
@@ -63,6 +68,95 @@ namespace Clowd.UI.Pages
                 ClowdVersion = "Version " + GetCurrentVersion(),
                 Sections = LoadCredits().Sections,
             };
+
+            UpdatesGroup.DataContext = SettingsRoot.Current.General;
+            BindEnumCombo(UpdateIntervalCombo, nameof(SettingsGeneral.UpdateCheckInterval), typeof(UpdateInterval));
+            InitializeUpdateGroup();
+        }
+
+        // ---- Updates group ----
+
+        /// <summary>The update group (moved here from the System page) renders <see cref="UpdateService"/>'s state rather than owning
+        /// any of its own: the background scheduler can check, download and stage an update while
+        /// this page is closed, or while it is open and untouched.</summary>
+        private void InitializeUpdateGroup()
+        {
+            RenderUpdateState();
+
+            // UpdateService outlives the settings window (PageManager evicts the window on close), so
+            // like AutoStartManager the subscription is tied to the visual tree.
+            AttachedToVisualTree += (s, e) =>
+            {
+                UpdateService.Default.StateChanged += OnUpdateStateChanged;
+                RenderUpdateState();
+            };
+
+            DetachedFromVisualTree += (s, e) => UpdateService.Default.StateChanged -= OnUpdateStateChanged;
+        }
+
+        private void OnUpdateStateChanged(object sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(RenderUpdateState);
+
+        private void RenderUpdateState()
+        {
+            var update = UpdateService.Default;
+
+            UpdateStatusText.Text = update.StatusMessage;
+            UpdateStatusText.IsVisible = !String.IsNullOrEmpty(update.StatusMessage);
+
+            UpdateProgress.IsVisible = update.State == UpdateState.Downloading;
+            UpdateProgress.Value = update.DownloadProgress;
+
+            UpdateButton.Content = update.State switch
+            {
+                UpdateState.ReadyToRestart => "Restart to Update",
+                UpdateState.UpdateAvailable => "Download Update",
+                _ => "Check for Updates",
+            };
+
+            UpdateButton.IsEnabled = update.IsSupported
+                                     && update.State != UpdateState.Checking
+                                     && update.State != UpdateState.Downloading;
+
+            // shown even where it cannot be used (a loose build cannot update at all) — a missing
+            // control reads as a missing feature.
+            PrereleaseSection.IsEnabled = update.IsSupported;
+            PrereleaseHelpText.Text = update.IsSupported
+                ? "Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases."
+                : "Experimental builds can only be opted into in an installed build.";
+        }
+
+        private async void OnUpdateButtonClick(object sender, RoutedEventArgs e)
+        {
+            var update = UpdateService.Default;
+
+            switch (update.State)
+            {
+                case UpdateState.ReadyToRestart:
+                    update.ApplyUpdatesAndRestart();
+                    break;
+
+                case UpdateState.UpdateAvailable:
+                    await update.DownloadAvailableUpdateAsync();
+                    break;
+
+                default:
+                    await update.CheckForUpdatesAsync();
+                    break;
+            }
+        }
+
+        /// <summary>Enum ComboBox with [Description] display names, same as the generated
+        /// settings pages (SettingsControlFactory).</summary>
+        private static void BindEnumCombo(ComboBox combo, string propertyName, Type enumType)
+        {
+            combo.ItemTemplate = new FuncDataTemplate<object>((o, ns) =>
+                new TextBlock { Text = SettingsControlFactory.GetEnumDisplayString(o) });
+            combo.ItemsSource = Enum.GetValues(enumType);
+            combo.Bind(ComboBox.SelectedItemProperty, new Avalonia.Data.Binding(propertyName)
+            {
+                Mode = Avalonia.Data.BindingMode.TwoWay,
+            });
         }
 
         private static CreditsData LoadCredits()

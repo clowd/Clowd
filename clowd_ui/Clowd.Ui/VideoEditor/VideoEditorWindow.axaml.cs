@@ -146,7 +146,7 @@ namespace Clowd.UI.VideoEditor
 
         private static SettingsVideoEditor Settings => SettingsRoot.Current?.VideoEditor;
 
-        private static SettingsGeneral General => SettingsRoot.Current?.General;
+        private static SettingsEditor EditorSettings => SettingsRoot.Current?.Editor;
 
         public RelayCommand CommandPlayPause { get; }
         public RelayCommand CommandStepBack { get; }
@@ -259,8 +259,8 @@ namespace Clowd.UI.VideoEditor
             ApplyToolbarOverflow();
             ApplyPreviewChecker();
             ActualThemeVariantChanged += (_, _) => ApplyPreviewChecker();
-            General.PropertyChanged += OnGeneralSettingChanged;
-            Closed += (_, _) => General.PropertyChanged -= OnGeneralSettingChanged;
+            EditorSettings.PropertyChanged += OnEditorSettingChanged;
+            Closed += (_, _) => EditorSettings.PropertyChanged -= OnEditorSettingChanged;
 
             // Under the extended client area (macOS) this bar IS the title bar.
             EnableTitleBarDrag(TopBar);
@@ -1660,17 +1660,17 @@ namespace Clowd.UI.VideoEditor
                 : CheckerBrushes.Canvas;
         }
 
-        private void OnGeneralSettingChanged(object sender, PropertyChangedEventArgs e)
+        private void OnEditorSettingChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName is null or nameof(SettingsGeneral.EditorLayout))
+            if (e.PropertyName is null or nameof(SettingsEditor.EditorLayout))
                 ApplyChrome();
-            if (e.PropertyName is null or nameof(SettingsGeneral.EditorToolbarOverflow))
+            if (e.PropertyName is null or nameof(SettingsEditor.EditorToolbarOverflow))
                 ApplyToolbarOverflow();
         }
 
         private void ApplyToolbarOverflow()
         {
-            ToolBar.HideOverflow = General is { EditorToolbarOverflow: ToolbarOverflow.Hide };
+            ToolBar.HideOverflow = EditorSettings is { EditorToolbarOverflow: ToolbarOverflow.Hide };
         }
 
         /// <summary>
@@ -1688,7 +1688,7 @@ namespace Clowd.UI.VideoEditor
             if (rootGrid == null)
                 return;
 
-            var modern = General is not { EditorLayout: EditorLayout.Compact };
+            var modern = EditorSettings is not { EditorLayout: EditorLayout.Compact };
 
             rootGrid.Classes.Set("modern", modern);
             rootGrid.Classes.Set("compact", !modern);

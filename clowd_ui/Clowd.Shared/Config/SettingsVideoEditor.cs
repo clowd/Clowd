@@ -246,7 +246,7 @@ namespace Clowd.Config
         }
 
         /// <summary>The tool last picked from the strip's "more" menu, by key. With
-        /// <see cref="SettingsGeneral.EditorToolbarOverflow"/> set to Hide, it keeps the last slot
+        /// <see cref="SettingsEditor.EditorToolbarOverflow"/> set to Hide, it keeps the last slot
         /// on the strip whenever its own place in the order has been cut off. Null for none.</summary>
         [Browsable(false)]
         public string PinnedOverflowTool

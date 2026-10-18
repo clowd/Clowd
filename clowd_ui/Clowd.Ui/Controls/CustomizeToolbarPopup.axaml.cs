@@ -282,17 +282,17 @@ namespace Clowd.UI.Controls
         private IBrush ThemeBrush(string key, IBrush fallback)
             => this.TryFindResource(key, ActualThemeVariant, out var value) && value is IBrush brush ? brush : fallback;
 
-        /// <summary>The chrome picker, bound straight to the setting, so it and the Appearance
-        /// page are two views of one value and neither has to know about the other.</summary>
+        /// <summary>The chrome picker, bound straight to the setting, so it and the Image & Video
+        /// Editor settings page are two views of one value and neither has to know about the other.</summary>
         private void InitializeLayoutCombo()
         {
             layoutCombo.ItemTemplate = new FuncDataTemplate<object>((o, _) =>
                 new TextBlock { Text = SettingsControlFactory.GetEnumDisplayString(o) });
             layoutCombo.ItemsSource = Enum.GetValues(typeof(EditorLayout));
             layoutCombo.Bind(SelectingItemsControl.SelectedItemProperty,
-                new Binding(nameof(SettingsGeneral.EditorLayout))
+                new Binding(nameof(SettingsEditor.EditorLayout))
                 {
-                    Source = SettingsRoot.Current.General,
+                    Source = SettingsRoot.Current.Editor,
                     Mode = BindingMode.TwoWay,
                 });
 
@@ -300,9 +300,9 @@ namespace Clowd.UI.Controls
             overflowCombo.ItemTemplate = layoutCombo.ItemTemplate;
             overflowCombo.ItemsSource = Enum.GetValues(typeof(ToolbarOverflow));
             overflowCombo.Bind(SelectingItemsControl.SelectedItemProperty,
-                new Binding(nameof(SettingsGeneral.EditorToolbarOverflow))
+                new Binding(nameof(SettingsEditor.EditorToolbarOverflow))
                 {
-                    Source = SettingsRoot.Current.General,
+                    Source = SettingsRoot.Current.Editor,
                     Mode = BindingMode.TwoWay,
                 });
         }

@@ -150,6 +150,13 @@
                          over a light ground is read as a grey halo rather than as depth, and over
                          a dark one it barely registers until it is this strong. -->
                     <BoxShadows x:Key="ClowdEditorSurfaceShadow">0 0 9 0 #66000000</BoxShadows>
+
+                    <!-- The label of a badged nav entry (MainWindow.RenderNavBadges). The icon beside
+                         it carries the full-strength SemiColorDanger / SemiYellow5; the text is the
+                         same hue pulled toward the theme's ink, so a line of it is not as loud as
+                         the glyph — darker here, paler in the dark theme. -->
+                    <SolidColorBrush x:Key="ClowdNavDangerTextBrush" Color="#A8372C" />
+                    <SolidColorBrush x:Key="ClowdNavWarningTextBrush" Color="#866400" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="ApplicationBackgroundColor">#202020</Color>
@@ -160,6 +167,8 @@
                     <SolidColorBrush x:Key="ClowdEditorCanvasBrush" Color="#1E1E1E" />
                     <SolidColorBrush x:Key="ClowdEditorSurfaceEdgeBrush" Color="#38383A" />
                     <BoxShadows x:Key="ClowdEditorSurfaceShadow">0 0 9 0 #A6000000</BoxShadows>
+                    <SolidColorBrush x:Key="ClowdNavDangerTextBrush" Color="#FFA89C" />
+                    <SolidColorBrush x:Key="ClowdNavWarningTextBrush" Color="#F8E39A" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

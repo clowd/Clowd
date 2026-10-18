@@ -17,7 +17,7 @@ namespace Clowd.UI.VideoEditor
 
     /// <summary>
     /// Routes the keyboard's play/pause and next/previous track keys to the focused video editor
-    /// window while <see cref="SettingsRecording.CaptureMediaKeys"/> is on (off by default: these
+    /// window while <see cref="SettingsEditor.CaptureMediaKeys"/> is on (off by default: these
     /// keys belong to whatever is playing music until the user says otherwise).
     ///
     /// The keys never arrive as ordinary window input — Windows turns them into WM_APPCOMMAND for
@@ -50,7 +50,7 @@ namespace Clowd.UI.VideoEditor
 
             // the switch only shows on the settings page in Studio mode, so it only acts there —
             // a swallowed media key with no visible setting to explain it is a bug report.
-            if (target != null && SettingsRoot.Current?.Recording is { CaptureMediaKeys: true, Mode: RecordingMode.Studio })
+            if (target != null && SettingsRoot.Current is { Editor.CaptureMediaKeys: true, Recording.Mode: RecordingMode.Studio })
                 Register();
             else
                 Unregister();

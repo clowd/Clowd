@@ -5,32 +5,6 @@ using Avalonia.Media;
 
 namespace Clowd.Config
 {
-    /// <summary>
-    /// Which chrome the image and video editors wear. Not a theme (that is light/dark, and this
-    /// is orthogonal to it) — it is how much room the editors' own tool surfaces take.
-    /// </summary>
-    public enum EditorLayout
-    {
-        [Description("Modern")]
-        Modern,
-
-        [Description("Compact")]
-        Compact,
-    }
-
-    /// <summary>
-    /// What an editor's tool strip does when it has more tools than room: wrap them onto a second
-    /// lane (the original behaviour), or keep one lane and move the rest behind a "more" button.
-    /// </summary>
-    public enum ToolbarOverflow
-    {
-        [Description("Wrap")]
-        Wrap,
-
-        [Description("Hide")]
-        Hide,
-    }
-
     public enum AppTheme
     {
         [Description("Follow system")]
@@ -233,7 +207,7 @@ namespace Clowd.Config
         /// is the state of every install until the user picks a language; a name with no matching
         /// satellite assembly also falls back to the OS language (see Loc.ApplyCulture).
         ///
-        /// Not browsable: the settings-control factory would render a text box. The General page
+        /// Not browsable: the settings-control factory would render a text box. The System page
         /// hosts a hand-built combo populated from Loc.GetAvailableLanguages().
         /// </summary>
         [Browsable(false)]
@@ -249,30 +223,6 @@ namespace Clowd.Config
         {
             get => _theme;
             set => Set(ref _theme, value);
-        }
-
-        /// <summary>
-        /// Chrome for the image and video editors. Unlike <see cref="Theme"/> this is picked up
-        /// live by editors that are already open, so the two looks can be compared side by side.
-        /// </summary>
-        [DisplayName("Layout")]
-        [Description("How much room the editor tool bars take.")]
-        public EditorLayout EditorLayout
-        {
-            get => _editorLayout;
-            set => Set(ref _editorLayout, value);
-        }
-
-        /// <summary>
-        /// What the editors' tool strips do with tools that do not fit. Picked up live, like
-        /// <see cref="EditorLayout"/>, which it sits beside in both editors' customize flyouts.
-        /// </summary>
-        [DisplayName("Toolbar overflow")]
-        [Description("What the editor tool bars do with tools that do not fit.")]
-        public ToolbarOverflow EditorToolbarOverflow
-        {
-            get => _editorToolbarOverflow;
-            set => Set(ref _editorToolbarOverflow, value);
         }
 
         /// <summary>
@@ -412,8 +362,6 @@ namespace Clowd.Config
         private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;
         private bool _registerAutoStart = DefaultRegisterAutoStart;
         private AppTheme _theme = AppTheme.System;
-        private EditorLayout _editorLayout = EditorLayout.Modern;
-        private ToolbarOverflow _editorToolbarOverflow = ToolbarOverflow.Wrap;
 
         // On by default: it is what a Tahoe-era mac window looks like, and the windows that
         // extend have been laid out for it (the gutters in SystemThemedWindow).

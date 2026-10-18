@@ -260,7 +260,7 @@
 
     </Window.Resources>
 
-    <!--  Classes selects the editor chrome and ApplyChrome sets it from General.EditorLayout,
+    <!--  Classes selects the editor chrome and ApplyChrome sets it from Editor.EditorLayout,
           exactly as the image editor does (live — a window already open follows the setting).
           "compact" is the legacy look this window has always had (30px square buttons on opaque
           #535353 chrome); "modern" floats the two tool bars on the window's own background (Mica
