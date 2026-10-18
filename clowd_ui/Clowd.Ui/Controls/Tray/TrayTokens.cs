@@ -223,5 +223,53 @@ namespace Clowd.UI.Controls.Tray
         /// </para>
         /// </summary>
         public static readonly BoxShadows ShadowCompact = BoxShadows.Parse("0 3 10 0 #59000000");
+
+        // the engaged frame (FloatingTray.IsEngaged): an accent spine over the grip edge, an accent ring,
+        // and an accent glow in place of the drop shadow
+
+        /// <summary>The resource keys of the engaged frame's glow and of the glow burst, written by the
+        /// window from the accent (<see cref="EngagedGlow"/>, <see cref="BurstGlow"/>) next to
+        /// <see cref="AccentBrushKey"/>.</summary>
+        public const string EngagedGlowKey = "TrayEngagedGlow", BurstGlowKey = "TrayBurstGlow";
+
+        /// <summary>How deep the spine runs in from the grip edge: the tray's padding, the grip, and half
+        /// the gap after it, so its inner edge falls midway between the grip and the first tile. The grip
+        /// is GripLength along the strip axis in every layout and orientation.</summary>
+        public const double SpineLength = TrayPad + GripLength + Gap / 2;
+
+        /// <summary>The accent ring: half a pixel heavier than the 1 px graphite ring it covers.</summary>
+        public const double EngagedRing = 1.5;
+
+        /// <summary>Where the engaged frame's graphite panel sits over the accent: the ring's width in from
+        /// three edges and the spine's length in from the grip edge — the left of a row, the top of a column.</summary>
+        public static readonly Thickness EngagedInsetRow = new Thickness(SpineLength, EngagedRing, EngagedRing, EngagedRing),
+                                         EngagedInsetColumn = new Thickness(EngagedRing, SpineLength, EngagedRing, EngagedRing);
+
+        /// <summary>The panel's corners: concentric with the tray's on the outer edges, and the same where it
+        /// meets the spine, so the graphite reads as one rounded shape set into the accent.</summary>
+        public static readonly CornerRadius EngagedPanelCorner = new CornerRadius(Radius - EngagedRing);
+
+        /// <summary>
+        /// The room the glow needs outside the tray on every side, in logical px, at its widest (the burst
+        /// on top of the resting glow). The window reserves it (<see cref="FloatingTrayOptions.EngagedFrame"/>),
+        /// so the glow's falloff never meets the window edge.
+        /// </summary>
+        public const double GlowReserve = 16;
+
+        /// <summary>The engaged glow: a soft accent halo plus a crisp accent hairline just outside the edge.</summary>
+        public static BoxShadows EngagedGlow(Color accent) => Glow(accent, spread: 1, alpha: 0.5, hairline: 1, hairlineAlpha: 0.4);
+
+        /// <summary>The glow burst, drawn over whatever glow there is: the halo swells in spread and
+        /// strength rather than in blur, which is what <see cref="GlowReserve"/> has room for.</summary>
+        public static BoxShadows BurstGlow(Color accent) => Glow(accent, spread: 4, alpha: 0.8, hairline: 3, hairlineAlpha: 0.65);
+
+        /// <summary>The blur of every glow's halo.</summary>
+        public const double GlowBlur = 12;
+
+        private static BoxShadows Glow(Color accent, double spread, double alpha, double hairline, double hairlineAlpha) => new(
+            new BoxShadow { Blur = GlowBlur, Spread = spread, Color = WithAlpha(accent, alpha) },
+            new[] { new BoxShadow { Spread = hairline, Color = WithAlpha(accent, hairlineAlpha) } });
+
+        private static Color WithAlpha(Color c, double alpha) => new Color((byte)Math.Round(255 * alpha), c.R, c.G, c.B);
     }
 }

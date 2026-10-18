@@ -184,5 +184,24 @@ namespace Clowd.VideoSDK.Tests
             Assert.False(Hidden.IsToolLit(ToolType.Brush));
             Assert.False((Drawing with { Hidden = true }).IsToolLit(ToolType.Brush));
         }
+
+        [Fact]
+        public void IsDrawing_only_while_the_canvases_take_the_mouse()
+        {
+            Assert.True(Drawing.IsDrawing);
+            Assert.False(Through.IsDrawing);
+            Assert.False(Hidden.IsDrawing);
+            Assert.False(DrawOnScreenState.Initial.IsDrawing);
+        }
+
+        [Fact]
+        public void Hotkeys_are_live_while_the_toolbar_is_focused_or_a_tool_is_in_hand()
+        {
+            Assert.True(Drawing.AreHotkeysLive(toolbarFocused: false));
+            Assert.True(Through.AreHotkeysLive(toolbarFocused: true));
+            Assert.True(Hidden.AreHotkeysLive(toolbarFocused: true));
+            Assert.False(Through.AreHotkeysLive(toolbarFocused: false));
+            Assert.False(Hidden.AreHotkeysLive(toolbarFocused: false));
+        }
     }
 }

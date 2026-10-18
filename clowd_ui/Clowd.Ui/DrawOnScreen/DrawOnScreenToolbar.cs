@@ -4,6 +4,8 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Clowd.Localization;
@@ -21,8 +23,10 @@ namespace Clowd.UI.DrawOnScreen
     /// It owns no state. Everything it shows is read off <see cref="IDrawOnScreenController"/> in
     /// <see cref="Refresh"/>, which runs on every <see cref="IDrawOnScreenController.Changed"/>, and
     /// every click is a controller command — so the session stays the one writer of the mode and the
-    /// toolbar can never show a state the canvases are not in. Like the other strips it never takes
-    /// keyboard focus (the chassis is WS_EX_NOACTIVATE). It is the only draw-on-screen window kept
+    /// toolbar can never show a state the canvases are not in. Unlike the other strips a click gives it
+    /// the keyboard (<see cref="FloatingTrayOptions.TakesFocus"/>): while it is focused, or a tool is in
+    /// hand, the strip is engaged — lit with the engaged frame — which is when its hotkeys are live
+    /// (issue #110). It is the only draw-on-screen window kept
     /// out of screen captures: the ink must stay in the picture, the toolbar must not.
     /// </para>
     /// </summary>
@@ -57,7 +61,9 @@ namespace Clowd.UI.DrawOnScreen
                 HasEmblem = false,
                 GripLayout = TrayGripLayout.Spanning,
                 Shadow = TrayTokens.ShadowCompact,
-                IntroComet = true,
+                Intro = true,
+                EngagedFrame = true,
+                TakesFocus = true,
             })
         {
             _controller = controller ?? throw new ArgumentNullException(nameof(controller));
@@ -164,9 +170,26 @@ namespace Clowd.UI.DrawOnScreen
             };
             ApplyAxisMargins();
 
+            // a focused toolbar has no keys of its own yet, and a key must not fall through to the button
+            // the last click focused: Space would press Clear all again
+            AddHandler(KeyDownEvent, OnPreviewKey, RoutingStrategies.Tunnel);
+            AddHandler(KeyUpEvent, OnPreviewKey, RoutingStrategies.Tunnel);
+
             _controller.Changed += OnControllerChanged;
             Loc.CultureChanged += OnCultureChanged;
             Refresh();
+        }
+
+        /// <summary>
+        /// Follows the strip's focus. Not the Activated event: Avalonia raises it before it sets
+        /// <see cref="WindowBase.IsActive"/>, so a handler reading IsActive still sees false.
+        /// </summary>
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+
+            if (change.Property == IsActiveProperty && _controller != null)
+                UpdateEngaged();
         }
 
         protected override void OnClosed(EventArgs e)
@@ -177,6 +200,12 @@ namespace Clowd.UI.DrawOnScreen
         }
 
         private void OnControllerChanged(object sender, EventArgs e) => Refresh();
+
+        private static void OnPreviewKey(object sender, KeyEventArgs e) => e.Handled = true;
+
+        /// <summary>Engaged while the strip has the keyboard or a tool is in hand: the times its hotkeys
+        /// are live (<see cref="DrawOnScreenState.AreHotkeysLive"/>).</summary>
+        private void UpdateEngaged() => IsEngaged = _controller.State.AreHotkeysLive(IsActive);
 
         private void OnCultureChanged(object sender, EventArgs e)
         {
@@ -193,6 +222,8 @@ namespace Clowd.UI.DrawOnScreen
         private void Refresh()
         {
             var state = _controller.State;
+
+            UpdateEngaged();
 
             _clickThrough.Classes.Set("ringed", state.ClickThrough);
             SetLabel(_clickThrough, "Draw_ClickThrough");

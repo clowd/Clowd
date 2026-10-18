@@ -275,8 +275,9 @@ namespace Clowd.UI.Controls.Tray
             IsVisible = false;
         }
 
-        /// <summary>Windows' "Animation effects" setting. Every other platform animates.</summary>
-        private static bool AnimationsEnabled()
+        /// <summary>Windows' "Animation effects" setting. Every other platform animates. Shared with the
+        /// tray's glow burst (<see cref="FloatingTray.PlayGlowBurst"/>).</summary>
+        internal static bool AnimationsEnabled()
         {
             if (!OperatingSystem.IsWindows())
                 return true;

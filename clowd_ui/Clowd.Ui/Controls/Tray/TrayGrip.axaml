@@ -132,6 +132,10 @@
         <Style Selector="^[IsDragging=True] /template/ tray|TrayGripDots#_dots">
             <Setter Property="Opacity" Value="0.85" />
         </Style>
+        <!-- On the engaged frame's accent spine the quiet 45 % dots would read as a smudge: full white. -->
+        <Style Selector="^[IsEngaged=True] /template/ tray|TrayGripDots#_dots">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
 
         <!-- Vertical strip: the grip lies down. GripLength high, full width, dots 3x4, rotate to the
              left of the handle. -->

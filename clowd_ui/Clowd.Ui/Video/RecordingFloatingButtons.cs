@@ -90,7 +90,7 @@ namespace Clowd.UI
         private IReadOnlyList<int> FpsOptions => FpsCycleRules.Options(_regionHz, _sources?.FpsPresets);
 
         public RecordingFloatingButtons()
-            : base(new FloatingTrayOptions { Title = "Clowd Recording Toolbar", IntroComet = true })
+            : base(new FloatingTrayOptions { Title = "Clowd Recording Toolbar", Intro = true })
         {
             // the model first: its constructor audits the capture toggles against the attached devices
             // and writes the result back before the recorder is spawned, so the settings file the

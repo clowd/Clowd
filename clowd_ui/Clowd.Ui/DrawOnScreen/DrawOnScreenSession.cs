@@ -91,8 +91,10 @@ namespace Clowd.UI.DrawOnScreen
             {
                 active.Raise();
 
-                // the press found a session already up: point at its toolbar, wherever it was left
-                active._toolbar?.ReplayIntroComet();
+                // the press found a session already up: point at its toolbar, wherever it was left, and
+                // hand it the keyboard again
+                active._toolbar?.ReplayIntro();
+                active._toolbar?.Activate();
                 return;
             }
 
@@ -151,6 +153,11 @@ namespace Clowd.UI.DrawOnScreen
                 else
                     _toolbar.Show();
                 WindowNativeExtensions.RaiseTopmostNoActivate(_toolbar);
+
+                // opened from the tray or the hotkey, the session starts focused on its toolbar (its
+                // hotkeys live). An explicit Activate gets past the toolbar opening without activation;
+                // the press that got us here is what lets this process take the foreground.
+                _toolbar.Activate();
 
                 UpdateKeystrokes();
                 OnChanged();

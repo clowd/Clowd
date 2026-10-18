@@ -64,7 +64,7 @@ namespace Clowd.UI
         public event EventHandler DrawClicked;
 
         public ShareRegionFloatingButtons()
-            : base(new FloatingTrayOptions { Title = "Clowd Share Toolbar", PreferAboveBeforeVertical = true, IntroComet = true })
+            : base(new FloatingTrayOptions { Title = "Clowd Share Toolbar", PreferAboveBeforeVertical = true, Intro = true })
         {
             // The FPS readout, permanently a label (see the class summary for why it is never a
             // button on this strip). The page seeds it with the rate the helper was spawned at and

@@ -123,7 +123,7 @@ namespace Clowd.UI
             {
                 Console.WriteLine("usage: " + ArgName + " generic|glyphs|recording|share|scroll|draw [--vertical]"
                     + " [--shadow spec|compact] [--state <name>] [--cycle] [--nochevron] [--region full]"
-                    + " [--exit-after <ms>] [--snapshot <png>]");
+                    + " [--exit-after <ms>] [--snapshot <png> [--snapshot-after <ms>]]");
                 Console.Out.Flush();
                 // a harness process with no window would hang: the desktop lifetime shuts down only
                 // on the tray's Exit item, and this path never sets a tray up.
@@ -134,7 +134,7 @@ namespace Clowd.UI
 
             var snapshot = ValueOf(args, "--snapshot");
             if (snapshot != null)
-                ScheduleSnapshot(window, snapshot);
+                ScheduleSnapshot(window, snapshot, IntValueOf(args, "--snapshot-after") ?? 800);
 
             var region = String.Equals(ValueOf(args, "--region"), "full", StringComparison.OrdinalIgnoreCase)
                 ? FullScreenRegion(window)
@@ -269,7 +269,7 @@ namespace Clowd.UI
         /// line running out of the tray on each side (one number per logical px, from the tray edge to
         /// the window edge). A non-zero last number means the reserve clips the shadow.
         /// </summary>
-        private static void ScheduleSnapshot(FloatingTrayWindow window, string path)
+        private static void ScheduleSnapshot(FloatingTrayWindow window, string path, int afterMs)
         {
             DispatcherTimer.RunOnce(() =>
             {
@@ -327,7 +327,7 @@ namespace Clowd.UI
                 }
 
                 Console.Out.Flush();
-            }, TimeSpan.FromMilliseconds(800));
+            }, TimeSpan.FromMilliseconds(afterMs));
         }
 
         /// <summary>
@@ -410,7 +410,7 @@ namespace Clowd.UI
             private TimeSpan _elapsed = ClockStart;
 
             public GenericTrayWindow(BoxShadows shadow, bool vertical)
-                : base(new FloatingTrayOptions { Title = "Clowd Tray Spike", Shadow = shadow, IntroComet = true })
+                : base(new FloatingTrayOptions { Title = "Clowd Tray Spike", Shadow = shadow, Intro = true })
             {
                 _primary = new TrayPrimaryButton { State = TrayPrimaryState.Idle, Label = "Start" };
                 ToolTip.SetTip(_primary, "Transport · Idle");
@@ -982,10 +982,11 @@ namespace Clowd.UI
                 switch (state?.ToLowerInvariant())
                 {
                     case "drawing":
-                        _controller.Set(DrawOnScreenState.Initial);
+                        _controller.Set(DrawOnScreenState.Initial.PickTool(DrawPalette.DefaultTool));
                         break;
                     case "clickthrough":
-                        _controller.Set(DrawOnScreenState.Initial.ToggleClickThrough());
+                        // a session opens in click-through
+                        _controller.Set(DrawOnScreenState.Initial);
                         break;
                     case "hidden":
                         _controller.Set(DrawOnScreenState.Initial.ToggleHide());

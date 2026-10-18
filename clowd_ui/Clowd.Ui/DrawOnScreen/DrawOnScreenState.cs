@@ -64,7 +64,15 @@ namespace Clowd.UI.DrawOnScreen
         private DrawOnScreenState ResumeDrawing() =>
             ClickThrough || Hidden || Tool is ToolType.Eraser or ToolType.Pointer ? PickTool(ToolType.Brush) : this;
 
+        /// <summary>Whether the canvases are taking the mouse: the ink is up and not passed through.</summary>
+        public bool IsDrawing => !ClickThrough && !Hidden;
+
+        /// <summary>Whether the session's hotkeys are live: while the toolbar is focused
+        /// (<paramref name="toolbarFocused"/>), or a tool is in hand. A canvas window only ever has the
+        /// keyboard while it is drawing, so its focus needs no case of its own.</summary>
+        public bool AreHotkeysLive(bool toolbarFocused) => toolbarFocused || IsDrawing;
+
         /// <summary>Whether <paramref name="tool"/>'s button shows as active: picked, and actually drawing.</summary>
-        public bool IsToolLit(ToolType tool) => Tool == tool && !ClickThrough && !Hidden;
+        public bool IsToolLit(ToolType tool) => Tool == tool && IsDrawing;
     }
 }

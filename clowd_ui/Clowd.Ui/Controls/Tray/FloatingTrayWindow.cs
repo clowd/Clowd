@@ -50,9 +50,27 @@ namespace Clowd.UI.Controls.Tray
 
         public BoxShadows Shadow { get; init; } = TrayTokens.ShadowCompact;
 
-        /// <summary>Circles the strip with the accent comet (<see cref="TrayComet"/>) when it first
-        /// appears, to draw the eye to a toolbar that has just popped up somewhere on the desktop.</summary>
-        public bool IntroComet { get; init; }
+        /// <summary>Draws the eye to a toolbar that has just popped up somewhere on the desktop when it
+        /// first appears: the accent comet (<see cref="TrayComet"/>) circles it, or, on a strip with the
+        /// <see cref="EngagedFrame"/>, the engaged frame's glow bursts (<see cref="FloatingTray.PlayGlowBurst"/>).</summary>
+        public bool Intro { get; init; }
+
+        /// <summary>
+        /// Lets the owner engage the strip (<see cref="FloatingTrayWindow.IsEngaged"/>) to show that its
+        /// hotkeys are live. The engaged frame's glow reaches past the tray on every side, so the window
+        /// reserves <see cref="TrayTokens.GlowReserve"/> all round, not just the shadow's room — which widens
+        /// the band of transparent window around the strip that eats clicks. Needs <see cref="HasGrip"/>: the
+        /// frame's spine covers the grip edge.
+        /// </summary>
+        public bool EngagedFrame { get; init; }
+
+        /// <summary>
+        /// Lets a click on the strip give it the keyboard: the window is built without WS_EX_NOACTIVATE, so
+        /// it becomes the foreground window like any other (it still opens without activating). For a strip
+        /// whose own hotkeys go live while it is focused; every other strip leaves the user's app the
+        /// keyboard. On macOS a plain Avalonia window activates on click either way.
+        /// </summary>
+        public bool TakesFocus { get; init; }
     }
 
     /// <summary>
@@ -114,7 +132,8 @@ namespace Clowd.UI.Controls.Tray
         private ContentControl _blipContent;
         private DispatcherTimer _blipTimer;
 
-        // the entrance comet; null unless the options asked for it.
+        // the entrance comet; null unless the options asked for an intro on a strip without the engaged
+        // frame, whose intro is the glow burst instead.
         private readonly TrayComet _comet;
 
         /// <summary>The panel. Subclasses add their controls to its Items before showing the window.</summary>
@@ -142,6 +161,8 @@ namespace Clowd.UI.Controls.Tray
             // and a rotate flips the axis while the pinned Width/Height stay put (the strip clips).
             if (options.HasGrip && options.FixedTraySize.HasValue)
                 throw new ArgumentException("A fixed-size tray cannot carry a grip: placement ignores the manual latch and the size does not follow rotation.", nameof(options));
+            if (options.EngagedFrame && !options.HasGrip)
+                throw new ArgumentException("The engaged frame's spine covers the grip edge: a tray without a grip cannot have one.", nameof(options));
 
             Title = options.Title;
             WindowDecorations = WindowDecorations.None;
@@ -162,13 +183,21 @@ namespace Clowd.UI.Controls.Tray
             Background = Brushes.Transparent;
             TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
 
-            // never steal focus from the app beneath; no taskbar/alt-tab entry. A one-way door: these
-            // styles cannot be removed for the life of the window, so this is the only place they are set.
-            WindowNativeExtensions.AddExStyles(this, WindowNativeExtensions.WS_EX_NOACTIVATE | WindowNativeExtensions.WS_EX_TOOLWINDOW);
+            // never steal focus from the app beneath (unless the owner asked for the keyboard); no
+            // taskbar/alt-tab entry. A one-way door: these styles cannot be removed for the life of the
+            // window, so this is the only place they are set.
+            WindowNativeExtensions.AddExStyles(this, options.TakesFocus
+                ? WindowNativeExtensions.WS_EX_TOOLWINDOW
+                : WindowNativeExtensions.WS_EX_NOACTIVATE | WindowNativeExtensions.WS_EX_TOOLWINDOW);
 
             // the one runtime value in the tray's palette: the user's capture accent, read once here and
             // reached by every tray theme through a DynamicResource.
             Resources[TrayTokens.AccentBrushKey] = new ImmutableSolidColorBrush(AppStyles.CaptureAccentColor);
+            if (options.EngagedFrame)
+            {
+                Resources[TrayTokens.EngagedGlowKey] = TrayTokens.EngagedGlow(AppStyles.CaptureAccentColor);
+                Resources[TrayTokens.BurstGlowKey] = TrayTokens.BurstGlow(AppStyles.CaptureAccentColor);
+            }
 
             // the dark tooltip / menu look is scoped to tray windows (and their popups, whose styling
             // parent chain reaches this window) rather than merged app-wide.
@@ -180,7 +209,7 @@ namespace Clowd.UI.Controls.Tray
             Tray = new FloatingTray
             {
                 Shadow = options.Shadow,
-                Margin = TrayPlacement.ShadowReserve(options.Shadow),
+                Margin = WindowReserve(options),
             };
 
             // several tiles are disabled exactly when their tip is the only explanation, and ToolTipService
@@ -209,7 +238,7 @@ namespace Clowd.UI.Controls.Tray
 
             // laid over the whole window, after the tray so it draws on top; it sizes to nothing, so the
             // window still sizes to the tray and its margin.
-            if (options.IntroComet)
+            if (options.Intro && !options.EngagedFrame)
             {
                 _comet = new TrayComet(Tray);
                 _root.Children.Add(_comet);
@@ -304,30 +333,72 @@ namespace Clowd.UI.Controls.Tray
                     QueueReposition();
                 }
 
-                // the comet's outer rings live in the shadow reserve, so a window that lost it has no
-                // room to draw them. Posted so the run starts where the strip is placed, not where it
-                // was parked for the show.
-                else if (_comet != null)
+                // the comet's outer rings and the burst's glow live in the reserve, so a window that lost
+                // it has no room to draw them. Posted so the run starts where the strip is placed, not
+                // where it was parked for the show.
+                else if (_options.Intro)
                 {
                     Dispatcher.UIThread.Post(() =>
                     {
                         if (IsVisible)
-                            _comet.Start();
+                            PlayIntro();
                     }, DispatcherPriority.Background);
                 }
             };
         }
 
         /// <summary>
-        /// Plays the entrance comet again on a strip that is already up — for an owner whose entry point
-        /// was used a second time while its strip was showing, so the press visibly lands somewhere.
-        /// Does nothing on a strip without the comet, one that is not visible, or one whose window could
-        /// not go transparent (the same rule the first run follows).
+        /// Whether the strip is engaged — its hotkeys are live — shown by the tray's engaged frame
+        /// (<see cref="FloatingTray.IsEngaged"/>). Changing it fades the frame in or out.
+        /// Only a window built with <see cref="FloatingTrayOptions.EngagedFrame"/> may be engaged: any
+        /// other has no room for the glow.
         /// </summary>
-        public void ReplayIntroComet()
+        public bool IsEngaged
         {
-            if (_comet != null && IsVisible && ActualTransparencyLevel == WindowTransparencyLevel.Transparent)
-                _comet.Start();
+            get => Tray.IsEngaged;
+            set
+            {
+                if (value && !_options.EngagedFrame)
+                    throw new InvalidOperationException("Only a tray built with FloatingTrayOptions.EngagedFrame can be engaged: no other reserves room for the glow.");
+                Tray.IsEngaged = value;
+            }
+        }
+
+        /// <summary>The transparent room the window keeps round the tray: the shadow's, widened on every
+        /// side to the engaged frame's glow when the strip can be engaged.</summary>
+        private static Thickness WindowReserve(FloatingTrayOptions options)
+        {
+            var shadow = TrayPlacement.ShadowReserve(options.Shadow);
+            if (!options.EngagedFrame)
+                return shadow;
+
+            var glow = TrayTokens.GlowReserve;
+            return new Thickness(
+                Math.Max(shadow.Left, glow),
+                Math.Max(shadow.Top, glow),
+                Math.Max(shadow.Right, glow),
+                Math.Max(shadow.Bottom, glow));
+        }
+
+        /// <summary>
+        /// Plays the entrance again (the comet, or the glow burst) on a strip that is already up — for an
+        /// owner whose entry point was used a second time while its strip was showing, so the press
+        /// visibly lands somewhere. Does nothing on a strip without <see cref="FloatingTrayOptions.Intro"/>,
+        /// one that is not visible, or one whose window could not go transparent (the same rule the first
+        /// run follows).
+        /// </summary>
+        public void ReplayIntro()
+        {
+            if (_options.Intro && IsVisible && ActualTransparencyLevel == WindowTransparencyLevel.Transparent)
+                PlayIntro();
+        }
+
+        private void PlayIntro()
+        {
+            if (_options.EngagedFrame)
+                Tray.PlayGlowBurst();
+            else
+                _comet?.Start();
         }
 
         /// <summary>

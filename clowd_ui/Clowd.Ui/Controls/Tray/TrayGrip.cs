@@ -65,6 +65,13 @@ namespace Clowd.UI.Controls.Tray
         public static readonly DirectProperty<TrayGrip, bool> IsDraggingProperty =
             AvaloniaProperty.RegisterDirect<TrayGrip, bool>(nameof(IsDragging), o => o.IsDragging);
 
+        /// <summary>
+        /// Pushed down by the tray from <see cref="FloatingTray.IsEngaged"/>: the grip then sits on the
+        /// engaged frame's accent spine, and the theme brings its dots up to full strength.
+        /// </summary>
+        public static readonly StyledProperty<bool> IsEngagedProperty =
+            AvaloniaProperty.Register<TrayGrip, bool>(nameof(IsEngaged));
+
         private TrayDragGesture _gesture;
         private bool _isDragging;
         private Button _rotate;
@@ -84,6 +91,12 @@ namespace Clowd.UI.Controls.Tray
         {
             get => GetValue(LayoutProperty);
             set => SetValue(LayoutProperty, value);
+        }
+
+        public bool IsEngaged
+        {
+            get => GetValue(IsEngagedProperty);
+            set => SetValue(IsEngagedProperty, value);
         }
 
         public bool IsDragging

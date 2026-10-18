@@ -46,14 +46,59 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Panel>
+                    <!-- The shadow and the glows are shadow-only layers (an outer box shadow is clipped
+                         to outside its own rect, so none of them tints the tray), kept apart from the fill
+                         so the engaged frame can fade the drop shadow out without fading the fill. -->
+                    <Border Name="_shadow"
+                            Background="Transparent"
+                            BoxShadow="{TemplateBinding Shadow}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                    <!-- the glow burst (FloatingTray.PlayGlowBurst): its opacity is animated 0 → 1 → 0 -->
+                    <Border Name="PART_Burst"
+                            Background="Transparent"
+                            BoxShadow="{DynamicResource TrayBurstGlow}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False"
+                            Opacity="0" />
                     <Border Name="_fill"
                             Background="{TemplateBinding Background}"
-                            BoxShadow="{TemplateBinding Shadow}"
                             CornerRadius="{TemplateBinding CornerRadius}" />
                     <Border Name="_ring"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False" />
+                    <!-- The engaged frame: the tray filled with the accent, and a rounded graphite panel
+                         laid over it that leaves the accent showing as a 1.5 px ring round the edge and a
+                         spine over the grip, the panel's own corners rounding off where it meets the spine.
+                         Only the accent (and its glow) fades: the panel is always drawn, graphite on graphite
+                         while the strip is not engaged, because Avalonia fades a panel's children one by one
+                         rather than as a group, and a fading panel let the accent show through mid-fade.
+                         Over the graphite ring and under the items, so the grip's dots and rotate glyph sit
+                         on the spine. -->
+                    <Panel Name="_engaged" IsHitTestVisible="False" Opacity="0">
+                        <Panel.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Panel.Transitions>
+                        <Border Background="Transparent"
+                                BoxShadow="{DynamicResource TrayEngagedGlow}"
+                                CornerRadius="{TemplateBinding CornerRadius}" />
+                        <Border Background="{DynamicResource TrayAccentBrush}"
+                                CornerRadius="{TemplateBinding CornerRadius}" />
+                    </Panel>
+                    <Border Name="_panel"
+                            Background="{TemplateBinding Background}"
+                            Margin="{x:Static tray:TrayTokens.EngagedInsetRow}"
+                            CornerRadius="{x:Static tray:TrayTokens.EngagedPanelCorner}"
                             IsHitTestVisible="False" />
                     <!-- TrayPad 4 = 1 px ring + 3 px inner padding, spec §1 -->
                     <ItemsPresenter Name="PART_ItemsPresenter"
@@ -62,6 +107,20 @@
                 </Panel>
             </ControlTemplate>
         </Setter>
+
+        <!-- engaged: the frame fades in and the drop shadow out, both on the tray's fill transition, so
+             the grip's dots brighten in step with the spine under them -->
+        <Style Selector="^[IsEngaged=True] /template/ Border#_shadow">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^[IsEngaged=True] /template/ Panel#_engaged">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <!-- a column's grip edge is its top -->
+        <Style Selector="^[Orientation=Vertical] /template/ Border#_panel">
+            <Setter Property="Margin" Value="{x:Static tray:TrayTokens.EngagedInsetColumn}" />
+        </Style>
     </ControlTheme>
 
 </ResourceDictionary>
