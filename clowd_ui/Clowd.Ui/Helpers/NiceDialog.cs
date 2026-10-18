@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
@@ -35,6 +34,17 @@ namespace Clowd.UI.Helpers
     /// a single <see cref="MessageDialog"/> window, the font prompt by <see cref="FontDialog"/>,
     /// color prompts by the ColorPicker dialogs, and file pickers by Avalonia's StorageProvider
     /// (decision table #49).
+    /// <para>
+    /// Every one is something the user just asked for, so each comes up in front with the keyboard
+    /// (<see cref="WindowNativeExtensions.ForceForeground"/>) even when what asked was a global hotkey
+    /// or a capture finishing in another process — neither of which leaves this process the right to
+    /// take the foreground, and a dialog that only flashes in the taskbar reads as nothing happening.
+    /// </para>
+    /// <para>
+    /// A window dialog is owned by the caller's window when it has one and is otherwise a top level of
+    /// its own. A native file picker cannot be: it needs an owner's StorageProvider, so without a
+    /// caller's window it gets a <see cref="TransparentDialogHost"/> for the duration.
+    /// </para>
     /// </summary>
     public static class NiceDialog
     {
@@ -64,7 +74,7 @@ namespace Clowd.UI.Helpers
             string footerTxt = null)
         {
             var dialog = new MessageDialog(icon, content, mainInstruction, trueTxt, falseTxt, footerIcon, footerTxt);
-            var result = await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.Result);
+            var result = await ShowWindowAsync(dialog, TryGetWindowFromVisual(parent), () => dialog.Result);
             return result == true;
         }
 
@@ -83,7 +93,7 @@ namespace Clowd.UI.Helpers
             string verificationTxt)
         {
             var dialog = new MessageDialog(icon, content, mainInstruction, trueTxt, falseTxt, verificationTxt: verificationTxt);
-            var result = await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.Result);
+            var result = await ShowWindowAsync(dialog, TryGetWindowFromVisual(parent), () => dialog.Result);
             return new VerifiableResult(result == true, dialog.IsVerificationChecked);
         }
 
@@ -100,14 +110,15 @@ namespace Clowd.UI.Helpers
             string primaryTxt, string alternateTxt, string cancelTxt = "Cancel")
         {
             var dialog = new MessageDialog(icon, content, mainInstruction, primaryTxt, cancelTxt, altTxt: alternateTxt);
-            await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.Result);
+            await ShowWindowAsync(dialog, TryGetWindowFromVisual(parent), () => dialog.Result);
             return dialog.Choice;
         }
 
         public static async Task<Color> ShowColorPromptAsync(Visual parent, Color initial)
         {
             var dialog = new ColorDialog(HslRgbColor.FromColor(initial), true);
-            var result = await dialog.ShowAsync(GetOwnerWindow(parent));
+            ComeForwardWhenOpened(dialog);
+            var result = await dialog.ShowAsync(TryGetWindowFromVisual(parent));
 
             if (result == true)
                 return dialog.CurrentColor.ToColor();
@@ -123,6 +134,7 @@ namespace Clowd.UI.Helpers
 
             var dialog = new ColorDialog(color, false);
             dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            ComeForwardWhenOpened(dialog);
             dialog.Show();
             dialog.Activate();
         }
@@ -130,7 +142,7 @@ namespace Clowd.UI.Helpers
         public static async Task<SelectedFont> ShowFontDialogAsync(Visual parent, string family, double size, FontStyle style, FontWeight weight)
         {
             var dialog = new FontDialog(family, size, style, weight);
-            var result = await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.SelectedFont != null);
+            var result = await ShowWindowAsync(dialog, TryGetWindowFromVisual(parent), () => dialog.SelectedFont != null);
             return result == true ? dialog.SelectedFont : null;
         }
 
@@ -138,7 +150,7 @@ namespace Clowd.UI.Helpers
         public static async Task<string> ShowFontFamilyDialogAsync(Visual parent, string family)
         {
             var dialog = new FontDialog(family, familyOnly: true);
-            var result = await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.SelectedFont != null);
+            var result = await ShowWindowAsync(dialog, TryGetWindowFromVisual(parent), () => dialog.SelectedFont != null);
             return result == true ? dialog.SelectedFont.TextFontFamilyName : null;
         }
 
@@ -154,9 +166,8 @@ namespace Clowd.UI.Helpers
                                                                  bool multiSelect = false, FilePickerFileType[] filter = null,
                                                                  string suggestedFileName = null)
         {
-            var provider = GetStorageProvider(parent);
-            if (provider == null)
-                return null;
+            using var storage = GetOrCreateWindowStorage(parent);
+            var provider = storage.Provider;
 
             var options = new FilePickerOpenOptions { AllowMultiple = multiSelect };
 
@@ -185,9 +196,8 @@ namespace Clowd.UI.Helpers
 
         public static async Task<string> ShowSaveImageDialog(Visual parent, Bitmap bitmap, string directory, string filePattern)
         {
-            var provider = GetStorageProvider(parent);
-            if (provider == null)
-                return null;
+            using var storage = GetOrCreateWindowStorage(parent);
+            var provider = storage.Provider;
 
             if (String.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
                 directory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -243,41 +253,65 @@ namespace Clowd.UI.Helpers
             return file;
         }
 
-        private static Window GetOwnerWindow(Visual parent)
+        /// <summary>The visible window <paramref name="parent"/> is in, or null: a window dialog without
+        /// one is simply its own top level.</summary>
+        private static Window TryGetWindowFromVisual(Visual parent) =>
+            parent != null && TopLevel.GetTopLevel(parent) is Window window && window.IsVisible ? window : null;
+
+        /// <summary>
+        /// The owner a native file picker opens over, brought to the front first (the picker opens
+        /// activated only over a foreground owner): the caller's window, or failing that a
+        /// <see cref="TransparentDialogHost"/>, which takes the foreground itself and is closed when
+        /// the returned value is disposed.
+        /// </summary>
+        private static WindowStorage GetOrCreateWindowStorage(Visual parent)
         {
-            if (parent != null && TopLevel.GetTopLevel(parent) is Window owner && owner.IsVisible)
-                return owner;
-
-            // No (visible) parent — fall back to any visible app window, preferring the active
-            // one. When nothing is available the dialog is simply shown non-modal, centered on
-            // screen (replaces the WPF "fake owner window" mechanism).
-            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            if (TryGetWindowFromVisual(parent) is { } window)
             {
-                // Exclude Avalonia-internal transient top-levels (e.g. TrayPopupRoot, the window
-                // that hosts the tray context menu). When a dialog is opened from a tray menu item,
-                // that popup is still listed and reports IsVisible/IsActive, but it is torn down as
-                // the menu dismisses — picking it as the dialog owner makes ShowDialog's CenterOwner
-                // placement throw "Windowing backend wasn't properly initialized." once its backend
-                // is gone. Our own windows all live under Clowd.* namespaces.
-                static bool IsAppWindow(Window w) => !w.GetType().FullName!.StartsWith("Avalonia", StringComparison.Ordinal);
-
-                return desktop.Windows.FirstOrDefault(w => w.IsActive && w.IsVisible && IsAppWindow(w))
-                       ?? desktop.Windows.FirstOrDefault(w => w.IsVisible && IsAppWindow(w));
+                WindowNativeExtensions.ForceForeground(window);
+                return new WindowStorage(window.StorageProvider, null);
             }
 
-            return null;
+            var host = new TransparentDialogHost();
+            host.Show();
+            return new WindowStorage(host.StorageProvider, host);
         }
 
-        private static IStorageProvider GetStorageProvider(Visual parent)
+        /// <summary>A picker's storage provider, and the host window to close once the picker is done
+        /// (null when the caller's own window owns it).</summary>
+        private sealed class WindowStorage : IDisposable
         {
-            if (parent != null && TopLevel.GetTopLevel(parent) is { } topLevel)
-                return topLevel.StorageProvider;
+            private readonly Window _host;
 
-            return GetOwnerWindow(null)?.StorageProvider;
+            public WindowStorage(IStorageProvider provider, Window host)
+            {
+                Provider = provider;
+                _host = host;
+            }
+
+            public IStorageProvider Provider { get; }
+
+            public void Dispose() => _host?.Close();
+        }
+
+        /// <summary>Takes the foreground for <paramref name="dialog"/> once it has a handle. A no-op
+        /// when it already has it, and a plain SetForegroundWindow when another Clowd window is in
+        /// front; keys are only injected when another app is.</summary>
+        private static void ComeForwardWhenOpened(Window dialog)
+        {
+            void OnOpened(object sender, EventArgs e)
+            {
+                dialog.Opened -= OnOpened;
+                WindowNativeExtensions.ForceForeground(dialog);
+            }
+
+            dialog.Opened += OnOpened;
         }
 
         private static Task<bool?> ShowWindowAsync(Window dialog, Window owner, Func<bool?> resultFn)
         {
+            ComeForwardWhenOpened(dialog);
+
             if (owner != null)
             {
                 dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
