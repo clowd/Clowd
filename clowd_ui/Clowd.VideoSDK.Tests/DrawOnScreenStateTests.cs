@@ -231,6 +231,14 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Frozen_hotkeys_are_live_only_with_the_keyboard()
+        {
+            var frozen = DrawOnScreenState.Initial.Freeze();
+            Assert.True(frozen.AreHotkeysLive(focused: true));
+            Assert.False(frozen.AreHotkeysLive(focused: false));
+        }
+
+        [Fact]
         public void Frozen_ignores_the_keys_toggle()
         {
             var frozen = DrawOnScreenState.Initial.Freeze();

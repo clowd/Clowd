@@ -430,6 +430,69 @@ namespace Clowd.UI.Helpers
                 SetForegroundWindow(hwnd);
         }
 
+        /// <summary>Whether <paramref name="window"/> is the system's foreground window (Windows). Not
+        /// the same as <see cref="WindowBase.IsActive"/>: a SetForegroundWindow refused by the
+        /// foreground lock still makes the window its thread's active one, so Avalonia reports it
+        /// active while every key goes to the app in front. False off Windows.</summary>
+        public static bool IsForeground(Window window) =>
+            OperatingSystem.IsWindows() && window?.TryGetPlatformHandle() is { Handle: var hwnd }
+            && hwnd != IntPtr.Zero && GetForegroundWindow() == hwnd;
+
+        /// <summary>
+        /// Windows: brings <paramref name="window"/> to the foreground past the foreground lock, which
+        /// refuses SetForegroundWindow to a process that did not receive the last input — and a
+        /// global hotkey swallowed by the low-level keyboard hook was never delivered to us as input.
+        /// A plain SetForegroundWindow is tried first (it is allowed after a click on one of our
+        /// windows). Failing that, injecting a key makes this process the last to have sent input,
+        /// which lifts the lock for the call. The key is Alt, the one the lock reliably yields to,
+        /// masked AutoHotkey-style by an unassigned key (0xE8) between its press and release: Alt then
+        /// reads as part of a chord, so no app — the one losing the foreground or this one — sees a
+        /// lone Alt tap and enters menu mode. An Alt the user is physically holding (part of the hotkey) is left alone:
+        /// injecting its release would tell Windows they let go. Returns whether the window ended
+        /// up in front. False off Windows or before the window has a handle.
+        /// </summary>
+        public static bool ForceForeground(Window window)
+        {
+            if (!OperatingSystem.IsWindows())
+                return false;
+
+            var handle = window?.TryGetPlatformHandle();
+            if (handle == null || handle.Handle == IntPtr.Zero)
+                return false;
+
+            var hwnd = handle.Handle;
+            if (GetForegroundWindow() == hwnd)
+                return true;
+
+            // a click on one of our windows is input we did receive: no keys needed then, and none
+            // injected into the gesture it starts
+            if (SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd)
+                return true;
+
+            var altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            if (!altHeld)
+                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_MENU_MASK, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_MENU_MASK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+            SetForegroundWindow(hwnd);
+
+            if (!altHeld)
+                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+            return GetForegroundWindow() == hwnd;
+        }
+
+        private const byte VK_MENU = 0x12;
+        private const byte VK_MENU_MASK = 0xE8; // unassigned: AutoHotkey's default #MenuMaskKey
+        private const uint KEYEVENTF_KEYUP = 0x0002;
+
+        [DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
         // NSStatusWindowLevel — one above NSMainMenuWindowLevel (24), same level the Rust
         // capturer overlay uses.
         private const nint NSStatusWindowLevel = 25;

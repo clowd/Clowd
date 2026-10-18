@@ -83,8 +83,9 @@ namespace Clowd.UI.DrawOnScreen
 
         /// <summary>Whether the session's hotkeys are live: while the session has the keyboard
         /// (<paramref name="focused"/>: the toolbar or a canvas window), or a tool is in hand. The two
-        /// part only for a moment: a session that loses the keyboard stops drawing.</summary>
-        public bool AreHotkeysLive(bool focused) => focused || IsDrawing;
+        /// part only for a moment: a session that loses the keyboard stops drawing. A frozen session is
+        /// always drawing, so there only the keyboard counts: the strip never claims keys it lacks.</summary>
+        public bool AreHotkeysLive(bool focused) => focused || (IsDrawing && !Frozen);
 
         /// <summary>Whether <paramref name="tool"/>'s button shows as active: picked, and actually drawing.</summary>
         public bool IsToolLit(ToolType tool) => Tool == tool && IsDrawing;

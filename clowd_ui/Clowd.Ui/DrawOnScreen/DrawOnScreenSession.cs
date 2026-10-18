@@ -134,7 +134,7 @@ namespace Clowd.UI.DrawOnScreen
                 // the press found a session already up: point at its toolbar, wherever it was left, and
                 // hand it the keyboard again
                 active._toolbar?.ReplayIntro();
-                active._toolbar?.Activate();
+                active.TakeKeyboard();
                 return;
             }
 
@@ -186,6 +186,11 @@ namespace Clowd.UI.DrawOnScreen
                 _toolbar.Opened += (s, e) => KeepToolbarOnTop();
                 _toolbar.PropertyChanged += OnToolbarPropertyChanged;
                 _toolbar.Screens.Changed += OnScreensChanged;
+                // a click on the strip can bring the keyboard without IsActive changing (the strip was
+                // already its thread's active window, just not in front), so look again after one
+                _toolbar.AddHandler(InputElement.PointerPressedEvent,
+                    (s, e) => Dispatcher.UIThread.Post(OnFocusMoved, DispatcherPriority.Background),
+                    RoutingStrategies.Tunnel, handledEventsToo: true);
 
                 var screens = DesktopScreens.All(_toolbar);
                 if (screens.Count == 0 && DesktopScreens.Primary(_toolbar) is { } primary)
@@ -214,9 +219,9 @@ namespace Clowd.UI.DrawOnScreen
                 WindowNativeExtensions.RaiseTopmostNoActivate(_toolbar);
 
                 // opened from the tray or the hotkey, the session starts focused on its toolbar (its
-                // hotkeys live). An explicit Activate gets past the toolbar opening without activation;
-                // the press that got us here is what lets this process take the foreground.
-                _toolbar.Activate();
+                // hotkeys live). The toolbar opens without activation, and the hotkey that got us here
+                // was swallowed by the keyboard hook, not delivered to us: see TakeKeyboard.
+                TakeKeyboard();
 
                 UpdateKeystrokes();
                 OnChanged();
@@ -787,8 +792,28 @@ namespace Clowd.UI.DrawOnScreen
         // Focus
         // ====================================================================
 
-        /// <summary>Whether the toolbar or a canvas has the keyboard right now (unsettled).</summary>
-        private bool HasKeyboard => _toolbar?.IsActive == true || _overlays.Any(o => o.Window.IsActive);
+        /// <summary>Whether the toolbar or a canvas has the keyboard right now (unsettled). On Windows
+        /// that is the system's foreground window, not <see cref="WindowBase.IsActive"/>, which a
+        /// refused SetForegroundWindow still sets (see <see cref="WindowNativeExtensions.IsForeground"/>).</summary>
+        private bool HasKeyboard => OperatingSystem.IsWindows()
+            ? WindowNativeExtensions.IsForeground(_toolbar) || _overlays.Any(o => WindowNativeExtensions.IsForeground(o.Window))
+            : _toolbar?.IsActive == true || _overlays.Any(o => o.Window.IsActive);
+
+        /// <summary>
+        /// Puts the keyboard on the toolbar: past the foreground lock on Windows
+        /// (<see cref="WindowNativeExtensions.ForceForeground"/>) — a hotkey swallowed by the keyboard
+        /// hook does not count as input this process received, so a plain Activate is refused there
+        /// while Avalonia still reports the strip active — then Activate for Avalonia's own focus.
+        /// </summary>
+        private void TakeKeyboard()
+        {
+            if (_toolbar == null)
+                return;
+
+            WindowNativeExtensions.ForceForeground(_toolbar);
+            _toolbar.Activate();
+            OnFocusMoved();
+        }
 
         private void OnToolbarPropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
         {
@@ -837,12 +862,23 @@ namespace Clowd.UI.DrawOnScreen
         /// </summary>
         private void OnFocusSettled()
         {
-            if (_closing || HasKeyboard)
+            if (_closing)
                 return;
 
+            // the keyboard arrived while the loss was settling (an activation can land a moment after
+            // the IsActive change that announced it)
+            if (HasKeyboard)
+            {
+                OnFocusMoved();
+                return;
+            }
+
+            // only a keyboard the session had can be lost: one that never arrived (the foreground lock
+            // won) leaves the strip unlit, for a click on a canvas to take it
             if (State.Frozen)
             {
-                Close();
+                if (_focused)
+                    Close();
                 return;
             }
 
@@ -867,7 +903,7 @@ namespace Clowd.UI.DrawOnScreen
             KeepToolbarOnTop();
 
             if (OperatingSystem.IsWindows() && State.IsDrawing && !HasKeyboard)
-                _toolbar?.Activate();
+                TakeKeyboard();
         }
 
         private void OnCanvasHotkeyDown(KeyEventArgs e)
