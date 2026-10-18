@@ -51,8 +51,9 @@ namespace Clowd.UI.Controls.Tray
         public BoxShadows Shadow { get; init; } = TrayTokens.ShadowCompact;
 
         /// <summary>Draws the eye to a toolbar that has just popped up somewhere on the desktop when it
-        /// first appears: the accent comet (<see cref="TrayComet"/>) circles it, or, on a strip with the
-        /// <see cref="EngagedFrame"/>, the engaged frame's glow bursts (<see cref="FloatingTray.PlayGlowBurst"/>).</summary>
+        /// first appears: an accent glow bursts round it (<see cref="FloatingTray.PlayGlowBurst"/>). The
+        /// glow reaches past the tray on every side, so the window reserves
+        /// <see cref="TrayTokens.GlowReserve"/> all round, as for the <see cref="EngagedFrame"/>.</summary>
         public bool Intro { get; init; }
 
         /// <summary>
@@ -132,10 +133,6 @@ namespace Clowd.UI.Controls.Tray
         private ContentControl _blipContent;
         private DispatcherTimer _blipTimer;
 
-        // the entrance comet; null unless the options asked for an intro on a strip without the engaged
-        // frame, whose intro is the glow burst instead.
-        private readonly TrayComet _comet;
-
         /// <summary>The panel. Subclasses add their controls to its Items before showing the window.</summary>
         public FloatingTray Tray { get; }
 
@@ -193,11 +190,12 @@ namespace Clowd.UI.Controls.Tray
             // the one runtime value in the tray's palette: the user's capture accent, read once here and
             // reached by every tray theme through a DynamicResource.
             Resources[TrayTokens.AccentBrushKey] = new ImmutableSolidColorBrush(AppStyles.CaptureAccentColor);
+            // the glows are light with nothing written on them, so they take the accent as picked: the
+            // darkening for white text would only muddy them
             if (options.EngagedFrame)
-            {
-                Resources[TrayTokens.EngagedGlowKey] = TrayTokens.EngagedGlow(AppStyles.CaptureAccentColor);
-                Resources[TrayTokens.BurstGlowKey] = TrayTokens.BurstGlow(AppStyles.CaptureAccentColor);
-            }
+                Resources[TrayTokens.EngagedGlowKey] = TrayTokens.EngagedGlow(AppStyles.CapturePickedAccentColor);
+            if (options.Intro)
+                Resources[TrayTokens.BurstGlowKey] = TrayTokens.BurstGlow(AppStyles.CapturePickedAccentColor);
 
             // the dark tooltip / menu look is scoped to tray windows (and their popups, whose styling
             // parent chain reaches this window) rather than merged app-wide.
@@ -235,14 +233,6 @@ namespace Clowd.UI.Controls.Tray
             // this window so its content resolves the tray themes.
             _root = new Panel { Children = { Tray } };
             Content = _root;
-
-            // laid over the whole window, after the tray so it draws on top; it sizes to nothing, so the
-            // window still sizes to the tray and its margin.
-            if (options.Intro && !options.EngagedFrame)
-            {
-                _comet = new TrayComet(Tray);
-                _root.Children.Add(_comet);
-            }
 
             if (options.HasGrip)
             {
@@ -333,15 +323,14 @@ namespace Clowd.UI.Controls.Tray
                     QueueReposition();
                 }
 
-                // the comet's outer rings and the burst's glow live in the reserve, so a window that lost
-                // it has no room to draw them. Posted so the run starts where the strip is placed, not
-                // where it was parked for the show.
+                // the burst's glow lives in the reserve, so a window that lost it has no room to draw it.
+                // Posted so the burst plays where the strip is placed, not where it was parked for the show.
                 else if (_options.Intro)
                 {
                     Dispatcher.UIThread.Post(() =>
                     {
                         if (IsVisible)
-                            PlayIntro();
+                            Tray.PlayGlowBurst();
                     }, DispatcherPriority.Background);
                 }
             };
@@ -365,11 +354,11 @@ namespace Clowd.UI.Controls.Tray
         }
 
         /// <summary>The transparent room the window keeps round the tray: the shadow's, widened on every
-        /// side to the engaged frame's glow when the strip can be engaged.</summary>
+        /// side to the glow's when the strip has one (the intro burst, or the engaged frame).</summary>
         private static Thickness WindowReserve(FloatingTrayOptions options)
         {
             var shadow = TrayPlacement.ShadowReserve(options.Shadow);
-            if (!options.EngagedFrame)
+            if (!options.EngagedFrame && !options.Intro)
                 return shadow;
 
             var glow = TrayTokens.GlowReserve;
@@ -381,24 +370,15 @@ namespace Clowd.UI.Controls.Tray
         }
 
         /// <summary>
-        /// Plays the entrance again (the comet, or the glow burst) on a strip that is already up — for an
-        /// owner whose entry point was used a second time while its strip was showing, so the press
-        /// visibly lands somewhere. Does nothing on a strip without <see cref="FloatingTrayOptions.Intro"/>,
+        /// Plays the entrance glow burst again on a strip that is already up — for an owner whose entry
+        /// point was used a second time while its strip was showing, so the press visibly lands somewhere. Does nothing on a strip without <see cref="FloatingTrayOptions.Intro"/>,
         /// one that is not visible, or one whose window could not go transparent (the same rule the first
         /// run follows).
         /// </summary>
         public void ReplayIntro()
         {
             if (_options.Intro && IsVisible && ActualTransparencyLevel == WindowTransparencyLevel.Transparent)
-                PlayIntro();
-        }
-
-        private void PlayIntro()
-        {
-            if (_options.EngagedFrame)
                 Tray.PlayGlowBurst();
-            else
-                _comet?.Start();
         }
 
         /// <summary>

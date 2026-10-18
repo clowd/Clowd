@@ -115,7 +115,8 @@ namespace Clowd
         public const double CometMinLightness = 0.62, CometMaxLightness = 0.72;
 
         /// <summary>
-        /// The two colours of the floating strips' entrance comet, derived from the accent as the user
+        /// The two colours of the capture overlay's hint comet (clowd_capture mirrors this in
+        /// <c>hints::trail::comet_colors</c>), derived from the accent as the user
         /// picked it (not the contrast-darkened fill, which reads as muddy once it glows): the body, and
         /// the hot tint its head burns towards.
         /// <para>

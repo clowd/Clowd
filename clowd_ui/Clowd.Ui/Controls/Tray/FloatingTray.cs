@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Avalonia;
 using Avalonia.Animation;
@@ -94,13 +95,27 @@ namespace Clowd.UI.Controls.Tray
         /// </summary>
         public void PlayGlowBurst()
         {
-            if (_burst == null || !TrayComet.AnimationsEnabled())
+            if (_burst == null || !AnimationsEnabled())
                 return;
 
             _burstRun?.Cancel();
             _burstRun = new CancellationTokenSource();
             _ = BurstAnimation.RunAsync(_burst, _burstRun.Token);
         }
+
+        /// <summary>Windows' "Animation effects" setting. Every other platform animates.</summary>
+        private static bool AnimationsEnabled()
+        {
+            if (!OperatingSystem.IsWindows())
+                return true;
+            return !SystemParametersInfo(SPI_GETCLIENTAREAANIMATION, 0, out var enabled, 0) || enabled;
+        }
+
+        private const uint SPI_GETCLIENTAREAANIMATION = 0x1042;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, [MarshalAs(UnmanagedType.Bool)] out bool pvParam, uint fWinIni);
 
         protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
         {

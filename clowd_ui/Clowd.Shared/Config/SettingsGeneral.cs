@@ -358,7 +358,7 @@ namespace Clowd.Config
         /// The accent as chosen — the OS accent when the user asked for it and there is one to read,
         /// otherwise their own pick — before any contrast correction. For surfaces that carry no white
         /// ink and want the color itself rather than a fill dark enough to write on, such as the
-        /// floating strips' entrance comet (<see cref="AccentColors.CometColors"/>).
+        /// floating strips' glows and the capturer's hint comet (<see cref="AccentColors.CometColors"/>).
         /// </summary>
         public Color GetPickedAccentColor()
             => (UseSystemAccentColor ? AccentColors.GetSystemAccent() : null) ?? AccentColor;

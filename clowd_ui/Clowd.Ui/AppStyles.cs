@@ -52,7 +52,7 @@ namespace Clowd
         /// <summary>
         /// The accent exactly as the user chose it, before <see cref="CaptureAccentColor"/>'s darkening
         /// for white text. For light-emitting accents with nothing written on them — the floating strips'
-        /// entrance comet — where the darkened fill reads as muddy rather than as the user's color.
+        /// glows — where the darkened fill reads as muddy rather than as the user's color.
         /// </summary>
         public static Color CapturePickedAccentColor
             => SettingsRoot.Current?.General?.GetPickedAccentColor() ?? AccentColors.ClowdBlue;

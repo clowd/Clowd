@@ -329,7 +329,7 @@ namespace Clowd.UI
                 PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsShareRegion);
 
             // the same entry point as the tray item and hotkey: opens the drawing toolbar, or brings an
-            // open one forward and replays its comet so the click visibly lands.
+            // open one forward and replays its glow burst so the click visibly lands.
             _toolbar.DrawClicked += (s, e) => DrawOnScreen.DrawOnScreenSession.Toggle();
             // The toolbar has no clock of its own and this page deliberately does not grow one: an
             // elapsed timer would need a DispatcherTimer whose only job is to say how long a thing

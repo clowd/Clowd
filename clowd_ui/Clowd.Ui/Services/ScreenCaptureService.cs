@@ -492,7 +492,7 @@ namespace Clowd.UI
             // the accent follows the OS (or the user's pick). It goes over as picked: the capturer
             // makes the same contrast correction for the white text drawn on it that
             // SettingsGeneral.GetEffectiveAccentColor does (issue #48; clowd_capture/src/accent.rs),
-            // and derives its hint comet from the original as the tray comet does. It lives on
+            // and derives its hint comet from the original (AccentColors.CometColors). It lives on
             // General rather than Capture because the recording toolbar and border wear it too.
             var accent = general.GetPickedAccentColor();
 
