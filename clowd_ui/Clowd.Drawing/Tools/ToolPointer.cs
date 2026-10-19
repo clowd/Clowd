@@ -261,19 +261,16 @@ namespace Clowd.Drawing.Tools
                         // text and step badges number their handles differently (rotation / arrow
                         // tip), so the rectangle's corner-resize aspect lock must not apply to them
                         var rotatableGraphic = _handleGrabbedObject is GraphicText ? null : _handleGrabbedObject as GraphicRectangle;
-                        var rotatableDestRect = GetTransformedRect(
-                            rotatableGraphic?.UnrotatedBounds,
-                            _handleGrabbed,
-                            rotatableGraphic?.UnapplyRotation(wpfPt) ?? default(Point));
-                        if (shiftPressed && rotatableGraphic != null && _handleRatio != 0 && rotatableDestRect != null)
+                        if (shiftPressed && rotatableGraphic != null && IsCornerHandle(_handleGrabbed)
+                            && double.IsFinite(_handleRatio) && _handleRatio > 0)
                         {
-                            var sourceRatio = _handleRatio;
-                            rotatableDestRect = ScaleRectToAspect(rotatableDestRect.Value, sourceRatio);
-                            rotatableDestRect = TranslateDestAroundHandle(rotatableGraphic.UnrotatedBounds, rotatableDestRect.Value, _handleGrabbed);
-                            rotatableGraphic.Left = rotatableDestRect.Value.Left;
-                            rotatableGraphic.Bottom = rotatableDestRect.Value.Bottom;
-                            rotatableGraphic.Right = rotatableDestRect.Value.Right;
-                            rotatableGraphic.Top = rotatableDestRect.Value.Top;
+                            // only the grabbed corner moves, so the aspect-locked size goes through the
+                            // graphic's own MoveHandleTo — which keeps an image's crop clamp and the
+                            // usual raise. The anchor is read from the raw edges that handle never
+                            // writes, so it stays put even after the corner is dragged across it.
+                            var anchor = GetOppositeCorner(rotatableGraphic, _handleGrabbed);
+                            var corner = GetAspectLockedCorner(anchor, rotatableGraphic.UnapplyRotation(wpfPt), _handleRatio, _handleGrabbed);
+                            rotatableGraphic.MoveHandleTo(rotatableGraphic.ApplyRotation(corner), _handleGrabbed);
                         }
                         // angle snapping is an ENDPOINT gesture (handles 1/2): it re-aims the free end
                         // around the anchored one. The arrow's curve handle (3) moves no endpoint, so
@@ -421,83 +418,40 @@ namespace Clowd.Drawing.Tools
             return result;
         }
 
-        // decision #3: WPF Rect.Empty sentinels become Rect? null in these helpers.
-        private Rect? GetTransformedRect(Rect? source, int handleNumber, Point point)
-        {
-            if (source == null)
-                return null;
+        private static bool IsCornerHandle(int handleNumber) =>
+            handleNumber is 1 or 3 or 5 or 7;
 
-            switch (handleNumber)
+        /// <summary>The (unrotated) corner opposite a rectangle's corner handle, read from the raw
+        /// edges that handle's MoveHandleTo never writes — so it stays the gesture's fixed anchor
+        /// even once the dragged corner crosses it and the edges are mid-drag inverted.</summary>
+        internal static Point GetOppositeCorner(GraphicRectangle graphic, int handleNumber)
+        {
+            return handleNumber switch
             {
-                case 1:
-                    return HelperFunctions.CreateRectSafe(point.X, point.Y, source.Value.Right, source.Value.Bottom);
-                case 3:
-                    return HelperFunctions.CreateRectSafe(source.Value.Left, point.Y, point.X, source.Value.Bottom);
-                case 5:
-                    return HelperFunctions.CreateRectSafe(source.Value.Left, source.Value.Top, point.X, point.Y);
-                case 7:
-                    return HelperFunctions.CreateRectSafe(point.X, source.Value.Top, source.Value.Right, point.Y);
-                default:
-                    return null;
-            }
+                1 => new Point(graphic.Right, graphic.Bottom),
+                3 => new Point(graphic.Left, graphic.Bottom),
+                5 => new Point(graphic.Left, graphic.Top),
+                7 => new Point(graphic.Right, graphic.Top),
+                _ => throw new ArgumentOutOfRangeException(nameof(handleNumber)),
+            };
         }
 
-        private Rect? TranslateDestAroundHandle(Rect source, Rect dest, int handleNumber)
+        /// <summary>Where an aspect-locked corner handle lands (unrotated): the <paramref name="aspect"/>
+        /// box anchored at <paramref name="anchor"/> that just covers <paramref name="pointer"/>, on
+        /// whichever side of the anchor the pointer is — dragging across the anchor flips the box
+        /// through it, exactly as a free resize does. Only the corner is returned, never a
+        /// two-point Rect: unlike WPF's, Avalonia's Rect(Point, Point) does not normalize.</summary>
+        internal static Point GetAspectLockedCorner(Point anchor, Point pointer, double aspect, int handleNumber)
         {
-            switch (handleNumber)
-            {
-                case 5:
-                    var topLeft = source.TopLeft;
-                    return new Rect(new Point(topLeft.X + dest.Width, topLeft.Y + dest.Height), topLeft);
-                case 7:
-                    var topRight = source.TopRight;
-                    return new Rect(new Point(topRight.X - dest.Width, topRight.Y + dest.Height), topRight);
-                case 1:
-                    var botRight = source.BottomRight;
-                    return new Rect(new Point(botRight.X - dest.Width, botRight.Y - dest.Height), botRight);
-                case 3:
-                    var botLeft = source.BottomLeft;
-                    return new Rect(new Point(botLeft.X + dest.Width, botLeft.Y - dest.Height), botLeft);
-                default:
-                    return null;
-            }
-        }
+            var dx = pointer.X - anchor.X;
+            var dy = pointer.Y - anchor.Y;
+            var width = Math.Max(Math.Abs(dx), Math.Abs(dy) * aspect);
+            var height = width / aspect;
 
-        private Rect ScaleRectToAspect(Rect dest, double sourceAspect, bool keepWidth = true, bool keepHeight = true)
-        {
-            // Avalonia Rect is immutable; compute width/height locally (position is ignored by callers).
-            double destWidth, destHeight;
-
-            double destAspect = dest.Width / dest.Height;
-
-            if (sourceAspect > destAspect)
-            {
-                // wider than high keep the width and scale the height
-                destWidth = dest.Width;
-                destHeight = dest.Width / sourceAspect;
-
-                if (keepHeight)
-                {
-                    double resizePerc = dest.Height / destHeight;
-                    destWidth = dest.Width * resizePerc;
-                    destHeight = dest.Height;
-                }
-            }
-            else
-            {
-                // higher than wide – keep the height and scale the width
-                destHeight = dest.Height;
-                destWidth = dest.Height * sourceAspect;
-
-                if (keepWidth)
-                {
-                    double resizePerc = dest.Width / destWidth;
-                    destWidth = dest.Width;
-                    destHeight = dest.Height * resizePerc;
-                }
-            }
-
-            return new Rect(0, 0, destWidth, destHeight);
+            // exactly on the anchor's axis, fall back to the handle's own side
+            var signX = dx != 0 ? Math.Sign(dx) : handleNumber is 3 or 5 ? 1 : -1;
+            var signY = dy != 0 ? Math.Sign(dy) : handleNumber is 5 or 7 ? 1 : -1;
+            return new Point(anchor.X + signX * width, anchor.Y + signY * height);
         }
     }
 }
