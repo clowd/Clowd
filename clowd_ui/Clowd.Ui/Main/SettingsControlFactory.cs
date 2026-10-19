@@ -478,6 +478,9 @@ namespace Clowd.UI.Config
                         numeric.Step = 0.05;
                 }
 
+                if (GetFirstAttributeOrDefault<SpinnerStepAttribute>(pd) is { } step)
+                    numeric.Step = step.Step;
+
                 return new PreferredWidthBox(160, SimpleControlBinding(numeric, pd, ScrollableUrsaSpinner.ValueProperty, new NumericTypeConverter()));
             }
 

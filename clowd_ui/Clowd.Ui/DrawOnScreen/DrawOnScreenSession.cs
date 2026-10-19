@@ -47,8 +47,10 @@ namespace Clowd.UI.DrawOnScreen
     /// by <see cref="SettingsDrawOnScreen"/>.
     /// </para>
     /// <para>
-    /// A frozen session (<see cref="ToggleOnScreenshot"/>, issue #111) grabs every monitor before
-    /// anything is shown and draws over those pictures instead of the live desktop. It is drawing for
+    /// A frozen session (<see cref="ToggleOnScreenshot"/>, issues #111 and #114) grabs the monitor the
+    /// mouse is on before anything is shown and draws over that picture instead of the live desktop,
+    /// opening zoomed in on the mouse by <see cref="SettingsDrawOnScreen.ScreenshotZoom"/>; the other
+    /// monitors get no window. It is drawing for
     /// its whole life (<see cref="DrawOnScreenState.Frozen"/>): with no desktop to click through to,
     /// Esc and the keyboard leaving close it instead.
     /// </para>
@@ -117,8 +119,8 @@ namespace Clowd.UI.DrawOnScreen
         public static void Toggle() => Start(frozen: false);
 
         /// <summary>
-        /// The Draw on Instant Screenshot action: starts a session drawn over a picture of every
-        /// monitor taken right now, so whatever was on screen holds still to be drawn on. A session
+        /// The Draw on Instant Screenshot action: starts a session drawn over a picture of the
+        /// mouse's monitor taken right now, so whatever was on screen holds still to be drawn on. A session
         /// already up, frozen or not, is brought back to the front as by <see cref="Toggle"/>: its
         /// ink is never thrown away for a new one.
         /// </summary>
@@ -197,22 +199,38 @@ namespace Clowd.UI.DrawOnScreen
                 if (screens.Count == 0 && DesktopScreens.Primary(_toolbar) is { } primary)
                     screens = new[] { primary };
 
+                // the strip goes to the monitor the user is looking at, which the mouse is the best
+                // guess of before any pointer event has reached us
+                var hasCursor = CursorPosition.TryGet(_toolbar, out var cursor);
+                var anchor = (hasCursor ? DesktopScreens.FromPoint(_toolbar, cursor) : null)
+                    ?? DesktopScreens.Primary(_toolbar)
+                    ?? screens.FirstOrDefault();
+
+                // a frozen session covers only that monitor; the others stay the live desktop
+                if (_frozen)
+                    screens = anchor != null ? new[] { anchor } : Array.Empty<DesktopScreen>();
+
                 // grabbed before the first canvas shows, which would otherwise be in the picture
                 var backdrops = _frozen ? GrabScreens(screens) : null;
-                if (_frozen && backdrops == null)
+                if (_frozen && (backdrops == null || backdrops.Length == 0))
                 {
                     _ = ShutdownAsync();
                     return;
                 }
 
                 for (var i = 0; i < screens.Count; i++)
-                    AddOverlay(screens[i], backdrops?[i]);
+                {
+                    var overlay = AddOverlay(screens[i], backdrops?[i]);
 
-                // the strip goes to the monitor the user is looking at, which the mouse is the best
-                // guess of before any pointer event has reached us
-                var anchor = (CursorPosition.TryGet(_toolbar, out var cursor) ? DesktopScreens.FromPoint(_toolbar, cursor) : null)
-                    ?? DesktopScreens.Primary(_toolbar)
-                    ?? screens.FirstOrDefault();
+                    // opened zoomed in on the mouse (the screen's middle if it could not be read)
+                    if (_frozen && _keySettings is { } settings)
+                    {
+                        var bounds = screens[i].Bounds;
+                        overlay.Window.ZoomBackdropAt(settings.ScreenshotZoom / 100.0,
+                            hasCursor ? cursor : new PixelPoint(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
+                    }
+                }
+
                 if (anchor != null)
                     _toolbar.ShowAtBottomOf(anchor.WorkingArea);
                 else
@@ -999,8 +1017,8 @@ namespace Clowd.UI.DrawOnScreen
             var added = false;
             foreach (var screen in screens)
             {
-                // a frozen session has no picture of a monitor that arrived after it opened, so
-                // nothing to draw on there: that monitor stays the live desktop
+                // a frozen session only ever has a picture of the monitor it opened on: every other
+                // one, present then or plugged in since, stays the live desktop
                 if (matched.Add(screen) && !State.Frozen)
                 {
                     AddOverlay(screen);

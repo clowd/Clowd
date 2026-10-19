@@ -33,9 +33,11 @@ namespace Clowd.UI.DrawOnScreen
     /// meant to appear in screenshots, recordings and shares.
     /// </para>
     /// <para>
-    /// A frozen session (Draw on Instant Screenshot) hands each window its monitor's picture, shown
+    /// A frozen session (Draw on Instant Screenshot) hands its window the monitor's picture, shown
     /// under the canvas rather than added to it as a graphic: the eraser, the select tool, Clear all
-    /// and the undo history only ever see the ink.
+    /// and the undo history only ever see the ink. The mouse wheel zooms the picture alone
+    /// (<see cref="ZoomBackdropAt"/>), with nearest-neighbour sampling so its pixels stay sharp; the
+    /// ink stays where it was drawn on the screen.
     /// </para>
     /// </summary>
     internal sealed class DrawOnScreenWindow : Window
@@ -43,8 +45,19 @@ namespace Clowd.UI.DrawOnScreen
         // the ink's hide/show fade (the session drives Canvas.Opacity)
         private static readonly TimeSpan HideFade = TimeSpan.FromMilliseconds(150);
 
+        // the backdrop's zoom range, and one wheel notch's step within it: the capture overlay's
+        // magnifier (clowd_capture's ZOOM_STEP and ZOOM_MAX), so both zoom alike
+        private const double MaxBackdropZoom = 256;
+        private const double WheelZoomStep = 2;
+
         private readonly ToggleableExStyles _styles;
         private readonly Bitmap _backdrop;
+        private readonly Image _backdropImage;
+
+        // the backdrop's zoom, and where its top-left corner sits as a fraction of the window
+        // (always in [1 - zoom, 0], so the picture covers the whole screen)
+        private double _zoom = 1;
+        private Point _pan;
 
         /// <param name="backdrop">The monitor's frozen picture, owned (and disposed) by the window from
         /// here on; null to draw over the live desktop.</param>
@@ -90,7 +103,24 @@ namespace Clowd.UI.DrawOnScreen
             // the bitmap's DPI makes its DIP size the monitor's, so filling the window maps it 1:1
             _backdrop = backdrop;
             if (backdrop != null)
-                root.Children.Insert(0, new Image { Source = backdrop, Stretch = Stretch.Fill });
+            {
+                _backdropImage = new Image
+                {
+                    Source = backdrop,
+                    Stretch = Stretch.Fill,
+                    RenderTransformOrigin = RelativePoint.TopLeft,
+                };
+                RenderOptions.SetBitmapInterpolationMode(_backdropImage, BitmapInterpolationMode.None);
+                _backdropImage.PropertyChanged += (s, e) =>
+                {
+                    if (e.Property == BoundsProperty)
+                        UpdateBackdropTransform();
+                };
+                root.Children.Insert(0, _backdropImage);
+
+                // ahead of the canvas, which pins itself 1:1 in overlay mode anyway
+                AddHandler(PointerWheelChangedEvent, OnPreviewPointerWheel, RoutingStrategies.Tunnel);
+            }
             Content = root;
 
             // pre-show geometry from the monitor's own scaling as a best guess; Opened re-applies it
@@ -176,6 +206,63 @@ namespace Clowd.UI.DrawOnScreen
             Screen = screen ?? throw new ArgumentNullException(nameof(screen));
             ApplyGeometry();
             Canvas.UpdateForScalingChange();
+        }
+
+        /// <summary>
+        /// Zooms the backdrop to <paramref name="zoom"/> (clamped to 1..<see cref="MaxBackdropZoom"/>),
+        /// keeping the picture's pixel under <paramref name="screenPoint"/> (in
+        /// <see cref="DesktopScreens"/> units, like <see cref="CursorPosition"/>) where it is. A no-op
+        /// without a backdrop. Usable before the window is shown.
+        /// </summary>
+        public void ZoomBackdropAt(double zoom, PixelPoint screenPoint)
+        {
+            var bounds = Screen.Bounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+                return;
+
+            ZoomBackdrop(zoom, new Point(
+                (double)(screenPoint.X - bounds.X) / bounds.Width,
+                (double)(screenPoint.Y - bounds.Y) / bounds.Height));
+        }
+
+        /// <param name="anchor">The fixed point, as a fraction of the window.</param>
+        private void ZoomBackdrop(double zoom, Point anchor)
+        {
+            if (_backdropImage == null)
+                return;
+
+            zoom = Math.Clamp(zoom, 1, MaxBackdropZoom);
+            anchor = new Point(Math.Clamp(anchor.X, 0, 1), Math.Clamp(anchor.Y, 0, 1));
+
+            // the picture's point under the anchor (as a fraction of the picture) stays under it
+            var u = (anchor - _pan) / _zoom;
+            var pan = anchor - u * zoom;
+
+            _zoom = zoom;
+            _pan = new Point(Math.Clamp(pan.X, 1 - zoom, 0), Math.Clamp(pan.Y, 1 - zoom, 0));
+            UpdateBackdropTransform();
+        }
+
+        private void UpdateBackdropTransform()
+        {
+            var size = _backdropImage.Bounds.Size;
+            _backdropImage.RenderTransform = new MatrixTransform(
+                Matrix.CreateScale(_zoom, _zoom) * Matrix.CreateTranslation(_pan.X * size.Width, _pan.Y * size.Height));
+        }
+
+        private void OnPreviewPointerWheel(object sender, PointerWheelEventArgs e)
+        {
+            e.Handled = true;
+
+            var size = _backdropImage.Bounds.Size;
+            if (size.Width <= 0 || size.Height <= 0)
+                return;
+
+            // a wheel notch (a delta of 1) is one step; the fractions touchpads and macOS mice send
+            // zoom smoothly in proportion, so a notch's worth of them is one step too
+            var factor = Math.Pow(WheelZoomStep, e.Delta.Y);
+            var p = e.GetPosition(this);
+            ZoomBackdrop(_zoom * factor, new Point(p.X / size.Width, p.Y / size.Height));
         }
 
         /// <summary>

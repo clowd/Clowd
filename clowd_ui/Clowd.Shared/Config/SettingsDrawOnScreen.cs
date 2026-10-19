@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
@@ -104,6 +105,30 @@ namespace Clowd.Config
             get => _showKeystrokes;
             set => Set(ref _showKeystrokes, value);
         }
+
+        [Category("Instant screenshot")]
+        [VisibleWhen(nameof(Mode), DrawOnScreenMode.On)]
+        [DisplayName("Initial zoom")]
+        [Description("How far Draw on Instant Screenshot zooms into the picture when it opens, centered on the mouse, in percent. Scroll the mouse wheel to zoom in or out.")]
+        [Range(MinScreenshotZoom, MaxScreenshotZoom)]
+        [SpinnerStep(ScreenshotZoomStep)]
+        public int ScreenshotZoom
+        {
+            get => _screenshotZoom;
+            set
+            {
+                // kept on the spinner's 10% grid; a typed value that had to move is re-announced so
+                // the field shows where it landed
+                var snapped = Math.Clamp((int)Math.Round(value / (double)ScreenshotZoomStep) * ScreenshotZoomStep,
+                    MinScreenshotZoom, MaxScreenshotZoom);
+                if (!Set(ref _screenshotZoom, snapped) && snapped != value)
+                    OnPropertyChanged();
+            }
+        }
+
+        private const int MinScreenshotZoom = 100;
+        private const int MaxScreenshotZoom = 1600;
+        private const int ScreenshotZoomStep = 10;
 
         [Category("Keystroke placement")]
         [VisibleWhen(nameof(Mode), DrawOnScreenMode.On)]
@@ -286,6 +311,7 @@ namespace Clowd.Config
         // transform and row transitions), so a live overlay and a fresh track look alike
         private DrawOnScreenMode _mode = DrawOnScreenMode.On;
         private bool _showKeystrokes;
+        private int _screenshotZoom = 100;
         private DrawKeystrokeRegion _region = DrawKeystrokeRegion.Bottom;
         private int _margin = 36;
         private double _width = 0.5;
