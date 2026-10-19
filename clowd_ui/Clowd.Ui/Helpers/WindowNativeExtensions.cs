@@ -493,6 +493,62 @@ namespace Clowd.UI.Helpers
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
 
+        /// <summary>
+        /// Windows: calls <paramref name="changed"/> whenever the system's foreground window changes,
+        /// to any window of any process, until disposed. Call on the UI thread: the hook is out of
+        /// context, so it is delivered through the calling thread's message loop. This is the event
+        /// for <see cref="IsForeground"/>; <see cref="WindowBase.IsActive"/> is not, as the two drift
+        /// apart (a refused SetForegroundWindow sets one and not the other), and a foreground lost
+        /// while they disagree raises no IsActive change at all. Null off Windows.
+        /// </summary>
+        public static IDisposable WatchForeground(Action changed)
+        {
+            if (!OperatingSystem.IsWindows())
+                return null;
+
+            var watch = new ForegroundWatch(changed);
+            return watch.IsHooked ? watch : null;
+        }
+
+        private sealed class ForegroundWatch : IDisposable
+        {
+            // held for the hook's lifetime: the native side keeps only a function pointer
+            private readonly WinEventProc _proc;
+            private IntPtr _hook;
+
+            public ForegroundWatch(Action changed)
+            {
+                _proc = (hook, evt, hwnd, idObject, idChild, thread, time) => changed();
+                _hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _proc,
+                                        0, 0, WINEVENT_OUTOFCONTEXT);
+            }
+
+            public bool IsHooked => _hook != IntPtr.Zero;
+
+            public void Dispose()
+            {
+                if (_hook == IntPtr.Zero)
+                    return;
+
+                UnhookWinEvent(_hook);
+                _hook = IntPtr.Zero;
+            }
+        }
+
+        private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+        private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+        private delegate void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject,
+                                           int idChild, uint idEventThread, uint dwmsEventTime);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc,
+                                                     WinEventProc lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
         // NSStatusWindowLevel — one above NSMainMenuWindowLevel (24), same level the Rust
         // capturer overlay uses.
         private const nint NSStatusWindowLevel = 25;

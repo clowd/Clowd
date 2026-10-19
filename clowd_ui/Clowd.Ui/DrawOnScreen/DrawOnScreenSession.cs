@@ -79,6 +79,7 @@ namespace Clowd.UI.DrawOnScreen
         private readonly DrawHotkeys _canvasHotkeys;
         private bool _focused;
         private DispatcherTimer _focusLoss;
+        private IDisposable _foregroundWatch;
 
         // the keystroke overlay: the rows, the hook feeding them, the settings styling them, and
         // the one screen drawing them
@@ -217,6 +218,12 @@ namespace Clowd.UI.DrawOnScreen
                 else
                     _toolbar.Show();
                 WindowNativeExtensions.RaiseTopmostNoActivate(_toolbar);
+
+                // HasKeyboard reads the system foreground on Windows, so that is what must re-check it:
+                // the windows' IsActive changes alone miss a foreground that leaves while IsActive is
+                // out of step with it (as TakeKeyboard's refused first attempt leaves it), and the
+                // strip then stays lit for good
+                _foregroundWatch = WindowNativeExtensions.WatchForeground(OnFocusMoved);
 
                 // opened from the tray or the hotkey, the session starts focused on its toolbar (its
                 // hotkeys live). The toolbar opens without activation, and the hotkey that got us here
@@ -359,6 +366,8 @@ namespace Clowd.UI.DrawOnScreen
             _hotplug = null;
             _focusLoss?.Stop();
             _focusLoss = null;
+            _foregroundWatch?.Dispose();
+            _foregroundWatch = null;
 
             _feed?.Dispose();
             _feed = null;
