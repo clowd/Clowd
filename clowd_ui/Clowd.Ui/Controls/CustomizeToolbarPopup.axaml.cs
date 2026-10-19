@@ -115,7 +115,7 @@ namespace Clowd.UI.Controls
             InitializeLayoutCombo();
 
             btnResetOrder.Click += (_, _) => ResetOrderRequested?.Invoke(this, EventArgs.Empty);
-            btnResetSettings.Click += (_, _) => ResetSettingsRequested?.Invoke(this, EventArgs.Empty);
+            btnEditDefaults.Click += (_, _) => EditDefaultsRequested?.Invoke(this, EventArgs.Empty);
 
             popup.Opened += (_, _) => FocusCheck(_checks.FirstOrDefault(c => c.IsEnabled));
 
@@ -152,15 +152,15 @@ namespace Clowd.UI.Controls
         /// has gone with it (the canvas, in both editors).</summary>
         public Control FallbackFocus { get; set; }
 
-        /// <summary>Whether the "Reset Tool Settings" button is offered. Off for a strip whose
+        /// <summary>Whether the "Edit Tool Defaults" button is offered. Off for a strip whose
         /// tools have no saved settings of their own.</summary>
-        public static readonly StyledProperty<bool> ShowResetSettingsProperty =
-            AvaloniaProperty.Register<CustomizeToolbarPopup, bool>(nameof(ShowResetSettings), defaultValue: true);
+        public static readonly StyledProperty<bool> ShowEditDefaultsProperty =
+            AvaloniaProperty.Register<CustomizeToolbarPopup, bool>(nameof(ShowEditDefaults), defaultValue: true);
 
-        public bool ShowResetSettings
+        public bool ShowEditDefaults
         {
-            get => GetValue(ShowResetSettingsProperty);
-            set => SetValue(ShowResetSettingsProperty, value);
+            get => GetValue(ShowEditDefaultsProperty);
+            set => SetValue(ShowEditDefaultsProperty, value);
         }
 
         public static readonly StyledProperty<string> TitleProperty =
@@ -182,7 +182,7 @@ namespace Clowd.UI.Controls
 
         public event EventHandler ResetOrderRequested;
 
-        public event EventHandler ResetSettingsRequested;
+        public event EventHandler EditDefaultsRequested;
 
         public bool IsOpen => popup.IsOpen;
 
@@ -311,8 +311,8 @@ namespace Clowd.UI.Controls
         {
             base.OnPropertyChanged(change);
 
-            if (change.Property == ShowResetSettingsProperty)
-                btnResetSettings.IsVisible = ShowResetSettings;
+            if (change.Property == ShowEditDefaultsProperty)
+                btnEditDefaults.IsVisible = ShowEditDefaults;
             else if (change.Property == TitleProperty)
                 titleText.Text = Title;
         }

@@ -475,6 +475,48 @@ namespace Clowd.Drawing
 
         private record struct ToolDesc(string Name, ToolBase Instance, Type ObjectType = null, Skill Skills = Skill.None);
 
+        /// <summary>What each tool draws, and any skills it has beyond that graphic's own. The one
+        /// source for both the tool store and <see cref="GetToolSettingSkills"/>, so the settings
+        /// window offers a tool exactly the fields its property bar does. Tools missing here
+        /// (panning, the eraser) draw nothing and have no settings.</summary>
+        private static readonly Dictionary<ToolType, (Type ObjectType, Skill Skills)> ToolKinds = new()
+        {
+            [ToolType.Pointer] = (null, Skill.CanvasBackground),
+            [ToolType.Rectangle] = (typeof(GraphicRectangle), Skill.None),
+            [ToolType.FilledRectangle] = (typeof(GraphicFilledRectangle), Skill.None),
+            [ToolType.Ellipse] = (typeof(GraphicEllipse), Skill.None),
+            [ToolType.Line] = (typeof(GraphicLine), Skill.None),
+            [ToolType.Arrow] = (typeof(GraphicArrow), Skill.None),
+            [ToolType.Pen] = (typeof(GraphicPath), Skill.None),
+            [ToolType.Brush] = (typeof(GraphicBrush), Skill.None),
+            [ToolType.Highlighter] = (typeof(GraphicHighlighter), Skill.None),
+            [ToolType.Text] = (typeof(GraphicText), Skill.AutoFill),
+            [ToolType.StickyNote] = (typeof(GraphicStickyNote), Skill.None),
+            [ToolType.Count] = (typeof(GraphicCount), Skill.None),
+            [ToolType.Pixelate] = (null, Skill.BlurRadius | Skill.ObscureMode),
+            [ToolType.Measure] = (typeof(GraphicMeasure), Skill.None),
+        };
+
+        /// <summary>The skills the property bar shows while <paramref name="tool"/> is in hand with
+        /// nothing selected: those of the graphic it draws plus its own, less the angle (a tool
+        /// cannot preset one). Each binds to a <see cref="SavedToolSettings"/> property, except
+        /// the pointer's canvas background.</summary>
+        public static Skill GetToolSettingSkills(ToolType tool)
+        {
+            var kind = ToolKinds.GetValueOrDefault(tool);
+            return ToolSettingSkills(kind.ObjectType, kind.Skills);
+        }
+
+        private static Skill ToolSettingSkills(Type objectType, Skill toolSkills)
+        {
+            var skills = toolSkills;
+            if (objectType?.GetCustomAttribute<GraphicDescAttribute>() is { } attr)
+                skills |= attr.Skills;
+
+            // we do not allow the angle to be set in the tool.
+            return skills & ~Skill.Angle;
+        }
+
         public DrawingCanvas()
         {
             Focusable = true; // to handle keyboard messages
@@ -566,28 +608,33 @@ namespace Clowd.Drawing
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
 
+            ToolDesc Desc(ToolType tool, string name, ToolBase instance)
+            {
+                var kind = ToolKinds.GetValueOrDefault(tool);
+                return new ToolDesc(name, instance, kind.ObjectType, kind.Skills);
+            }
+
             _toolStore = new Dictionary<ToolType, ToolDesc>();
-            _toolStore[ToolType.None] = new ToolDesc("Panning", new ToolPanning());
-            _toolStore[ToolType.Pointer] = new ToolDesc("Pointer", ToolPointer, Skills: Skill.CanvasBackground);
-            _toolStore[ToolType.Rectangle] = new ToolDesc("Rectangle", toolRectangle, ObjectType: typeof(GraphicRectangle));
-            _toolStore[ToolType.FilledRectangle] = new ToolDesc("Filled Rectangle", toolFilledRectangle,
-                                                                ObjectType: typeof(GraphicFilledRectangle));
-            _toolStore[ToolType.Ellipse] = new ToolDesc("Ellipse", toolEllipse, ObjectType: typeof(GraphicEllipse));
-            _toolStore[ToolType.Line] = new ToolDesc("Line", toolLine, ObjectType: typeof(GraphicLine));
-            _toolStore[ToolType.Arrow] = new ToolDesc("Arrow", toolArrow, ObjectType: typeof(GraphicArrow));
+            _toolStore[ToolType.None] = Desc(ToolType.None, "Panning", new ToolPanning());
+            _toolStore[ToolType.Pointer] = Desc(ToolType.Pointer, "Pointer", ToolPointer);
+            _toolStore[ToolType.Rectangle] = Desc(ToolType.Rectangle, "Rectangle", toolRectangle);
+            _toolStore[ToolType.FilledRectangle] = Desc(ToolType.FilledRectangle, "Filled Rectangle", toolFilledRectangle);
+            _toolStore[ToolType.Ellipse] = Desc(ToolType.Ellipse, "Ellipse", toolEllipse);
+            _toolStore[ToolType.Line] = Desc(ToolType.Line, "Line", toolLine);
+            _toolStore[ToolType.Arrow] = Desc(ToolType.Arrow, "Arrow", toolArrow);
             // no entry for ToolType.PolyLine: the legacy pencil graphic still loads and edits, but
             // nothing creates one any more (the pen and the brush replaced it)
-            _toolStore[ToolType.Pen] = new ToolDesc("Pen", ToolPen, ObjectType: typeof(GraphicPath));
-            _toolStore[ToolType.Brush] = new ToolDesc("Brush", ToolBrush, ObjectType: typeof(GraphicBrush));
-            _toolStore[ToolType.Highlighter] = new ToolDesc("Highlighter", new ToolHighlighter(), ObjectType: typeof(GraphicHighlighter));
-            _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText), Skills: Skill.AutoFill);
-            _toolStore[ToolType.StickyNote] = new ToolDesc("Sticky Note", new ToolStickyNote(), ObjectType: typeof(GraphicStickyNote));
-            _toolStore[ToolType.Count] = new ToolDesc("Step Count", new ToolCount(), ObjectType: typeof(GraphicCount));
-            _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate(), Skills: Skill.BlurRadius | Skill.ObscureMode);
-            _toolStore[ToolType.Measure] = new ToolDesc("Measure", toolMeasure, ObjectType: typeof(GraphicMeasure));
+            _toolStore[ToolType.Pen] = Desc(ToolType.Pen, "Pen", ToolPen);
+            _toolStore[ToolType.Brush] = Desc(ToolType.Brush, "Brush", ToolBrush);
+            _toolStore[ToolType.Highlighter] = Desc(ToolType.Highlighter, "Highlighter", new ToolHighlighter());
+            _toolStore[ToolType.Text] = Desc(ToolType.Text, "Text", ToolText);
+            _toolStore[ToolType.StickyNote] = Desc(ToolType.StickyNote, "Sticky Note", new ToolStickyNote());
+            _toolStore[ToolType.Count] = Desc(ToolType.Count, "Step Count", new ToolCount());
+            _toolStore[ToolType.Pixelate] = Desc(ToolType.Pixelate, "Pixelate", new ToolPixelate());
+            _toolStore[ToolType.Measure] = Desc(ToolType.Measure, "Measure", toolMeasure);
             // overlay-only (not in the editor's toolbar or ToolRegistry): no object type and no
             // skills, so SyncObjectState never creates a settings entry for it
-            _toolStore[ToolType.Eraser] = new ToolDesc("Eraser", ToolEraser);
+            _toolStore[ToolType.Eraser] = Desc(ToolType.Eraser, "Eraser", ToolEraser);
 
             _autosaveThrottle = new AutosaveThrottle(this);
             _undoManager = new UndoManager(this);
@@ -1791,18 +1838,7 @@ namespace Clowd.Drawing
                 // if we are not editing the selection, or if there are no objects selected, use tool skills
                 if (selected.Length == 0 || !editsSelection)
                 {
-                    Skill skills = CurrentTool.Skills;
-                    if (CurrentTool.ObjectType != null)
-                    {
-                        var attr = CurrentTool.ObjectType.GetCustomAttribute<GraphicDescAttribute>();
-                        if (attr != null)
-                        {
-                            skills |= attr.Skills;
-                        }
-                    }
-
-                    // we do not allow the angle to be set in the tool.
-                    skills &= ~Skill.Angle;
+                    Skill skills = ToolSettingSkills(CurrentTool.ObjectType, CurrentTool.Skills);
 
                     // a tool with no skills (the eraser, panning) has nothing to bind, so it never
                     // looks its settings up either: the lookup creates the entry, and an entry for

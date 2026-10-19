@@ -221,7 +221,20 @@ namespace Clowd.UI.Config
         private void AddRow(SettingsRowsPanel panel, PropertyDescriptor pd)
         {
             var description = GetFirstAttributeOrDefault<DescriptionAttribute>(pd)?.Description;
-            var editor = GetRowForProperty(pd);
+
+            // the image editor's tool styles are a list too big for the editor column: it goes
+            // under the caption as a block of its own, and the row's editor is its "Reset all"
+            Control block = null, editor;
+            if (_obj is SettingsEditor editorSettings && pd.Name == nameof(SettingsEditor.Tools))
+            {
+                var tools = new ToolDefaultsList(editorSettings);
+                block = tools;
+                editor = tools.CreateResetAllButton();
+            }
+            else
+            {
+                editor = GetRowForProperty(pd);
+            }
 
             // [DisabledWhen] rows stay visible but stop responding (and dim) while the bool they
             // defer to holds the disabling value — e.g. the manual accent color while the OS
@@ -321,6 +334,15 @@ namespace Clowd.UI.Config
                 panel.Children.Add(caption);
                 ApplyDisabledWhen(caption, enabledOpacity: 0.65);
                 ApplyVisibleWhen(caption);
+            }
+
+            if (block != null)
+            {
+                block.Margin = new Thickness(0, 4, 4, 12);
+                SettingsRowsPanel.SetRole(block, SettingsRowsPanel.Role.Block);
+                panel.Children.Add(block);
+                ApplyDisabledWhen(block);
+                ApplyVisibleWhen(block);
             }
         }
 
@@ -499,18 +521,6 @@ namespace Clowd.UI.Config
             if (Is(pd, typeof(Control)))
             {
                 return (Control)pd.GetValue(_obj);
-            }
-
-            if (Is(pd, typeof(Dictionary<,>)))
-            {
-                return ButtonControl("Reset all tool defaults…", "Danger", async (s, e) =>
-                {
-                    if (await NiceDialog.ShowYesNoPromptAsync(s as Visual, NiceDialogIcon.Warning,
-                            "Reset every tool's saved color, line width and font back to the defaults? This cannot be undone."))
-                    {
-                        pd.SetValue(_obj, Activator.CreateInstance(pd.PropertyType));
-                    }
-                });
             }
 
             // the three frame-rate presets sit side by side in one row: they are one choice made of

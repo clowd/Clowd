@@ -1127,7 +1127,7 @@
         <!--  The shared customize flyout (Controls/CustomizeToolbarPopup), the same one the
               image editor hangs off its strip — minus the reset-settings button, since these
               tools carry no saved settings of their own.  -->
-        <controls:CustomizeToolbarPopup x:Name="customizePopup" ShowResetSettings="False" />
+        <controls:CustomizeToolbarPopup x:Name="customizePopup" ShowEditDefaults="False" />
 
         <!--  The Render button's presets. Same chrome as the image editor's two popups (commit
               a4b42d07): the 10px margin is room for the shadow and the offsets cancel it, so the

@@ -106,14 +106,13 @@
                         Content="Reset Tool Order" />
 
                     <!--  Hidden unless the host asks for it: the video editor's tools carry no
-                          saved settings to reset.  -->
+                          saved settings to edit.  -->
                     <Button
-                        x:Name="btnResetSettings"
+                        x:Name="btnEditDefaults"
                         Margin="4,4,4,2"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
-                        Classes="Danger"
-                        Content="Reset Tool Settings" />
+                        Content="Edit Tool Defaults" />
                 </StackPanel>
             </Grid>
         </Border>

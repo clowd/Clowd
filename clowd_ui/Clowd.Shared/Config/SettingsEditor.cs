@@ -166,6 +166,28 @@ namespace Clowd.Config
             return settings;
         }
 
+        /// <summary>Puts every value back to <paramref name="tool"/>'s defaults in place, so whatever
+        /// is bound to this instance (an open editor's property bar, the settings window) follows
+        /// rather than being left holding an orphaned copy.</summary>
+        public void ResetToDefault(ToolType tool)
+        {
+            var d = CreateDefault(tool);
+            ObjectColor = d.ObjectColor;
+            LineWidth = d.LineWidth;
+            FontFamily = d.FontFamily;
+            FontSize = d.FontSize;
+            FontStyle = d.FontStyle;
+            FontWeight = d.FontWeight;
+            FontStretch = d.FontStretch;
+            BlurRadius = d.BlurRadius;
+            CornerRadius = d.CornerRadius;
+            DashStyle = d.DashStyle;
+            ObscureMode = d.ObscureMode;
+            FillColor = d.FillColor;
+            AutoFill = d.AutoFill;
+            Scale = d.Scale;
+        }
+
         /// <summary>A detached copy (no PropertyChanged subscribers carried over), keeping which
         /// values are set and which still fall back to the defaults.</summary>
         public SavedToolSettings Clone() => new()
@@ -239,6 +261,18 @@ namespace Clowd.Config
             set => Set(ref _editorToolbarOverflow, value);
         }
 
+        /// <summary>The video editor only exists in Studio recording mode, so the row follows the
+        /// Recording page's mode.</summary>
+        [Category("Video Editor")]
+        [VisibleWhen(nameof(SettingsRecording.Mode), RecordingMode.Studio, Section = nameof(SettingsRoot.Recording))]
+        [DisplayName("Capture media keys in video editor")]
+        [Description("Use the media keys to play, pause and step frames while the video editor is focused.")]
+        public bool CaptureMediaKeys
+        {
+            get => _captureMediaKeys;
+            set => Set(ref _captureMediaKeys, value);
+        }
+
         [Category("Image Editor")]
         [DisplayName("Canvas background")]
         [Description("Color shown behind transparent areas of an image.")]
@@ -256,8 +290,8 @@ namespace Clowd.Config
         }
 
         [Category("Image Editor")]
-        [DisplayName("Tool preferences")]
-        [Description("Every drawing tool remembers the color, line width and font last used with it.")]
+        [DisplayName("Tool defaults")]
+        [Description("Each drawing tool remembers the style you last drew with. Change or reset any of them here.")]
         [ConfigurationKeyName("ToolsV2"), JsonPropertyName("ToolsV2")] // V2: reset for everyone after the tool rework
         public Dictionary<ToolType, SavedToolSettings> Tools
         {
@@ -272,18 +306,6 @@ namespace Clowd.Config
         {
             get => _deleteSessionsAfter;
             set => Set(ref _deleteSessionsAfter, value);
-        }
-
-        /// <summary>The video editor only exists in Studio recording mode, so the row follows the
-        /// Recording page's mode.</summary>
-        [Category("Video Editor")]
-        [VisibleWhen(nameof(SettingsRecording.Mode), RecordingMode.Studio, Section = nameof(SettingsRoot.Recording))]
-        [DisplayName("Capture media keys in video editor")]
-        [Description("Use the media keys to play, pause and step frames while the video editor is focused.")]
-        public bool CaptureMediaKeys
-        {
-            get => _captureMediaKeys;
-            set => Set(ref _captureMediaKeys, value);
         }
 
         // NOTE: there is deliberately no SidebarVisible setting. The layers sidebar is per-editor-
@@ -322,6 +344,11 @@ namespace Clowd.Config
             get => _pinnedOverflowTool;
             set => Set(ref _pinnedOverflowTool, value);
         }
+
+        /// <summary>Raises a change for <see cref="Tools"/> after one of its entries changed in place,
+        /// so whoever persists this object on change (the settings window) saves it. The entries
+        /// are not watched individually.</summary>
+        public void NotifyToolSettingsChanged() => OnPropertyChanged(nameof(Tools));
 
         /// <summary>Lazily creates the per-tool settings entry (replaces the old AutoDictionary
         /// indexer behavior).</summary>

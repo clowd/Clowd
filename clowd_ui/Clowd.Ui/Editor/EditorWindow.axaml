@@ -6,7 +6,6 @@
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:draw="clr-namespace:Clowd.Drawing;assembly=Clowd.Drawing"
-    xmlns:graphics="clr-namespace:Clowd.Drawing.Graphics;assembly=Clowd.Drawing"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:tray="clr-namespace:Clowd.UI.Controls.Tray"
     xmlns:util="clr-namespace:Clowd.Util"
@@ -30,7 +29,6 @@
         <draw:ToolTypeConverter x:Key="convToolType" />
         <conv:ColorToBrushConverter x:Key="convColorToBrush" />
         <conv:EnumMatchToBooleanConverter x:Key="enumMatch" />
-        <conv:StringToFontFamilyConverter x:Key="convFontFamily" />
 
         <!--  The zoom pill's buttons: the voice recorder pill's icon button (transparent fill,
               white hover veil, stronger pressed veil, dimmed when disabled), since the two are
@@ -315,7 +313,7 @@
                     Text="{Binding ElementName=drawingCanvas, Path=SubjectName, Mode=OneWay}" />
             </StackPanel>
 
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=IsCanvasSubject, Mode=OneWay}">
+            <StackPanel x:Name="canvasBackgroundItem" IsVisible="{Binding ElementName=drawingCanvas, Path=IsCanvasSubject, Mode=OneWay}">
                 <TextBlock VerticalAlignment="Center" Text="Background" />
                 <Border
                     Margin="4,0,0,0"
@@ -337,160 +335,9 @@
                 </Border>
             </StackPanel>
 
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Stroke}">
-                <TextBlock VerticalAlignment="Center" Text="Stroke" />
-                <controls:ThemedSpinner
-                    Min="0"
-                    SnapToWholeNumber="True"
-                    SpinAmount="1"
-                    Suffix="px"
-                    Value="{Binding ElementName=drawingCanvas, Path=LineWidth, Mode=TwoWay}" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Color}">
-                <TextBlock VerticalAlignment="Center" Text="Color" />
-                <Border
-                    Margin="4,0,0,0"
-                    BorderBrush="Black"
-                    BorderThickness="1"
-                    Classes="swatchOuter">
-                    <Border
-                        x:Name="objectColorSwatch"
-                        Background="{x:Static util:CheckerBrushes.Light}"
-                        BorderBrush="White"
-                        BorderThickness="1"
-                        Classes="colorSwatch"
-                        Cursor="Hand"
-                        Focusable="True"
-                        KeyDown="objectColor_KeyDown"
-                        PointerPressed="objectColor_Click">
-                        <Border Background="{Binding ElementName=drawingCanvas, Path=ObjectColor, Mode=OneWay, Converter={StaticResource convColorToBrush}}" Classes="colorFill" />
-                    </Border>
-                </Border>
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Fill}">
-                <TextBlock VerticalAlignment="Center" Text="Fill" />
-                <Border
-                    Margin="4,0,0,0"
-                    BorderBrush="Black"
-                    BorderThickness="1"
-                    Classes="swatchOuter">
-                    <!-- auto-fill picks the fill itself, so there is no swatch to pick (only for the tool:
-                         a selected text's fill stays editable, and the check is hidden then) -->
-                    <Border.IsVisible>
-                        <MultiBinding Converter="{x:Static BoolConverters.Or}">
-                            <Binding ElementName="chkFillAuto" Path="!IsVisible" />
-                            <Binding ElementName="chkFillAuto" Path="!IsChecked" />
-                        </MultiBinding>
-                    </Border.IsVisible>
-                    <Border
-                        x:Name="objectFillSwatch"
-                        Background="{x:Static util:CheckerBrushes.Light}"
-                        BorderBrush="White"
-                        BorderThickness="1"
-                        Classes="colorSwatch"
-                        Cursor="Hand"
-                        Focusable="True"
-                        KeyDown="objectFill_KeyDown"
-                        PointerPressed="objectFill_Click">
-                        <Border Background="{Binding ElementName=drawingCanvas, Path=ObjectFill, Mode=OneWay, Converter={StaticResource convColorToBrush}}" Classes="colorFill" />
-                    </Border>
-                </Border>
-                <controls:CaptionedCheckBox
-                    x:Name="chkFillAuto"
-                    Margin="4,0,0,0"
-                    Caption="Auto"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectFillAuto, Mode=TwoWay}"
-                    IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=AutoFill}" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Font}">
-                <TextBlock VerticalAlignment="Center" Text="Font" />
-                <Button
-                    Classes="fieldButton"
-                    Click="font_Click"
-                    Content="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay}"
-                    FontFamily="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay, Converter={StaticResource convFontFamily}}"
-                    FontStretch="{Binding ElementName=drawingCanvas, Path=TextFontStretch, Mode=OneWay}"
-                    FontStyle="{Binding ElementName=drawingCanvas, Path=TextFontStyle, Mode=OneWay}" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=FontFamily}">
-                <TextBlock VerticalAlignment="Center" Text="Font" />
-                <Button
-                    Classes="fieldButton"
-                    Click="fontFamily_Click"
-                    Content="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay}"
-                    FontFamily="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay, Converter={StaticResource convFontFamily}}" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Scale}">
-                <TextBlock VerticalAlignment="Center" Text="Scale" />
-                <controls:ThemedSpinner
-                    Max="{x:Static graphics:GraphicStickyNote.MaxScale}"
-                    Min="{x:Static graphics:GraphicStickyNote.MinScale}"
-                    SpinAmount="0.1"
-                    Suffix="×"
-                    Value="{Binding ElementName=drawingCanvas, Path=ObjectScale, Mode=TwoWay}" />
-                <controls:ResetDefaultButton
-                    Margin="4,0,0,0"
-                    CurrentValue="{Binding ElementName=drawingCanvas, Path=ObjectScale, Mode=TwoWay}"
-                    DefaultValue="1" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Angle}">
-                <TextBlock VerticalAlignment="Center" Text="Angle" />
-                <controls:ThemedSpinner
-                    Max="180"
-                    Min="-180"
-                    SnapToWholeNumber="True"
-                    SpinAmount="10"
-                    Suffix="°"
-                    Value="{Binding ElementName=drawingCanvas, Path=ObjectAngle, Mode=TwoWay}" />
-                <controls:ResetDefaultButton
-                    Margin="4,0,0,0"
-                    CurrentValue="{Binding ElementName=drawingCanvas, Path=ObjectAngle, Mode=TwoWay}"
-                    DefaultValue="0" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=BlurRadius}">
-                <TextBlock VerticalAlignment="Center" Text="Blur" />
-                <controls:ThemedSpinner
-                    Min="1"
-                    SnapToWholeNumber="True"
-                    SpinAmount="1"
-                    Suffix="px"
-                    Value="{Binding ElementName=drawingCanvas, Path=BlurRadius, Mode=TwoWay}" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Radius}">
-                <TextBlock VerticalAlignment="Center" Text="Radius" />
-                <!-- A window's corner radius runs to three digits plus the unit, which sits tight
-                     at the default field width. -->
-                <controls:ThemedSpinner
-                    Classes="wideField"
-                    Min="0"
-                    SnapToWholeNumber="True"
-                    SpinAmount="1"
-                    Suffix="px"
-                    Value="{Binding ElementName=drawingCanvas, Path=CornerRadius, Mode=TwoWay}" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=DashStyle}">
-                <TextBlock VerticalAlignment="Center" Text="Dash" />
-                <controls:ThemedDropDown
-                    ItemsSource="{x:Static draw:DrawingCanvas.DashStyleValues}"
-                    SelectedItem="{Binding ElementName=drawingCanvas, Path=DashStyle, Mode=TwoWay}" />
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=ObscureMode}">
-                <TextBlock VerticalAlignment="Center" Text="Mode" />
-                <controls:ThemedDropDown
-                    ItemsSource="{x:Static draw:DrawingCanvas.ObscureModeValues}"
-                    SelectedItem="{Binding ElementName=drawingCanvas, Path=ObscureMode, Mode=TwoWay}"
-                    ToolTip.Tip="How obscured regions are rendered" />
-            </StackPanel>
+            <!--  The style fields (stroke, color, fill, font... through the obscure mode) are
+                  inserted here from code: ToolStyleFields builds them, shared with the settings
+                  window's tool defaults list. See InitStyleFields.  -->
 
             <controls:ToolButton
                 Classes="wide"

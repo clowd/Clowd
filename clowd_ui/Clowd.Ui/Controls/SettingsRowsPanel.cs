@@ -8,8 +8,9 @@ namespace Clowd.UI.Controls
     /// <summary>
     /// The two-column label/editor form behind a generated settings page. Children are tagged with
     /// <see cref="RoleProperty"/>: a Label starts a row, the Editor that follows sits beside it in
-    /// the second column, and an optional Caption spans both columns underneath. All labels share
-    /// one column, like a Grid with an Auto column, but here the column is allowed to give way.
+    /// the second column, and an optional Caption spans both columns underneath (as does a Block,
+    /// which is a row of its own). All labels share one column, like a Grid with an Auto column,
+    /// but here the column is allowed to give way.
     /// </summary>
     /// <remarks>
     /// A Grid measures its Auto column with infinite width, so a single long label ("Render
@@ -35,6 +36,10 @@ namespace Clowd.UI.Controls
             Label,
             Editor,
             Caption,
+
+            /// <summary>Full width like a caption, but a row of its own: content too big for the
+            /// editor column that the row above introduces (the image editor's tool list).</summary>
+            Block,
         }
 
         public static readonly AttachedProperty<Role> RoleProperty =
@@ -75,7 +80,7 @@ namespace Clowd.UI.Controls
             foreach (var child in Children)
             {
                 var role = GetRole(child);
-                if (role == Role.Label || current == null)
+                if (role == Role.Label || role == Role.Block || current == null)
                 {
                     current = new Row();
                     rows.Add(current);
@@ -90,6 +95,7 @@ namespace Clowd.UI.Controls
                         current.Editor = child;
                         break;
                     case Role.Caption:
+                    case Role.Block:
                         current.Caption = child;
                         break;
                 }

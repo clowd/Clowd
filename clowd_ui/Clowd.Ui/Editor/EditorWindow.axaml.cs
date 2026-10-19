@@ -17,6 +17,7 @@ using Avalonia.Controls.Notifications;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -234,6 +235,7 @@ namespace Clowd.UI
 
             miniColor.ParentWindow = this;
             miniColor.Canceled += (_, _) => miniColorPopup.IsOpen = false;
+            InitStyleFields();
 
             // covers every close path, light dismiss included
             miniColorPopup.Closed += (_, _) =>
@@ -879,6 +881,11 @@ namespace Clowd.UI
 
         private static ToolRegistryEntry GetToolEntry(ToolType tool) => ToolRegistry.FirstOrDefault(e => e.Tool == tool);
 
+        /// <summary>A tool's toolbar name and icon key, for lists of tools outside the editor (the
+        /// settings window's tool defaults). Null for a tool the editor does not offer.</summary>
+        internal static (string DisplayName, string IconKey)? GetToolLabel(ToolType tool)
+            => GetToolEntry(tool) is { } entry ? (entry.DisplayName, entry.IconKey) : null;
+
         /// <summary>Toggles the right-hand layers sidebar. Deliberately per-window and transient:
         /// it is a view of the document you are looking at right now, not a preference, so it always
         /// starts closed and toggling it never touches the other editors or the settings file.
@@ -1183,7 +1190,7 @@ namespace Clowd.UI
             };
             customizePopup.Moved += (_, e) => MoveTool(e.Keys, e.FromRow, e.ToRow);
             customizePopup.ResetOrderRequested += (_, _) => ResetToolOrder();
-            customizePopup.ResetSettingsRequested += (_, _) => _ = ResetToolSettingsAsync();
+            customizePopup.EditDefaultsRequested += (_, _) => EditToolDefaults();
         }
 
         /// <summary>One row per vector tool, in resolved order. The order list may name a tool the
@@ -1265,22 +1272,10 @@ namespace Clowd.UI
             customizePopup.Rebuild();
         }
 
-        private async Task ResetToolSettingsAsync()
+        private void EditToolDefaults()
         {
-            // close the light-dismiss popup before showing the modal prompt
             customizePopup.Close();
-
-            // same wording as the settings window's "Reset all tool defaults…" button
-            if (!await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning,
-                    "Reset every tool's saved color, line width and font back to the defaults? This cannot be undone."))
-                return;
-
-            _settings.Editor.Tools = new Dictionary<ToolType, SavedToolSettings>();
-            _sessionToolSettings.Clear(); // every tool back to the defaults, this window's too
-            TrySaveSettings();
-            // the property bar is bound to the old SavedToolSettings instances; rebind it to the
-            // (lazily re-created) defaults in the new dictionary
-            drawingCanvas.ResyncToolSettings();
+            ToolDefaultsList.ShowInSettings(drawingCanvas.Tool);
         }
 
         // ---- style menu -----------------------------------------------------------------
@@ -1723,42 +1718,14 @@ namespace Clowd.UI
         // Color popups + font dialog (§5.1 / §5.3)
         // ====================================================================
 
-        private void objectColor_Click(object sender, PointerPressedEventArgs e)
-        {
-            OpenObjectColorPicker();
-        }
-
-        private void objectFill_Click(object sender, PointerPressedEventArgs e)
-        {
-            OpenObjectFillPicker();
-        }
-
         private void backgroundColor_Click(object sender, PointerPressedEventArgs e)
         {
             OpenBackgroundColorPicker();
         }
 
-        // The swatches are plain Borders (a Button theme would fight the checker/color fill), so
+        // The swatch is a plain Border (a Button theme would fight the checker/color fill), so
         // keyboard activation is wired by hand. Enter only: the editor swallows Space window-wide
         // as the pan modifier, so it never reaches a focused control.
-        private void objectColor_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key != Key.Enter)
-                return;
-
-            e.Handled = true;
-            OpenObjectColorPicker();
-        }
-
-        private void objectFill_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key != Key.Enter)
-                return;
-
-            e.Handled = true;
-            OpenObjectFillPicker();
-        }
-
         private void backgroundColor_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key != Key.Enter)
@@ -1768,28 +1735,38 @@ namespace Clowd.UI
             OpenBackgroundColorPicker();
         }
 
-        private void OpenObjectColorPicker()
-        {
-            _colorSwatchToRefocus = objectColorSwatch;
-            miniColorPopup.PlacementTarget = objectColorSwatch;
-            miniColor.Reset(drawingCanvas.ObjectColor, (c) => drawingCanvas.ObjectColor = c);
-            miniColorPopup.IsOpen = true;
-        }
-
-        private void OpenObjectFillPicker()
-        {
-            _colorSwatchToRefocus = objectFillSwatch;
-            miniColorPopup.PlacementTarget = objectFillSwatch;
-            miniColor.Reset(drawingCanvas.ObjectFill, (c) => drawingCanvas.ObjectFill = c);
-            miniColorPopup.IsOpen = true;
-        }
-
         private void OpenBackgroundColorPicker()
         {
-            _colorSwatchToRefocus = backgroundColorSwatch;
-            miniColorPopup.PlacementTarget = backgroundColorSwatch;
-            miniColor.Reset(drawingCanvas.ArtworkBackground, (c) => drawingCanvas.SetBackgroundColor(c));
+            OpenColorPicker(backgroundColorSwatch, drawingCanvas.ArtworkBackground, c => drawingCanvas.SetBackgroundColor(c));
+        }
+
+        /// <summary>Opens the mini picker at <paramref name="swatch"/>, which gets the focus back
+        /// when it closes.</summary>
+        private void OpenColorPicker(Control swatch, Color current, Action<Color> write)
+        {
+            _colorSwatchToRefocus = swatch;
+            miniColorPopup.PlacementTarget = swatch;
+            miniColor.Reset(current, write);
             miniColorPopup.IsOpen = true;
+        }
+
+        /// <summary>Puts the style fields (ToolStyleFields, shared with the settings window's tool
+        /// defaults) into the property bar after the canvas background, each shown while the
+        /// canvas's subject has its skill.</summary>
+        private void InitStyleFields()
+        {
+            var fields = new ToolStyleFields(drawingCanvas, ToolStyleFields.CanvasPaths,
+                skill => new Binding(nameof(DrawingCanvas.SubjectSkill))
+                {
+                    Source = drawingCanvas,
+                    Mode = BindingMode.OneWay,
+                    Converter = new FuncValueConverter<Skill, bool>(s => s.HasFlag(skill)),
+                },
+                OpenColorPicker);
+
+            var at = PropertiesBar.Children.IndexOf(canvasBackgroundItem) + 1;
+            foreach (var field in ToolStyleFields.All)
+                PropertiesBar.Children.Insert(at++, fields.BuildBarItem(field));
         }
 
         private GraphicMeasure SelectedMeasure
@@ -1864,31 +1841,6 @@ namespace Clowd.UI
 
             drawingCanvas.SetMeasureUnits(measure, length, unit);
             measureUnitsPopup.IsOpen = false;
-        }
-
-        private async void font_Click(object sender, RoutedEventArgs e)
-        {
-            var result = await NiceDialog.ShowFontDialogAsync(
-                this,
-                drawingCanvas.TextFontFamilyName,
-                drawingCanvas.TextFontSize,
-                drawingCanvas.TextFontStyle,
-                drawingCanvas.TextFontWeight);
-
-            if (result != null) {
-                drawingCanvas.TextFontFamilyName = result.TextFontFamilyName;
-                drawingCanvas.TextFontSize = result.TextFontSize;
-                drawingCanvas.TextFontStyle = result.TextFontStyle;
-                drawingCanvas.TextFontWeight = result.TextFontWeight;
-            }
-        }
-
-        // sticky notes size and weight their own text, so only the face is theirs to pick
-        private async void fontFamily_Click(object sender, RoutedEventArgs e)
-        {
-            var family = await NiceDialog.ShowFontFamilyDialogAsync(this, drawingCanvas.TextFontFamilyName);
-            if (family != null)
-                drawingCanvas.TextFontFamilyName = family;
         }
     }
 }
