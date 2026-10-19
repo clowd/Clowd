@@ -199,6 +199,19 @@ namespace Clowd.UI
             if (Equals(GetGesture(entry), gesture))
                 return;
 
+            // a gesture belongs to one action: whichever other hotkey held it is left unset, and
+            // released first so this entry's registration can take the OS binding. Rows hidden by
+            // a feature switch are included — their gesture would otherwise collide the moment
+            // the feature comes back.
+            var displaced = gesture == null
+                ? new List<HotkeyEntry>()
+                : _entries.Where(e => e != entry && Equals(GetGesture(e), gesture)).ToList();
+            foreach (var other in displaced)
+            {
+                other.Setter(_settings, null);
+                Rebind(other);
+            }
+
             entry.Setter(_settings, gesture);
 
             // explicit-save policy: persisting the gesture is a UI-layer responsibility.
@@ -207,6 +220,8 @@ namespace Clowd.UI
 
             Rebind(entry);
             entry.RaiseGestureChanged();
+            foreach (var other in displaced)
+                other.RaiseGestureChanged();
         }
 
         private void Rebind(HotkeyEntry entry)
