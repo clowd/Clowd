@@ -18,12 +18,6 @@
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
         {
-          "name": "Avalonia.Fonts.Inter",
-          "version": "12.1.2",
-          "license": "MIT",
-          "url": "https://github.com/AvaloniaUI/Avalonia/"
-        },
-        {
           "name": "Avalonia.Skia",
           "version": "12.1.2",
           "license": "MIT",
