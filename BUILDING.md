@@ -62,4 +62,4 @@ dotnet test clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj
 dotnet test clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj
 ```
 
-The upload relay server (`clowd_server/`) is a separate Cloudflare Worker project with its own build and test setup — see `clowd_server/TESTING.md`.
+The upload relay server lives in its own repository, [clowd/Clowd.Server](https://github.com/clowd/Clowd.Server).

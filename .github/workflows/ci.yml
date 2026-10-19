@@ -1,6 +1,6 @@
 name: CI
 
-# Test + package on every commit; clowd_server has its own workflow (deploy-server.yml).
+# Test + package on every commit.
 # Each package is the published Clowd.Ui app with the Rust binaries beside it and
 # obs-express in a subdirectory, the layout ScreenCaptureService/ObsBinaryLocator expects.
 # Every package except osx-x64 (which upstream ONNX Runtime no longer supports) also
@@ -10,8 +10,6 @@ name: CI
 on:
   push:
     paths-ignore:
-      - "clowd_server/**"
-      - ".github/workflows/deploy-server.yml"
       - "**.md"
   workflow_dispatch:
 
