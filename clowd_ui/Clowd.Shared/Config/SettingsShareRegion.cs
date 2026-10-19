@@ -33,9 +33,9 @@ namespace Clowd.Config
     /// </summary>
     public class SettingsShareRegion : SimpleNotifyObject
     {
-        /// <summary>The tile selector at the top of the page; Off hides the rest of the page and
+        /// <summary>The mode banner at the top of the page; Off hides the rest of the page and
         /// every share entry point in the app (see <see cref="ShareRegionMode"/>).</summary>
-        [ModeSelector]
+        [ModeSelector(Feature = "Shared Region")]
         public ShareRegionMode Mode
         {
             get => _mode;

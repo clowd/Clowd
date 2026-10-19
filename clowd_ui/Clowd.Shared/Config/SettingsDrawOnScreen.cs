@@ -15,10 +15,12 @@ namespace Clowd.Config
     {
         [Description("On")]
         [ModeCaption("Draw over your screen from the tray menu, a hotkey, or while recording or sharing a region.")]
+        [ModeIcon("IconToolPen")]
         On,
 
         [Description("Off")]
         [ModeCaption("Turns Draw on Screen off entirely.")]
+        [ModeIcon("IconPower")]
         Off,
     }
 
@@ -81,9 +83,9 @@ namespace Clowd.Config
     /// </summary>
     public class SettingsDrawOnScreen : SimpleNotifyObject
     {
-        /// <summary>The tile selector at the top of the page; Off hides the rest of the page and
+        /// <summary>The mode banner at the top of the page; Off hides the rest of the page and
         /// every Draw on Screen entry point in the app (see <see cref="DrawOnScreenMode"/>).</summary>
-        [ModeSelector]
+        [ModeSelector(Feature = "Draw on Screen")]
         public DrawOnScreenMode Mode
         {
             get => _mode;

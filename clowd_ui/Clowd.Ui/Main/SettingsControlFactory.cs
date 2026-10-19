@@ -70,8 +70,8 @@ namespace Clowd.UI.Config
         {
             var all = EnumerateRows().ToList();
 
-            // a [ModeSelector] property is the page's headline choice: it renders as a row of tiles
-            // above the sections (never inside one), and the sections are what it gates.
+            // a [ModeSelector] property is the page's headline choice: it renders as the status
+            // banner above the sections (never inside one), and the sections are what it gates.
             var selectors = all.Where(r => GetFirstAttributeOrDefault<ModeSelectorAttribute>(r.Pd) != null).ToList();
             var rows = all.Except(selectors).ToList();
 
@@ -206,10 +206,10 @@ namespace Clowd.UI.Config
         }
 
         /// <summary>
-        /// The tile selector for <paramref name="propertyName"/> of <paramref name="obj"/> (a
+        /// The mode banner for <paramref name="propertyName"/> of <paramref name="obj"/> (a
         /// [ModeSelector] enum property), for hand-written pages that host one above their own
         /// content — the Uploads page. Same control, same titles and captions as the generated
-        /// pages get, so the enum stays the one place those words live.
+        /// pages get, so the enum stays the one place those words (and icons) live.
         /// </summary>
         public static Control CreateModeSelector(object obj, string propertyName)
         {
@@ -551,10 +551,16 @@ namespace Clowd.UI.Config
         }
 
         /// <summary>
-        /// The tile row for a [ModeSelector] enum property: one <see cref="ModeOption"/> per
-        /// member, titled by its [Description] (the same text the dropdown editor would show) and
-        /// captioned by its [ModeCaption].
+        /// The status banner for a [ModeSelector] enum property: one <see cref="ModeOption"/> per
+        /// member, titled by its [Description] (the same text the dropdown editor would show),
+        /// captioned by its [ModeCaption] and drawn with the VectorIcons geometry its [ModeIcon]
+        /// names. The attribute's Feature is the banner's eyebrow.
         /// </summary>
+        /// <remarks>
+        /// Left at the selector's default stretch: the banner is exactly as wide as the GroupBox
+        /// sections under it, which share its StackPanel and carry no margin of their own (the
+        /// page's right/bottom clearance is a margin on that whole stack).
+        /// </remarks>
         private Control BuildModeSelector(PropertyDescriptor pd)
         {
             if (!pd.PropertyType.IsEnum)
@@ -562,21 +568,25 @@ namespace Clowd.UI.Config
 
             var selector = new ModeSelector
             {
-                HorizontalAlignment = HorizontalAlignment.Left,
-                MaxWidth = 720,
+                FeatureName = GetFirstAttributeOrDefault<ModeSelectorAttribute>(pd)?.Feature,
             };
 
             foreach (var value in Enum.GetValues(pd.PropertyType))
             {
-                var caption = pd.PropertyType.GetField(value.ToString())
-                    ?.GetCustomAttributes(typeof(ModeCaptionAttribute), false)
+                var field = pd.PropertyType.GetField(value.ToString());
+                var caption = field?.GetCustomAttributes(typeof(ModeCaptionAttribute), false)
                     .OfType<ModeCaptionAttribute>().FirstOrDefault()?.Caption;
+                var iconKey = field?.GetCustomAttributes(typeof(ModeIconAttribute), false)
+                    .OfType<ModeIconAttribute>().FirstOrDefault()?.Key;
 
                 selector.Options.Add(new ModeOption
                 {
                     Value = value,
                     Title = GetEnumDisplayString(value),
                     Caption = caption,
+                    // a key that does not resolve is not an error worth throwing over: the
+                    // selector draws the title's initial in the disc instead.
+                    Icon = ModeSelector.FindIcon(iconKey),
                 });
             }
 

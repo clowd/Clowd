@@ -56,7 +56,11 @@
 
         </StackPanel>
 
-        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*">
+        <!-- MinWidth: the column is Auto, and the widest thing in it is the Image | Video row —
+             two equal star halves, so twice the wider button plus the gap. With recording off the
+             Video half goes and the column would shrink to the Image button alone, shifting the
+             whole page sideways; this holds it at the two-button width (measured on Windows). -->
+        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*" MinWidth="186">
 
             <StackPanel Grid.Row="0" Margin="0,0,0,24" Spacing="8">
                 <!-- Capture leads: it is what the app is for, and the two editors below it are the

@@ -258,6 +258,13 @@
     <!-- Material "flash" bolt -->
     <StreamGeometry x:Key="IconLightning">M7,2V13H10V22L17,10H13L17,2H7Z</StreamGeometry>
 
+    <!-- The power mark (an open ring under a bar), 24px canvas: what an "Off" mode wears on a
+         settings page's mode banner (ModeSelector). Drawn as filled outlines rather than a stroke
+         so it fills like every other glyph here: the ring is a 2px band of radius 7-9 about
+         (12,13), open 40 degrees either side of the top, with round ends; the bar is a 2px
+         rounded slot from y 2 to 12. -->
+    <StreamGeometry x:Key="IconPower">M 17.785,6.106 A 9,9 0 1 1 6.215,6.106 A 1,1 0 0 1 7.5,7.638 A 7,7 0 1 0 16.5,7.638 A 1,1 0 0 1 17.785,6.106 Z M 12,2 A 1,1 0 0 1 13,3 L 13,11 A 1,1 0 0 1 11,11 L 11,3 A 1,1 0 0 1 12,2 Z</StreamGeometry>
+
     <!-- icons8 "Star" outlined / filled (24x24), the two states of the Recent list's favourite
          toggle. The outline is a single even-odd path (the inner star is the hole), so it takes a
          Fill like every other icon here rather than a Stroke — which is what lets the two swap

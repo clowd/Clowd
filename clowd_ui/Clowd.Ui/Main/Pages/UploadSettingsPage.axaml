@@ -94,7 +94,7 @@
 
     <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="16">
-            <!-- The On/Off tile selector (SettingsUpload.Mode), built by the settings factory from
+            <!-- The On/Off mode banner (SettingsUpload.Mode), built by the settings factory from
                  the enum so this page and the generated ones share one control; everything under
                  it is hidden while uploads are off (UploadSettingsPage.ApplyMode). -->
             <ContentControl x:Name="ModeHost" />

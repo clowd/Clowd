@@ -135,7 +135,7 @@ namespace Clowd.Config
     ///
     /// Declaration order is the page's section order (the settings factory groups by first
     /// appearance of each [Category]), which is why Output comes first. <see cref="Mode"/> carries
-    /// no category: it is the tile selector above the sections, and every section is gated on it.
+    /// no category: it is the mode banner above the sections, and every section is gated on it.
     /// </summary>
     public class SettingsRecording : SimpleNotifyObject
     {
@@ -144,11 +144,11 @@ namespace Clowd.Config
         private const RecordingMode Instant = RecordingMode.Instant;
 
         /// <summary>
-        /// The tile selector at the top of the page. Everything else on the page is gated on it
+        /// The mode banner at the top of the page. Everything else on the page is gated on it
         /// (<see cref="VisibleWhenAttribute"/>): Off hides every other row, and the two recording
         /// modes each show the rows that apply to them.
         /// </summary>
-        [ModeSelector]
+        [ModeSelector(Feature = "Recording")]
         public RecordingMode Mode
         {
             get => _mode;

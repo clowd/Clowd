@@ -59,9 +59,9 @@ namespace Clowd.Config
 
     public class SettingsUpload : SimpleNotifyObject
     {
-        /// <summary>The tile selector at the top of the Uploads page; Off hides the rest of the
+        /// <summary>The mode banner at the top of the Uploads page; Off hides the rest of the
         /// page and every upload entry point in the app (see <see cref="UploadsMode"/>).</summary>
-        [ModeSelector]
+        [ModeSelector(Feature = "Uploads")]
         public UploadsMode Mode
         {
             get => _mode;
