@@ -702,8 +702,6 @@
                     </ToolTip.Tip>
                 </controls:ToolButton>
 
-                <!--  no DemoName: the tip has no generated demo yet (tools/track-tips), and an
-                      unset name hides the demo frame rather than showing a broken one  -->
                 <controls:ToolButton
                     x:Name="btnAddObscure"
                     Classes="wide"
@@ -716,6 +714,7 @@
                         <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
                             <ve:TrackTip
                                 x:Name="tipAddObscure"
+                                DemoName="obscure"
                                 Description="Hides part of the frame behind a mosaic, blur or blackout box at the playhead. Drag and resize it in the preview; anything on a track above it stays visible."
                                 Header="Add Obscure Track" />
                         </ToolTip>

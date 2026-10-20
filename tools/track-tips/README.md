@@ -1,7 +1,7 @@
 # Track tip demo GIFs
 
 The looping demos shown in the rich flyouts behind the add-track buttons on the video editor's left
-tool strip (Video, Audio, Image, Text, Background, Zoom, Speed, Cursor, Keyboard, Voice-over). Each flyout is a
+tool strip (Video, Audio, Image, Text, Obscure, Background, Zoom, Speed, Cursor, Keyboard, Voice-over). Each flyout is a
 header, a
 one or two sentence description, a demo GIF, and, when the button is disabled, the reason why.
 
@@ -29,7 +29,7 @@ file just hides the demo area, so the app builds and runs with or without the GI
 
 - Python 3 with Pillow: `pip3 install Pillow` (any Pillow 10+ works; 11 was used).
 - Run from the repo root:
-  - `python3 tools/track-tips/generate.py` regenerates all ten into the assets folder.
+  - `python3 tools/track-tips/generate.py` regenerates all eleven into the assets folder.
   - `python3 tools/track-tips/generate.py speed cursor` regenerates only the GIFs whose names contain
     those words.
   - `python3 tools/track-tips/generate.py --sheet /tmp/contact.png` also writes a review contact
@@ -86,14 +86,14 @@ it and 1x after, so it has a few more frames and its own path code.
   with `0:00 / 0:04 / 0:08` timestamps, the Screen row (accent filmstrip of desktop thumbnails) and
   the Audio row (green waveform), block gutters with the faint hatch.
 - New rows go where `TimelineRowLayout` puts them: Speed pinned at the top above a hatched gutter;
-  Zoom, Text, Image and an imported clip above Screen; Cursor and Keys glued directly above Screen and
+  Zoom, Text, Image, Obscure and an imported clip above Screen; Cursor and Keys glued directly above Screen and
   spanning the whole recording (with motion / click blips and key blips); Background under Screen,
   because the video block composites bottom up and a backdrop draws behind the recording; imported
   audio in the audio block under Audio.
 - A row name that does not fit the 34px header column is condensed rather than left to spill over the
   items next to it (`fitted_text`); "Background" is the only one so far that needs it.
 - Item labels use the editor's own formats: `200%` (zoom), `2x` (speed), `photo.png`, `clip`,
-  `music`, `Hello!`, `Cursor`, `Keys`.
+  `music`, `Hello!`, `Cursor`, `Keys`, and the obscure mode (`Mosaic`, `Blur`, `Blackout`).
 
 ## Style rules
 
@@ -101,7 +101,7 @@ it and 1x after, so it has a few more frames and its own path code.
   (228,228,230), header text (140,140,140).
 - Row kind colours, exactly as `TimelinePalette.cs` (dark variant): recording / video accent
   (84,169,255), audio (52,140,108), text (118,92,176), image (176,122,52), speed (184,70,92),
-  zoom (46,136,150), cursor (158,74,158), keyboard (132,144,56), background (64,142,76). Playhead
+  zoom (46,136,150), cursor (158,74,158), keyboard (132,144,56), background (64,142,76), obscure (98,106,120). Playhead
   (240,82,82). Selection
   outline in the accent. Waveform ink (226,244,236), cursor motion blips (246,228,246), key blips
   (246,248,226). Speed's stopwatch tints rose while it runs fast.
@@ -159,3 +159,11 @@ it and 1x after, so it has a few more frames and its own path code.
   into an ordinary selected audio item and the pill's record button goes back to a round dot. The
   Voice row is a normal audio row and the finished take is a normal audio clip: nothing about the
   row or the item is special, only the way it gets there.
+- `track-obscure.gif`: an Obscure row appears above Screen and a box pops in at the default spot
+  (centred, a third of the canvas each way) over a contact card the recording carries for the
+  occasion, a teal avatar and a bold `Jane Doe`. The box fades in as a mosaic, then the sweep
+  crossfades it to a blur and then a blackout (a slate badge over the box and the item label name
+  the mode), and it fades out as the playhead leaves the item. The box is painted from the
+  recording's own pixels the way `FrameComposer.DrawObscure` does it: cell averages blown back up
+  with nearest sampling, a Gaussian blur of the backdrop, a black fill. The mosaic cell is
+  exaggerated (3.4 logical px) so the blocks read at flyout size.

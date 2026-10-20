@@ -1093,6 +1093,127 @@ def gif_voice():
     return frames
 
 
+# ---- 11. obscure -----------------------------------------------------------------------------
+# A redaction box. The demo needs something worth hiding, so the recording gets a contact card
+# (a bright avatar and a name in bold) right where a fresh box lands: centred, a third of the
+# canvas each way (EditorSession.AddObscure, DefaultObscureExtent). The box is painted from the
+# recording's own pixels the way FrameComposer.DrawObscure paints it: a mosaic averages each cell
+# (anchored at the box's corner) and blows it back up with nearest sampling, a blur blurs the
+# backdrop under the box, a blackout fills it black, and the item's entry/exit fades blend the
+# result over the picture. The sweep walks through all three modes so the flyout shows each one;
+# the item label follows, the way the timeline card names the mode it carries.
+OBSCURE_KIND = (98, 106, 120)    # TimelinePalette's dark obscure row, the one neutral slate
+OBSCURE_EXTENT = 1.0 / 3
+OBSCURE_CELL = 3.4               # mosaic cell, logical px: exaggerated so it reads at flyout size
+OBSCURE_BLUR = 2.6               # blur sigma, logical px
+F_SECRET = font(6.6, bold=True)
+OBSCURE_MODES = [(0.0, "Mosaic"), (0.36, "Blur"), (0.68, "Blackout")]
+
+
+def obscure_desktop():
+    """The recording with a contact card in the middle of the app window's content area."""
+    base, _ = render_desktop(show_button=True)
+    img = base.copy()
+    d = ImageDraw.Draw(img)
+    cx, cy = CAN_W / 2, CAN_H / 2
+    # clear the content lines behind the card, then the card itself
+    d.rectangle((P(cx - 24), P(cy - 15), P(cx + 24), P(cy + 15)), fill=(242, 243, 246))
+    d.rounded_rectangle((P(cx - 22), P(cy - 10), P(cx + 22), P(cy + 10)), radius=P(2.5),
+                        fill=(255, 255, 255), outline=(214, 217, 226), width=int(0.5 * SS))
+    ax, ay, ar = cx - 13.5, cy - 0.5, 6.8
+    d.ellipse((P(ax - ar), P(ay - ar), P(ax + ar), P(ay + ar)), fill=(40, 168, 150))
+    d.ellipse((P(ax - 2.4), P(ay - 3.8), P(ax + 2.4), P(ay + 1.0)), fill=(214, 246, 238))
+    d.pieslice((P(ax - 4.6), P(ay + 1.4), P(ax + 4.6), P(ay + 10.6)), start=180, end=360, fill=(214, 246, 238))
+    d.text((P(cx - 5.5), P(cy - 4)), "Jane Doe", font=F_SECRET, fill=(28, 30, 40), anchor="lm")
+    d.rounded_rectangle((P(cx - 5.5), P(cy + 1.4), P(cx + 18), P(cy + 3.6)), radius=P(1.1), fill=(66, 122, 236))
+    d.rounded_rectangle((P(cx - 5.5), P(cy + 6), P(cx + 11), P(cy + 8.2)), radius=P(1.1), fill=(170, 174, 186))
+    return img
+
+
+def obscure_box():
+    w, h = CAN_W * OBSCURE_EXTENT, CAN_H * OBSCURE_EXTENT
+    cx, cy = (CANVAS[0] + CANVAS[2]) / 2, (CANVAS[1] + CANVAS[3]) / 2
+    return (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+
+
+def obscured_region(desktop, box, mode):
+    """The box's pixels as the compositor would paint them (box in preview coordinates)."""
+    x0, y0 = int(round(P(box[0] - CANVAS[0]))), int(round(P(box[1] - CANVAS[1])))
+    x1, y1 = int(round(P(box[2] - CANVAS[0]))), int(round(P(box[3] - CANVAS[1])))
+    w, h = x1 - x0, y1 - y0
+    if mode == "Blackout":
+        return Image.new("RGB", (w, h), (0, 0, 0))
+    if mode == "Blur":
+        # blur the backdrop with some context around the box, then cut the box back out
+        m = int(P(OBSCURE_BLUR * 3))
+        ctx = desktop.crop((x0 - m, y0 - m, x1 + m, y1 + m)).filter(ImageFilter.GaussianBlur(P(OBSCURE_BLUR)))
+        return ctx.crop((m, m, m + w, m + h))
+    cell = P(OBSCURE_CELL)
+    cols, rows = max(1, int(math.ceil(w / cell))), max(1, int(math.ceil(h / cell)))
+    grid = desktop.crop((x0, y0, x0 + int(cols * cell), y0 + int(rows * cell)))
+    small = grid.resize((cols, rows), Image.BOX)
+    return small.resize((int(cols * cell), int(rows * cell)), Image.NEAREST).crop((0, 0, w, h))
+
+
+def obscure_mode(sweep):
+    """(mode, previous mode, 0..1 crossfade from previous) for a point in the sweep."""
+    idx = 0
+    for k, (t0, _) in enumerate(OBSCURE_MODES):
+        if sweep >= t0:
+            idx = k
+    mode = OBSCURE_MODES[idx][1]
+    if idx == 0:
+        return mode, None, 1.0
+    t = min(1.0, (sweep - OBSCURE_MODES[idx][0]) / 0.07)
+    return mode, OBSCURE_MODES[idx - 1][1], ease_in_out(t)
+
+
+def gif_obscure():
+    frames = []
+    desktop = obscure_desktop()
+    thumb = thumb_of(desktop)
+    box = obscure_box()
+    regions = {m: obscured_region(desktop, box, m) for _, m in OBSCURE_MODES}
+    ox, oy = int(round(P(box[0]))), int(round(P(box[1])))
+    for i in range(N):
+        pop, sweep, settled = phases(i)
+        img = new_frame()
+        paste_canvas(img, desktop)
+        mode, prev, xt = obscure_mode(sweep)
+        # entry fade with the pop, exit fade as the playhead reaches the item's end
+        alpha = ease_out(pop) * (1.0 - ease_in_out(max(0.0, (sweep - 0.9) / 0.1)))
+        if settled:
+            alpha = 0.0
+        if alpha > 0.01:
+            patch = regions[mode] if prev is None else Image.blend(regions[prev], regions[mode], xt)
+            under = img.crop((ox, oy, ox + patch.size[0], oy + patch.size[1]))
+            img.paste(Image.blend(under, patch, alpha), (ox, oy))
+        d = ImageDraw.Draw(img)
+        if pop > 0 and not settled:
+            # the selected box's gizmo pops in around it, as the image demo's does
+            e = back_out(pop)
+            cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+            hw, hh = (box[2] - box[0]) / 2 * e, (box[3] - box[1]) / 2 * e
+            gz = (cx - hw, cy - hh, cx + hw, cy + hh)
+            rect(d, gz, outline=ACCENT, width=0.6)
+            for hx in (gz[0], gz[2]):
+                for hy in (gz[1], gz[3]):
+                    rect(d, (hx - 1.3, hy - 1.3, hx + 1.3, hy + 1.3), fill=(255, 255, 255), outline=ACCENT, width=0.4)
+            if pop >= 1:
+                # the mode badge, in the row's slate, tucked above the box's top-left corner
+                bw = F_BADGE.getlength(mode) / SS + 8
+                bx, by = box[0], box[1] - 8.5
+                rrect(d, (bx, by - 5.5, bx + bw, by + 5.5), 3, fill=OBSCURE_KIND)
+                text(d, (bx + bw / 2, by + 0.4), mode, F_BADGE, (255, 255, 255), anchor="mm")
+        tl = Timeline()
+        new_row = dict(name="Obscure", h=R_CARD, fill=OBSCURE_KIND, block="video", grow=min(1.0, pop * 1.4),
+                       items=[(x_of_sec(ITEM_T0), x_of_sec(ITEM_T1), mode, None, pop)])
+        base_rows(tl, new_row, "above_screen")
+        tl.draw(d, sweep_playhead(pop, sweep), thumb, selected=new_row if pop >= 1 else None)
+        frames.append(finish(img))
+    return frames
+
+
 GIFS = {
     "track-video.gif": gif_video,
     "track-audio.gif": gif_audio,
@@ -1104,6 +1225,7 @@ GIFS = {
     "track-keyboard.gif": gif_keyboard,
     "track-background.gif": gif_background,
     "track-voice.gif": gif_voice,
+    "track-obscure.gif": gif_obscure,
 }
 
 
