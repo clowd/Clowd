@@ -54,6 +54,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             comboExitEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             comboRampEntryEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             comboRampExitEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
+            comboObscureKind.ItemsSource = Enum.GetValues<ObscureKind>();
             ddSpeed.ItemsSource = SelectedItemViewModel.SpeedOptions;
             ddSpeedTarget.ItemsSource = SelectedItemViewModel.SpeedTargetOptions;
             ddKeyFilter.ItemsSource = SelectedItemViewModel.KeystrokeFilterOptions;
@@ -87,6 +88,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotRampExitEasing.DefaultValue = SelectedItemViewModel.DefaultTransitionEasing;
             dotRampEntryEnabled.DefaultValue = false;
             dotRampExitEnabled.DefaultValue = false;
+            // the model's own starting mode, the image editor's default
+            dotObscureKind.DefaultValue = new ObscureContent().Kind;
             dotCursorDebounce.DefaultValue = true;
             dotDenoise.DefaultValue = false;
             dotSpeedWarpExempt.DefaultValue = false;

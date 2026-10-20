@@ -63,6 +63,11 @@ namespace Clowd.VideoSDK.Composition
             // factor is exactly 1.0 in the render (canvas == output).
             double textScale = TextScaleOf(project, canvasHeight);
 
+            // the caller's mapping of the output canvas onto its device (identity in the render,
+            // the letterbox in the preview) — what an obscure box needs to find the frame's own
+            // edges again under the zoom and its rotation (see DrawObscure)
+            var frameMatrix = target.TotalMatrix;
+
             foreach (var track in tracks)
             {
                 // zoom rows above this track scale its whole picture about their focal points;
@@ -92,7 +97,8 @@ namespace Clowd.VideoSDK.Composition
                         // ride outside the zoom.
                         if (!itemZoom.IsIdentity && item.Content is not KeyboardContent)
                             target.Concat(in itemZoom);
-                        ComposeItem(project, item, timeTicks, frames, target, canvasWidth, canvasHeight, textScale);
+                        ComposeItem(project, item, timeTicks, frames, target, canvasWidth, canvasHeight,
+                            textScale, frameMatrix);
                     }
                     finally
                     {
@@ -132,7 +138,7 @@ namespace Clowd.VideoSDK.Composition
             project?.Output is { HeightPx: > 0 } output ? canvasHeight / output.HeightPx : 1.0;
 
         private static void ComposeItem(Project project, Item item, long timeTicks, IFrameSource frames,
-            SKCanvas target, int canvasWidth, int canvasHeight, double textScale)
+            SKCanvas target, int canvasWidth, int canvasHeight, double textScale, SKMatrix frameMatrix)
         {
             var transform = item.Transform ?? new Transform();
             // a keystroke overlay spends its Entry/Exit on its rows, one clock each, inside
@@ -194,6 +200,13 @@ namespace Clowd.VideoSDK.Composition
 
                 case TextContent text:
                     DrawText(target, text, transform, fx, opacity, canvasWidth, canvasHeight, textScale);
+                    break;
+
+                case ObscureContent obscure:
+                    // its Entry/Exit are ramps, which fx (a picture's arrival) deliberately skips:
+                    // DrawObscure reads them itself to fade the obscuring in and out
+                    DrawObscure(target, item, obscure, timeTicks, transform, opacity, frameMatrix,
+                        canvasWidth, canvasHeight, textScale);
                     break;
 
                 case CursorContent cursor:
@@ -854,6 +867,145 @@ namespace Clowd.VideoSDK.Composition
             {
                 target.RestoreToCount(save);
             }
+        }
+
+        // ------------------------------------------------------------------------------ obscure
+
+        /// <summary>
+        /// How much a mosaic cell is averaged before it is sampled, as a blur sigma per cell
+        /// width: about the deviation of a cell-wide box (1/√12 ≈ 0.29), so each cell shows its
+        /// area's mean color rather than whichever pixel its center happened to land on — a
+        /// point-sampled mosaic shimmers as the video under it moves, and can pass a thin stroke
+        /// through intact.
+        /// </summary>
+        private const float MosaicAverageSigma = 0.3f;
+
+        /// <summary>
+        /// An obscure box (<see cref="ObscureContent"/>): it has no picture of its own and instead
+        /// rewrites, inside its box, what the rows beneath it have already composed into
+        /// <paramref name="target"/> — rows above it draw afterwards, untouched. Boxed exactly like
+        /// <see cref="DrawSolid"/> (Scale/ScaleY are fractions of the canvas) and turned by
+        /// <see cref="ApplyClips"/>, which together only shape the clip.
+        ///
+        /// <para>Blackout is a plain black fill. Mosaic and blur open an empty layer under that
+        /// clip with a <b>backdrop</b> filter (<see cref="SKCanvasSaveLayerRec.Backdrop"/>): Skia
+        /// seeds the layer with the canvas content under it run through the filter, and restoring
+        /// the layer composites that back over the original. Nothing reads pixels back on the CPU,
+        /// so it is the same code on the raster and GPU backends and on Avalonia's leased preview
+        /// canvas, which is what keeps preview == render.</para>
+        ///
+        /// <para>The layer works in <paramref name="frame"/> space — the output canvas as the
+        /// caller mapped it, outside any zoom or rotation — so the filters can be told where the
+        /// frame ends: the backdrop is first cropped to the canvas and clamped at its edge. The
+        /// preview composes onto the window's own surface with the editor's chrome around the
+        /// frame, and a blur reaching past the frame edge would otherwise pull that chrome in; the
+        /// render's surface simply ends there, and the crop makes the two agree. It also means
+        /// mosaic cells stay square to the frame (as the image editor's stay square to the image)
+        /// rather than turning with a rotated box; the grid is anchored at the box's corner.</para>
+        ///
+        /// <para><see cref="ObscureContent.Strength"/> is output pixels, mapped onto this canvas by
+        /// <paramref name="textScale"/> exactly as a font size is. The entry/exit ramps
+        /// (<see cref="TransitionKind.Ramp"/>) fade the obscured layer over the clear picture, so
+        /// the first frame of an entry ramp shows the picture untouched; the item's opacity
+        /// multiplies the same alpha.</para>
+        /// </summary>
+        private static void DrawObscure(SKCanvas target, Item item, ObscureContent obscure, long timeTicks,
+            Transform transform, double opacity, SKMatrix frame, int canvasWidth, int canvasHeight,
+            double textScale)
+        {
+            double destW = transform.Scale * canvasWidth;
+            double destH = (transform.ScaleY ?? transform.Scale) * canvasHeight;
+            var rect = PlaceRect(transform, ItemEffects.Identity, destW, destH, canvasWidth, canvasHeight);
+            if (rect.Width <= 0 || rect.Height <= 0)
+                return;
+
+            double alpha = opacity
+                * TransitionMath.EntryProgress(item, timeTicks)
+                * TransitionMath.ExitProgress(item, timeTicks);
+            if (alpha <= 0)
+                return;
+
+            int save = target.Save();
+            try
+            {
+                // the box's corner in frame space (through the zoom, if one is in force), taken
+                // before the rotation goes on: the mosaic grid's anchor
+                SKPoint anchor = rect.Location;
+                if (frame.TryInvert(out var unframe))
+                    anchor = SKMatrix.Concat(unframe, target.TotalMatrix).MapPoint(anchor);
+
+                ApplyClips(target, transform, ItemEffects.Identity, rect);
+                target.ClipRect(rect, SKClipOperation.Intersect, antialias: true);
+
+                if (obscure.Kind == ObscureKind.Blackout)
+                {
+                    using var fill = new SKPaint { Color = SKColors.Black.WithAlpha(AlphaByte(alpha)) };
+                    target.DrawRect(rect, fill);
+                    return;
+                }
+
+                // the clip stays where the rotation put it; the layer's own space becomes the
+                // frame, origin at the anchor (a matrix filter scales about the origin)
+                target.SetMatrix(frame);
+                target.Translate(anchor.X, anchor.Y);
+                var canvas = SKRect.Create(-anchor.X, -anchor.Y, canvasWidth, canvasHeight);
+
+                float strength = (float)(ObscureStrengthOf(obscure) * textScale);
+                using var filter = obscure.Kind == ObscureKind.Blur
+                    ? CreateFrameBlur(strength, canvas)
+                    : CreateMosaicFilter(Math.Max(1f, strength), canvas);
+                using var layer = new SKPaint { Color = SKColors.White.WithAlpha(AlphaByte(alpha)) };
+                var rec = new SKCanvasSaveLayerRec
+                {
+                    Bounds = canvas,
+                    Paint = layer,
+                    Backdrop = filter,
+                };
+                // nothing is drawn into the layer: it starts as the filtered backdrop, and the
+                // restore in finally composites it back over the original at alpha
+                target.SaveLayer(rec);
+            }
+            finally
+            {
+                target.RestoreToCount(save);
+            }
+        }
+
+        /// <summary><see cref="ObscureContent.Strength"/> clamped to its validated range, with the
+        /// default standing in for a NaN — a project that slipped past validation still obscures.</summary>
+        private static double ObscureStrengthOf(ObscureContent obscure) =>
+            Double.IsNaN(obscure.Strength)
+                ? ObscureContent.DefaultStrength
+                : Math.Clamp(obscure.Strength, ObscureContent.MinStrength, ObscureContent.MaxStrength);
+
+        /// <summary>
+        /// A blur of the backdrop that treats <paramref name="canvas"/> as the edge of the world:
+        /// the input is cropped to it and clamped there (Skia's blur applies its tile mode at a
+        /// crop rect it is given), and the outer blur, given no crop, clamps at the bounds of that
+        /// cropped image and so extends the frame's edge pixels outward instead of fading to
+        /// nothing — a mosaic cell straddling the frame edge must still sample a color, or the
+        /// layer would come back transparent there and show the picture through.
+        /// </summary>
+        private static SKImageFilter CreateFrameBlur(float sigma, SKRect canvas)
+        {
+            using var cropped = SKImageFilter.CreateBlur(0, 0, SKShaderTileMode.Clamp, null, canvas);
+            return SKImageFilter.CreateBlur(sigma, sigma, SKShaderTileMode.Clamp, cropped);
+        }
+
+        /// <summary>Square cells <paramref name="cell"/> canvas units wide, aligned to the
+        /// parameter-space origin: averaged (<see cref="MosaicAverageSigma"/>), shrunk so each cell
+        /// is one pixel, then blown back up with nearest-neighbor sampling. The two scales must
+        /// stay separate filters with different sampling — Skia folds compatible transforms
+        /// together, and a nearest upscale is what stops it cancelling them out.</summary>
+        private static SKImageFilter CreateMosaicFilter(float cell, SKRect canvas)
+        {
+            using var average = CreateFrameBlur(cell * MosaicAverageSigma, canvas);
+            var down = SKMatrix.CreateScale(1 / cell, 1 / cell);
+            using var shrunk = SKImageFilter.CreateMatrix(in down,
+                new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None), average);
+            var up = SKMatrix.CreateScale(cell, cell);
+            return SKImageFilter.CreateMatrix(in up,
+                new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None), shrunk);
         }
 
         // --------------------------------------------------------------------------- background

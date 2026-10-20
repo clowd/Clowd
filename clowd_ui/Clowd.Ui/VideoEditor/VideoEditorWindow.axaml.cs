@@ -162,6 +162,7 @@ namespace Clowd.UI.VideoEditor
         public RelayCommand CommandAddText { get; }
         public RelayCommand CommandAddImage { get; }
         public RelayCommand CommandAddBackground { get; }
+        public RelayCommand CommandAddObscure { get; }
         public RelayCommand CommandAddZoomEffect { get; }
         public RelayCommand CommandAddSpeedEffect { get; }
         public RelayCommand CommandAddCursorTrack { get; }
@@ -220,6 +221,7 @@ namespace Clowd.UI.VideoEditor
             CommandAddText = new RelayCommand { Executed = _ => AddText(), Text = "Add _Text" };
             CommandAddImage = new RelayCommand { Executed = _ => _ = AddImageAsync(), Text = "Add _Image" };
             CommandAddBackground = new RelayCommand { Executed = _ => AddBackground(), Text = "Add _Background" };
+            CommandAddObscure = new RelayCommand { Executed = _ => AddObscure(), Text = "Add _Obscure" };
             CommandAddZoomEffect = new RelayCommand { Executed = _ => AddZoomEffect(), Text = "Add _Zoom" };
             CommandAddSpeedEffect = new RelayCommand
             {
@@ -1183,6 +1185,19 @@ namespace Clowd.UI.VideoEditor
             Dispatcher.UIThread.Post(() => inspectorPanel.FocusText(), DispatcherPriority.Input);
         }
 
+        /// <summary>Adds an obscure box at the playhead, centered and on the frontmost free row, so
+        /// it hides everything under it from the first frame; the user drags it over what needs
+        /// hiding.</summary>
+        private void AddObscure()
+        {
+            if (!CanAddToProject)
+                return;
+
+            var item = _editor.AddObscure(PlayheadTicks, AddedItemDurationTicks);
+            if (item != null)
+                RevealNewItem(item);
+        }
+
         private async Task AddImageAsync()
         {
             if (!CanAddToProject)
@@ -1723,6 +1738,7 @@ namespace Clowd.UI.VideoEditor
             ("ImportAudio", "Audio", btnImportAudio),
             ("AddImage", "Image", btnAddImage),
             ("AddText", "Text", btnAddText),
+            ("AddObscure", "Obscure", btnAddObscure),
             ("AddZoom", "Zoom", btnAddZoom),
             ("AddSpeed", "Speed", btnAddSpeed),
             ("AddCursor", "Cursor", btnAddCursor),
@@ -1733,7 +1749,7 @@ namespace Clowd.UI.VideoEditor
 
         private static readonly string[] StripToolKeys =
         {
-            "ImportMedia", "ImportAudio", "AddImage", "AddText", "AddZoom",
+            "ImportMedia", "ImportAudio", "AddImage", "AddText", "AddObscure", "AddZoom",
             "AddSpeed", "AddCursor", "AddKeyboard", "Voice", "AddBackground",
         };
 

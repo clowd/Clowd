@@ -95,7 +95,9 @@ public sealed class Project
     /// identical to a fresh one everywhere, instead of behaving alike only where a special case
     /// remembered to cover it. Idempotent: a height already present, whatever its value, is left
     /// alone, and nothing in this method nulls one, so the other callers (timeline ops, the
-    /// recording bootstrap) can run it any number of times.
+    /// recording bootstrap) can run it any number of times. An <see cref="ObscureContent"/> box is
+    /// free-sized for the same reason and boxed by the same rule (FrameComposer.DrawObscure), so it
+    /// shares the fill.
     /// </summary>
     public void Normalize()
     {
@@ -109,7 +111,7 @@ public sealed class Project
 
         foreach (var item in Items)
         {
-            if (item.Content is BackgroundContent)
+            if (item.Content is BackgroundContent or ObscureContent)
             {
                 // a null transform is the default placement (centered, Scale 1); materializing it
                 // draws the same frame and gives the height somewhere to live
@@ -272,6 +274,22 @@ public sealed class Project
                     // negated comparison so NaN fails the check rather than sailing through.
                     if (!(background.AnimationSpeed >= BackgroundContent.MinAnimationSpeed && background.AnimationSpeed <= BackgroundContent.MaxAnimationSpeed))
                         errors.Add($"Item {item.Id} has a background animation speed {background.AnimationSpeed} outside {BackgroundContent.MinAnimationSpeed}..{BackgroundContent.MaxAnimationSpeed}.");
+                    break;
+
+                case ObscureContent obscure:
+                    // obscures the picture under it, so it is picture content as far as rows go
+                    if (track is { Kind: TrackKind.Audio })
+                        errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on audio track {track.Id}.");
+                    // negated comparison so NaN fails the check rather than sailing through.
+                    if (!(obscure.Strength >= ObscureContent.MinStrength && obscure.Strength <= ObscureContent.MaxStrength))
+                        errors.Add($"Item {item.Id} has an obscure strength {obscure.Strength} outside {ObscureContent.MinStrength}..{ObscureContent.MaxStrength}.");
+                    // its animation fades the obscuring itself (a ramp of its own value, like an
+                    // effect item's), never a way of arriving on screen: a box that slid or wiped in
+                    // would expose what it is there to hide.
+                    if (item.Entry != null && item.Entry.Kind != TransitionKind.Ramp)
+                        errors.Add($"Obscure item {item.Id} has a non-ramp entry transition ({item.Entry.Kind}).");
+                    if (item.Exit != null && item.Exit.Kind != TransitionKind.Ramp)
+                        errors.Add($"Obscure item {item.Id} has a non-ramp exit transition ({item.Exit.Kind}).");
                     break;
 
                 default:

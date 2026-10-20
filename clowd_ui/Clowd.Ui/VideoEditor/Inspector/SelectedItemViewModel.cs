@@ -553,6 +553,10 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _zoomFactor = DefaultZoom;
         private double _zoomFocusX = 0.5;
         private double _zoomFocusY = 0.5;
+        private bool _showObscure;
+        private ObscureKind _obscureKind = ObscureKind.Mosaic;
+        private double _obscureStrength = ObscureContent.DefaultStrength;
+        private bool _showRampEasing = true;
 
         private bool _showEffect;
         private VideoEffectKind _effectKind;
@@ -714,7 +718,8 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>The second size row, shown only while the item carries an explicit height
         /// (<c>Transform.ScaleY</c>) — the Stretch fit mode, or a free edge-handle resize — and
-        /// always for a wallpaper, which is free-sized for life (see <see cref="Sync"/>).</summary>
+        /// always for a wallpaper or an obscure box, both free-sized for life (see
+        /// <see cref="Sync"/>).</summary>
         public bool ShowScaleHeight => _showScale && _hasScaleY;
 
         public bool ShowMask => _showMask;
@@ -734,7 +739,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>The kind-free entry/exit section: a switch, a length and an easing, shown for
         /// the items whose animation is a ramp of their own value — an audio item's volume, a speed
-        /// item's factor, a zoom item's magnification.</summary>
+        /// item's factor, a zoom item's magnification, an obscure box's obscuring.</summary>
         public bool ShowRamp => _showRamp;
 
         /// <summary>The speed effect item's target section.</summary>
@@ -751,6 +756,23 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>The wallpaper item's style/theme section.</summary>
         public bool ShowBackground => _showBackground;
+
+        /// <summary>The obscure box's mode/strength section.</summary>
+        public bool ShowObscure => _showObscure;
+
+        /// <summary>The strength row: what a mosaic cell or a blur sigma measures. A blackout has
+        /// nothing to measure.</summary>
+        public bool ShowObscureStrength => _obscureKind != ObscureKind.Blackout;
+
+        /// <summary>Whether the ramp section offers an easing per end. An obscure box's ramps are a
+        /// plain on/off + length (always <see cref="TransitionEasing.Linear"/>): a fade between the
+        /// clear and the obscured picture has no shape worth choosing.</summary>
+        public bool ShowRampEasing => _showRampEasing;
+
+        /// <summary>The entry ramp's easing row: the ramp is on and the item offers easing.</summary>
+        public bool ShowRampEntryEasing => _rampEntryEnabled && _showRampEasing;
+
+        public bool ShowRampExitEasing => _rampExitEnabled && _showRampEasing;
 
         public bool ShowTrackHidden => _showTrackHidden;
 
@@ -1636,7 +1658,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // has already settled _cropFollowsWindow for this selection.
                 stretch = false;
             }
-            else if (item?.Content is BackgroundContent)
+            else if (item?.Content is BackgroundContent or ObscureContent)
             {
                 tile = AspectTile.Unlocked;
                 stretch = false;
@@ -2165,6 +2187,40 @@ namespace Clowd.UI.VideoEditor.Inspector
                     return;
 
                 EditZoom("sel:zoomy", z => z.FocusY = value);
+            }
+        }
+
+        // ------------------------------------------------------------------------- obscure
+
+        /// <summary>The obscure box's mode. Single-item, like every content property here.</summary>
+        public ObscureKind ObscureKind
+        {
+            get => _obscureKind;
+            set
+            {
+                if (!Set(ref _obscureKind, value))
+                    return;
+
+                OnPropertyChanged(nameof(ShowObscureStrength));
+                if (_syncing)
+                    return;
+
+                EditObscure("sel:obscurekind", o => o.Kind = value);
+            }
+        }
+
+        /// <summary>Mosaic cell size / blur sigma in output pixels, clamped to the model's validated
+        /// range so the spinner cannot offer a number the project would refuse.</summary>
+        public double ObscureStrength
+        {
+            get => _obscureStrength;
+            set
+            {
+                value = Clamp(value, ObscureContent.MinStrength, ObscureContent.MaxStrength);
+                if (!Set(ref _obscureStrength, value) || _syncing)
+                    return;
+
+                EditObscure("sel:obscurestrength", o => o.Strength = value);
             }
         }
 
@@ -2895,7 +2951,11 @@ namespace Clowd.UI.VideoEditor.Inspector
             get => _rampEntryEnabled;
             set
             {
-                if (!Set(ref _rampEntryEnabled, value) || _syncing)
+                if (!Set(ref _rampEntryEnabled, value))
+                    return;
+
+                OnPropertyChanged(nameof(ShowRampEntryEasing));
+                if (_syncing)
                     return;
 
                 if (value)
@@ -2937,7 +2997,11 @@ namespace Clowd.UI.VideoEditor.Inspector
             get => _rampExitEnabled;
             set
             {
-                if (!Set(ref _rampExitEnabled, value) || _syncing)
+                if (!Set(ref _rampExitEnabled, value))
+                    return;
+
+                OnPropertyChanged(nameof(ShowRampExitEasing));
+                if (_syncing)
                     return;
 
                 if (value)
@@ -3165,6 +3229,9 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // as Unlocked without a tile ever being offered, so the section is not needed as
                 // the route to that state either.
                 var isCroppable = isPicture && item.Content is not BackgroundContent;
+                // an obscure box is placed, sized, turned and faded like a picture, but it has no
+                // pixels of its own: no mask, crop, ratio, surround or effect applies to it
+                var isObscure = item?.Content is ObscureContent;
 
                 Set(ref _hasSelection, item != null, nameof(HasSelection),
                     nameof(ShowProperties), nameof(ShowNothingSelected));
@@ -3178,13 +3245,18 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _showCrop, isCroppable, nameof(ShowCrop));
                 Set(ref _showText, isText, nameof(ShowText));
                 Set(ref _showAudio, isAudio, nameof(ShowAudio));
-                Set(ref _showTransitions, visual, nameof(ShowTransitions));
-                Set(ref _showRamp, item != null && (isAudio || isEffect), nameof(ShowRamp));
+                // an obscure box animates by fading the obscuring itself (a ramp of its own value,
+                // like an effect's), never by arriving: a box that slid or wiped in would expose
+                // what it is there to hide on the way
+                Set(ref _showTransitions, visual && !isObscure, nameof(ShowTransitions));
+                Set(ref _showRamp, item != null && (isAudio || isEffect || isObscure), nameof(ShowRamp));
                 Set(ref _showSpeedEffect, item?.Content is SpeedContent, nameof(ShowSpeedEffect));
                 Set(ref _showZoomEffect, item?.Content is ZoomContent, nameof(ShowZoomEffect));
                 Set(ref _showCursorTrack, isCursor, nameof(ShowCursorTrack));
                 Set(ref _showKeyboardTrack, item?.Content is KeyboardContent, nameof(ShowKeyboardTrack));
                 Set(ref _showBackground, item?.Content is BackgroundContent, nameof(ShowBackground));
+                Set(ref _showObscure, isObscure, nameof(ShowObscure));
+                Set(ref _showRampEasing, !isObscure, nameof(ShowRampEasing));
                 // the eye stays: hiding an effect row is how the effect is turned off
                 Set(ref _showTrackHidden, item != null && !isAudio, nameof(ShowTrackHidden));
                 Set(ref _showTrackMuted, isAudio, nameof(ShowTrackMuted));
@@ -3273,6 +3345,13 @@ namespace Clowd.UI.VideoEditor.Inspector
                     OnPropertyChanged(nameof(ShowBackgroundColor));
                 }
 
+                if (item?.Content is ObscureContent obscure)
+                {
+                    Set(ref _obscureKind, obscure.Kind, nameof(ObscureKind));
+                    Set(ref _obscureStrength, obscure.Strength, nameof(ObscureStrength));
+                    OnPropertyChanged(nameof(ShowObscureStrength));
+                }
+
                 if (item?.Content is KeyboardContent keyboard)
                 {
                     Set(ref _keyboardFontSize, keyboard.FontSize, nameof(KeyboardFontSize));
@@ -3326,7 +3405,9 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // seeds the explicit height; a file without one shows the height the composer
                 // falls back to, Scale, so the row tells the truth about what is drawn, and the
                 // first edit of it writes ScaleY for real.
-                var isBackground = item?.Content is BackgroundContent;
+                // an obscure box is free-sized by the same rule (DrawObscure boxes it exactly as
+                // DrawBackground does), so it offers the same two rows
+                var isBackground = item?.Content is BackgroundContent or ObscureContent;
                 Set(ref _hasScaleY, transform.ScaleY != null || isBackground, nameof(ShowScaleHeight));
                 Set(ref _scaleHeight,
                     transform.ScaleY ?? (isBackground ? transform.Scale : _scaleHeight),
@@ -3384,6 +3465,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                     nameof(RampEntryEnabled), nameof(RampEntryMs), nameof(RampEntryEasing));
                 SyncRamp(item?.Exit, ref _rampExitEnabled, ref _rampExitMs, ref _rampExitEasing,
                     nameof(RampExitEnabled), nameof(RampExitMs), nameof(RampExitEasing));
+                OnPropertyChanged(nameof(ShowRampEntryEasing));
+                OnPropertyChanged(nameof(ShowRampExitEasing));
             }
             finally
             {
@@ -3472,6 +3555,20 @@ namespace Clowd.UI.VideoEditor.Inspector
             {
                 if (i.Content is TextContent text)
                     edit(text);
+            }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
+        }
+
+        /// <summary>The obscure write, content-guarded on both sides like <see cref="EditText"/>.</summary>
+        private void EditObscure(string coalesceKey, Action<ObscureContent> edit)
+        {
+            var item = SelectedItem;
+            if (item?.Content is not ObscureContent)
+                return;
+
+            _session.EditItem(item.Id, i =>
+            {
+                if (i.Content is ObscureContent obscure)
+                    edit(obscure);
             }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
         }
 
@@ -3775,7 +3872,10 @@ namespace Clowd.UI.VideoEditor.Inspector
         {
             var enabled = entry ? _rampEntryEnabled : _rampExitEnabled;
             var ticks = MsToTicks(entry ? _rampEntryMs : _rampExitMs);
-            var easing = entry ? _rampEntryEasing : _rampExitEasing;
+            // an obscure box offers no easing row: its ramps are always linear, whatever the
+            // last ramp item selected left in the (hidden, sticky) easing fields
+            var easing = !_showRampEasing ? TransitionEasing.Linear
+                : entry ? _rampEntryEasing : _rampExitEasing;
 
             Transition Build() => !enabled
                 ? null
@@ -3868,6 +3968,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             TextContent => "Text",
             ImageContent => "Image",
             BackgroundContent => "Background",
+            ObscureContent => "Obscure",
             SolidContent => "Color",
             SpeedContent => "Speed",
             ZoomContent => "Zoom",

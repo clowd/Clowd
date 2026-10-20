@@ -21,6 +21,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         Cursor,
         Keyboard,
         Background,
+        Obscure,
     }
 
     /// <summary>The three reorder blocks the rows stack in; see <see cref="TimelineRowLayout.BlockOf"/>.</summary>
@@ -74,6 +75,9 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// on the canvas, not in the row, so there is nothing a taller row could draw.</summary>
         public const double BackgroundRowHeight = 26;
 
+        /// <summary>Obscure rows show an icon and the mode; the box itself has no picture to draw.</summary>
+        public const double ObscureRowHeight = 26;
+
         /// <summary>Effect rows (speed and zoom) show a glyph and a factor label — a card row,
         /// nothing to draw taller.</summary>
         public const double EffectRowHeight = 26;
@@ -97,6 +101,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Text => TextRowHeight,
             TimelineRowKind.Image => ImageRowHeight,
             TimelineRowKind.Background => BackgroundRowHeight,
+            TimelineRowKind.Obscure => ObscureRowHeight,
             TimelineRowKind.Speed => EffectRowHeight,
             TimelineRowKind.Zoom => EffectRowHeight,
             TimelineRowKind.Cursor => InputOverlayRowHeight,
@@ -153,6 +158,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 TextContent => TimelineRowKind.Text,
                 ImageContent => TimelineRowKind.Image,
                 BackgroundContent => TimelineRowKind.Background,
+                ObscureContent => TimelineRowKind.Obscure,
                 _ => TimelineRowKind.Video,
             };
         }

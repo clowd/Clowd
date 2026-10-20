@@ -7,7 +7,7 @@ namespace Clowd.VideoSDK.Model;
 /// <summary>
 /// What fills an <see cref="Item"/>'s span. Polymorphic on a <c>$type</c> discriminator
 /// (<c>media</c> / <c>text</c> / <c>image</c> / <c>solid</c> / <c>speed</c> / <c>zoom</c> /
-/// <c>cursor</c> / <c>keyboard</c> / <c>background</c>) via System.Text.Json's built-in
+/// <c>cursor</c> / <c>keyboard</c> / <c>background</c> / <c>obscure</c>) via System.Text.Json's built-in
 /// polymorphism, which the source-generated <see cref="ProjectJsonContext"/> supports. The
 /// discriminator strings are wire contract — renaming a class is free, renaming a discriminator
 /// breaks every saved project.
@@ -22,6 +22,7 @@ namespace Clowd.VideoSDK.Model;
 [JsonDerivedType(typeof(CursorContent), "cursor")]
 [JsonDerivedType(typeof(KeyboardContent), "keyboard")]
 [JsonDerivedType(typeof(BackgroundContent), "background")]
+[JsonDerivedType(typeof(ObscureContent), "obscure")]
 public abstract class ItemContent
 {
     /// <summary>Deep copy, used by <see cref="TimelineOps.Split"/> so the two halves never share
@@ -198,6 +199,61 @@ public sealed class BackgroundContent : ItemContent
         Color = Color,
         AnimationSpeed = AnimationSpeed,
     };
+}
+
+/// <summary>How an <see cref="ObscureContent"/> hides what is under it — the image editor's
+/// obscure modes, in its menu order (its "Solid" is spelled Blackout here). Serialized as a string
+/// (see <see cref="ProjectJsonContext"/>), so the names are wire contract.</summary>
+public enum ObscureKind
+{
+    /// <summary>Pixelated into square cells <see cref="ObscureContent.Strength"/> output pixels
+    /// wide.</summary>
+    Mosaic,
+
+    /// <summary>Gaussian blur at a sigma of <see cref="ObscureContent.Strength"/> output
+    /// pixels.</summary>
+    Blur,
+
+    /// <summary>Painted over in solid black; <see cref="ObscureContent.Strength"/> is
+    /// ignored.</summary>
+    Blackout,
+}
+
+/// <summary>
+/// A redaction box: the video editor's take on the image editor's obscure tool. It has no pixels
+/// of its own — the composer replaces whatever has been drawn <b>below</b> it (lower rows) inside
+/// its box with a mosaic, blur or blackout of those pixels, while rows above it draw over the
+/// result untouched, so the track order decides what is hidden.
+///
+/// <para>Placed exactly like a <see cref="SolidContent"/>: its natural size is the canvas, so
+/// <see cref="Transform.Scale"/> is a fraction of the canvas width and <see cref="Transform.ScaleY"/>
+/// a fraction of its height. Like a <see cref="BackgroundContent"/> it has no aspect ratio of its
+/// own and lives permanently free-sized (ScaleY set — see <see cref="Project.Normalize"/>).
+/// Rotation and opacity apply; crop, aspect, surround and effect do not.</para>
+///
+/// <para>Entry/Exit hold <see cref="TransitionKind.Ramp"/> transitions that fade the obscuring in
+/// from (and back out to) the clear picture.</para>
+/// </summary>
+public sealed class ObscureContent : ItemContent
+{
+    /// <summary>The image editor's default obscure size (its <c>BlurRadius</c>), so a fresh box
+    /// looks the same in both editors at 1:1.</summary>
+    public const double DefaultStrength = 8;
+
+    /// <summary>The range <see cref="Strength"/> is validated to, and what the editor's spinner
+    /// offers.</summary>
+    public const double MinStrength = 1;
+
+    public const double MaxStrength = 200;
+
+    public ObscureKind Kind { get; set; } = ObscureKind.Mosaic;
+
+    /// <summary>Mosaic cell size or blur sigma, in output-canvas pixels (mapped onto a smaller
+    /// preview canvas exactly like <see cref="TextContent.Size"/>, so the preview matches the
+    /// render). Ignored by <see cref="ObscureKind.Blackout"/>.</summary>
+    public double Strength { get; set; } = DefaultStrength;
+
+    public override ItemContent Clone() => new ObscureContent { Kind = Kind, Strength = Strength };
 }
 
 /// <summary>A playback-speed effect: while the item is active the whole output plays at

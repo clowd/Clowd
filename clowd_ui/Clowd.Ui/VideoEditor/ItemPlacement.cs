@@ -237,7 +237,10 @@ namespace Clowd.UI.VideoEditor
                     // free-sized (SyncAspect reads it as Unlocked), and this raw ratio is exactly
                     // right for that: with ScaleY null the height it implies is Scale * canvasH,
                     // the very (ScaleY ?? Scale) fallback DrawBackground draws, and with ScaleY set
-                    // Compose takes the explicit height and never consults it.
+                    // Compose takes the explicit height and never consults it. An obscure box
+                    // (FrameComposer.DrawObscure) is boxed by the same rule and free-sized for the
+                    // same reason, so it is the same case.
+                case ObscureContent:
                     return canvasWidth > 0 ? canvasHeight / canvasWidth : null;
 
                 case KeyboardContent keyboard:
@@ -406,9 +409,12 @@ namespace Clowd.UI.VideoEditor
         /// the two: that forwarding rides on a PropertyChanged that fires only when the tile
         /// changes, and a wallpaper must offer all eight handles and a free corner from the
         /// instant it is selected, whether it was just added (ScaleY seeded by
-        /// EditorSession.AddBackground) or came out of an older project file without one.
+        /// EditorSession.AddBackground) or came out of an older project file without one. An
+        /// obscure box is the same: a rectangle with no ratio of its own, boxed by Scale/ScaleY
+        /// (FrameComposer.DrawObscure) and seeded with an explicit height by
+        /// EditorSession.AddObscure.
         /// </summary>
-        public static bool IsFreeByContent(Item item) => item?.Content is BackgroundContent;
+        public static bool IsFreeByContent(Item item) => item?.Content is BackgroundContent or ObscureContent;
 
         /// <summary>
         /// What a corner drag does to the item, decided once per drag from the item itself and

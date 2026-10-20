@@ -1423,6 +1423,11 @@ namespace Clowd.UI.VideoEditor.Timeline
                 case BackgroundContent background:
                     (glyph, label) = (TimelineIcons.Find("IconBackground"), BackgroundLabel(background));
                     break;
+                // the image editor's obscure glyph and the mode, the one thing that tells two boxes
+                // apart on the timeline (where each sits is the preview's business)
+                case ObscureContent obscure:
+                    (glyph, label) = (TimelineIcons.Find("IconToolPixelate"), obscure.Kind.ToString());
+                    break;
                 case SpeedContent speed:
                     (glyph, label) = (TimelineIcons.SpeedometerGeometry,
                         speed.Factor.ToString("0.##", CultureInfo.InvariantCulture) + "×");

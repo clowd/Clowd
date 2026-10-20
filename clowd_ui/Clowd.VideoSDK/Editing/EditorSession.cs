@@ -884,15 +884,15 @@ namespace Clowd.VideoSDK.Editing
         /// </summary>
         private static string s_clipboard;
 
-        /// <summary>Whether <see cref="CopyItem"/> can lift the item: media, text, images and
-        /// solids on a video or audio row. Effect items and input overlays are defined by the rows
-        /// they sit on and have nowhere else to go.</summary>
+        /// <summary>Whether <see cref="CopyItem"/> can lift the item: media, text, images, solids
+        /// and obscure boxes on a video or audio row. Effect items and input overlays are defined by
+        /// the rows they sit on and have nowhere else to go.</summary>
         public bool CanCopyItem(Guid itemId)
         {
             var item = Project.Items.FirstOrDefault(i => i.Id == itemId);
             var track = item == null ? null : Project.Tracks.FirstOrDefault(t => t.Id == item.TrackId);
             return track is { Kind: TrackKind.Video or TrackKind.Audio }
-                   && item.Content is MediaContent or TextContent or ImageContent or SolidContent;
+                   && item.Content is MediaContent or TextContent or ImageContent or SolidContent or ObscureContent;
         }
 
         /// <summary>Copies the item to the clip clipboard (see <see cref="CanCopyItem"/>).
@@ -1436,6 +1436,37 @@ namespace Clowd.VideoSDK.Editing
             });
             return committed ? created : null;
         }
+
+        /// <summary>
+        /// Adds an obscure box (<see cref="ObscureContent"/>, at the image editor's default mode
+        /// and strength) on the topmost free video row (a fresh row when none is) — topmost so it
+        /// hides everything under it from the start; the user lifts what should stay crisp above
+        /// it by reordering rows. The box starts centered at a third of the canvas each way, with
+        /// its height written out explicitly: it has no aspect ratio of its own, so like
+        /// <see cref="AddBackground"/>'s wallpaper it lives in the free-sized "ScaleY set" state
+        /// from birth. Returns the live item, or null when rolled back.
+        /// </summary>
+        public Item AddObscure(long startTicks, long durationTicks, object origin = null)
+        {
+            Item created = null;
+            var committed = Mutate("Add Obscure", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                created = new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = FindOrCreateFreeVideoTrack(p, startTicks, durationTicks).Id,
+                    TimelineStartTicks = startTicks,
+                    DurationTicks = durationTicks,
+                    Content = new ObscureContent(),
+                    Transform = new Transform { Scale = DefaultObscureExtent, ScaleY = DefaultObscureExtent },
+                };
+                p.Items.Add(created);
+            });
+            return committed ? created : null;
+        }
+
+        /// <summary>A fresh obscure box's width and height, as fractions of the canvas's.</summary>
+        public const double DefaultObscureExtent = 1.0 / 3;
 
         /// <summary>
         /// Adds a wallpaper from the embedded library (<see cref="Composition.BackgroundCatalog"/>)

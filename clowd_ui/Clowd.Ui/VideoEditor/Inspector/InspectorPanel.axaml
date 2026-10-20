@@ -1580,6 +1580,39 @@
                     </DockPanel>
                 </StackPanel>
 
+                <!--  obscure box: how the pixels under it are hidden, and (for the two modes that
+                      have one) how coarse. Placement is the ordinary PLACEMENT section above.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowObscure}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="OBSCURE" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotObscureKind" CurrentValue="{Binding ObscureKind, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Mode" />
+                        <controls:ThemedDropDown x:Name="comboObscureKind" SelectedItem="{Binding ObscureKind, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  output pixels: a mosaic cell's width or a blur's sigma, the image editor's
+                          obscure size  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowObscureStrength}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ObscureStrength, Mode=TwoWay}" DefaultValue="8" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Strength" />
+                        <controls:ThemedSpinner
+                            Max="200"
+                            Min="1"
+                            SnapToWholeNumber="True"
+                            SpinAmount="1"
+                            Suffix="px"
+                            Value="{Binding ObscureStrength, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
                 <!--  cursor overlay: where it is drawn is the recording's business (the capture
                       file places it), so the whole section is about what it looks like. The size
                       and shadow rows leave the panel entirely under the native style, which draws
@@ -2390,9 +2423,10 @@
 
                 <!--  animation (ramps): the same two ends, for the items whose animation is a ramp
                       of their own value rather than a way of arriving on screen — an audio item's
-                      volume, a speed item's factor, a zoom item's magnification. No kind picker:
-                      a checkbox says whether the end ramps at all, and its length and shape are
-                      the questions underneath it, asked only once it is ticked.  -->
+                      volume, a speed item's factor, a zoom item's magnification, an obscure box's
+                      obscuring. No kind picker: a checkbox says whether the end ramps at all, and
+                      its length and shape are the questions underneath it, asked only once it is
+                      ticked (an obscure box is asked only the length: its fade is always linear).  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowRamp}">
                     <DockPanel>
                         <TextBlock Classes="section" Text="ANIMATION" />
@@ -2423,7 +2457,7 @@
                             Value="{Binding RampEntryMs, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <DockPanel Classes="row" IsVisible="{Binding RampEntryEnabled}">
+                    <DockPanel Classes="row" IsVisible="{Binding ShowRampEntryEasing}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton x:Name="dotRampEntryEasing" CurrentValue="{Binding RampEntryEasing, Mode=TwoWay}" />
                         </Panel>
@@ -2453,7 +2487,7 @@
                             Value="{Binding RampExitMs, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <DockPanel Classes="row" IsVisible="{Binding RampExitEnabled}">
+                    <DockPanel Classes="row" IsVisible="{Binding ShowRampExitEasing}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton x:Name="dotRampExitEasing" CurrentValue="{Binding RampExitEasing, Mode=TwoWay}" />
                         </Panel>
