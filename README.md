@@ -17,7 +17,7 @@
   <b>Free and open source. No account, no trial, no watermark.</b>
 </p>
 
-https://github.com/user-attachments/assets/4b7fdab6-1375-492d-8fa0-5eb39cffaad5
+https://github.com/user-attachments/assets/9aa1b37f-cd94-4b0a-ac25-0c002d3c4f4a
 
 ---
 
