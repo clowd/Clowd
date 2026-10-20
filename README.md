@@ -1,30 +1,45 @@
-[![Discord](https://img.shields.io/discord/767856501477343282?style=flat-square&color=purple)](https://discord.gg/M6he8ZPAAJ)
-[![Build](https://img.shields.io/github/actions/workflow/status/clowd/Clowd/ci.yml?branch=v4-rewrite&style=flat-square)](https://github.com/clowd/Clowd/actions)
+<p align="center">
+  <a href="https://clowd.studio"><img src="assets/readme/banner.png" alt="Clowd: capture, annotate, record and edit anything. Free and open source for Windows and macOS." width="100%"></a>
+</p>
 
-![73130051](https://user-images.githubusercontent.com/1287295/177045040-15601340-0380-418e-975a-cc1d0dd06ebc.png)
+<p align="center">
+  <a href="https://clowd.studio/download"><img src="https://img.shields.io/badge/Download-Windows%20%7C%20macOS-3B97D2?style=for-the-badge" alt="Download for Windows and macOS"></a>
+  <a href="https://clowd.studio"><img src="https://img.shields.io/badge/Website-clowd.studio-0b0f15?style=for-the-badge" alt="clowd.studio"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2ea043?style=for-the-badge" alt="MIT license"></a>
+  <a href="https://github.com/clowd/Clowd/actions"><img src="https://img.shields.io/github/actions/workflow/status/clowd/Clowd/ci.yml?branch=v4-rewrite&style=for-the-badge&label=Build" alt="Build status"></a>
+</p>
 
-# Clowd
+<h3 align="center">Capture, annotate, record and edit anything, all in one app.</h3>
 
-Clowd is a minimalist screen capture / screen recording tool. It sits out of your way in your system tray, and is activated when you press the `PrntScr` key.
+<p align="center">
+  Pixel-perfect screenshots, scrolling capture, on-device OCR, draw on screen, screen recording and a real multi-track video editor.<br>
+  It lives in your tray, wakes up when you press <kbd>PrtScn</kbd>, and gets out of your way the moment you're done.<br>
+  <b>Free and open source. No account, no trial, no watermark.</b>
+</p>
 
-## Features
- - [Region capture](#region-capture--prntscr-replacement) as a fast, zoomable `PrntScr` replacement
- - [Video recording](#video-recorder) to MKV, MP4, or GIF, with speaker and microphone audio
- - [Scrolling capture](#scrolling-capture) to grab a whole page or document as one tall image
- - [Text recognition](#text-recognition-ocr) to copy, search, or share the text out of anything on screen
- - [Image editor](#image-editor) for quick annotations and edits
- - [Upload anything](#upload-anything) to a variety of file sharing websites, with the URL copied to your clipboard
- - [Accelerated uploads](#accelerated-uploads) - share the link immediately, before the upload has finished
- - [Color picker](#color-picker) that can sample any pixel on screen
- - Window detection - selections snap to window borders
- - Fully keyboard accessible
- - Global hotkeys, configurable in settings
- - Lives in the system tray and stays out of your way
- - Automatic updates, with opt-in experimental builds
+https://github.com/user-attachments/assets/4b7fdab6-1375-492d-8fa0-5eb39cffaad5
 
-## Downloads
+---
 
-The latest stable release can always be downloaded below. Installed builds keep themselves up to date automatically; experimental (pre-release) builds can be opted into via the app settings.
+## Everything in one tray icon
+
+Capture it, annotate it, record it, edit it, share it. Every feature is a switch, so you can turn off whatever you don't use and it disappears.
+
+- [Video editor](#video-editor): from raw recording to share-ready
+- [Screen recording](#screen-recording): record once, polish it later
+- [Draw on screen](#draw-on-screen): draw on anything, then get back to work
+- [Screenshots](#screenshots): snap a window or crop to the pixel
+- [OCR](#ocr): copy text from anything on screen
+- [Scrolling capture](#scrolling-capture): the whole page in one image
+- [Image editor](#image-editor): arrows, steps and blur, one key each
+- [Share region](#share-region): share just part of your screen in any meeting
+- [Upload & share](#upload--share): instant links to your own storage
+
+---
+
+## Download
+
+**Every feature is in the free download. No trial, no watermark.** Installed builds keep themselves up to date, and only update after you've been idle for a while, never mid-capture. Experimental builds can be opted into in Settings.
 
 | Platform | Installer | Portable |
 | --- | --- | --- |
@@ -33,122 +48,149 @@ The latest stable release can always be downloaded below. Installed builds keep 
 | macOS Apple Silicon | [Clowd-osx-arm64-Setup.pkg](https://github.com/clowd/Clowd/releases/latest/download/Clowd-osx-arm64-Setup.pkg) | [Clowd-osx-arm64-Portable.zip](https://github.com/clowd/Clowd/releases/latest/download/Clowd-osx-arm64-Portable.zip) |
 | macOS Intel | [Clowd-osx-x64-Setup.pkg](https://github.com/clowd/Clowd/releases/latest/download/Clowd-osx-x64-Setup.pkg) | [Clowd-osx-x64-Portable.zip](https://github.com/clowd/Clowd/releases/latest/download/Clowd-osx-x64-Portable.zip) |
 
-I will respond to bug reports or questions in GitHub issues. Also feel free to bug me (@caesay) in the Clowd Discord server:
+Requires Windows 10+ or macOS 13+.
 
-[![discordimg2](https://user-images.githubusercontent.com/1287295/150318745-cbfcf5d0-3697-4bef-ac1a-b0d751f53b48.png)](https://discord.gg/M6he8ZPAAJ)
+---
 
-----
+## Video editor
 
-## Region Capture / PrntScr Replacement
- - Uses Direct3D so is super fast and responsive
- - Scroll to zoom in on any part of your screen, pixel perfect selections (or just looking at stuff on your screen closely)
- - Fully keyboard accessibly
- - Snaps selection to window borders
- - Click on any window to quickly bring it to the foreground
- - Select any color to open a color picker
- - Don't use one of the buttons? Switch UPLOAD, SCROLL or OCR off under
-   *Settings → Capture → Optional features* and the capture window drops them
+**A real timeline, not a trimmer.** Zoom in where attention should land, skip the waiting, restyle the cursor and drop it on a polished background. From raw recording to share-ready.
 
-https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-acee-216529f49c23.mp4
+<p align="center"><img src="assets/readme/video-editor.webp" alt="The video editor plays a recording through a 1.5× zoom and a 2× speed stretch" width="720"></p>
 
-----
+- **Zoom and speed.** Zoom in where it matters, and skip the boring parts at up to 10×.
+- **Restyle it after you record.** Cursor packs, click effects and live keystroke overlays, all changeable later.
+- **Backgrounds in one click.** Rounded corners, shadow and a backdrop that makes any recording look finished.
+- **On-device AI.** The Speech Enhancer cleans up your voice and background removal cuts out your webcam, on your own GPU.
+- **What you see is what you get.** The preview and the export match frame for frame, and it saves as you go.
 
-## Video Recorder
- - Record MKV, MP4, or GIF's easily
- - Capture Speaker and Microphone audio
- - Optionally show animation where mouse was clicked
- 
-![image of video capture ui](https://user-images.githubusercontent.com/1287295/177043599-853d4718-e879-4007-919a-7aee91776c7d.png)
+<sub>AI effects need Windows or a Mac with Apple Silicon.</sub>
 
-----
+**[Learn more about the video editor →](https://clowd.studio/features/video-editor)**
 
-## Scrolling Capture
+---
 
-Some things don't fit on screen — a long article, a chat history, a settings page. Scrolling
-capture takes the picture anyway.
+## Screen recording
 
- - Select a region, press `L` (SCROLL), then click the part of the screen the wheel should scroll
- - Clowd drives the scrolling for you, photographs each step, and stitches them into a single tall
-   image that opens in the editor like any other capture
- - **You get the whole page, not just the part you could see.** The target is wound back to the top
-   before the capture starts, so it doesn't matter where you were scrolled to. Turn this off with
-   *Settings → Capture → Optional features → Scroll to top first* when you want to capture from
-   where you are
- - **Sticky headers and toolbars appear once**, not repeated down the length of the image
- - It stops on its own when it reaches the end of the document. `Esc` or **FINISH** ends it early
-   and keeps everything captured so far; **CANCEL** throws it away
- - **Take your mouse back whenever you like.** Moving the cursor pauses the capture rather than
-   ruining it; put it down again and the capture resumes where it left off
- - Works on a window that is behind other windows — Clowd brings the one you selected to the front
-   and makes sure it is the one being photographed
+**Record once, decide later.** Screen, webcam, microphone and system audio each land on their own track, so nothing is baked in until you say so.
 
-A capture is capped at 120 frames, 20,000 pixels tall, or two minutes, whichever comes first.
-Scrolling a pane *inside* a window (a sidebar, a chat column) is not supported yet — for now, aim
-it at something that scrolls as a whole window. On macOS this needs Accessibility permission (to
-scroll the window for you) alongside the Screen Recording permission capture already uses — Clowd
-asks for both, and *Settings → General → Permissions* shows where they stand.
+<p align="center"><img src="assets/readme/screen-recording.webp" alt="The recording toolbar under a framed window: Start, the timer runs, the meters move" width="720"></p>
 
-----
+- **Separate tracks.** Screen, webcam, mic and system audio, each on its own row in the editor.
+- **Cursor you can restyle.** The cursor, clicks and keystrokes are recorded as data, so you can change them after you stop.
+- **Up to 240 fps.** Smooth enough for fast-moving demos, with a live frame counter as you record.
+- **Crash-safe.** Hardware encoding when your GPU has it, and a power cut doesn't cost you the recording.
 
-## Text Recognition (OCR)
+**[Learn more about screen recording →](https://clowd.studio/features/screen-recording)**
 
-Select any region and press `O` to read the text inside it — including text in screenshots,
-videos, error dialogs, and other places you can't select text normally.
+---
 
- - **Runs entirely on your machine.** The recognition models are built into Clowd, so there is no
-   cloud service, no network round trip, no API key, and no language pack to install
- - **You see what it read.** The recognized lines lift off the frozen screenshot as text, so you
-   can check the result before doing anything with it
- - Then `C` copies it, `S` searches the web for it, `U` uploads it as a text paste with the link on
-   your clipboard, and `B` takes you back to the normal capture buttons
- - Handles the text that usually defeats built-in OCR — small type, dark mode, low contrast
- - Everything inside the selection is read, so select tighter to read less
+## Draw on screen
 
-----
+**Draw on anything, then click straight through to your apps.** Walkthroughs, onboarding and code reviews that feel like you're sitting next to them.
 
-## Image Editor
- - Minimalistic / Easy-To-Learn UI for quick edits
- - Save and return to recent seessions
- - Copy to Clipboard or Upload to the web in one click
- - Pin the editor above every other window, so a capture stays visible while you work
- 
-![picture of image editor](https://user-images.githubusercontent.com/1287295/177043066-46f6fe23-260c-4b06-9c2c-da2970e9f249.png)
+<p align="center"><img src="assets/readme/draw-on-screen.webp" alt="Draw on Screen: a brush loop, an arrow and numbered badges over a form, then click-through" width="720"></p>
 
-## Upload Anything
- - Can upload any file or screenshot from PC with one click
- - URL is copied to clipboard
- - Supports a vareity of file sharing websites
- 
-![picture of upload](https://user-images.githubusercontent.com/1287295/177044201-1b510910-4211-4eda-9f3c-508fac4c8fba.png)
+- **Draw, then <kbd>Esc</kbd>.** Your ink stays on screen while you click, scroll and type underneath it.
+- **Live keystrokes.** Every shortcut you press shows up on screen, so nobody has to ask what you just did.
+- **Every tool is one key.** You never break stride mid-sentence.
+- **Freeze the frame or keep it live.** Draw on a still, or right over a playing video.
+- **One undo for every screen.** Undo works across all your monitors, in the order you drew.
 
-----
+**[Learn more about Draw on Screen →](https://clowd.studio/features/draw-on-screen)**
 
-## Accelerated Uploads
+---
 
-Uploading a large file to your own cloud storage normally means waiting for the whole transfer to
-finish before you have anything to share. Accelerated uploads remove that wait.
+## Screenshots
 
- - **The link is ready instantly.** Clowd copies a shareable URL to your clipboard the moment the
-   upload *starts*, not when it finishes.
- - **Recipients don't wait either.** Anyone who opens the link starts downloading right away — the
-   bytes stream through to them as they arrive, so they can begin watching a video or viewing an
-   image while you are still uploading it.
- - **Your files still land in your own storage.** The transfer is relayed to your bucket in the
-   background. Once it completes the link simply redirects there, so nothing stays in the middle.
+**Press <kbd>PrtScn</kbd>. It's already there.** Snap to a whole window in one click, or zoom in and crop to the exact pixel. Then take it anywhere in Clowd with a single key.
 
-Enable it with the ⚡ toggle next to any provider on the Upload settings page. It is available for
-the providers that upload to storage you own — Azure Blob Storage, Amazon S3 (and S3-compatible
-services), Cloudflare R2, and Backblaze B2 — and is on by default for those. Turn it off to upload
-directly to your storage as usual.
+<p align="center"><img src="assets/readme/capture.webp" alt="PrtScn freezes the screen, the selection snaps to a window, Copy" width="720"></p>
 
-----
+- **Opens instantly.** The screen is frozen and ready the moment you press the key.
+- **Click a window, get the window.** Even one that's partly hidden behind another, with its rounded corners kept transparent.
+- **Zoom to the pixel.** Scroll to zoom in up to 256× and place the edge exactly where you want it.
+- **Keyboard first.** Every button is one letter. <kbd>Enter</kbd> edits, <kbd>Esc</kbd> backs out.
+- **Built-in color picker.** Press <kbd>H</kbd> on any pixel for its HEX, RGB or HSL.
+- **Owns <kbd>PrtScn</kbd>,** even on Windows 11.
 
-## Color Picker
- - Select any color on screen using the PrntScr Screen Capture. Press 'H' when your cursor is over the desired color.
- - Can also open the color picker from the tray icon.
- 
-![picture of color picker](https://user-images.githubusercontent.com/1287295/177043307-91a17f2b-3b5f-4b76-9e71-7962cc6cf5e0.png)
+**[Learn more about the capture overlay →](https://clowd.studio/features/capture)**
 
-----
+---
 
-Interested in building Clowd from source? See [BUILDING.md](BUILDING.md).
+## OCR
+
+**Copy text from anything on screen.** Screenshots, videos, error dialogs: anywhere you can't normally select text.
+
+<p align="center"><img src="assets/readme/ocr.webp" alt="Text recognition lifts every line of an error dialog off the screen" width="720"></p>
+
+- **Private.** Text is read on your computer. No cloud, no API key, no language pack to install.
+- **Check it first.** Every line lifts off the screenshot, so you see what it read before you use it.
+- **One key out.** Copy it, search the web for it or share it as a paste in a single keypress.
+- **Reads the hard stuff.** Small type, dark mode and low contrast.
+
+<sub>Requires Windows or a Mac with Apple Silicon. Latin, Greek, Chinese and Japanese kana; Cyrillic and Korean aren't supported yet.</sub>
+
+**[Learn more about OCR →](https://clowd.studio/features/ocr)**
+
+---
+
+## Scrolling capture
+
+**The whole page, not just the part that fits.** A long article, a chat history, a settings page: Clowd scrolls it for you and stitches it into one tall image.
+
+<p align="center"><img src="assets/readme/scrolling-capture.webp" alt="Scrolling capture steps down a page while the stitched image grows" width="720"></p>
+
+- **Sticky headers appear once,** not repeated down the length of the image.
+- **Starts from the top.** It winds the page back first, so it doesn't matter where you were scrolled to.
+- **Stops on its own** when it reaches the end of the document.
+- **Take your mouse back whenever you like.** Moving the cursor pauses the capture; let go and it picks up where it left off.
+
+<sub>Scrolls whole windows, not panes inside them. Needs Accessibility permission on macOS.</sub>
+
+**[Learn more about scrolling capture →](https://clowd.studio/features/scrolling-capture)**
+
+---
+
+## Image editor
+
+**Mark it up. Send it. Move on.** Curved arrows, numbered steps that point, and redaction that never blurs your notes. One key per tool.
+
+<p align="center"><img src="assets/readme/image-editor.webp" alt="The image editor: an arrow bent into a curve, numbered steps, a mosaic and a text card" width="720"></p>
+
+- **15 tools, one key each.** <kbd>R</kbd> for a rectangle, <kbd>A</kbd> for an arrow, <kbd>O</kbd> to hide a password.
+- **Objects stay editable.** Move, restyle or delete anything you drew, at any point.
+- **Sessions autosave.** Restart your PC and your open editors come back, annotations intact.
+- **Pin it on top** so a capture stays visible while you work.
+
+**[Learn more about the image editor →](https://clowd.studio/features/image-editor)**
+
+---
+
+## Share region
+
+**Share any rectangle, in any meeting app.** Meeting apps share a whole screen or one window. Clowd lets you share exactly the part that matters, in Teams, Zoom, Meet or anything else.
+
+<p align="center"><img src="assets/readme/share-region.webp" alt="Share Region: Hide blurs what the meeting sees while the presenter's screen stays clear" width="720"></p>
+
+- **A panic button.** Blur or black out the share without stopping it.
+- **Move it mid-meeting.** Reframe the region and nobody has to re-share.
+- **Every control outside the frame,** so the meeting never sees them.
+- **Point at things.** Draw on screen and the meeting sees it.
+
+**[Learn more about Share Region →](https://clowd.studio/features/share-region)**
+
+---
+
+## Upload & share
+
+**Your storage, your rules.** Share a screenshot, a recording or a whole folder, and the link is on your clipboard before the upload has finished.
+
+<p align="center"><img src="assets/readme/upload-share.webp" alt="A capture is copied, then Upload Clipboard from the tray: the link is copied at once while the recipient's browser streams it" width="720"></p>
+
+- **Instant links.** With accelerated uploads, the link is copied the moment the upload *starts*, and recipients can start watching while you're still uploading.
+- **Your bucket, your keys.** Amazon S3 (and S3-compatible), Azure Blob Storage, Cloudflare R2 and Backblaze B2.
+- **Nothing kept on the way.** Accelerated uploads only pass through. Or switch them off and upload direct.
+- **Off until you want it.** One switch turns uploads off and every upload button disappears.
+
+**[Learn more about Upload & Share →](https://clowd.studio/features/upload-share)**
