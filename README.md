@@ -56,7 +56,7 @@ Requires Windows 10+ or macOS 13+.
 
 **A real timeline, not a trimmer.** Zoom in where attention should land, skip the waiting, restyle the cursor and drop it on a polished background. From raw recording to share-ready.
 
-<p align="center"><img src="assets/readme/video-editor.webp" alt="The video editor plays a recording through a 1.5× zoom and a 2× speed stretch" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/video-editor"><img src="assets/readme/video-editor.webp" alt="The video editor plays a recording through a 1.5× zoom and a 2× speed stretch" width="720"></a></p>
 
 - **Zoom and speed.** Zoom in where it matters, and skip the boring parts at up to 10×.
 - **Restyle it after you record.** Cursor packs, click effects and live keystroke overlays, all changeable later.
@@ -74,7 +74,7 @@ Requires Windows 10+ or macOS 13+.
 
 **Record once, decide later.** Screen, webcam, microphone and system audio each land on their own track, so nothing is baked in until you say so.
 
-<p align="center"><img src="assets/readme/screen-recording.webp" alt="The recording toolbar under a framed window: Start, the timer runs, the meters move" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/screen-recording"><img src="assets/readme/screen-recording.webp" alt="The recording toolbar under a framed window: Start, the timer runs, the meters move" width="720"></a></p>
 
 - **Separate tracks.** Screen, webcam, mic and system audio, each on its own row in the editor.
 - **Cursor you can restyle.** The cursor, clicks and keystrokes are recorded as data, so you can change them after you stop.
@@ -89,7 +89,7 @@ Requires Windows 10+ or macOS 13+.
 
 **Draw on anything, then click straight through to your apps.** Walkthroughs, onboarding and code reviews that feel like you're sitting next to them.
 
-<p align="center"><img src="assets/readme/draw-on-screen.webp" alt="Draw on Screen: a brush loop, an arrow and numbered badges over a form, then click-through" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/draw-on-screen"><img src="assets/readme/draw-on-screen.webp" alt="Draw on Screen: a brush loop, an arrow and numbered badges over a form, then click-through" width="720"></a></p>
 
 - **Draw, then <kbd>Esc</kbd>.** Your ink stays on screen while you click, scroll and type underneath it.
 - **Live keystrokes.** Every shortcut you press shows up on screen, so nobody has to ask what you just did.
@@ -105,7 +105,7 @@ Requires Windows 10+ or macOS 13+.
 
 **Press <kbd>PrtScn</kbd>. It's already there.** Snap to a whole window in one click, or zoom in and crop to the exact pixel. Then take it anywhere in Clowd with a single key.
 
-<p align="center"><img src="assets/readme/capture.webp" alt="PrtScn freezes the screen, the selection snaps to a window, Copy" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/capture"><img src="assets/readme/capture.webp" alt="PrtScn freezes the screen, the selection snaps to a window, Copy" width="720"></a></p>
 
 - **Opens instantly.** The screen is frozen and ready the moment you press the key.
 - **Click a window, get the window.** Even one that's partly hidden behind another, with its rounded corners kept transparent.
@@ -122,7 +122,7 @@ Requires Windows 10+ or macOS 13+.
 
 **Copy text from anything on screen.** Screenshots, videos, error dialogs: anywhere you can't normally select text.
 
-<p align="center"><img src="assets/readme/ocr.webp" alt="Text recognition lifts every line of an error dialog off the screen" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/ocr"><img src="assets/readme/ocr.webp" alt="Text recognition lifts every line of an error dialog off the screen" width="720"></a></p>
 
 - **Private.** Text is read on your computer. No cloud, no API key, no language pack to install.
 - **Check it first.** Every line lifts off the screenshot, so you see what it read before you use it.
@@ -139,7 +139,7 @@ Requires Windows 10+ or macOS 13+.
 
 **The whole page, not just the part that fits.** A long article, a chat history, a settings page: Clowd scrolls it for you and stitches it into one tall image.
 
-<p align="center"><img src="assets/readme/scrolling-capture.webp" alt="Scrolling capture steps down a page while the stitched image grows" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/scrolling-capture"><img src="assets/readme/scrolling-capture.webp" alt="Scrolling capture steps down a page while the stitched image grows" width="720"></a></p>
 
 - **Sticky headers appear once,** not repeated down the length of the image.
 - **Starts from the top.** It winds the page back first, so it doesn't matter where you were scrolled to.
@@ -156,7 +156,7 @@ Requires Windows 10+ or macOS 13+.
 
 **Mark it up. Send it. Move on.** Curved arrows, numbered steps that point, and redaction that never blurs your notes. One key per tool.
 
-<p align="center"><img src="assets/readme/image-editor.webp" alt="The image editor: an arrow bent into a curve, numbered steps, a mosaic and a text card" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/image-editor"><img src="assets/readme/image-editor.webp" alt="The image editor: an arrow bent into a curve, numbered steps, a mosaic and a text card" width="720"></a></p>
 
 - **15 tools, one key each.** <kbd>R</kbd> for a rectangle, <kbd>A</kbd> for an arrow, <kbd>O</kbd> to hide a password.
 - **Objects stay editable.** Move, restyle or delete anything you drew, at any point.
@@ -171,7 +171,7 @@ Requires Windows 10+ or macOS 13+.
 
 **Share any rectangle, in any meeting app.** Meeting apps share a whole screen or one window. Clowd lets you share exactly the part that matters, in Teams, Zoom, Meet or anything else.
 
-<p align="center"><img src="assets/readme/share-region.webp" alt="Share Region: Hide blurs what the meeting sees while the presenter's screen stays clear" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/share-region"><img src="assets/readme/share-region.webp" alt="Share Region: Hide blurs what the meeting sees while the presenter's screen stays clear" width="720"></a></p>
 
 - **A panic button.** Blur or black out the share without stopping it.
 - **Move it mid-meeting.** Reframe the region and nobody has to re-share.
@@ -186,7 +186,7 @@ Requires Windows 10+ or macOS 13+.
 
 **Your storage, your rules.** Share a screenshot, a recording or a whole folder, and the link is on your clipboard before the upload has finished.
 
-<p align="center"><img src="assets/readme/upload-share.webp" alt="A capture is copied, then Upload Clipboard from the tray: the link is copied at once while the recipient's browser streams it" width="720"></p>
+<p align="center"><a href="https://clowd.studio/features/upload-share"><img src="assets/readme/upload-share.webp" alt="A capture is copied, then Upload Clipboard from the tray: the link is copied at once while the recipient's browser streams it" width="720"></a></p>
 
 - **Instant links.** With accelerated uploads, the link is copied the moment the upload *starts*, and recipients can start watching while you're still uploading.
 - **Your bucket, your keys.** Amazon S3 (and S3-compatible), Azure Blob Storage, Cloudflare R2 and Backblaze B2.
