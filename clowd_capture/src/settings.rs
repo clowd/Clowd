@@ -205,10 +205,10 @@ pub struct CliArgs {
     #[arg(long, value_name = "PATH", requires = "standby")]
     pub session_root: Option<PathBuf>,
 
-    /// Global hotkey for a region capture, in handy-keys grammar
-    /// (for example `Control+Shift+PrintScreen`). Repeatable: one occurrence
-    /// per gesture, in the shell's list order, which is also the order the
-    /// per-gesture statuses come back in. No occurrence = no hotkey.
+    /// Global hotkey for a region capture, in the settings gesture form
+    /// (`Control+Shift+PrintScreen`), parsed by clowd_hotkeys. Repeatable: one
+    /// occurrence per gesture, in the shell's list order, which is also the
+    /// order the per-gesture statuses come back in. No occurrence = no hotkey.
     #[arg(long, value_name = "GESTURE", requires = "standby", action = ArgAction::Append)]
     pub hk_main: Vec<String>,
 

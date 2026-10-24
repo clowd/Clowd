@@ -5,127 +5,183 @@
 //! page-in time to every capture. Second, the key must be SUPPRESSED, not
 //! merely observed: Windows 11's "PrintScreen opens Snipping Tool" feature
 //! consumes the key ahead of RegisterHotKey delivery, so an ordinary hotkey
-//! registration reports success and then never fires. handy-keys provides
-//! libuiohook-style low-level hooks (WH_KEYBOARD_LL / CGEventTap / evdev)
-//! with synchronous blocking, which beats the OS handler the same way the
-//! shell's SharpHook hook used to.
+//! registration reports success and then never fires. clowd_hotkeys provides
+//! a low-level hook (WH_KEYBOARD_LL / CGEventTap) that swallows a registered
+//! press before any OS handler sees it.
 //!
-//! Trigger matching deliberately reuses the exact rule the hook applies for
-//! blocking (`Hotkey::modifiers.matches() && key ==`), so a press can never
-//! be suppressed without also starting a capture, or vice versa.
+//! Matching and suppression share one snapshot of the registrations inside
+//! the hook callback, so a press is never swallowed without firing, or fired
+//! without being swallowed. This module only maps the fired registration to
+//! its capture mode. While the shell records a gesture in its settings UI it
+//! pauses this hook over stdin (`{"type":"pause"}`), so the press it records
+//! reaches the shell's own hook instead of starting a capture here.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::{mpsc, Arc, Mutex};
 
-use handy_keys::{BlockingHotkeys, Hotkey, KeyboardListener};
+use clowd_hotkeys::{Error, Event, Gesture, HotkeyId, Hotkeys};
 use winit::event_loop::EventLoopProxy;
 
 use crate::settings::{CaptureMode, CliArgs};
 
 pub struct StandbyHotkeys {
-    /// Shared with the hook, which checks it synchronously per key event.
-    blocking: BlockingHotkeys,
-    /// Shared with the forwarding thread, which maps a matched press to a mode.
-    matches: Arc<Mutex<Vec<(Hotkey, CaptureMode)>>>,
+    /// None when the hook could not start (see `start_error`).
+    hotkeys: Option<Arc<Hotkeys>>,
+    /// Why the hook could not start (missing macOS Accessibility, no Linux
+    /// backend, hook failure). Reported per hotkey so the shell's settings UI
+    /// shows the real, actionable reason.
+    start_error: Option<String>,
+    /// Whether that failure is specific to this process (see `should_bail`).
+    bail: bool,
+    /// What the hook currently holds.
+    registered: Mutex<HashMap<Gesture, HotkeyId>>,
+    /// Read by the forwarding thread to turn a fired registration into a mode.
+    modes: Arc<Mutex<HashMap<HotkeyId, CaptureMode>>>,
     rx: mpsc::Receiver<CaptureMode>,
-    /// Why the listener could not start (missing macOS accessibility, missing
-    /// /dev/uinput access on Linux, hook failure). Reported per hotkey so the
-    /// shell's settings UI shows the real, actionable reason.
-    listener_error: Option<String>,
 }
 
 impl StandbyHotkeys {
     pub fn new(proxy: EventLoopProxy<()>) -> Self {
-        let blocking: BlockingHotkeys = Arc::new(Mutex::new(HashSet::new()));
-        let matches: Arc<Mutex<Vec<(Hotkey, CaptureMode)>>> = Arc::new(Mutex::new(Vec::new()));
+        let modes: Arc<Mutex<HashMap<HotkeyId, CaptureMode>>> = Arc::default();
         let (tx, rx) = mpsc::channel();
 
-        let listener_error = match KeyboardListener::new_with_blocking(Arc::clone(&blocking)) {
-            Err(err) => Some(err.to_string()),
-            Ok(listener) => {
-                let matches_reader = Arc::clone(&matches);
-                let spawned = std::thread::Builder::new()
-                    .name("standby-hotkeys".into())
-                    .spawn(move || {
-                        while let Ok(event) = listener.recv() {
-                            if !event.is_key_down {
-                                continue;
-                            }
-                            let mode = matches_reader
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .iter()
-                                .find(|(hotkey, _)| hotkey.modifiers.matches(event.modifiers) && hotkey.key == event.key)
-                                .map(|(_, mode)| *mode);
-                            if let Some(mode) = mode {
-                                if tx.send(mode).is_err() {
-                                    return;
+        let started = Hotkeys::start().and_then(|(hotkeys, events)| {
+            let modes_reader = Arc::clone(&modes);
+            std::thread::Builder::new()
+                .name("standby-hotkeys".into())
+                .spawn(move || {
+                    while let Some(event) = events.recv() {
+                        match event {
+                            Event::Hotkey {
+                                id,
+                                repeat: false,
+                            } => {
+                                let mode = modes_reader
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .get(&id)
+                                    .copied();
+                                if let Some(mode) = mode {
+                                    if tx.send(mode).is_err() {
+                                        return;
+                                    }
+                                    let _ = proxy.send_event(());
                                 }
-                                let _ = proxy.send_event(());
                             }
+                            // A standby with a dead hook is a healthy-looking process
+                            // whose hotkeys never fire and whose statuses would keep
+                            // claiming active — exit instead, so the shell's crash
+                            // accounting restarts us or falls back to its own hotkeys.
+                            Event::Stopped(reason) => {
+                                eprintln!("standby hotkey hook died ({reason}); exiting so the shell can recover");
+                                std::process::exit(1);
+                            }
+                            _ => {}
                         }
-                        // recv() fails only when the hook side dropped its sender — on
-                        // Windows that includes SetWindowsHookExW failing INSIDE the
-                        // crate's hook thread (its spawn "succeeds" regardless) and a
-                        // later hook-thread death. A standby with a dead hook is a
-                        // healthy-looking process whose hotkeys never fire and whose
-                        // statuses would keep claiming active — exit instead, so the
-                        // shell's crash accounting restarts us or falls back to its
-                        // own SharpHook hotkeys.
-                        eprintln!("standby hotkey hook died; exiting so the shell can recover");
-                        std::process::exit(1);
-                    });
-                match spawned {
-                    Ok(_) => None,
-                    Err(err) => Some(format!("failed to start hotkey thread: {err}")),
-                }
+                    }
+                    // The queue closed because Hotkeys was dropped on a normal
+                    // shutdown (stdin EOF → main returns): not a failure.
+                })
+                .map(|_| Arc::new(hotkeys))
+                .map_err(|err| Error::HookFailed(format!("failed to start the hotkey thread: {err}")))
+        });
+
+        let (hotkeys, start_error, bail) = match started {
+            Ok(hotkeys) => (Some(hotkeys), None, false),
+            Err(err) => {
+                let bail = matches!(err, Error::HookFailed(_));
+                (None, Some(err.to_string()), bail)
             }
         };
-
         Self {
-            blocking,
-            matches,
+            hotkeys,
+            start_error,
+            bail,
+            registered: Mutex::default(),
+            modes,
             rx,
-            listener_error,
         }
     }
 
-    /// Why the hook could not start, if it couldn't. macOS keeps running in
-    /// this state (SharpHook needs the same Accessibility permission, so a
-    /// fallback would gain nothing and the per-hotkey error is actionable);
-    /// everywhere else the caller should treat it as fatal so the shell falls
-    /// back to hotkeys that can work.
+    /// Why the hook could not start, if it couldn't.
     pub fn listener_error(&self) -> Option<&str> {
-        self.listener_error.as_deref()
+        self.start_error.as_deref()
+    }
+
+    /// True when the hook could not start for a reason another process would
+    /// not share (`Error::HookFailed`) — standby then exits so the shell falls
+    /// back to its own registrations. `Unsupported` and `PermissionDenied`
+    /// would fail the same way in the shell, so they keep the process up.
+    pub fn should_bail(&self) -> bool {
+        self.bail
+    }
+
+    /// For the stdin reader thread: applies `{"type":"pause"}` immediately,
+    /// even mid-capture. None without a hook, where there is nothing to pause.
+    pub fn pause_handle(&self) -> Option<Arc<Hotkeys>> {
+        self.hotkeys.clone()
     }
 
     /// Replaces the whole gesture set from a CLI snapshot and returns the
     /// per-gesture statuses for CLOWD_SETTINGS_STATUS. Hook-based hotkeys
     /// cannot conflict with other applications, so a gesture is active exactly
-    /// when it parses, is not a duplicate, and the listener is running.
+    /// when it parses, is usable on this OS, is not a duplicate, and the hook
+    /// accepted it.
     pub fn apply(&self, args: &CliArgs) -> serde_json::Map<String, serde_json::Value> {
         let requested = [
             ("main", args.hk_main.as_slice(), CaptureMode::Region),
             ("window", args.hk_window.as_slice(), CaptureMode::Window),
             ("monitor", args.hk_monitor.as_slice(), CaptureMode::Screen),
         ];
-        let plan = plan_hotkeys(&requested, self.listener_error.as_deref());
+        let mut plan = plan_hotkeys(&requested, self.start_error.as_deref());
+        let Some(hotkeys) = &self.hotkeys else {
+            return plan.statuses;
+        };
 
-        // matches first, blocking second. The invariant this ordering buys: a
-        // CONFIGURED hotkey never loses a capture — a press racing the writes
-        // may go un-suppressed once (leaks to the OS) but still triggers. The
-        // cost falls only on a REMOVED hotkey, whose final racing press can be
-        // suppressed without triggering (one swallowed keystroke); the reversed
-        // order would instead drop captures for just-added hotkeys. Both sets
-        // are swapped whole, so this holds for every gesture of every mode.
-        *self
-            .matches
+        // Held for the whole apply, so the forwarding thread can never see a
+        // registration without its mode. A gesture present in both snapshots
+        // is never unregistered, so it keeps firing throughout.
+        let mut modes = self
+            .modes
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = plan.matches;
-        *self
-            .blocking
+            .unwrap_or_else(|e| e.into_inner());
+        let mut registered = self
+            .registered
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = plan.blocking;
+            .unwrap_or_else(|e| e.into_inner());
+        let mut kept = Vec::with_capacity(plan.wanted.len());
+        for (&(gesture, mode), &(name, index)) in plan.wanted.iter().zip(&plan.slots) {
+            if let Some(&id) = registered.get(&gesture) {
+                modes.insert(id, mode);
+                kept.push(gesture);
+                continue;
+            }
+            match hotkeys.register(gesture) {
+                Ok(id) => {
+                    registered.insert(gesture, id);
+                    modes.insert(id, mode);
+                    kept.push(gesture);
+                }
+                Err(err) => {
+                    if let Some(status) = plan
+                        .statuses
+                        .get_mut(name)
+                        .and_then(|entries| entries.get_mut(index))
+                    {
+                        status["active"] = false.into();
+                        status["error"] = err.to_string().into();
+                    }
+                }
+            }
+        }
+        registered.retain(|gesture, id| {
+            let keep = kept.contains(gesture);
+            if !keep {
+                hotkeys.unregister(*id);
+                modes.remove(id);
+            }
+            keep
+        });
         plan.statuses
     }
 
@@ -140,9 +196,12 @@ impl StandbyHotkeys {
 
 /// The outcome of one settings snapshot, computed without touching the hook
 /// so the registration rules can be tested without a live listener.
-struct HotkeyPlan {
-    blocking: HashSet<Hotkey>,
-    matches: Vec<(Hotkey, CaptureMode)>,
+struct HotkeyPlan<'a> {
+    /// The gestures to hold, in request order, each with its mode.
+    wanted: Vec<(Gesture, CaptureMode)>,
+    /// Parallel to `wanted`: where its status sits in `statuses`, so a
+    /// registration the hook refuses can still be reported in place.
+    slots: Vec<(&'a str, usize)>,
     statuses: serde_json::Map<String, serde_json::Value>,
 }
 
@@ -151,42 +210,39 @@ struct HotkeyPlan {
 /// and "gesture" echoes the received string verbatim — the shell matches
 /// statuses back to its own gestures by that string, so it must never be
 /// normalized here.
-fn plan_hotkeys(requested: &[(&str, &[String], CaptureMode)], listener_error: Option<&str>) -> HotkeyPlan {
-    let mut blocking = HashSet::new();
-    let mut matches = Vec::new();
+fn plan_hotkeys<'a>(requested: &[(&'a str, &[String], CaptureMode)], start_error: Option<&str>) -> HotkeyPlan<'a> {
+    let mut wanted: Vec<(Gesture, CaptureMode)> = Vec::new();
+    let mut slots = Vec::new();
     let mut statuses = serde_json::Map::new();
     for &(name, gestures, mode) in requested {
         let mut entries = Vec::with_capacity(gestures.len());
         for gesture in gestures {
-            let (active, error) = match gesture.parse::<Hotkey>() {
-                Err(err) => (false, Some(err.to_string())),
-                // handy-keys accepts modifier-only hotkeys ("Control+Shift"); the
-                // shell can never emit one, and hooking it would block bare
-                // modifier presses system-wide — reject rather than register.
-                Ok(hotkey) if hotkey.key.is_none() => (false, Some("gesture has no key".into())),
-                // The shell already gives each gesture to at most one action, so
-                // this is defense in depth. The forwarding thread takes the FIRST
-                // matching entry, so a second registration of the same hotkey
-                // could never fire — report it rather than claim it active.
-                // Compared parsed, so a respelling ("Shift+Control+A") counts as
-                // the gesture it duplicates.
-                Ok(hotkey) if blocking.contains(&hotkey) => (false, Some("duplicate gesture".into())),
-                Ok(hotkey) => match listener_error {
-                    Some(err) => (false, Some(err.to_string())),
-                    None => {
-                        blocking.insert(hotkey);
-                        matches.push((hotkey, mode));
-                        (true, None)
-                    }
+            let error = match gesture.parse::<Gesture>() {
+                Err(err) => Some(err.to_string()),
+                Ok(parsed) => match parsed.validate() {
+                    Err(err) => Some(err.to_string()),
+                    // The shell already gives each gesture to at most one action, so
+                    // this is defense in depth: the hook refuses an equal gesture
+                    // anyway. Compared parsed, so a respelling ("Shift+Control+A")
+                    // counts as the gesture it duplicates.
+                    Ok(()) if wanted.iter().any(|(g, _)| *g == parsed) => Some("duplicate gesture".into()),
+                    Ok(()) => match start_error {
+                        Some(err) => Some(err.to_string()),
+                        None => {
+                            wanted.push((parsed, mode));
+                            slots.push((name, entries.len()));
+                            None
+                        }
+                    },
                 },
             };
-            entries.push(serde_json::json!({ "gesture": gesture, "active": active, "error": error }));
+            entries.push(serde_json::json!({ "gesture": gesture, "active": error.is_none(), "error": error }));
         }
         statuses.insert(name.into(), serde_json::Value::Array(entries));
     }
     HotkeyPlan {
-        blocking,
-        matches,
+        wanted,
+        slots,
         statuses,
     }
 }
@@ -195,65 +251,11 @@ fn plan_hotkeys(requested: &[(&str, &[String], CaptureMode)], listener_error: Op
 mod tests {
     use super::*;
 
-    /// The exact strings SimpleKeyGesture.ToCapturerString (CapturerKeyMap in
-    /// Clowd.Shared) produces must parse in handy-keys' grammar — this map is
-    /// the wire contract between the shell and the capturer.
-    #[test]
-    fn parses_capturer_gestures() {
-        for gesture in [
-            "PrintScreen",
-            "Control+Shift+PrintScreen",
-            "Alt+F12",
-            "Control+A",
-            "Control+1",
-            "Super+Minus",
-            "Control+Alt+Grave",
-            "Shift+KeypadPlus",
-            "Left",
-            "Control+Space",
-            "Control+PageDown",
-            "Shift+Backspace",
-            "Control+ForwardDelete",
-            "Control+Semicolon",
-            "Control+LeftBracket",
-            "Control+Backslash",
-            "Control+Quote",
-            "Control+Comma",
-            "Control+Period",
-            "Control+Slash",
-            "Control+Equal",
-            "Control+Keypad7",
-            "Control+KeypadMultiply",
-            "Control+ContextMenu",
-            "PlayPause",
-            "Control+F24",
-        ] {
-            assert!(gesture.parse::<Hotkey>().is_ok(), "failed to parse {gesture}");
-        }
-
-        // raw Avalonia names must FAIL so the shell-side map stays the one
-        // source of truth (a pass here would mean two grammars half-work)
-        assert!("Snapshot".parse::<Hotkey>().is_err());
-        assert!("OemMinus".parse::<Hotkey>().is_err());
-        assert!("Control+D1".parse::<Hotkey>().is_err());
-    }
-
-    /// Blocking and triggering must share one matching rule; this pins the
-    /// half of it we implement (the forwarding thread's lookup).
-    #[test]
-    fn match_rule_is_exact_on_modifiers() {
-        let hotkey: Hotkey = "Control+Shift+PrintScreen".parse().unwrap();
-        let pressed: Hotkey = "Control+Shift+PrintScreen".parse().unwrap();
-        assert!(hotkey.modifiers.matches(pressed.modifiers));
-        let wrong: Hotkey = "Control+PrintScreen".parse().unwrap();
-        assert!(!hotkey.modifiers.matches(wrong.modifiers));
-    }
-
     fn gestures(list: &[&str]) -> Vec<String> {
         list.iter().map(|g| g.to_string()).collect()
     }
 
-    fn plan(main: &[&str], window: &[&str], monitor: &[&str], listener_error: Option<&str>) -> HotkeyPlan {
+    fn plan(main: &[&str], window: &[&str], monitor: &[&str], start_error: Option<&str>) -> HotkeyPlan<'static> {
         let (main, window, monitor) = (gestures(main), gestures(window), gestures(monitor));
         plan_hotkeys(
             &[
@@ -261,39 +263,36 @@ mod tests {
                 ("window", &window, CaptureMode::Window),
                 ("monitor", &monitor, CaptureMode::Screen),
             ],
-            listener_error,
+            start_error,
         )
     }
 
-    fn hotkey(gesture: &str) -> Hotkey {
-        gesture.parse().unwrap()
+    fn gesture(text: &str) -> Gesture {
+        text.parse().unwrap()
     }
+
+    // The tests below use keys that exist on every OS. PrintScreen and Cancel
+    // have no macOS key code, so they are refused there (see
+    // settings_form_gestures_parse), and CI runs this suite on macOS too.
 
     #[test]
     fn registers_every_gesture_of_a_mode() {
-        let plan = plan(&["PrintScreen", "Control+Shift+1"], &["Alt+PrintScreen"], &[], None);
+        let plan = plan(&["F12", "Control+Shift+D1"], &["Alt+F12"], &[], None);
         assert_eq!(
-            plan.matches,
+            plan.wanted,
             vec![
-                (hotkey("PrintScreen"), CaptureMode::Region),
-                (hotkey("Control+Shift+1"), CaptureMode::Region),
-                (hotkey("Alt+PrintScreen"), CaptureMode::Window),
+                (gesture("F12"), CaptureMode::Region),
+                (gesture("Control+Shift+D1"), CaptureMode::Region),
+                (gesture("Alt+F12"), CaptureMode::Window),
             ]
         );
-        // blocking and matches must stay the same set, or a press could be
-        // suppressed without triggering (or trigger without being suppressed)
-        assert_eq!(plan.blocking.len(), 3);
-        assert!(plan
-            .matches
-            .iter()
-            .all(|(h, _)| plan.blocking.contains(h)));
+        assert_eq!(plan.slots, vec![("main", 0), ("main", 1), ("window", 0)]);
     }
 
     #[test]
     fn empty_lists_register_nothing_but_still_report() {
         let plan = plan(&[], &[], &[], None);
-        assert!(plan.matches.is_empty());
-        assert!(plan.blocking.is_empty());
+        assert!(plan.wanted.is_empty());
         assert_eq!(
             serde_json::Value::Object(plan.statuses),
             serde_json::json!({ "main": [], "window": [], "monitor": [] })
@@ -303,20 +302,21 @@ mod tests {
     #[test]
     fn duplicate_across_modes_keeps_the_first() {
         let plan = plan(
-            &["PrintScreen"],
+            &["Return"],
             &["Control+Shift+A"],
-            &["Control+Shift+A", "PrintScreen", "Shift+Control+A"],
+            &["Control+Shift+A", "Return", "Shift+Control+A", "Enter"],
             None,
         );
         assert_eq!(
-            plan.matches,
+            plan.wanted,
             vec![
-                (hotkey("PrintScreen"), CaptureMode::Region),
-                (hotkey("Control+Shift+A"), CaptureMode::Window),
+                (gesture("Return"), CaptureMode::Region),
+                (gesture("Control+Shift+A"), CaptureMode::Window),
             ]
         );
         assert_eq!(plan.statuses["window"][0]["active"], true);
-        for (i, gesture) in ["Control+Shift+A", "PrintScreen", "Shift+Control+A"]
+        // Compared parsed: a modifier respelling and a key alias both count.
+        for (i, gesture) in ["Control+Shift+A", "Return", "Shift+Control+A", "Enter"]
             .into_iter()
             .enumerate()
         {
@@ -329,46 +329,87 @@ mod tests {
 
     #[test]
     fn duplicate_within_a_mode_keeps_the_first() {
-        let plan = plan(&["PrintScreen", "PrintScreen"], &[], &[], None);
-        assert_eq!(plan.matches.len(), 1);
+        let plan = plan(&["F12", "F12"], &[], &[], None);
+        assert_eq!(plan.wanted.len(), 1);
         assert_eq!(plan.statuses["main"][0]["active"], true);
         assert_eq!(plan.statuses["main"][1]["error"], "duplicate gesture");
     }
 
     /// The shell maps statuses back by the echoed string, in order, so the
-    /// echo must be the exact input — rejected gestures included.
+    /// echo must be the exact input — rejected and respelled gestures included.
     #[test]
     fn status_shape_echoes_gestures_in_order() {
-        let plan = plan(&["Control+Shift", "Snapshot", "PrintScreen"], &[], &["Alt+F12"], None);
+        let plan = plan(&["Control+Shift", "control+snapshot", "F12"], &[], &["Alt+F12"], None);
         let main = plan.statuses["main"].as_array().unwrap();
         assert_eq!(main.len(), 3);
         assert_eq!(
             main[0],
-            serde_json::json!({ "gesture": "Control+Shift", "active": false, "error": "gesture has no key" })
+            serde_json::json!({ "gesture": "Control+Shift", "active": false, "error": "unknown key 'Shift'" })
         );
-        assert_eq!(main[1]["gesture"], "Snapshot");
-        assert_eq!(main[1]["active"], false);
-        assert!(main[1]["error"].is_string());
-        assert_eq!(
-            main[2],
-            serde_json::json!({ "gesture": "PrintScreen", "active": true, "error": null })
-        );
+        assert_eq!(main[1]["gesture"], "control+snapshot");
+        assert_eq!(main[1]["active"], cfg!(not(target_os = "macos")));
+        assert_eq!(main[2], serde_json::json!({ "gesture": "F12", "active": true, "error": null }));
         assert_eq!(plan.statuses["window"], serde_json::json!([]));
         assert_eq!(
             plan.statuses["monitor"],
             serde_json::json!([{ "gesture": "Alt+F12", "active": true, "error": null }])
         );
-        assert_eq!(plan.matches.len(), 2);
     }
 
     #[test]
     fn listener_error_reports_on_every_gesture() {
-        let plan = plan(&["PrintScreen", "Control+1"], &[], &[], Some("no accessibility"));
-        assert!(plan.matches.is_empty());
-        assert!(plan.blocking.is_empty());
+        let plan = plan(&["F12", "Control+D1"], &[], &[], Some("no accessibility"));
+        assert!(plan.wanted.is_empty());
         for status in plan.statuses["main"].as_array().unwrap() {
             assert_eq!(status["active"], false);
             assert_eq!(status["error"], "no accessibility");
+        }
+    }
+
+    /// The gestures the shell sends today (HotkeyGesture.ToSerializedString)
+    /// plan active wherever their key exists.
+    #[test]
+    fn settings_form_gestures_parse() {
+        let all = [
+            "PrintScreen",
+            "Control+PrintScreen",
+            "Alt+PrintScreen",
+            "Shift+PrintScreen",
+            "Control+Shift+D1",
+            "Control+Cancel",
+        ];
+        let plan = plan(&all, &[], &[], None);
+        let main = plan.statuses["main"].as_array().unwrap();
+        for (status, text) in main.iter().zip(all) {
+            #[cfg(not(target_os = "macos"))]
+            assert_eq!(*status, serde_json::json!({ "gesture": text, "active": true, "error": null }));
+            // No macOS key code: refused up front, never a silent dead hotkey.
+            #[cfg(target_os = "macos")]
+            if text == "Control+Shift+D1" {
+                assert_eq!(status["active"], true, "{text}");
+            } else {
+                let key = gesture(text).key;
+                assert_eq!(
+                    status["error"],
+                    format!("the key '{}' cannot be used as a global hotkey on this system", key.name()),
+                    "{text}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn none_and_modifier_keys_are_refused() {
+        let plan = plan(&["None", "LeftShift", "Control+RightAlt"], &[], &[], None);
+        assert!(plan.wanted.is_empty());
+        let main = &plan.statuses["main"];
+        assert_eq!(
+            main[0],
+            serde_json::json!({ "gesture": "None", "active": false, "error": "gesture has no key" })
+        );
+        for i in [1, 2] {
+            assert_eq!(main[i]["active"], false);
+            assert_eq!(main[i]["error"], "a modifier key on its own cannot be a global hotkey");
         }
     }
 
@@ -387,10 +428,10 @@ mod tests {
             "--hk-monitor",
             "Control+PrintScreen",
             "--hk-main",
-            "Control+Shift+1",
+            "Control+Shift+D1",
         ])
         .unwrap();
-        assert_eq!(args.hk_main, ["PrintScreen", "Control+Shift+1"]);
+        assert_eq!(args.hk_main, ["PrintScreen", "Control+Shift+D1"]);
         assert!(args.hk_window.is_empty());
         assert_eq!(args.hk_monitor, ["Control+PrintScreen"]);
     }

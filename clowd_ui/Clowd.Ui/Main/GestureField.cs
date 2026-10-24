@@ -1,12 +1,10 @@
 using System;
 using System.ComponentModel;
-using System.Text;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
-using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -28,9 +26,17 @@ namespace Clowd.UI.Config
     /// raises <see cref="EditRequested"/>, the owner starts the recording with
     /// <see cref="BeginListening"/>, and <see cref="ListeningEnded"/> hands it the result (null for
     /// a cancel) — see <see cref="HotkeyShortcutsEditor"/>, which turns that into list edits.
-    /// <para>While listening the global hotkeys are paused (<see cref="HotkeyManager.IsPaused"/>) so
-    /// the combination being pressed reaches this field instead of firing its action. Modifier keys
-    /// on their own only update the preview; Esc or focus moving elsewhere cancels.</para>
+    /// <para>The combination is recorded by the global keyboard hook
+    /// (<see cref="HotkeyManager.StartRecording"/>), not from this window's key events: the hook
+    /// sees keys the window never gets (PrtScr, Win combinations), and registered hotkeys stay
+    /// silent while it records, so the combination being pressed does not fire its action. The
+    /// hook hears every app, so the recording never outlives the user's attention on this field:
+    /// the focus leaving it or its window being deactivated cancels it, as do Esc on its own and
+    /// the Windows task-switching combinations (<see cref="HotkeyGesture.IsSystemReserved"/>).
+    /// Modifier keys on their own only update the preview. Win+L is recorded like any other
+    /// combination, but Windows always locks on it as well — the hook can never suppress it.</para>
+    /// <para>Without a working hook (macOS before Accessibility is granted, Linux, the library
+    /// missing) nothing can be recorded, and the field says why in its status.</para>
     /// </remarks>
     public class GestureField : UserControl
     {
@@ -55,6 +61,9 @@ namespace Clowd.UI.Config
 
         public bool IsListening { get; private set; }
 
+        /// <summary>Why the last <see cref="BeginListening"/> could not record (no hook), or null.</summary>
+        public string RecordingError => _recordingError;
+
         /// <summary>The gesture button was clicked: the owner decides whether to start listening.</summary>
         public event EventHandler EditRequested;
 
@@ -62,8 +71,8 @@ namespace Clowd.UI.Config
         public event EventHandler RemoveRequested;
 
         /// <summary>Listening is over: the recorded gesture, or null when it was canceled. The
-        /// hotkeys are already un-paused when this is raised.</summary>
-        public event EventHandler<SimpleKeyGesture> ListeningEnded;
+        /// recording has already ended when this is raised.</summary>
+        public event EventHandler<HotkeyGesture> ListeningEnded;
 
         private readonly string _actionName;
         private const string StatusActive = "Active";
@@ -78,7 +87,10 @@ namespace Clowd.UI.Config
         private readonly StackPanel _statusPanel;
         private HotkeyShortcut _shortcut;
         private bool _subscribed;
-        private KeyModifiers _editModifiers;
+        private HotkeyModifiers _editModifiers;
+        private IDisposable _session;
+        private Window _window;
+        private string _recordingError;
 
         /// <param name="actionName">The display name of the action the shortcut belongs to: a
         /// screen reader announces it with the gesture, since a row's several gesture buttons are
@@ -228,16 +240,16 @@ namespace Clowd.UI.Config
 
             // the window closed (or the page was switched) mid-recording: nothing will ever take
             // the focus from a field that is no longer shown, so cancel now — a recording left
-            // open would keep every global hotkey paused.
+            // open would swallow the next key pressed in any app.
             if (IsListening)
-                FinishListening(Key.None, KeyModifiers.None);
+                FinishListening(null);
         }
 
         private void OnShortcutPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            // the status can change long after the gesture was set (the SharpHook hook failing to
-            // start on macOS without the Accessibility permission, the standby capturer reporting
-            // back) — keep the indicator live.
+            // the status can change long after the gesture was set (the hook failing to start on
+            // macOS without the Accessibility permission, the standby capturer reporting back) —
+            // keep the indicator live.
             if (Dispatcher.UIThread.CheckAccess())
                 UpdateControls();
             else
@@ -251,33 +263,50 @@ namespace Clowd.UI.Config
         }
 
         /// <summary>
-        /// Starts recording: pauses the global hotkeys and takes the keyboard focus. False (and
-        /// nothing changed) when the hotkeys are unavailable or already paused for another
-        /// recording. The field must be in the visual tree.
+        /// Starts recording through the hook and takes the keyboard focus. False (and nothing
+        /// changed) when the field's window is not the active one, recording is unavailable — the
+        /// field then shows why — or another recording is in progress. The field must be in the
+        /// visual tree.
         /// </summary>
         public bool BeginListening()
         {
             var manager = HotkeyManager.Current;
-            if (IsListening || manager == null || manager.IsPaused)
+            if (IsListening || manager == null)
                 return false;
 
-            manager.IsPaused = true;
+            // the hook records from any app: only start while the user is looking at this window
+            if (TopLevel.GetTopLevel(this) is not Window { IsActive: true } window)
+                return false;
+
+            var session = manager.StartRecording(OnRecordModifiers, OnRecorded, out var error);
+            if (session == null)
+            {
+                if (error != null)
+                {
+                    _recordingError = error;
+                    UpdateControls();
+                }
+                return false;
+            }
+
+            _recordingError = null;
+            _session = session;
+            _window = window;
             IsListening = true;
-            _editModifiers = KeyModifiers.None;
-            KeyDown += OnKeyDown;
-            KeyUp += OnKeyUp;
+            _editModifiers = HotkeyModifiers.None;
             LostFocus += OnLostFocus;
+            window.Deactivated += OnWindowDeactivated;
             UpdateControls();
 
             // a field that was only just added (a new shortcut) can be refused the focus until it
             // has been laid out; give it one layout pass, and cancel if it still cannot have it —
-            // without the focus no key would ever reach it, and no focus loss would cancel it.
+            // without the focus no focus loss would ever cancel it.
             if (!Focus())
             {
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (IsListening && !IsFocused && !Focus())
-                        FinishListening(Key.None, KeyModifiers.None);
+                        FinishListening(null);
                 }, DispatcherPriority.Loaded);
             }
 
@@ -291,57 +320,50 @@ namespace Clowd.UI.Config
             if (!ReferenceEquals(e.Source, this))
                 return;
 
-            FinishListening(Key.None, KeyModifiers.None);
+            FinishListening(null);
         }
 
-        private void OnKeyUp(object sender, KeyEventArgs e)
+        // another app took the foreground (a click elsewhere, Alt+Tab): the next key is not meant
+        // for this field
+        private void OnWindowDeactivated(object sender, EventArgs e) => FinishListening(null);
+
+        private void OnRecordModifiers(HotkeyModifiers modifiers)
         {
-            // PrtScr does not arrive in KeyDown on Windows — only in KeyUp.
-            _editModifiers = e.KeyModifiers;
-            if (e.Key == Key.PrintScreen)
-            {
-                e.Handled = true;
-                FinishListening(e.Key, e.KeyModifiers);
-            }
-            else
-            {
-                UpdateControls();
-            }
+            _editModifiers = modifiers;
+            UpdateControls();
         }
 
-        private void OnKeyDown(object sender, KeyEventArgs e)
-        {
-            _editModifiers = e.KeyModifiers;
-            var keyCode = (int)e.Key;
-            // ignore any known modifier keys (LWin/RWin = 70/71, LeftShift..RightAlt = 116..121).
-            if (keyCode == 70 || keyCode == 71 || (keyCode >= 116 && keyCode <= 121))
-            {
-                UpdateControls();
-            }
-            else
-            {
-                e.Handled = true;
-                FinishListening(e.Key, e.KeyModifiers);
-            }
-        }
+        private void OnRecorded(HotkeyGesture gesture) => FinishListening(gesture);
 
-        private void FinishListening(Key key, KeyModifiers modifiers)
+        private void FinishListening(HotkeyGesture gesture)
         {
             if (!IsListening)
                 return;
 
-            IsListening = false;
-            if (HotkeyManager.Current != null)
-                HotkeyManager.Current.IsPaused = false;
-            KeyDown -= OnKeyDown;
-            KeyUp -= OnKeyUp;
-            LostFocus -= OnLostFocus;
+            try
+            {
+                IsListening = false;
+                LostFocus -= OnLostFocus;
+                if (_window != null)
+                    _window.Deactivated -= OnWindowDeactivated;
+                _window = null;
+            }
+            finally
+            {
+                _session?.Dispose();
+                _session = null;
+            }
             UpdateControls();
 
-            // Esc on its own and a focus loss (Key.None) are cancels — an aborted recording must
-            // not destroy the binding it was replacing.
-            var canceled = key == Key.None || (key == Key.Escape && modifiers == KeyModifiers.None);
-            ListeningEnded?.Invoke(this, canceled ? null : new SimpleKeyGesture(key, modifiers));
+            // Esc on its own and a focus loss (null) are cancels — an aborted recording must not
+            // destroy the binding it was replacing. So are the task-switching combinations: the
+            // hook swallowed that one press, the next one switches normally, and binding one would
+            // break task switching system-wide.
+            var canceled = gesture == null
+                           || gesture.Key == HotkeyKey.None
+                           || (gesture.Key == HotkeyKey.Escape && gesture.Modifiers == HotkeyModifiers.None)
+                           || HotkeyGesture.IsSystemReserved(gesture);
+            ListeningEnded?.Invoke(this, canceled ? null : gesture);
         }
 
         private void SetStatus(string dotClass, string text, string tooltip)
@@ -375,16 +397,7 @@ namespace Clowd.UI.Config
                 SetRemoveVisible(false);
 
                 // the modifiers held so far, so the user can see the combination being built
-                var held = new StringBuilder();
-                if (_editModifiers.HasFlag(KeyModifiers.Control))
-                    held.Append("Ctrl+");
-                if (_editModifiers.HasFlag(KeyModifiers.Alt))
-                    held.Append("Alt+");
-                if (_editModifiers.HasFlag(KeyModifiers.Shift))
-                    held.Append("Shift+");
-                if (_editModifiers.HasFlag(KeyModifiers.Meta))
-                    held.Append("Meta+");
-
+                var held = HotkeyGesture.ModifiersText(_editModifiers);
                 _button.Content = held.Length == 0 ? "Press a key combination…" : held + " …";
                 AutomationProperties.SetName(_button, _actionName + ": press a key combination");
                 AutomationProperties.SetHelpText(_button, null);
@@ -401,6 +414,7 @@ namespace Clowd.UI.Config
                 SetStatus(null, "", null);
                 AutomationProperties.SetName(_button, null);
                 AutomationProperties.SetHelpText(_button, null);
+                ShowRecordingError();
                 return;
             }
 
@@ -424,6 +438,19 @@ namespace Clowd.UI.Config
                 SetStatus("active", StatusActive, null);
                 AutomationProperties.SetHelpText(_button, "Active");
             }
+
+            ShowRecordingError();
+        }
+
+        /// <summary>Recording is unavailable (no hook): said where a registration error shows, so
+        /// a click that cannot record is never silent.</summary>
+        private void ShowRecordingError()
+        {
+            if (_recordingError == null)
+                return;
+
+            SetStatus("error", StatusError, _recordingError);
+            AutomationProperties.SetHelpText(_button, "Cannot record a shortcut: " + _recordingError);
         }
     }
 }

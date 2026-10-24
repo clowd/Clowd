@@ -51,7 +51,7 @@ namespace Clowd.UI
         public static bool HasScreenRecording => !OperatingSystem.IsMacOS() || MacOS.PreflightScreenCapture();
 
         /// <summary>Accessibility: needed by the global keyboard hook behind the hotkeys
-        /// (<see cref="GlobalHotkeyHost"/>). True off macOS.</summary>
+        /// (<see cref="NativeHotkeyHost"/>). True off macOS.</summary>
         public static bool HasAccessibility => !OperatingSystem.IsMacOS() || MacOS.IsProcessTrusted();
 
         /// <summary>

@@ -1,0 +1,55 @@
+//! Clowd's global keyboard hook: registered hotkeys, one-shot gesture recording and the keystroke
+//! observe stream, all from one hook per process. Linked into `clowd_capture` (Rust API) and built
+//! as `clowd_hotkeys.dll` / `libclowd_hotkeys.dylib` for Clowd.Ui (C ABI, `ffi.rs`).
+//!
+//! - [`Key`] is the only key type for global hotkeys anywhere in Clowd; the C# `HotkeyKey` is
+//!   generated from the same table. The only other key maps live inside this crate: `Key` to
+//!   Windows VK and `Key` to macOS CGKeyCode / NX media keytype.
+//! - A [`Gesture`]'s text form (`Control+Alt+Shift+Meta+<Key>`) is the one wire format: settings,
+//!   the capturer's `--hk-*` flags and the status echo.
+//! - The hook callback only decides suppression and enqueues; consumers pull [`Event`]s from
+//!   [`Events`]. It never calls user code, so neither the capturer nor C# can stall it. Matching
+//!   and suppression share one snapshot inside the callback, so a press is never swallowed
+//!   without firing, or fired without being swallowed (bar a press racing an `unregister`).
+//!
+//! Limitations:
+//!
+//! - Windows: elevated foreground windows don't reach a medium-IL hook. Win+L and Ctrl+Alt+Del
+//!   can't be suppressed (Win+L can still be recorded; registering it fires but Windows still
+//!   locks). AltGr is Ctrl+Alt (as with SharpHook, Avalonia and RegisterHotKey), so a registered
+//!   `Control+Alt+X` also swallows AltGr+X — and `Alt+E` never eats AltGr+E.
+//! - macOS: needs the Accessibility permission (`start` fails with `PermissionDenied`, never
+//!   prompts). Secure Input (password fields) hides all keys from the tap, and media-key
+//!   swallowing must be verified live on current macOS.
+//! - Linux: no backend yet; `start` fails with `Unsupported`.
+
+// Used by the backends only.
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
+mod core;
+mod error;
+mod ffi;
+mod gesture;
+mod hotkeys;
+mod key;
+mod modifiers;
+// Used only by windows.rs outside tests; compiled and tested on every OS.
+#[cfg_attr(not(windows), allow(dead_code))]
+mod winstate;
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(not(any(windows, target_os = "macos")))]
+mod unsupported;
+#[cfg(windows)]
+mod windows;
+
+#[cfg(test)]
+mod csharp;
+
+pub use std::sync::mpsc::RecvTimeoutError;
+
+pub use error::Error;
+pub use gesture::{Gesture, ParseGestureError};
+pub use hotkeys::{Event, Events, HotkeyId, Hotkeys, KeyEvent};
+pub use key::Key;
+pub use modifiers::Modifiers;

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Avalonia.Input;
 using Clowd;
 using Clowd.Config;
 using Clowd.UI;
@@ -17,10 +16,10 @@ namespace Clowd.VideoSDK.Tests
     /// </summary>
     public class HotkeyManagerTests
     {
-        private static readonly SimpleKeyGesture PrintScreen = new(Key.Snapshot);
-        private static readonly SimpleKeyGesture CtrlShift1 = new(Key.D1, KeyModifiers.Control | KeyModifiers.Shift);
-        private static readonly SimpleKeyGesture CtrlShift2 = new(Key.D2, KeyModifiers.Control | KeyModifiers.Shift);
-        private static readonly SimpleKeyGesture CtrlShift3 = new(Key.D3, KeyModifiers.Control | KeyModifiers.Shift);
+        private static readonly HotkeyGesture PrintScreen = new(HotkeyKey.PrintScreen);
+        private static readonly HotkeyGesture CtrlShift1 = new(HotkeyKey.D1, HotkeyModifiers.Control | HotkeyModifiers.Shift);
+        private static readonly HotkeyGesture CtrlShift2 = new(HotkeyKey.D2, HotkeyModifiers.Control | HotkeyModifiers.Shift);
+        private static readonly HotkeyGesture CtrlShift3 = new(HotkeyKey.D3, HotkeyModifiers.Control | HotkeyModifiers.Shift);
 
         private static (HotkeyManager Manager, FakeHost Host, SettingsHotkey Settings) Create(bool wireActions = true)
         {
@@ -78,11 +77,11 @@ namespace Clowd.VideoSDK.Tests
             var (manager, _, settings) = Create(wireActions: false);
             var draw = manager.GetEntry(HotkeyId.DrawOnScreen);
 
-            draw.AddGesture(new SimpleKeyGesture(Key.D, KeyModifiers.Control | KeyModifiers.Shift));
+            draw.AddGesture(new HotkeyGesture(HotkeyKey.D, HotkeyModifiers.Control | HotkeyModifiers.Shift));
             draw.RemoveGestureAt(0);
 
             Assert.Equal(GestureList.Of(PrintScreen), settings.CaptureRegionShortcut);
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control)), settings.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control)), settings.CaptureFullscreenShortcut);
         }
 
         [Fact]
@@ -228,7 +227,7 @@ namespace Clowd.VideoSDK.Tests
         public void Statuses_reported_by_the_capturer_land_on_the_matching_gestures()
         {
             var (manager, host, _) = Create(wireActions: false);
-            // warm capture: the standby capturer, not SharpHook, owns the screenshot gestures
+            // warm capture: the standby capturer, not this process's hook, owns the screenshot gestures
             manager.SetAction(HotkeyId.CaptureRegion, null);
             var region = manager.GetEntry(HotkeyId.CaptureRegion);
             region.AddGesture(CtrlShift1);
@@ -238,7 +237,7 @@ namespace Clowd.VideoSDK.Tests
 
             manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[]
             {
-                new ExternalGestureStatus("Control+Shift+1", false, "duplicate gesture"),
+                new ExternalGestureStatus("Control+Shift+D1", false, "duplicate gesture"),
                 new ExternalGestureStatus("PrintScreen", true, ""),
                 // not one of ours (a report for a superseded settings snapshot): ignored
                 new ExternalGestureStatus("Alt+F4", true, ""),
@@ -252,7 +251,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("", region.Shortcuts[2].Error);
             Assert.Equal(PrintScreen, region.FirstRegisteredGesture);
 
-            // and once SharpHook owns the action again, a stale capturer report must not stomp it
+            // and once this process owns the action again, a stale capturer report must not stomp it
             host.Refuse(PrintScreen, "Taken by another app.");
             manager.SetAction(HotkeyId.CaptureRegion, () => { });
             manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[] { new ExternalGestureStatus("PrintScreen", true, "") });
@@ -269,7 +268,7 @@ namespace Clowd.VideoSDK.Tests
 
             var args = CaptureArguments.BuildStandby(@"C:\sessions", root).ToList();
 
-            Assert.Equal(new[] { "PrintScreen", "Control+Shift+1" }, ValuesOf("--hk-main"));
+            Assert.Equal(new[] { "PrintScreen", "Control+Shift+D1" }, ValuesOf("--hk-main"));
             Assert.Empty(ValuesOf("--hk-window"));
             Assert.Equal(new[] { "Control+PrintScreen" }, ValuesOf("--hk-monitor"));
 
@@ -277,18 +276,96 @@ namespace Clowd.VideoSDK.Tests
                 args.Select((a, i) => (a, i)).Where(t => t.a == flag).Select(t => args[t.i + 1]).ToList();
         }
 
+        [Fact]
+        public void Recording_raises_RecordingChanged_on_start_and_on_end()
+        {
+            var (manager, host, _) = Create();
+            var states = new List<bool>();
+            manager.RecordingChanged += (_, _) => states.Add(manager.IsRecording);
+            HotkeyGesture recorded = null;
+
+            var session = manager.StartRecording(_ => { }, g => recorded = g, out var error);
+
+            Assert.NotNull(session);
+            Assert.Null(error);
+            Assert.True(manager.IsRecording);
+            Assert.Equal(new[] { true }, states);
+
+            // one recording at a time: a second is refused without an error
+            Assert.Null(manager.StartRecording(_ => { }, _ => { }, out error));
+            Assert.Null(error);
+
+            host.Recording.Recorded(CtrlShift1);
+
+            Assert.Equal(CtrlShift1, recorded);
+            Assert.False(manager.IsRecording);
+            Assert.Equal(new[] { true, false }, states);
+
+            // disposing after the end changes nothing, and a new recording can start
+            session.Dispose();
+            Assert.Equal(new[] { true, false }, states);
+            Assert.NotNull(manager.StartRecording(_ => { }, _ => { }, out _));
+        }
+
+        [Fact]
+        public void Disposing_a_recording_cancels_it_in_the_host_and_ends_it()
+        {
+            var (manager, host, _) = Create();
+            var states = new List<bool>();
+            manager.RecordingChanged += (_, _) => states.Add(manager.IsRecording);
+
+            var session = manager.StartRecording(_ => { }, _ => { }, out _);
+            var inner = host.Recording;
+            session.Dispose();
+
+            Assert.True(inner.Canceled);
+            Assert.False(manager.IsRecording);
+            Assert.Equal(new[] { true, false }, states);
+        }
+
+        [Fact]
+        public void A_recorded_callback_that_throws_still_ends_the_recording()
+        {
+            var (manager, host, _) = Create();
+            manager.StartRecording(_ => { }, _ => throw new InvalidOperationException("boom"), out _);
+
+            Assert.Throws<InvalidOperationException>(() => host.Recording.Recorded(CtrlShift1));
+
+            Assert.False(manager.IsRecording);
+        }
+
+        [Fact]
+        public void A_host_that_cannot_record_passes_its_error_through()
+        {
+            var (manager, host, _) = Create();
+            host.RecordingError = "Grant Accessibility permission.";
+            var raised = false;
+            manager.RecordingChanged += (_, _) => raised = true;
+
+            var session = manager.StartRecording(_ => { }, _ => { }, out var error);
+
+            Assert.Null(session);
+            Assert.Equal("Grant Accessibility permission.", error);
+            Assert.False(manager.IsRecording);
+            Assert.False(raised);
+        }
+
         private sealed class FakeHost : IGlobalTriggerHost
         {
             public readonly List<FakeRegistration> Live = new();
-            private readonly Dictionary<SimpleKeyGesture, string> _refused = new();
+            private readonly Dictionary<HotkeyGesture, string> _refused = new();
 
-            public bool IsPaused { get; set; }
+            /// <summary>When set, <see cref="StartRecording"/> refuses with this error.</summary>
+            public string RecordingError;
+
+            /// <summary>The recording last started.</summary>
+            public FakeRecording Recording;
 
             /// <summary>Makes every later registration of <paramref name="gesture"/> fail up front,
             /// as the real host does for a key it cannot hook.</summary>
-            public void Refuse(SimpleKeyGesture gesture, string error) => _refused[gesture] = error;
+            public void Refuse(HotkeyGesture gesture, string error) => _refused[gesture] = error;
 
-            public IGlobalTriggerRegistration RegisterTrigger(SimpleKeyGesture gesture, Action executed)
+            public IGlobalTriggerRegistration RegisterTrigger(HotkeyGesture gesture, Action executed, bool fireOnRepeat = false)
             {
                 if (_refused.TryGetValue(gesture, out var error))
                     return new FakeRegistration(null, gesture, false, error);
@@ -301,12 +378,30 @@ namespace Clowd.VideoSDK.Tests
             }
 
             public IDisposable ObserveKeys(Action<GlobalKeyEvent> observer) => throw new NotSupportedException();
+
+            public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, out string error)
+            {
+                error = RecordingError;
+                if (error != null)
+                    return null;
+
+                return Recording = new FakeRecording(recorded);
+            }
         }
 
-        private sealed class FakeRegistration(FakeHost host, SimpleKeyGesture gesture, bool isRegistered, string error)
+        private sealed class FakeRecording(Action<HotkeyGesture> recorded) : IDisposable
+        {
+            public bool Canceled { get; private set; }
+
+            public void Recorded(HotkeyGesture gesture) => recorded(gesture);
+
+            public void Dispose() => Canceled = true;
+        }
+
+        private sealed class FakeRegistration(FakeHost host, HotkeyGesture gesture, bool isRegistered, string error)
             : IGlobalTriggerRegistration
         {
-            public SimpleKeyGesture Gesture { get; } = gesture;
+            public HotkeyGesture Gesture { get; } = gesture;
             public bool IsRegistered { get; private set; } = isRegistered;
             public string Error { get; private set; } = error;
             public event EventHandler StatusChanged;

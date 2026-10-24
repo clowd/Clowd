@@ -51,9 +51,38 @@ On-device AI — text recognition for the capture overlay, plus the video/audio 
 
 On Windows there is also `clowd_shell_ext`, a small COM dll (`IExplorerCommand`) that adds the "Upload with Clowd" entry to the Windows 11 context menu. It is registered as a *sparse* MSIX package: CI substitutes version/arch into `clowd_shell_ext/msix/AppxManifest.template.xml`, packs it with `makeappx` into `ClowdShellExt.msix` (manifest + logos only — the dll stays outside the package as external content), and release.yml signs the msix with Azure Trusted Signing before Velopack bundles it. At install time the app copies the dll to the install root and registers the msix with `Add-AppxPackage -ExternalLocation` (see `SparsePackageManager`). The installed dll is named for the crate's own version (`ClowdShellExt_1.0.0.dll`, independent of the app version) — **bump the `clowd_shell_ext` crate version whenever the extension changes**, so the update lands under a fresh filename that Explorer's lock on the old copy cannot block; unchanged versions are never re-copied. The crate compiles to an empty library on non-Windows so workspace-wide builds still work on macOS.
 
+### Global hotkeys (clowd_hotkeys)
+
+Global hotkeys, gesture recording in the hotkey settings and the Draw on Screen keystroke overlay all
+go through one keyboard hook in the `clowd_hotkeys` crate (`WH_KEYBOARD_LL` on Windows, a
+`CGEventTap` on macOS, which needs the Accessibility permission; there is no Linux backend yet). The
+capturer links it statically. Clowd.Ui P/Invokes it as a native library, `clowd_hotkeys.dll` /
+`libclowd_hotkeys.dylib`, which release packages ship beside the Clowd.Ui executable.
+`cargo build -p clowd_capture` builds the library as a dependency, so the build block above needs no
+extra step. `HotkeysLibraryLocator` finds the library by probing, in order:
+
+1. `CLOWD_HOTKEYS_PATH`, if set,
+2. the app directory (the release layout),
+3. walking up to the workspace `Cargo.toml`, the newest of `target/{debug,release}/` and
+   `target/{debug,release}/deps/`. Building a dependent crate leaves the library in `deps/` without
+   copying it up a level, so both places are checked.
+
+While Clowd.Ui runs, it holds the library open, so relinking it fails (LNK1104 on Windows). Close
+Clowd.Ui and the standby `clowd_capture` process, build, then relaunch.
+
+The C# key enum and the ABI constants (`clowd_ui/Clowd.Shared/Hotkeys/HotkeyKey.g.cs` and
+`clowd_ui/Clowd.Ui/Services/Hotkeys/HotkeysAbi.g.cs`) are generated from the crate's key table and
+checked by `cargo test -p clowd_hotkeys`. After changing a key, an ABI code or the event struct,
+rewrite both with:
+
+```sh
+CLOWD_HOTKEYS_REGEN=1 cargo test -p clowd_hotkeys csharp_mirror
+```
+
 ## Tests
 
 ```cmd
+cargo test -p clowd_hotkeys
 cargo test -p clowd_capture
 cargo test -p clowd_shell_ext
 cargo test -p clowd_ai

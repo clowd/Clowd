@@ -5,7 +5,8 @@
 #
 # 1. dotnet publish Clowd.Ui (Release, framework-dependent, host RID) to build/<version>/<rid>
 # 2. cargo build --release (builds clowd_capture, the scrolling capture
-#    driver, and the clowd_ai inference binary the overlay spawns for OCR and
+#    driver, the clowd_hotkeys global hotkey library Clowd.Ui P/Invokes, and
+#    the clowd_ai inference binary the overlay spawns for OCR and
 #    Clowd.VideoSDK spawns for the AI effects)
 # 3. copy the capture binaries next to the published Clowd.Ui executable
 #    (release binary discovery expects them there — see clowd_ui/MIGRATION.md)
@@ -71,6 +72,13 @@ cp "$ROOT/target/release/clowd_capture$EXE" "$OUT/"
 # Beside the overlay, which is where CaptureBinaryLocator.ResolveScrollDriver
 # looks for it.
 cp "$ROOT/target/release/clowd_scroll_driver$EXE" "$OUT/"
+# The global hotkey library, beside Clowd.Ui where HotkeysLibraryLocator looks for it.
+# Linux has no hotkey backend yet and Clowd.Ui never loads the library there, so
+# nothing ships for it.
+case "$RID" in
+    win-*) cp "$ROOT/target/release/clowd_hotkeys.dll" "$OUT/" ;;
+    osx-*) cp "$ROOT/target/release/libclowd_hotkeys.dylib" "$OUT/" ;;
+esac
 if [ "$RID" != "osx-x64" ]; then
     # The AI inference binary, beside Clowd.Ui where AiLoader looks for it
     # and beside the overlay, which spawns it for OCR. ONNX Runtime is

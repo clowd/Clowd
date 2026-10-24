@@ -72,8 +72,8 @@ repeatable, one occurrence per gesture in the action's list order, and zero
 occurrences means that action has no hotkey (hotkeys take effect when the
 first settings snapshot arrives — see below). The capturer prints
 `CLOWD_STANDBY_READY` and waits event-driven without initializing capture/GPU
-resources (the main loop is fully blocked; the crate's hook thread wakes on a
-short internal timer), then creates a unique child directory and
+resources (the main loop is fully blocked, and so is the hook thread between
+key events), then creates a unique child directory and
 prints `CLOWD_SESSION <absolute-path>` when a hotkey fires, followed by one
 ordinary capture cycle. stdout carries ONLY protocol lines — the log goes to
 stderr (and the session's `capture.log`), because a log record spliced into
@@ -85,24 +85,30 @@ and the waiting capturer exits without starting a capture (mid-capture, it
 exits immediately).
 
 The capturer owns the screenshot hotkeys, via a low-level keyboard hook
-(the handy-keys crate: WH_KEYBOARD_LL on Windows, CGEventTap on macOS —
-which needs the same Accessibility permission SharpHook did — and evdev on
-Linux, X11 and Wayland alike), NOT via RegisterHotKey-style registration.
-Both halves of that choice are load-bearing: the trigger path must not
-depend on the shell being resident (a paged-out Clowd.UI would add its
-page-in time to every capture), and the key must be suppressed before OS
+(the clowd_hotkeys crate: WH_KEYBOARD_LL on Windows, a CGEventTap on macOS —
+which needs the Accessibility permission; there is no Linux backend yet, and
+that error is reported per gesture), NOT via RegisterHotKey-style
+registration. Both halves of that choice are load-bearing: the trigger path
+must not depend on the shell being resident (a paged-out Clowd.UI would add
+its page-in time to every capture), and the key must be suppressed before OS
 handlers see it — Windows 11's "PrintScreen opens Snipping Tool" feature
 consumes the key ahead of RegisterHotKey delivery, so a plain registration
-reports success and then never fires. Gestures travel in handy-keys'
-grammar: `Control`/`Alt`/`Shift`/`Super` joined with `+`, then a key token
-(`A`, `1`, `PrintScreen`, `Keypad7`). The shell owns the translation from
-its Avalonia key names (`CapturerKeyMap` in Clowd.Shared); the capturer
-translates nothing, so an unmapped key surfaces as an explicit per-hotkey
-error. Standby is not the only capture path: the shell only runs it while
-its "keep capturer warm" setting is in effect, and it falls back to its own
-SharpHook hotkeys plus classic one-shot spawns for the rest of its process
-lifetime when standby proves unusable — no permission or binary, exit
-code 3 (permission revoked), or repeated crashes.
+reports success and then never fires. Gestures travel in the settings form:
+`Control`/`Alt`/`Shift`/`Meta` joined with `+`, then a canonical key name
+(`PrintScreen`, `Control+Shift+D1`, `Alt+Meta+Oem3`); aliases such as
+`Snapshot` are accepted. The shell translates nothing — the key names are
+clowd_hotkeys' key table, which the shell's `HotkeyKey` is generated from —
+and a key with no code on this OS surfaces as an explicit per-hotkey error.
+A hook that cannot start is fatal (exit) only when the failure is specific
+to this process (`HookFailed`); `Unsupported` (Linux) and `PermissionDenied`
+(macOS Accessibility) would fail the same way in the shell, so the process
+stays up for tray captures and reports the error on every gesture. A hook
+that dies later exits with code 1. Standby is not the only capture path: the
+shell only runs it while its "keep capturer warm" setting is in effect, and
+it falls back to its own clowd_hotkeys registrations plus classic one-shot
+spawns for the rest of its process lifetime when standby proves unusable —
+no permission or binary, exit code 3 (permission revoked), or repeated
+crashes.
 
 While waiting, stdin is also a newline-delimited JSON control channel. A
 `{"type":"settings","args":[...]}` message replaces the complete standby CLI
@@ -112,7 +118,7 @@ arrive out of order: one pipe, one sequential reader). Its `hotkeys` object
 maps each of `main`, `window`, and `monitor` to an array with one entry per
 gesture received for that action, in the order received; `gesture` echoes
 the received string verbatim, which is what the shell matches back to
-`ToCapturerString()` of its own gestures:
+`HotkeyGesture.ToSerializedString()` of its own gestures:
 
 ```json
 {"hotkeys":{
@@ -123,13 +129,19 @@ the received string verbatim, which is what the shell matches back to
 ```
 
 Hook-based hotkeys cannot conflict with other applications, so a gesture is
-active exactly when it parses and the hook is running; an unparseable gesture
-or a failed hook is non-fatal and does not prevent other hotkeys or settings
-from being applied. The shell gives each gesture to at most one action; as
+active exactly when it parses, names a key usable on this OS (not `None`, not
+a bare modifier), and the hook is running; a rejected gesture or a missing
+hook is non-fatal and does not prevent other hotkeys or settings from being
+applied. The shell gives each gesture to at most one action; as
 defense in depth, a gesture repeated anywhere in the snapshot (compared after
 parsing) registers at its first occurrence and every later one reports
 `"active":false,"error":"duplicate gesture"`. A snapshot that fails to parse
 changes nothing and is answered with the surviving hotkeys' real state. A
+`{"type":"pause","paused":true|false}` message pauses or resumes the hotkeys
+(paused: registered gestures neither fire nor are suppressed) while the shell
+records a gesture in its settings UI, so the recorded press reaches the
+shell. It is applied immediately, even mid-capture, gets no reply, and the
+shell re-sends it after every `CLOWD_STANDBY_READY`. A
 `{"type":"capture","mode":"region|screen|window"}` message starts the same
 single capture cycle as a native hotkey. This is how shell and tray capture
 buttons reuse the waiting process instead of spawning a second one; the shell

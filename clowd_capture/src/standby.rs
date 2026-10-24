@@ -44,11 +44,15 @@ fn emit_ipc_error(message: &str) {
     emit!("CLOWD_IPC_ERROR {flat}");
 }
 
+/// `Pause` stops the hotkeys while the shell records a gesture. It is applied
+/// on the reader thread, so it takes effect even mid-capture, and is never
+/// forwarded.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Message {
     Settings { args: Vec<String> },
     Capture { mode: String },
+    Pause { paused: bool },
 }
 
 enum Input {
@@ -70,19 +74,21 @@ impl Standby {
         let capture_active = Arc::new(AtomicBool::new(false));
         let hotkeys = StandbyHotkeys::new(proxy.clone());
         if let Some(err) = hotkeys.listener_error() {
-            // Without a hook this process can only serve tray captures while the
-            // hotkey UI shows errors. On macOS that is the right trade — the
-            // shell's own hook needs the same Accessibility permission, so
-            // falling back gains nothing. Everywhere else, exit so the shell's
-            // crash accounting falls back to SharpHook hotkeys that can work.
+            // `Unsupported` (Linux) and `PermissionDenied` (macOS Accessibility)
+            // would fail the same way in the shell, so stay up for tray captures
+            // and report the error on every gesture. `HookFailed` is
+            // process-specific — exit so the shell's crash accounting falls back
+            // to its own clowd_hotkeys registrations.
             log::error!("standby hotkey hook unavailable: {err}");
-            #[cfg(not(target_os = "macos"))]
-            anyhow::bail!("standby hotkey hook unavailable: {err}");
+            if hotkeys.should_bail() {
+                anyhow::bail!("standby hotkey hook unavailable: {err}");
+            }
         }
 
         let (input_tx, input_rx) = mpsc::channel();
         let parent_gone_reader = Arc::clone(&parent_gone);
         let capture_active_reader = Arc::clone(&capture_active);
+        let pause = hotkeys.pause_handle();
         std::thread::Builder::new()
             .name("standby-ipc".into())
             .spawn(move || {
@@ -90,6 +96,14 @@ impl Standby {
                     match line {
                         Ok(line) if !line.trim().is_empty() => {
                             let input = match serde_json::from_str(&line) {
+                                Ok(Message::Pause {
+                                    paused,
+                                }) => {
+                                    if let Some(hotkeys) = &pause {
+                                        hotkeys.set_paused(paused);
+                                    }
+                                    continue;
+                                }
                                 Ok(message) => Input::Message(message),
                                 Err(err) => Input::Invalid(err.to_string()),
                             };
@@ -250,6 +264,10 @@ impl StandbyApp<'_> {
                         return;
                     }
                 }
+                // Applied on the reader thread; never forwarded here.
+                Input::Message(Message::Pause {
+                    ..
+                }) => {}
                 Input::Invalid(err) => {
                     emit_ipc_error(&err);
                 }

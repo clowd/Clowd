@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Avalonia.Input;
 using Clowd.Config;
 
 namespace Clowd.UI.VideoEditor
@@ -22,7 +21,7 @@ namespace Clowd.UI.VideoEditor
     ///
     /// The keys never arrive as ordinary window input — Windows turns them into WM_APPCOMMAND for
     /// the shell and macOS keeps them as system-defined events — so they are picked up through the
-    /// same SharpHook keyboard hook the global hotkeys use (<see cref="HotkeyManager.Host"/>),
+    /// same clowd_hotkeys hook the global hotkeys use (<see cref="HotkeyManager.Host"/>),
     /// which also lets the press be swallowed so the media player does not act on it too. That
     /// hook is global, so the registration is held only while an editor window is actually
     /// focused: <see cref="SetTarget"/> on activation, <see cref="ReleaseTarget"/> on deactivation
@@ -31,11 +30,11 @@ namespace Clowd.UI.VideoEditor
     /// </summary>
     internal static class MediaKeyTransport
     {
-        private static readonly (Key Key, Action<IMediaKeyTarget> Invoke)[] Bindings =
+        private static readonly (HotkeyKey Key, Action<IMediaKeyTarget> Invoke)[] Bindings =
         {
-            (Key.MediaPlayPause, t => t.MediaPlayPause()),
-            (Key.MediaNextTrack, t => t.MediaStepFrame(1)),
-            (Key.MediaPreviousTrack, t => t.MediaStepFrame(-1)),
+            (HotkeyKey.MediaPlayPause, t => t.MediaPlayPause()),
+            (HotkeyKey.MediaNextTrack, t => t.MediaStepFrame(1)),
+            (HotkeyKey.MediaPreviousTrack, t => t.MediaStepFrame(-1)),
         };
 
         private static IMediaKeyTarget _target;
@@ -80,12 +79,12 @@ namespace Clowd.UI.VideoEditor
                 // a failed registration (the hook could not start, or the key is already a global
                 // hotkey) is kept and disposed with the rest: it simply never fires, and the
                 // editor's own Space / arrow keys are unaffected.
-                registrations.Add(host.RegisterTrigger(new SimpleKeyGesture(key), () =>
+                registrations.Add(host.RegisterTrigger(new HotkeyGesture(key), () =>
                 {
                     var target = _target;
                     if (target != null)
                         invoke(target);
-                }));
+                }, fireOnRepeat: true));
             }
 
             _registrations = registrations;

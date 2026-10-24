@@ -1,0 +1,1597 @@
+{
+  "avaloniaVersion": "12.1.2",
+  "assembly": "Avalonia.Base, Version=12.1.2.0, Culture=neutral, PublicKeyToken=c8d484a7012f9a8b",
+  "dotnetRuntimeUsedForToString": "10.0.7",
+  "keyIsFlags": false,
+  "modifiersIsFlags": true,
+  "key": [
+    {
+      "name": "None",
+      "value": 0,
+      "toString": "None",
+      "tryParseCaseInsensitiveValue": 0,
+      "tryParseOk": true
+    },
+    {
+      "name": "Cancel",
+      "value": 1,
+      "toString": "Cancel",
+      "tryParseCaseInsensitiveValue": 1,
+      "tryParseOk": true
+    },
+    {
+      "name": "Back",
+      "value": 2,
+      "toString": "Back",
+      "tryParseCaseInsensitiveValue": 2,
+      "tryParseOk": true
+    },
+    {
+      "name": "Tab",
+      "value": 3,
+      "toString": "Tab",
+      "tryParseCaseInsensitiveValue": 3,
+      "tryParseOk": true
+    },
+    {
+      "name": "LineFeed",
+      "value": 4,
+      "toString": "LineFeed",
+      "tryParseCaseInsensitiveValue": 4,
+      "tryParseOk": true
+    },
+    {
+      "name": "Clear",
+      "value": 5,
+      "toString": "Clear",
+      "tryParseCaseInsensitiveValue": 5,
+      "tryParseOk": true
+    },
+    {
+      "name": "Return",
+      "value": 6,
+      "toString": "Return",
+      "tryParseCaseInsensitiveValue": 6,
+      "tryParseOk": true
+    },
+    {
+      "name": "Enter",
+      "value": 6,
+      "toString": "Return",
+      "tryParseCaseInsensitiveValue": 6,
+      "tryParseOk": true
+    },
+    {
+      "name": "Pause",
+      "value": 7,
+      "toString": "Pause",
+      "tryParseCaseInsensitiveValue": 7,
+      "tryParseOk": true
+    },
+    {
+      "name": "CapsLock",
+      "value": 8,
+      "toString": "CapsLock",
+      "tryParseCaseInsensitiveValue": 8,
+      "tryParseOk": true
+    },
+    {
+      "name": "Capital",
+      "value": 8,
+      "toString": "CapsLock",
+      "tryParseCaseInsensitiveValue": 8,
+      "tryParseOk": true
+    },
+    {
+      "name": "HangulMode",
+      "value": 9,
+      "toString": "HangulMode",
+      "tryParseCaseInsensitiveValue": 9,
+      "tryParseOk": true
+    },
+    {
+      "name": "KanaMode",
+      "value": 9,
+      "toString": "HangulMode",
+      "tryParseCaseInsensitiveValue": 9,
+      "tryParseOk": true
+    },
+    {
+      "name": "JunjaMode",
+      "value": 10,
+      "toString": "JunjaMode",
+      "tryParseCaseInsensitiveValue": 10,
+      "tryParseOk": true
+    },
+    {
+      "name": "FinalMode",
+      "value": 11,
+      "toString": "FinalMode",
+      "tryParseCaseInsensitiveValue": 11,
+      "tryParseOk": true
+    },
+    {
+      "name": "KanjiMode",
+      "value": 12,
+      "toString": "HanjaMode",
+      "tryParseCaseInsensitiveValue": 12,
+      "tryParseOk": true
+    },
+    {
+      "name": "HanjaMode",
+      "value": 12,
+      "toString": "HanjaMode",
+      "tryParseCaseInsensitiveValue": 12,
+      "tryParseOk": true
+    },
+    {
+      "name": "Escape",
+      "value": 13,
+      "toString": "Escape",
+      "tryParseCaseInsensitiveValue": 13,
+      "tryParseOk": true
+    },
+    {
+      "name": "ImeConvert",
+      "value": 14,
+      "toString": "ImeConvert",
+      "tryParseCaseInsensitiveValue": 14,
+      "tryParseOk": true
+    },
+    {
+      "name": "ImeNonConvert",
+      "value": 15,
+      "toString": "ImeNonConvert",
+      "tryParseCaseInsensitiveValue": 15,
+      "tryParseOk": true
+    },
+    {
+      "name": "ImeAccept",
+      "value": 16,
+      "toString": "ImeAccept",
+      "tryParseCaseInsensitiveValue": 16,
+      "tryParseOk": true
+    },
+    {
+      "name": "ImeModeChange",
+      "value": 17,
+      "toString": "ImeModeChange",
+      "tryParseCaseInsensitiveValue": 17,
+      "tryParseOk": true
+    },
+    {
+      "name": "Space",
+      "value": 18,
+      "toString": "Space",
+      "tryParseCaseInsensitiveValue": 18,
+      "tryParseOk": true
+    },
+    {
+      "name": "PageUp",
+      "value": 19,
+      "toString": "PageUp",
+      "tryParseCaseInsensitiveValue": 19,
+      "tryParseOk": true
+    },
+    {
+      "name": "Prior",
+      "value": 19,
+      "toString": "PageUp",
+      "tryParseCaseInsensitiveValue": 19,
+      "tryParseOk": true
+    },
+    {
+      "name": "PageDown",
+      "value": 20,
+      "toString": "PageDown",
+      "tryParseCaseInsensitiveValue": 20,
+      "tryParseOk": true
+    },
+    {
+      "name": "Next",
+      "value": 20,
+      "toString": "PageDown",
+      "tryParseCaseInsensitiveValue": 20,
+      "tryParseOk": true
+    },
+    {
+      "name": "End",
+      "value": 21,
+      "toString": "End",
+      "tryParseCaseInsensitiveValue": 21,
+      "tryParseOk": true
+    },
+    {
+      "name": "Home",
+      "value": 22,
+      "toString": "Home",
+      "tryParseCaseInsensitiveValue": 22,
+      "tryParseOk": true
+    },
+    {
+      "name": "Left",
+      "value": 23,
+      "toString": "Left",
+      "tryParseCaseInsensitiveValue": 23,
+      "tryParseOk": true
+    },
+    {
+      "name": "Up",
+      "value": 24,
+      "toString": "Up",
+      "tryParseCaseInsensitiveValue": 24,
+      "tryParseOk": true
+    },
+    {
+      "name": "Right",
+      "value": 25,
+      "toString": "Right",
+      "tryParseCaseInsensitiveValue": 25,
+      "tryParseOk": true
+    },
+    {
+      "name": "Down",
+      "value": 26,
+      "toString": "Down",
+      "tryParseCaseInsensitiveValue": 26,
+      "tryParseOk": true
+    },
+    {
+      "name": "Select",
+      "value": 27,
+      "toString": "Select",
+      "tryParseCaseInsensitiveValue": 27,
+      "tryParseOk": true
+    },
+    {
+      "name": "Print",
+      "value": 28,
+      "toString": "Print",
+      "tryParseCaseInsensitiveValue": 28,
+      "tryParseOk": true
+    },
+    {
+      "name": "Execute",
+      "value": 29,
+      "toString": "Execute",
+      "tryParseCaseInsensitiveValue": 29,
+      "tryParseOk": true
+    },
+    {
+      "name": "Snapshot",
+      "value": 30,
+      "toString": "PrintScreen",
+      "tryParseCaseInsensitiveValue": 30,
+      "tryParseOk": true
+    },
+    {
+      "name": "PrintScreen",
+      "value": 30,
+      "toString": "PrintScreen",
+      "tryParseCaseInsensitiveValue": 30,
+      "tryParseOk": true
+    },
+    {
+      "name": "Insert",
+      "value": 31,
+      "toString": "Insert",
+      "tryParseCaseInsensitiveValue": 31,
+      "tryParseOk": true
+    },
+    {
+      "name": "Delete",
+      "value": 32,
+      "toString": "Delete",
+      "tryParseCaseInsensitiveValue": 32,
+      "tryParseOk": true
+    },
+    {
+      "name": "Help",
+      "value": 33,
+      "toString": "Help",
+      "tryParseCaseInsensitiveValue": 33,
+      "tryParseOk": true
+    },
+    {
+      "name": "D0",
+      "value": 34,
+      "toString": "D0",
+      "tryParseCaseInsensitiveValue": 34,
+      "tryParseOk": true
+    },
+    {
+      "name": "D1",
+      "value": 35,
+      "toString": "D1",
+      "tryParseCaseInsensitiveValue": 35,
+      "tryParseOk": true
+    },
+    {
+      "name": "D2",
+      "value": 36,
+      "toString": "D2",
+      "tryParseCaseInsensitiveValue": 36,
+      "tryParseOk": true
+    },
+    {
+      "name": "D3",
+      "value": 37,
+      "toString": "D3",
+      "tryParseCaseInsensitiveValue": 37,
+      "tryParseOk": true
+    },
+    {
+      "name": "D4",
+      "value": 38,
+      "toString": "D4",
+      "tryParseCaseInsensitiveValue": 38,
+      "tryParseOk": true
+    },
+    {
+      "name": "D5",
+      "value": 39,
+      "toString": "D5",
+      "tryParseCaseInsensitiveValue": 39,
+      "tryParseOk": true
+    },
+    {
+      "name": "D6",
+      "value": 40,
+      "toString": "D6",
+      "tryParseCaseInsensitiveValue": 40,
+      "tryParseOk": true
+    },
+    {
+      "name": "D7",
+      "value": 41,
+      "toString": "D7",
+      "tryParseCaseInsensitiveValue": 41,
+      "tryParseOk": true
+    },
+    {
+      "name": "D8",
+      "value": 42,
+      "toString": "D8",
+      "tryParseCaseInsensitiveValue": 42,
+      "tryParseOk": true
+    },
+    {
+      "name": "D9",
+      "value": 43,
+      "toString": "D9",
+      "tryParseCaseInsensitiveValue": 43,
+      "tryParseOk": true
+    },
+    {
+      "name": "A",
+      "value": 44,
+      "toString": "A",
+      "tryParseCaseInsensitiveValue": 44,
+      "tryParseOk": true
+    },
+    {
+      "name": "B",
+      "value": 45,
+      "toString": "B",
+      "tryParseCaseInsensitiveValue": 45,
+      "tryParseOk": true
+    },
+    {
+      "name": "C",
+      "value": 46,
+      "toString": "C",
+      "tryParseCaseInsensitiveValue": 46,
+      "tryParseOk": true
+    },
+    {
+      "name": "D",
+      "value": 47,
+      "toString": "D",
+      "tryParseCaseInsensitiveValue": 47,
+      "tryParseOk": true
+    },
+    {
+      "name": "E",
+      "value": 48,
+      "toString": "E",
+      "tryParseCaseInsensitiveValue": 48,
+      "tryParseOk": true
+    },
+    {
+      "name": "F",
+      "value": 49,
+      "toString": "F",
+      "tryParseCaseInsensitiveValue": 49,
+      "tryParseOk": true
+    },
+    {
+      "name": "G",
+      "value": 50,
+      "toString": "G",
+      "tryParseCaseInsensitiveValue": 50,
+      "tryParseOk": true
+    },
+    {
+      "name": "H",
+      "value": 51,
+      "toString": "H",
+      "tryParseCaseInsensitiveValue": 51,
+      "tryParseOk": true
+    },
+    {
+      "name": "I",
+      "value": 52,
+      "toString": "I",
+      "tryParseCaseInsensitiveValue": 52,
+      "tryParseOk": true
+    },
+    {
+      "name": "J",
+      "value": 53,
+      "toString": "J",
+      "tryParseCaseInsensitiveValue": 53,
+      "tryParseOk": true
+    },
+    {
+      "name": "K",
+      "value": 54,
+      "toString": "K",
+      "tryParseCaseInsensitiveValue": 54,
+      "tryParseOk": true
+    },
+    {
+      "name": "L",
+      "value": 55,
+      "toString": "L",
+      "tryParseCaseInsensitiveValue": 55,
+      "tryParseOk": true
+    },
+    {
+      "name": "M",
+      "value": 56,
+      "toString": "M",
+      "tryParseCaseInsensitiveValue": 56,
+      "tryParseOk": true
+    },
+    {
+      "name": "N",
+      "value": 57,
+      "toString": "N",
+      "tryParseCaseInsensitiveValue": 57,
+      "tryParseOk": true
+    },
+    {
+      "name": "O",
+      "value": 58,
+      "toString": "O",
+      "tryParseCaseInsensitiveValue": 58,
+      "tryParseOk": true
+    },
+    {
+      "name": "P",
+      "value": 59,
+      "toString": "P",
+      "tryParseCaseInsensitiveValue": 59,
+      "tryParseOk": true
+    },
+    {
+      "name": "Q",
+      "value": 60,
+      "toString": "Q",
+      "tryParseCaseInsensitiveValue": 60,
+      "tryParseOk": true
+    },
+    {
+      "name": "R",
+      "value": 61,
+      "toString": "R",
+      "tryParseCaseInsensitiveValue": 61,
+      "tryParseOk": true
+    },
+    {
+      "name": "S",
+      "value": 62,
+      "toString": "S",
+      "tryParseCaseInsensitiveValue": 62,
+      "tryParseOk": true
+    },
+    {
+      "name": "T",
+      "value": 63,
+      "toString": "T",
+      "tryParseCaseInsensitiveValue": 63,
+      "tryParseOk": true
+    },
+    {
+      "name": "U",
+      "value": 64,
+      "toString": "U",
+      "tryParseCaseInsensitiveValue": 64,
+      "tryParseOk": true
+    },
+    {
+      "name": "V",
+      "value": 65,
+      "toString": "V",
+      "tryParseCaseInsensitiveValue": 65,
+      "tryParseOk": true
+    },
+    {
+      "name": "W",
+      "value": 66,
+      "toString": "W",
+      "tryParseCaseInsensitiveValue": 66,
+      "tryParseOk": true
+    },
+    {
+      "name": "X",
+      "value": 67,
+      "toString": "X",
+      "tryParseCaseInsensitiveValue": 67,
+      "tryParseOk": true
+    },
+    {
+      "name": "Y",
+      "value": 68,
+      "toString": "Y",
+      "tryParseCaseInsensitiveValue": 68,
+      "tryParseOk": true
+    },
+    {
+      "name": "Z",
+      "value": 69,
+      "toString": "Z",
+      "tryParseCaseInsensitiveValue": 69,
+      "tryParseOk": true
+    },
+    {
+      "name": "LWin",
+      "value": 70,
+      "toString": "LWin",
+      "tryParseCaseInsensitiveValue": 70,
+      "tryParseOk": true
+    },
+    {
+      "name": "RWin",
+      "value": 71,
+      "toString": "RWin",
+      "tryParseCaseInsensitiveValue": 71,
+      "tryParseOk": true
+    },
+    {
+      "name": "Apps",
+      "value": 72,
+      "toString": "Apps",
+      "tryParseCaseInsensitiveValue": 72,
+      "tryParseOk": true
+    },
+    {
+      "name": "Sleep",
+      "value": 73,
+      "toString": "Sleep",
+      "tryParseCaseInsensitiveValue": 73,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad0",
+      "value": 74,
+      "toString": "NumPad0",
+      "tryParseCaseInsensitiveValue": 74,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad1",
+      "value": 75,
+      "toString": "NumPad1",
+      "tryParseCaseInsensitiveValue": 75,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad2",
+      "value": 76,
+      "toString": "NumPad2",
+      "tryParseCaseInsensitiveValue": 76,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad3",
+      "value": 77,
+      "toString": "NumPad3",
+      "tryParseCaseInsensitiveValue": 77,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad4",
+      "value": 78,
+      "toString": "NumPad4",
+      "tryParseCaseInsensitiveValue": 78,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad5",
+      "value": 79,
+      "toString": "NumPad5",
+      "tryParseCaseInsensitiveValue": 79,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad6",
+      "value": 80,
+      "toString": "NumPad6",
+      "tryParseCaseInsensitiveValue": 80,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad7",
+      "value": 81,
+      "toString": "NumPad7",
+      "tryParseCaseInsensitiveValue": 81,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad8",
+      "value": 82,
+      "toString": "NumPad8",
+      "tryParseCaseInsensitiveValue": 82,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumPad9",
+      "value": 83,
+      "toString": "NumPad9",
+      "tryParseCaseInsensitiveValue": 83,
+      "tryParseOk": true
+    },
+    {
+      "name": "Multiply",
+      "value": 84,
+      "toString": "Multiply",
+      "tryParseCaseInsensitiveValue": 84,
+      "tryParseOk": true
+    },
+    {
+      "name": "Add",
+      "value": 85,
+      "toString": "Add",
+      "tryParseCaseInsensitiveValue": 85,
+      "tryParseOk": true
+    },
+    {
+      "name": "Separator",
+      "value": 86,
+      "toString": "Separator",
+      "tryParseCaseInsensitiveValue": 86,
+      "tryParseOk": true
+    },
+    {
+      "name": "Subtract",
+      "value": 87,
+      "toString": "Subtract",
+      "tryParseCaseInsensitiveValue": 87,
+      "tryParseOk": true
+    },
+    {
+      "name": "Decimal",
+      "value": 88,
+      "toString": "Decimal",
+      "tryParseCaseInsensitiveValue": 88,
+      "tryParseOk": true
+    },
+    {
+      "name": "Divide",
+      "value": 89,
+      "toString": "Divide",
+      "tryParseCaseInsensitiveValue": 89,
+      "tryParseOk": true
+    },
+    {
+      "name": "F1",
+      "value": 90,
+      "toString": "F1",
+      "tryParseCaseInsensitiveValue": 90,
+      "tryParseOk": true
+    },
+    {
+      "name": "F2",
+      "value": 91,
+      "toString": "F2",
+      "tryParseCaseInsensitiveValue": 91,
+      "tryParseOk": true
+    },
+    {
+      "name": "F3",
+      "value": 92,
+      "toString": "F3",
+      "tryParseCaseInsensitiveValue": 92,
+      "tryParseOk": true
+    },
+    {
+      "name": "F4",
+      "value": 93,
+      "toString": "F4",
+      "tryParseCaseInsensitiveValue": 93,
+      "tryParseOk": true
+    },
+    {
+      "name": "F5",
+      "value": 94,
+      "toString": "F5",
+      "tryParseCaseInsensitiveValue": 94,
+      "tryParseOk": true
+    },
+    {
+      "name": "F6",
+      "value": 95,
+      "toString": "F6",
+      "tryParseCaseInsensitiveValue": 95,
+      "tryParseOk": true
+    },
+    {
+      "name": "F7",
+      "value": 96,
+      "toString": "F7",
+      "tryParseCaseInsensitiveValue": 96,
+      "tryParseOk": true
+    },
+    {
+      "name": "F8",
+      "value": 97,
+      "toString": "F8",
+      "tryParseCaseInsensitiveValue": 97,
+      "tryParseOk": true
+    },
+    {
+      "name": "F9",
+      "value": 98,
+      "toString": "F9",
+      "tryParseCaseInsensitiveValue": 98,
+      "tryParseOk": true
+    },
+    {
+      "name": "F10",
+      "value": 99,
+      "toString": "F10",
+      "tryParseCaseInsensitiveValue": 99,
+      "tryParseOk": true
+    },
+    {
+      "name": "F11",
+      "value": 100,
+      "toString": "F11",
+      "tryParseCaseInsensitiveValue": 100,
+      "tryParseOk": true
+    },
+    {
+      "name": "F12",
+      "value": 101,
+      "toString": "F12",
+      "tryParseCaseInsensitiveValue": 101,
+      "tryParseOk": true
+    },
+    {
+      "name": "F13",
+      "value": 102,
+      "toString": "F13",
+      "tryParseCaseInsensitiveValue": 102,
+      "tryParseOk": true
+    },
+    {
+      "name": "F14",
+      "value": 103,
+      "toString": "F14",
+      "tryParseCaseInsensitiveValue": 103,
+      "tryParseOk": true
+    },
+    {
+      "name": "F15",
+      "value": 104,
+      "toString": "F15",
+      "tryParseCaseInsensitiveValue": 104,
+      "tryParseOk": true
+    },
+    {
+      "name": "F16",
+      "value": 105,
+      "toString": "F16",
+      "tryParseCaseInsensitiveValue": 105,
+      "tryParseOk": true
+    },
+    {
+      "name": "F17",
+      "value": 106,
+      "toString": "F17",
+      "tryParseCaseInsensitiveValue": 106,
+      "tryParseOk": true
+    },
+    {
+      "name": "F18",
+      "value": 107,
+      "toString": "F18",
+      "tryParseCaseInsensitiveValue": 107,
+      "tryParseOk": true
+    },
+    {
+      "name": "F19",
+      "value": 108,
+      "toString": "F19",
+      "tryParseCaseInsensitiveValue": 108,
+      "tryParseOk": true
+    },
+    {
+      "name": "F20",
+      "value": 109,
+      "toString": "F20",
+      "tryParseCaseInsensitiveValue": 109,
+      "tryParseOk": true
+    },
+    {
+      "name": "F21",
+      "value": 110,
+      "toString": "F21",
+      "tryParseCaseInsensitiveValue": 110,
+      "tryParseOk": true
+    },
+    {
+      "name": "F22",
+      "value": 111,
+      "toString": "F22",
+      "tryParseCaseInsensitiveValue": 111,
+      "tryParseOk": true
+    },
+    {
+      "name": "F23",
+      "value": 112,
+      "toString": "F23",
+      "tryParseCaseInsensitiveValue": 112,
+      "tryParseOk": true
+    },
+    {
+      "name": "F24",
+      "value": 113,
+      "toString": "F24",
+      "tryParseCaseInsensitiveValue": 113,
+      "tryParseOk": true
+    },
+    {
+      "name": "NumLock",
+      "value": 114,
+      "toString": "NumLock",
+      "tryParseCaseInsensitiveValue": 114,
+      "tryParseOk": true
+    },
+    {
+      "name": "Scroll",
+      "value": 115,
+      "toString": "Scroll",
+      "tryParseCaseInsensitiveValue": 115,
+      "tryParseOk": true
+    },
+    {
+      "name": "LeftShift",
+      "value": 116,
+      "toString": "LeftShift",
+      "tryParseCaseInsensitiveValue": 116,
+      "tryParseOk": true
+    },
+    {
+      "name": "RightShift",
+      "value": 117,
+      "toString": "RightShift",
+      "tryParseCaseInsensitiveValue": 117,
+      "tryParseOk": true
+    },
+    {
+      "name": "LeftCtrl",
+      "value": 118,
+      "toString": "LeftCtrl",
+      "tryParseCaseInsensitiveValue": 118,
+      "tryParseOk": true
+    },
+    {
+      "name": "RightCtrl",
+      "value": 119,
+      "toString": "RightCtrl",
+      "tryParseCaseInsensitiveValue": 119,
+      "tryParseOk": true
+    },
+    {
+      "name": "LeftAlt",
+      "value": 120,
+      "toString": "LeftAlt",
+      "tryParseCaseInsensitiveValue": 120,
+      "tryParseOk": true
+    },
+    {
+      "name": "RightAlt",
+      "value": 121,
+      "toString": "RightAlt",
+      "tryParseCaseInsensitiveValue": 121,
+      "tryParseOk": true
+    },
+    {
+      "name": "BrowserBack",
+      "value": 122,
+      "toString": "BrowserBack",
+      "tryParseCaseInsensitiveValue": 122,
+      "tryParseOk": true
+    },
+    {
+      "name": "BrowserForward",
+      "value": 123,
+      "toString": "BrowserForward",
+      "tryParseCaseInsensitiveValue": 123,
+      "tryParseOk": true
+    },
+    {
+      "name": "BrowserRefresh",
+      "value": 124,
+      "toString": "BrowserRefresh",
+      "tryParseCaseInsensitiveValue": 124,
+      "tryParseOk": true
+    },
+    {
+      "name": "BrowserStop",
+      "value": 125,
+      "toString": "BrowserStop",
+      "tryParseCaseInsensitiveValue": 125,
+      "tryParseOk": true
+    },
+    {
+      "name": "BrowserSearch",
+      "value": 126,
+      "toString": "BrowserSearch",
+      "tryParseCaseInsensitiveValue": 126,
+      "tryParseOk": true
+    },
+    {
+      "name": "BrowserFavorites",
+      "value": 127,
+      "toString": "BrowserFavorites",
+      "tryParseCaseInsensitiveValue": 127,
+      "tryParseOk": true
+    },
+    {
+      "name": "BrowserHome",
+      "value": 128,
+      "toString": "BrowserHome",
+      "tryParseCaseInsensitiveValue": 128,
+      "tryParseOk": true
+    },
+    {
+      "name": "VolumeMute",
+      "value": 129,
+      "toString": "VolumeMute",
+      "tryParseCaseInsensitiveValue": 129,
+      "tryParseOk": true
+    },
+    {
+      "name": "VolumeDown",
+      "value": 130,
+      "toString": "VolumeDown",
+      "tryParseCaseInsensitiveValue": 130,
+      "tryParseOk": true
+    },
+    {
+      "name": "VolumeUp",
+      "value": 131,
+      "toString": "VolumeUp",
+      "tryParseCaseInsensitiveValue": 131,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaNextTrack",
+      "value": 132,
+      "toString": "MediaNextTrack",
+      "tryParseCaseInsensitiveValue": 132,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaPreviousTrack",
+      "value": 133,
+      "toString": "MediaPreviousTrack",
+      "tryParseCaseInsensitiveValue": 133,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaStop",
+      "value": 134,
+      "toString": "MediaStop",
+      "tryParseCaseInsensitiveValue": 134,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaPlayPause",
+      "value": 135,
+      "toString": "MediaPlayPause",
+      "tryParseCaseInsensitiveValue": 135,
+      "tryParseOk": true
+    },
+    {
+      "name": "LaunchMail",
+      "value": 136,
+      "toString": "LaunchMail",
+      "tryParseCaseInsensitiveValue": 136,
+      "tryParseOk": true
+    },
+    {
+      "name": "SelectMedia",
+      "value": 137,
+      "toString": "SelectMedia",
+      "tryParseCaseInsensitiveValue": 137,
+      "tryParseOk": true
+    },
+    {
+      "name": "LaunchApplication1",
+      "value": 138,
+      "toString": "LaunchApplication1",
+      "tryParseCaseInsensitiveValue": 138,
+      "tryParseOk": true
+    },
+    {
+      "name": "LaunchApplication2",
+      "value": 139,
+      "toString": "LaunchApplication2",
+      "tryParseCaseInsensitiveValue": 139,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemSemicolon",
+      "value": 140,
+      "toString": "OemSemicolon",
+      "tryParseCaseInsensitiveValue": 140,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem1",
+      "value": 140,
+      "toString": "OemSemicolon",
+      "tryParseCaseInsensitiveValue": 140,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemPlus",
+      "value": 141,
+      "toString": "OemPlus",
+      "tryParseCaseInsensitiveValue": 141,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemComma",
+      "value": 142,
+      "toString": "OemComma",
+      "tryParseCaseInsensitiveValue": 142,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemMinus",
+      "value": 143,
+      "toString": "OemMinus",
+      "tryParseCaseInsensitiveValue": 143,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemPeriod",
+      "value": 144,
+      "toString": "OemPeriod",
+      "tryParseCaseInsensitiveValue": 144,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemQuestion",
+      "value": 145,
+      "toString": "OemQuestion",
+      "tryParseCaseInsensitiveValue": 145,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem2",
+      "value": 145,
+      "toString": "OemQuestion",
+      "tryParseCaseInsensitiveValue": 145,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemTilde",
+      "value": 146,
+      "toString": "Oem3",
+      "tryParseCaseInsensitiveValue": 146,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem3",
+      "value": 146,
+      "toString": "Oem3",
+      "tryParseCaseInsensitiveValue": 146,
+      "tryParseOk": true
+    },
+    {
+      "name": "AbntC1",
+      "value": 147,
+      "toString": "AbntC1",
+      "tryParseCaseInsensitiveValue": 147,
+      "tryParseOk": true
+    },
+    {
+      "name": "AbntC2",
+      "value": 148,
+      "toString": "AbntC2",
+      "tryParseCaseInsensitiveValue": 148,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemOpenBrackets",
+      "value": 149,
+      "toString": "Oem4",
+      "tryParseCaseInsensitiveValue": 149,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem4",
+      "value": 149,
+      "toString": "Oem4",
+      "tryParseCaseInsensitiveValue": 149,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemPipe",
+      "value": 150,
+      "toString": "OemPipe",
+      "tryParseCaseInsensitiveValue": 150,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem5",
+      "value": 150,
+      "toString": "OemPipe",
+      "tryParseCaseInsensitiveValue": 150,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemCloseBrackets",
+      "value": 151,
+      "toString": "OemCloseBrackets",
+      "tryParseCaseInsensitiveValue": 151,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem6",
+      "value": 151,
+      "toString": "OemCloseBrackets",
+      "tryParseCaseInsensitiveValue": 151,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemQuotes",
+      "value": 152,
+      "toString": "OemQuotes",
+      "tryParseCaseInsensitiveValue": 152,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem7",
+      "value": 152,
+      "toString": "OemQuotes",
+      "tryParseCaseInsensitiveValue": 152,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem8",
+      "value": 153,
+      "toString": "Oem8",
+      "tryParseCaseInsensitiveValue": 153,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemBackslash",
+      "value": 154,
+      "toString": "OemBackslash",
+      "tryParseCaseInsensitiveValue": 154,
+      "tryParseOk": true
+    },
+    {
+      "name": "Oem102",
+      "value": 154,
+      "toString": "OemBackslash",
+      "tryParseCaseInsensitiveValue": 154,
+      "tryParseOk": true
+    },
+    {
+      "name": "ImeProcessed",
+      "value": 155,
+      "toString": "ImeProcessed",
+      "tryParseCaseInsensitiveValue": 155,
+      "tryParseOk": true
+    },
+    {
+      "name": "System",
+      "value": 156,
+      "toString": "System",
+      "tryParseCaseInsensitiveValue": 156,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemAttn",
+      "value": 157,
+      "toString": "OemAttn",
+      "tryParseCaseInsensitiveValue": 157,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeAlphanumeric",
+      "value": 157,
+      "toString": "OemAttn",
+      "tryParseCaseInsensitiveValue": 157,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemFinish",
+      "value": 158,
+      "toString": "OemFinish",
+      "tryParseCaseInsensitiveValue": 158,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeKatakana",
+      "value": 158,
+      "toString": "OemFinish",
+      "tryParseCaseInsensitiveValue": 158,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeHiragana",
+      "value": 159,
+      "toString": "OemCopy",
+      "tryParseCaseInsensitiveValue": 159,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemCopy",
+      "value": 159,
+      "toString": "OemCopy",
+      "tryParseCaseInsensitiveValue": 159,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeSbcsChar",
+      "value": 160,
+      "toString": "OemAuto",
+      "tryParseCaseInsensitiveValue": 160,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemAuto",
+      "value": 160,
+      "toString": "OemAuto",
+      "tryParseCaseInsensitiveValue": 160,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeDbcsChar",
+      "value": 161,
+      "toString": "OemEnlw",
+      "tryParseCaseInsensitiveValue": 161,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemEnlw",
+      "value": 161,
+      "toString": "OemEnlw",
+      "tryParseCaseInsensitiveValue": 161,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemBackTab",
+      "value": 162,
+      "toString": "OemBackTab",
+      "tryParseCaseInsensitiveValue": 162,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeRoman",
+      "value": 162,
+      "toString": "OemBackTab",
+      "tryParseCaseInsensitiveValue": 162,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeNoRoman",
+      "value": 163,
+      "toString": "DbeNoRoman",
+      "tryParseCaseInsensitiveValue": 163,
+      "tryParseOk": true
+    },
+    {
+      "name": "Attn",
+      "value": 163,
+      "toString": "DbeNoRoman",
+      "tryParseCaseInsensitiveValue": 163,
+      "tryParseOk": true
+    },
+    {
+      "name": "CrSel",
+      "value": 164,
+      "toString": "CrSel",
+      "tryParseCaseInsensitiveValue": 164,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeEnterWordRegisterMode",
+      "value": 164,
+      "toString": "CrSel",
+      "tryParseCaseInsensitiveValue": 164,
+      "tryParseOk": true
+    },
+    {
+      "name": "ExSel",
+      "value": 165,
+      "toString": "ExSel",
+      "tryParseCaseInsensitiveValue": 165,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeEnterImeConfigureMode",
+      "value": 165,
+      "toString": "ExSel",
+      "tryParseCaseInsensitiveValue": 165,
+      "tryParseOk": true
+    },
+    {
+      "name": "EraseEof",
+      "value": 166,
+      "toString": "DbeFlushString",
+      "tryParseCaseInsensitiveValue": 166,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeFlushString",
+      "value": 166,
+      "toString": "DbeFlushString",
+      "tryParseCaseInsensitiveValue": 166,
+      "tryParseOk": true
+    },
+    {
+      "name": "Play",
+      "value": 167,
+      "toString": "DbeCodeInput",
+      "tryParseCaseInsensitiveValue": 167,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeCodeInput",
+      "value": 167,
+      "toString": "DbeCodeInput",
+      "tryParseCaseInsensitiveValue": 167,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeNoCodeInput",
+      "value": 168,
+      "toString": "Zoom",
+      "tryParseCaseInsensitiveValue": 168,
+      "tryParseOk": true
+    },
+    {
+      "name": "Zoom",
+      "value": 168,
+      "toString": "Zoom",
+      "tryParseCaseInsensitiveValue": 168,
+      "tryParseOk": true
+    },
+    {
+      "name": "NoName",
+      "value": 169,
+      "toString": "NoName",
+      "tryParseCaseInsensitiveValue": 169,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeDetermineString",
+      "value": 169,
+      "toString": "NoName",
+      "tryParseCaseInsensitiveValue": 169,
+      "tryParseOk": true
+    },
+    {
+      "name": "DbeEnterDialogConversionMode",
+      "value": 170,
+      "toString": "DbeEnterDialogConversionMode",
+      "tryParseCaseInsensitiveValue": 170,
+      "tryParseOk": true
+    },
+    {
+      "name": "Pa1",
+      "value": 170,
+      "toString": "DbeEnterDialogConversionMode",
+      "tryParseCaseInsensitiveValue": 170,
+      "tryParseOk": true
+    },
+    {
+      "name": "OemClear",
+      "value": 171,
+      "toString": "OemClear",
+      "tryParseCaseInsensitiveValue": 171,
+      "tryParseOk": true
+    },
+    {
+      "name": "DeadCharProcessed",
+      "value": 172,
+      "toString": "DeadCharProcessed",
+      "tryParseCaseInsensitiveValue": 172,
+      "tryParseOk": true
+    },
+    {
+      "name": "FnLeftArrow",
+      "value": 10001,
+      "toString": "FnLeftArrow",
+      "tryParseCaseInsensitiveValue": 10001,
+      "tryParseOk": true
+    },
+    {
+      "name": "FnRightArrow",
+      "value": 10002,
+      "toString": "FnRightArrow",
+      "tryParseCaseInsensitiveValue": 10002,
+      "tryParseOk": true
+    },
+    {
+      "name": "FnUpArrow",
+      "value": 10003,
+      "toString": "FnUpArrow",
+      "tryParseCaseInsensitiveValue": 10003,
+      "tryParseOk": true
+    },
+    {
+      "name": "FnDownArrow",
+      "value": 10004,
+      "toString": "FnDownArrow",
+      "tryParseCaseInsensitiveValue": 10004,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaHome",
+      "value": 100000,
+      "toString": "MediaHome",
+      "tryParseCaseInsensitiveValue": 100000,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaChannelList",
+      "value": 100001,
+      "toString": "MediaChannelList",
+      "tryParseCaseInsensitiveValue": 100001,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaChannelRaise",
+      "value": 100002,
+      "toString": "MediaChannelRaise",
+      "tryParseCaseInsensitiveValue": 100002,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaChannelLower",
+      "value": 100003,
+      "toString": "MediaChannelLower",
+      "tryParseCaseInsensitiveValue": 100003,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaRecord",
+      "value": 100005,
+      "toString": "MediaRecord",
+      "tryParseCaseInsensitiveValue": 100005,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaRed",
+      "value": 100010,
+      "toString": "MediaRed",
+      "tryParseCaseInsensitiveValue": 100010,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaGreen",
+      "value": 100011,
+      "toString": "MediaGreen",
+      "tryParseCaseInsensitiveValue": 100011,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaYellow",
+      "value": 100012,
+      "toString": "MediaYellow",
+      "tryParseCaseInsensitiveValue": 100012,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaBlue",
+      "value": 100013,
+      "toString": "MediaBlue",
+      "tryParseCaseInsensitiveValue": 100013,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaMenu",
+      "value": 100020,
+      "toString": "MediaMenu",
+      "tryParseCaseInsensitiveValue": 100020,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaMore",
+      "value": 100021,
+      "toString": "MediaMore",
+      "tryParseCaseInsensitiveValue": 100021,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaOption",
+      "value": 100022,
+      "toString": "MediaOption",
+      "tryParseCaseInsensitiveValue": 100022,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaInfo",
+      "value": 100023,
+      "toString": "MediaInfo",
+      "tryParseCaseInsensitiveValue": 100023,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaSearch",
+      "value": 100024,
+      "toString": "MediaSearch",
+      "tryParseCaseInsensitiveValue": 100024,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaSubtitle",
+      "value": 100025,
+      "toString": "MediaSubtitle",
+      "tryParseCaseInsensitiveValue": 100025,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaTvGuide",
+      "value": 100026,
+      "toString": "MediaTvGuide",
+      "tryParseCaseInsensitiveValue": 100026,
+      "tryParseOk": true
+    },
+    {
+      "name": "MediaPreviousChannel",
+      "value": 100027,
+      "toString": "MediaPreviousChannel",
+      "tryParseCaseInsensitiveValue": 100027,
+      "tryParseOk": true
+    }
+  ],
+  "modifiers": [
+    {
+      "name": "None",
+      "value": 0,
+      "toString": "None"
+    },
+    {
+      "name": "Alt",
+      "value": 1,
+      "toString": "Alt"
+    },
+    {
+      "name": "Control",
+      "value": 2,
+      "toString": "Control"
+    },
+    {
+      "name": "Shift",
+      "value": 4,
+      "toString": "Shift"
+    },
+    {
+      "name": "Meta",
+      "value": 8,
+      "toString": "Meta"
+    }
+  ]
+}

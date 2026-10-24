@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using Avalonia.Input;
 using Avalonia.Media;
 using Clowd.Config;
 using Xunit;
@@ -37,7 +36,7 @@ namespace Clowd.Shared.Tests
 
             Assert.NotNull(loaded);
             Assert.True(loaded.General.ConfirmClose);
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot)), loaded.Hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen)), loaded.Hotkeys.CaptureRegionShortcut);
             Assert.Equal(Colors.Transparent, loaded.Editor.CanvasBackground);
             Assert.Equal(0.80, loaded.Capture.ObscuredWindowDetectionThreshold);
             Assert.True(loaded.Capture.RoundedWindowCorners);
@@ -92,8 +91,8 @@ namespace Clowd.Shared.Tests
             tool.FontFamily = "Consolas";
 
             // gestures: modified, and cleared (must NOT resurrect the compiled-in default)
-            original.Hotkeys.CaptureRegionShortcut = GestureList.Of(new SimpleKeyGesture(Key.S, KeyModifiers.Control | KeyModifiers.Shift));
-            original.Hotkeys.FileUploadShortcut = GestureList.Of(new SimpleKeyGesture(Key.F12, KeyModifiers.Alt));
+            original.Hotkeys.CaptureRegionShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.S, HotkeyModifiers.Control | HotkeyModifiers.Shift));
+            original.Hotkeys.FileUploadShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.F12, HotkeyModifiers.Alt));
             original.Hotkeys.CaptureFullscreenShortcut = GestureList.Empty; // default is Ctrl+PrtScr
 
             SettingsService.Save(original, _path);
@@ -139,12 +138,12 @@ namespace Clowd.Shared.Tests
             Assert.Equal(FontStretch.Condensed, loadedTool.FontStretch);
             Assert.Equal("Consolas", loadedTool.FontFamily);
 
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.S, KeyModifiers.Control | KeyModifiers.Shift)), loaded.Hotkeys.CaptureRegionShortcut);
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.F12, KeyModifiers.Alt)), loaded.Hotkeys.FileUploadShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.S, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.Hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.F12, HotkeyModifiers.Alt)), loaded.Hotkeys.FileUploadShortcut);
             Assert.Empty(loaded.Hotkeys.CaptureFullscreenShortcut);
 
             // untouched values still come back as defaults
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt)), loaded.Hotkeys.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), loaded.Hotkeys.CaptureActiveShortcut);
             Assert.True(loaded.Editor.RestoreSessionsOnClowdStart);
         }
 
@@ -550,10 +549,10 @@ namespace Clowd.Shared.Tests
         {
             var hotkeys = SettingsService.Load(_path).Hotkeys;
 
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot)), hotkeys.CaptureRegionShortcut);
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control)), hotkeys.CaptureFullscreenShortcut);
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt)), hotkeys.CaptureActiveShortcut);
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Shift)), hotkeys.StartStopRecordingShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen)), hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control)), hotkeys.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), hotkeys.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Shift)), hotkeys.StartStopRecordingShortcut);
 
             Assert.Empty(hotkeys.FileUploadShortcut);
             Assert.Empty(hotkeys.ClipboardUploadShortcut);
@@ -573,13 +572,13 @@ namespace Clowd.Shared.Tests
             // saved: these exact gestures, in this order, and no default in front of them.
             var original = new SettingsRoot();
             original.Hotkeys.CaptureRegionShortcut = GestureList.Of(
-                new SimpleKeyGesture(Key.D1, KeyModifiers.Control | KeyModifiers.Shift),
-                new SimpleKeyGesture(Key.Snapshot));
+                new HotkeyGesture(HotkeyKey.D1, HotkeyModifiers.Control | HotkeyModifiers.Shift),
+                new HotkeyGesture(HotkeyKey.PrintScreen));
             original.Hotkeys.ColorWheelShortcut = GestureList.Of(
-                new SimpleKeyGesture(Key.C, KeyModifiers.Control | KeyModifiers.Alt),
-                new SimpleKeyGesture(Key.F9));
-            original.Hotkeys.NewImageEditorShortcut = GestureList.Of(new SimpleKeyGesture(Key.I, KeyModifiers.Meta));
-            original.Hotkeys.NewVideoEditorShortcut = GestureList.Of(new SimpleKeyGesture(Key.V, KeyModifiers.Alt | KeyModifiers.Shift));
+                new HotkeyGesture(HotkeyKey.C, HotkeyModifiers.Control | HotkeyModifiers.Alt),
+                new HotkeyGesture(HotkeyKey.F9));
+            original.Hotkeys.NewImageEditorShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.I, HotkeyModifiers.Meta));
+            original.Hotkeys.NewVideoEditorShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.V, HotkeyModifiers.Alt | HotkeyModifiers.Shift));
 
             SettingsService.Save(original, _path);
             var loaded = SettingsService.Load(_path).Hotkeys;
@@ -633,12 +632,12 @@ namespace Clowd.Shared.Tests
 
             var loaded = SettingsService.Load(_path).Hotkeys;
 
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control)), loaded.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control)), loaded.CaptureRegionShortcut);
             Assert.Empty(loaded.CaptureFullscreenShortcut);
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.D, KeyModifiers.Control | KeyModifiers.Shift)), loaded.DrawOnScreenShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.DrawOnScreenShortcut);
 
             // absent from the old file: defaults, the new actions included
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt)), loaded.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), loaded.CaptureActiveShortcut);
             Assert.Empty(loaded.ColorWheelShortcut);
             Assert.Empty(loaded.NewVideoEditorShortcut);
         }
@@ -647,13 +646,13 @@ namespace Clowd.Shared.Tests
         public void GestureList_SerializedString_RoundTrips_AndParsesTolerantly()
         {
             var list = GestureList.Of(
-                new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control),
-                new SimpleKeyGesture(Key.F1, KeyModifiers.Alt | KeyModifiers.Shift));
+                new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control),
+                new HotkeyGesture(HotkeyKey.F1, HotkeyModifiers.Alt | HotkeyModifiers.Shift));
             Assert.Equal("Control+PrintScreen; Alt+Shift+F1", list.ToSerializedString());
             Assert.Equal(list, GestureList.Parse(list.ToSerializedString()));
             Assert.Equal("Ctrl+Del, Alt+Shift+F1", GestureList.Of(
-                new SimpleKeyGesture(Key.Delete, KeyModifiers.Control),
-                new SimpleKeyGesture(Key.F1, KeyModifiers.Alt | KeyModifiers.Shift)).ToString());
+                new HotkeyGesture(HotkeyKey.Delete, HotkeyModifiers.Control),
+                new HotkeyGesture(HotkeyKey.F1, HotkeyModifiers.Alt | HotkeyModifiers.Shift)).ToString());
 
             Assert.Equal("None", GestureList.Empty.ToSerializedString());
             Assert.Empty(GestureList.Parse("None"));
@@ -661,7 +660,7 @@ namespace Clowd.Shared.Tests
             Assert.Empty(GestureList.Parse(""));
 
             // an entry it cannot read is dropped, not the whole list; repeats and None collapse
-            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.A), new SimpleKeyGesture(Key.B)),
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.A), new HotkeyGesture(HotkeyKey.B)),
                 GestureList.Parse("A; NotAKey; None, A, B"));
 
             // lists written with the comma separator, before the switch to ';', still load
@@ -676,26 +675,26 @@ namespace Clowd.Shared.Tests
             // Enum.TryParse<Key>, which reads "PrintScreen, F9" as PrintScreen|F9 — a made-up key
             // it would register system-wide. That segment must fail to parse instead.
             var serialized = GestureList.Of(
-                new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control),
-                new SimpleKeyGesture(Key.F9)).ToSerializedString();
+                new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control),
+                new HotkeyGesture(HotkeyKey.F9)).ToSerializedString();
             var parts = serialized.Split('+');
 
-            Assert.False(Enum.TryParse<Key>(parts[^1], true, out _));
-            Assert.True(Enum.TryParse<Key>("PrintScreen, F9", true, out _)); // why ',' is not used
+            Assert.False(Enum.TryParse<Avalonia.Input.Key>(parts[^1], true, out _));
+            Assert.True(Enum.TryParse<Avalonia.Input.Key>("PrintScreen, F9", true, out _)); // why ',' is not used
         }
 
         [Fact]
         public void GestureList_Edits_KeepOrder_AndNeverHoldAGestureTwice()
         {
-            var a = new SimpleKeyGesture(Key.A);
-            var b = new SimpleKeyGesture(Key.B);
-            var c = new SimpleKeyGesture(Key.C);
+            var a = new HotkeyGesture(HotkeyKey.A);
+            var b = new HotkeyGesture(HotkeyKey.B);
+            var c = new HotkeyGesture(HotkeyKey.C);
             var list = GestureList.Of(a, b);
 
             Assert.Equal(GestureList.Of(a, b, c), list.Add(c));
             Assert.Same(list, list.Add(b)); // already there: a no-op
             Assert.Same(list, list.Add(null));
-            Assert.Same(list, list.Add(new SimpleKeyGesture(Key.None)));
+            Assert.Same(list, list.Add(new HotkeyGesture(HotkeyKey.None)));
 
             Assert.Equal(GestureList.Of(c, b), list.SetItem(0, c));
             Assert.Same(list, list.SetItem(0, b)); // held at another index: a no-op
@@ -713,19 +712,19 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void SimpleKeyGesture_SerializedString_RoundTrips()
+        public void HotkeyGesture_SerializedString_RoundTrips()
         {
-            // note: Key.Snapshot and Key.PrintScreen share a value — ToString() yields "PrintScreen",
-            // and both names parse back to the same key.
-            var gesture = new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control | KeyModifiers.Shift);
+            // note: "Snapshot" is an alias of PrintScreen (the two names shared a value in
+            // Avalonia's Key) — the canonical name is written, and both parse back to the same key.
+            var gesture = new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control | HotkeyModifiers.Shift);
             Assert.Equal("Control+Shift+PrintScreen", gesture.ToSerializedString());
-            Assert.Equal(gesture, SimpleKeyGesture.Parse(gesture.ToSerializedString()));
-            Assert.Equal(gesture, SimpleKeyGesture.Parse("Control+Shift+Snapshot"));
+            Assert.Equal(gesture, HotkeyGesture.Parse(gesture.ToSerializedString()));
+            Assert.Equal(gesture, HotkeyGesture.Parse("Control+Shift+Snapshot"));
 
-            Assert.Null(SimpleKeyGesture.Parse(null));
-            Assert.Null(SimpleKeyGesture.Parse(""));
-            Assert.Null(SimpleKeyGesture.Parse("NotAKey"));
-            Assert.Equal(new SimpleKeyGesture(Key.None), SimpleKeyGesture.Parse("None"));
+            Assert.Null(HotkeyGesture.Parse(null));
+            Assert.Null(HotkeyGesture.Parse(""));
+            Assert.Null(HotkeyGesture.Parse("NotAKey"));
+            Assert.Equal(new HotkeyGesture(HotkeyKey.None), HotkeyGesture.Parse("None"));
         }
     }
 }

@@ -627,6 +627,8 @@ namespace Clowd.UI
             // each flag is repeatable: one occurrence per gesture, in the action's own order, and
             // none at all for an action with no gestures. The capturer reports a status per
             // occurrence, echoing this exact string (CaptureStandbySupervisor.ApplyHotkeyStatus).
+            // Gestures travel in the settings form, which the capturer parses with the same
+            // clowd_hotkeys grammar: nothing is translated on the way.
             var hotkeys = root.Hotkeys;
             AddHotkeys("--hk-main", hotkeys.CaptureRegionShortcut);
             AddHotkeys("--hk-window", hotkeys.CaptureActiveShortcut);
@@ -638,7 +640,7 @@ namespace Clowd.UI
                 foreach (var gesture in gestures)
                 {
                     args.Add(flag);
-                    args.Add(gesture.ToCapturerString());
+                    args.Add(gesture.ToSerializedString());
                 }
             }
         }

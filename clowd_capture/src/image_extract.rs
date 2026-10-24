@@ -899,8 +899,8 @@ mod tests {
 
     fn opaque(w: u32, h: u32) -> Vec<u8> {
         let mut v = vec![0u8; (w * h * 4) as usize];
-        for px in v.chunks_exact_mut(4) {
-            px.copy_from_slice(&[10, 20, 30, 255]);
+        for px in v.as_chunks_mut::<4>().0 {
+            *px = [10, 20, 30, 255];
         }
         v
     }

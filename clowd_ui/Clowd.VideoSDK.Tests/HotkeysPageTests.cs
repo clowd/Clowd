@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
-using Avalonia.Input;
 using Clowd;
 using Clowd.Config;
 using Clowd.UI;
@@ -21,10 +20,10 @@ namespace Clowd.VideoSDK.Tests
     /// </summary>
     public class HotkeysPageTests
     {
-        private static readonly SimpleKeyGesture PrintScreen = new(Key.Snapshot);
-        private static readonly SimpleKeyGesture CtrlShift1 = new(Key.D1, KeyModifiers.Control | KeyModifiers.Shift);
-        private static readonly SimpleKeyGesture CtrlShift2 = new(Key.D2, KeyModifiers.Control | KeyModifiers.Shift);
-        private static readonly SimpleKeyGesture CtrlShift3 = new(Key.D3, KeyModifiers.Control | KeyModifiers.Shift);
+        private static readonly HotkeyGesture PrintScreen = new(HotkeyKey.PrintScreen);
+        private static readonly HotkeyGesture CtrlShift1 = new(HotkeyKey.D1, HotkeyModifiers.Control | HotkeyModifiers.Shift);
+        private static readonly HotkeyGesture CtrlShift2 = new(HotkeyKey.D2, HotkeyModifiers.Control | HotkeyModifiers.Shift);
+        private static readonly HotkeyGesture CtrlShift3 = new(HotkeyKey.D3, HotkeyModifiers.Control | HotkeyModifiers.Shift);
 
         // ---- layout ----
 
@@ -307,11 +306,12 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>Registers nothing for real: every registration succeeds.</summary>
         private sealed class FakeHost : IGlobalTriggerHost
         {
-            public bool IsPaused { get; set; }
-
-            public IGlobalTriggerRegistration RegisterTrigger(SimpleKeyGesture gesture, Action executed) => new Registration();
+            public IGlobalTriggerRegistration RegisterTrigger(HotkeyGesture gesture, Action executed, bool fireOnRepeat = false) => new Registration();
 
             public IDisposable ObserveKeys(Action<GlobalKeyEvent> observer) => throw new NotSupportedException();
+
+            public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, out string error) =>
+                throw new NotSupportedException();
 
             private sealed class Registration : IGlobalTriggerRegistration
             {

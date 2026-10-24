@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Avalonia.Input;
 
 namespace Clowd.Config
 {
@@ -113,10 +112,10 @@ namespace Clowd.Config
 
         private GestureList _fileUploadShortcut = GestureList.Empty;
         private GestureList _clipboardUploadShortcut = GestureList.Empty;
-        private GestureList _captureRegionShortcut = GestureList.Of(new SimpleKeyGesture(Key.Snapshot));
-        private GestureList _captureFullscreenShortcut = GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control));
-        private GestureList _captureActiveShortcut = GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt));
-        private GestureList _startStopRecordingShortcut = GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Shift));
+        private GestureList _captureRegionShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen));
+        private GestureList _captureFullscreenShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control));
+        private GestureList _captureActiveShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt));
+        private GestureList _startStopRecordingShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Shift));
 
         // No default, on purpose: PrintScreen with no modifier, Ctrl, Alt and Shift are all already
         // spoken for by the four above, and the remaining combinations (Ctrl+Shift, Ctrl+Alt, …) are

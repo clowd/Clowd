@@ -16,7 +16,7 @@ namespace Clowd.UI
     /// Runs the capturer in its lightweight hotkey-waiting standby mode (CAPTURE_PROTOCOL.md).
     /// Exists only while warm capture is in effect: created and disposed by
     /// <c>App.ConfigureCaptureHotkeys</c>, which owns the choice between this and the classic
-    /// SharpHook + one-shot path. When standby cannot work — missing permission or binary,
+    /// in-process hotkeys + one-shot path. When standby cannot work — missing permission or binary,
     /// permission-revoked exit, repeated crashes — the supervisor calls the fallback delegate
     /// exactly once and stops; the shell then reverts to one-shot capture for the rest of its
     /// process lifetime without touching the saved setting.
@@ -44,6 +44,11 @@ namespace Clowd.UI
         private static readonly TimeSpan OverlayHangTimeout = TimeSpan.FromMinutes(30);
 
         private static CaptureStandbySupervisor _current;
+
+        // whether the standby capturer's hook should be paused: true while the shell records a
+        // gesture (HotkeyManager.IsRecording), so the combination being recorded is not caught
+        // there as well. Re-sent after every READY, since a restarted capturer starts unpaused.
+        private static volatile bool s_hotkeysPaused;
 
         /// <summary>True while the standby capturer's overlay is on screen (or an accepted
         /// request is about to put it there) — merged into ScreenCapturePage.IsCaptureActive
@@ -216,7 +221,11 @@ namespace Clowd.UI
                             Volatile.Write(ref _ready, 1);
                             // off the reader thread: writing stdin from the stdout loop is the
                             // classic bidirectional-pipe deadlock shape
-                            _ = Task.Run(() => SendSettings(force: true));
+                            _ = Task.Run(() =>
+                            {
+                                SendSettings(force: true);
+                                SendPause();
+                            });
                         }
                         else if (line.StartsWith(SessionPrefix, StringComparison.Ordinal))
                         {
@@ -441,6 +450,27 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to parse standby hotkey status: " + ex);
+            }
+        }
+
+        /// <summary>Pauses or resumes the standby capturer's hotkeys (best-effort: a capturer that
+        /// is busy or restarting gets the current value with its next READY). Any thread.</summary>
+        public static void SetHotkeysPaused(bool paused)
+        {
+            s_hotkeysPaused = paused;
+            Volatile.Read(ref _current)?.SendPause();
+        }
+
+        private void SendPause()
+        {
+            try
+            {
+                lock (_stdinGate)
+                    SendLocked(JsonSerializer.Serialize(new { type = "pause", paused = s_hotkeysPaused }));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to send standby pause: " + ex);
             }
         }
 

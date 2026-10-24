@@ -1,5 +1,4 @@
 using System;
-using Avalonia.Input;
 
 namespace Clowd.UI.Config
 {
@@ -10,9 +9,9 @@ namespace Clowd.UI.Config
     /// </summary>
     /// <remarks>
     /// While a shortcut is being re-recorded the action holds <see cref="Listening"/>, which is
-    /// the saved list without that gesture: the hotkey pause only silences the in-process hook,
-    /// and the standby capturer would otherwise still catch the old combination — the one the
-    /// user is most likely to press again. The gesture comes back on cancel, or is replaced in
+    /// the saved list without that gesture: the standby capturer's own hook is only paused for
+    /// the recording on a best-effort basis (a message over its stdin), and would otherwise still
+    /// catch the old combination — the one the user is most likely to press again. The gesture comes back on cancel, or is replaced in
     /// its old position on commit, so the order the user built up survives a re-recording.
     /// </remarks>
     public sealed class GestureListEdit
@@ -54,9 +53,9 @@ namespace Clowd.UI.Config
         /// one is a cancel. Taking the gesture from another action is the assignment's business
         /// (<see cref="HotkeyEntry.Gestures"/>), not this list's.
         /// </summary>
-        public GestureList Commit(SimpleKeyGesture gesture)
+        public GestureList Commit(HotkeyGesture gesture)
         {
-            if (gesture == null || gesture.Key == Key.None)
+            if (gesture == null || gesture.Key == HotkeyKey.None)
                 return Saved;
 
             return ReplacedIndex is int index ? Saved.SetItem(index, gesture) : Saved.Add(gesture);

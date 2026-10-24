@@ -31,7 +31,7 @@ namespace Clowd.UI
     /// </summary>
     public sealed class HotkeyShortcut : SimpleNotifyObject
     {
-        public SimpleKeyGesture Gesture { get; }
+        public HotkeyGesture Gesture { get; }
 
         /// <summary>True while the gesture is actually hooked and will fire the action.</summary>
         public bool IsRegistered
@@ -54,7 +54,7 @@ namespace Clowd.UI
         private bool _isRegistered;
         private string _error = "";
 
-        internal HotkeyShortcut(SimpleKeyGesture gesture)
+        internal HotkeyShortcut(HotkeyGesture gesture)
         {
             Gesture = gesture;
         }
@@ -123,7 +123,7 @@ namespace Clowd.UI
 
         /// <summary>The first gesture that is actually registered — what the tray menu shows beside
         /// the action — or null when none is.</summary>
-        public SimpleKeyGesture FirstRegisteredGesture => _shortcuts.FirstOrDefault(s => s.IsRegistered)?.Gesture;
+        public HotkeyGesture FirstRegisteredGesture => _shortcuts.FirstOrDefault(s => s.IsRegistered)?.Gesture;
 
         /// <summary>False while the action's feature is switched off (see
         /// <see cref="HotkeyManager.SetEnabled"/>): its gestures are kept but none is registered.</summary>
@@ -150,13 +150,13 @@ namespace Clowd.UI
         /// <summary>Appends <paramref name="gesture"/>, taking it from whichever other action held
         /// it (hidden, feature-switched rows included — it would otherwise collide the moment the
         /// feature came back). A no-op when this action already has it.</summary>
-        public void AddGesture(SimpleKeyGesture gesture) => Gestures = Gestures.Add(gesture);
+        public void AddGesture(HotkeyGesture gesture) => Gestures = Gestures.Add(gesture);
 
         /// <summary>Replaces the gesture at <paramref name="index"/> in place, taking the new one from
         /// any other action as <see cref="AddGesture"/> does. A no-op when this action already holds
-        /// <paramref name="gesture"/> at any index; a null or <see cref="Avalonia.Input.Key.None"/>
+        /// <paramref name="gesture"/> at any index; a null or <see cref="HotkeyKey.None"/>
         /// gesture removes the one at <paramref name="index"/>.</summary>
-        public void ReplaceGesture(int index, SimpleKeyGesture gesture) => Gestures = Gestures.SetItem(index, gesture);
+        public void ReplaceGesture(int index, HotkeyGesture gesture) => Gestures = Gestures.SetItem(index, gesture);
 
         public void RemoveGestureAt(int index) => Gestures = Gestures.RemoveAt(index);
 
@@ -217,22 +217,23 @@ namespace Clowd.UI
 
         public IReadOnlyList<HotkeyEntry> Entries => _entries;
 
-        /// <summary>While true, hotkeys neither fire nor swallow key presses (gesture editing).</summary>
-        public bool IsPaused
-        {
-            get => _host.IsPaused;
-            set => _host.IsPaused = value;
-        }
-
         /// <summary>The OS backend, for features that listen for a fixed key of their own rather
         /// than a user-configurable gesture (the video editor's media keys). Registrations made
-        /// through it share this manager's <see cref="IsPaused"/> state and the same hook.</summary>
+        /// through it share the same hook, and like every hotkey stay silent while a gesture is
+        /// being recorded.</summary>
         public IGlobalTriggerHost Host => _host;
 
+        /// <summary>True while a gesture is being recorded (<see cref="StartRecording"/>).</summary>
+        public bool IsRecording => _recording != null;
+
+        /// <summary>Raised on the UI thread after <see cref="IsRecording"/> changes, both ways (the
+        /// App pauses the standby capturer's hook with it).</summary>
+        public event EventHandler RecordingChanged;
+
         /// <summary>Raised whenever any action's gestures or any gesture's registration status
-        /// change — the latter possibly long after the change that caused it (the SharpHook hook
-        /// failing to start, the standby capturer reporting back). Raised on the thread that made
-        /// the change, which is the UI thread in the app.</summary>
+        /// change — the latter possibly long after the change that caused it (the hook failing to
+        /// start, the standby capturer reporting back). Raised on the thread that made the change,
+        /// which is the UI thread in the app.</summary>
         public event EventHandler Changed;
 
         private readonly IGlobalTriggerHost _host;
@@ -240,6 +241,7 @@ namespace Clowd.UI
         private readonly List<HotkeyEntry> _entries;
         private readonly Dictionary<HotkeyId, Action> _actions = new();
         private readonly HashSet<HotkeyId> _switchedOff = new();
+        private RecordingSession _recording;
         private bool _disposed;
 
         public HotkeyManager(IGlobalTriggerHost host, SettingsHotkey settings)
@@ -320,9 +322,46 @@ namespace Clowd.UI
         }
 
         /// <summary>
+        /// Records one gesture through the hook (see <see cref="IGlobalTriggerHost.StartRecording"/>),
+        /// one recording at a time. Null if recording is unavailable (<paramref name="error"/> says
+        /// why) or another recording is active (<paramref name="error"/> is null). While it is
+        /// active <see cref="IsRecording"/> is true and <see cref="RecordingChanged"/> has been
+        /// raised; it ends — raising it again — when the gesture is recorded or the handle is
+        /// disposed, even if a callback or the host throws.
+        /// </summary>
+        public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, out string error)
+        {
+            if (modifiersChanged == null) throw new ArgumentNullException(nameof(modifiersChanged));
+            if (recorded == null) throw new ArgumentNullException(nameof(recorded));
+
+            error = null;
+            if (_disposed || _recording != null)
+                return null;
+
+            var session = new RecordingSession(this, recorded);
+            var inner = _host.StartRecording(modifiersChanged, session.OnRecorded, out error);
+            if (inner == null)
+                return null;
+
+            session.Inner = inner;
+            _recording = session;
+            RecordingChanged?.Invoke(this, EventArgs.Empty);
+            return session;
+        }
+
+        private void EndRecording(RecordingSession session)
+        {
+            if (!ReferenceEquals(_recording, session))
+                return;
+
+            _recording = null;
+            RecordingChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
         /// Statuses for an action whose gestures another process registers (the standby capturer's
         /// screenshot hotkeys), keyed by the gesture as that process received it —
-        /// <see cref="SimpleKeyGesture.ToCapturerString"/>. A gesture with no report keeps the
+        /// <see cref="HotkeyGesture.ToSerializedString"/>. A gesture with no report keeps the
         /// status it has: the report may predate the settings snapshot that added it, and the
         /// snapshot's own report follows. Ignored while this manager owns the action itself.
         /// </summary>
@@ -335,13 +374,12 @@ namespace Clowd.UI
             if (_actions.TryGetValue(id, out var action) && action != null)
                 return;
 
-            // each report is used once: two gestures that are distinct here can still send the
-            // same token (CapturerKeyMap sends both Pause and Cancel as "Pause"), and the second
-            // of those is the one the capturer refuses as a duplicate.
+            // each report is used once: the capturer echoes every occurrence it was sent, in
+            // order, so a report always pairs with the gesture it was sent for.
             var used = new bool[statuses.Count];
             foreach (var shortcut in entry.Shortcuts)
             {
-                var token = shortcut.Gesture.ToCapturerString();
+                var token = shortcut.Gesture.ToSerializedString();
                 for (int i = 0; i < statuses.Count; i++)
                 {
                     if (used[i] || statuses[i].Gesture != token)
@@ -430,16 +468,59 @@ namespace Clowd.UI
                 shortcut.SetStatus(false, "");
             }
 
+            _recording?.Dispose();
             (_host as IDisposable)?.Dispose();
 
             if (Current == this)
                 Current = null;
+        }
+
+        /// <summary>The manager's side of one recording: ends <see cref="IsRecording"/> exactly
+        /// once, whichever way the recording ends, in a finally so a throwing callback or host call
+        /// cannot leave it (and with it the standby capturer's pause) stuck.</summary>
+        private sealed class RecordingSession : IDisposable
+        {
+            private readonly HotkeyManager _manager;
+            private readonly Action<HotkeyGesture> _recorded;
+
+            public IDisposable Inner { get; set; }
+
+            public RecordingSession(HotkeyManager manager, Action<HotkeyGesture> recorded)
+            {
+                _manager = manager;
+                _recorded = recorded;
+            }
+
+            public void OnRecorded(HotkeyGesture gesture)
+            {
+                // the recording is over before the owner hears what it recorded
+                try
+                {
+                    _manager.EndRecording(this);
+                }
+                finally
+                {
+                    _recorded(gesture);
+                }
+            }
+
+            public void Dispose()
+            {
+                try
+                {
+                    Inner?.Dispose();
+                }
+                finally
+                {
+                    _manager.EndRecording(this);
+                }
+            }
         }
     }
 
     /// <summary>One gesture's status as reported by the process that registered it (see
     /// <see cref="HotkeyManager.ApplyExternalStatus"/>).</summary>
     /// <param name="Gesture">The gesture exactly as that process received it, in
-    /// <see cref="SimpleKeyGesture.ToCapturerString"/> form.</param>
+    /// <see cref="HotkeyGesture.ToSerializedString"/> form.</param>
     public readonly record struct ExternalGestureStatus(string Gesture, bool IsRegistered, string Error);
 }

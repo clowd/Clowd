@@ -225,10 +225,16 @@ namespace Clowd.UI.Config
 
             if (!field.BeginListening())
             {
-                // another recording holds the hotkeys (or there are none): no field to keep
+                // another recording holds the hook (or there is none): no field to keep. A hook
+                // that cannot record says why on the button instead, since the field leaves.
                 _pending = null;
                 _edit = null;
                 Refresh();
+                if (field.RecordingError != null)
+                {
+                    ToolTip.SetTip(_addButton, field.RecordingError);
+                    ToolTip.SetIsOpen(_addButton, true);
+                }
             }
         }
 
@@ -246,7 +252,7 @@ namespace Clowd.UI.Config
                 _addButton.Focus();
         }
 
-        private void OnFieldListeningEnded(object sender, SimpleKeyGesture gesture)
+        private void OnFieldListeningEnded(object sender, HotkeyGesture gesture)
         {
             var field = (GestureField)sender;
             if (!ReferenceEquals(field, _pending))

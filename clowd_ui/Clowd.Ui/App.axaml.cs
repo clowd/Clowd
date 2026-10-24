@@ -428,18 +428,23 @@ namespace Clowd
                 TrayIcon.SetIcons(this, new TrayIcons { _trayIcon });
             }
 
-            // Shortcuts are surfaced as separate, right-aligned menu text — Avalonia binds
-            // NativeMenuItem.Gesture → MenuItem.InputGesture on the Windows managed tray menu (the
-            // Semi theme renders it in muted, right-aligned gesture text) and to the native key
-            // equivalent on macOS. An action can have several gestures; the menu quotes the first
-            // one that is actually registered, and none at all when none is — a key that does
-            // nothing (taken by another app, its feature off, the hook not running) must not be
-            // advertised as the way to reach the item.
+            // An action can have several gestures; the menu shows the first one that is actually
+            // registered, and none at all when none is — a key that does nothing (taken by another
+            // app, its feature off, the hook not running) must not be advertised as the way to reach
+            // the item. NativeMenuItem.Gesture takes an Avalonia KeyGesture, which HotkeyGesture
+            // converts to by name; should the key tables ever drift apart the item just goes without
+            // its shortcut.
             void ApplyGesture(NativeMenuItem item, HotkeyId id)
             {
                 var gesture = _hotkeys?.GetEntry(id).FirstRegisteredGesture;
-                if (gesture != null && !String.IsNullOrEmpty(gesture.ToString()))
-                    item.Gesture = gesture.ToKeyGesture();
+                if (gesture == null)
+                    return;
+
+                var keyGesture = gesture.ToKeyGestureOrNull();
+                if (keyGesture != null)
+                    item.Gesture = keyGesture;
+                else
+                    Debug.WriteLine($"[Tray] '{gesture.ToSerializedString()}' has no Avalonia KeyGesture; showing '{item.Header}' without its shortcut");
             }
 
             var menu = _trayIcon.Menu;
@@ -658,31 +663,19 @@ namespace Clowd
         }
 
         /// <summary>
-        /// Creates the <see cref="HotkeyManager"/> over the SharpHook-backed
-        /// <see cref="GlobalHotkeyHost"/> and wires the hotkey actions explicitly (mirroring the WPF
+        /// Creates the <see cref="HotkeyManager"/> over the clowd_hotkeys-backed
+        /// <see cref="NativeHotkeyHost"/> and wires the hotkey actions explicitly (mirroring the WPF
         /// App.SetupSettings wiring, adapted to what exists in this build). Gestures are read from
         /// settings; the OS keyboard hook itself starts lazily on the first registration, so no hook
         /// runs if no gestures are set.
         /// </summary>
         private void SetupGlobalHotkeys()
         {
-            // libuiohook raises KeyTyped by running ToUnicodeEx on every key press it does not
-            // suppress, which corrupts the foreground app's keyboard state on Windows — e.g. Visual
-            // Studio inserts a stray character on Alt+Up/Down (SharpHook#67). Hotkeys only use
-            // KeyPressed, whose modifier mask is tracked independently, so turn it off. The flag is
-            // process-global, and setting it loads the native library, so a failure here must not
-            // take startup down with it.
-            try
-            {
-                SharpHook.Providers.UioHookProvider.Instance.KeyTypedEnabled = false;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("Failed to disable SharpHook KeyTyped events: " + ex);
-                SentryConfig.CaptureHandled(ex, "hotkey.disable-key-typed");
-            }
+            _hotkeys = new HotkeyManager(new NativeHotkeyHost(), SettingsRoot.Current.Hotkeys);
 
-            _hotkeys = new HotkeyManager(new GlobalHotkeyHost(), SettingsRoot.Current.Hotkeys);
+            // while the settings page records a gesture, the standby capturer's own hook must not
+            // catch the combination being pressed (it would take a screenshot instead)
+            _hotkeys.RecordingChanged += (_, _) => CaptureStandbySupervisor.SetHotkeysPaused(_hotkeys?.IsRecording == true);
 
             _hotkeys.SetAction(HotkeyId.FileUpload, () => UploadFilePrompt());
             _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => UploadClipboard());
@@ -734,10 +727,10 @@ namespace Clowd
 
         /// <summary>
         /// The screenshot hotkeys have exactly one owner at a time. Warm: the standby capturer
-        /// hooks them itself (handy-keys low-level hook — see standby_hotkeys.rs for why they
-        /// must live in that process), and SharpHook must stay out so two hooks never race to
+        /// hooks them itself (its own clowd_hotkeys hook — see standby_hotkeys.rs for why they
+        /// must live in that process), and this process must stay out so two hooks never race to
         /// suppress and handle the same press. Not warm — setting off, or overridden after
-        /// standby faulted — SharpHook drives the classic one-shot path. Called at startup and
+        /// standby faulted — this process's hook drives the classic one-shot path. Called at startup and
         /// again on every ownership change (setting toggled, supervisor fallback), always on
         /// the UI thread.
         /// </summary>
@@ -784,7 +777,7 @@ namespace Clowd
             catch { }
             try
             {
-                _hotkeys?.Dispose(); // also disposes the underlying GlobalHotkeyHost
+                _hotkeys?.Dispose(); // also disposes the underlying NativeHotkeyHost
                 _hotkeys = null;
             }
             catch { }

@@ -23,7 +23,6 @@
     <PackageReference Include="Semi.Avalonia" Version="12.1.0.1" />
     <PackageReference Include="Irihi.Ursa" Version="2.1.0" />
     <PackageReference Include="Irihi.Ursa.Themes.Semi" Version="2.1.0" />
-    <PackageReference Include="SharpHook" Version="7.1.3" />
     <!-- WASAPI via built-in COM interop; all call sites are OperatingSystem.IsWindows()-guarded -->
     <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
     <PackageReference Include="Velopack" Version="1.2.0" />

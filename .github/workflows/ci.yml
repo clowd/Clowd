@@ -51,12 +51,23 @@ jobs:
           cargo fmt --check
           cargo clippy -p clowd_rust_core --all-targets -- -D warnings
           cargo test -p clowd_rust_core
+          cargo clippy -p clowd_hotkeys --all-targets -- -D warnings
+          cargo test -p clowd_hotkeys
           cargo clippy -p clowd_capture -- -D warnings
           cargo test -p clowd_capture
           cargo clippy -p clowd_scroll_driver --all-targets -- -D warnings
           cargo test -p clowd_scroll_driver
           cargo clippy -p clowd_ai --all-targets -- -D warnings
           cargo test -p clowd_ai
+        shell: bash
+
+      # clowd_hotkeys has no Linux backend yet, but Key/Gesture/the C ABI still build there, and
+      # CI has no Linux leg. The crate is plain Rust on Linux, so clippy needs no linker.
+      - name: "Rust gate: clowd_hotkeys Linux cross-check"
+        if: runner.os == 'Windows'
+        run: |
+          rustup target add x86_64-unknown-linux-gnu
+          cargo clippy -p clowd_hotkeys --target x86_64-unknown-linux-gnu -- -D warnings
         shell: bash
 
       # The shell extension is a Windows COM dll and an empty crate elsewhere.
@@ -251,7 +262,7 @@ jobs:
       - name: Build rust binaries
         shell: bash
         run: |
-          PKGS="-p clowd_capture -p clowd_scroll_driver"
+          PKGS="-p clowd_capture -p clowd_scroll_driver -p clowd_hotkeys"
           if [ "${{ runner.os }}" = "Windows" ]; then
             PKGS="$PKGS -p clowd_shell_ext"
           fi
@@ -287,6 +298,9 @@ jobs:
           fi
           if [ "${{ runner.os }}" = "Windows" ]; then
             sentry-cli debug-files upload "$OUT/clowd_shell_ext.pdb" "$OUT/clowd_shell_ext.dll"
+            sentry-cli debug-files upload "$OUT/clowd_hotkeys.pdb" "$OUT/clowd_hotkeys.dll"
+          else
+            sentry-cli debug-files upload "$OUT/libclowd_hotkeys.dylib.dSYM" "$OUT/libclowd_hotkeys.dylib"
           fi
 
       # The driver (and clowd_ai, below) sit beside the overlay, which resolves them as siblings of its own executable.
@@ -296,6 +310,15 @@ jobs:
 
       - name: Copy scrolling capture driver into package
         run: cp "target/${{ matrix.target }}/release/clowd_scroll_driver${{ matrix.exe }}" publish/
+        shell: bash
+
+      # The global hotkey library Clowd.Ui P/Invokes, beside it where HotkeysLibraryLocator looks.
+      # release.yml signs it with the rest: vpk's Trusted Signing pass covers every dll in the pack
+      # dir, and the macOS app signing and notarization cover every Mach-O in the bundle.
+      - name: Copy hotkeys library into package
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then cp "target/${{ matrix.target }}/release/clowd_hotkeys.dll" publish/
+          else cp "target/${{ matrix.target }}/release/libclowd_hotkeys.dylib" publish/; fi
         shell: bash
 
       # Beside Clowd.Ui (where AiLoader looks for it) and beside the overlay (which spawns it for OCR).

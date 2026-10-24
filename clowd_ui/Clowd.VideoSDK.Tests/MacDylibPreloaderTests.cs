@@ -162,7 +162,7 @@ namespace Clowd.VideoSDK.Tests
                        .Select(d => d.Substring(prefix.Length)).ToList(),
                     rpath);
 
-                // libuiohook.dylib is a copy of libuiohook.1.dylib and names itself that way.
+                // a copy of a versioned original (libfoo.dylib of libfoo.N.dylib) names itself that way.
                 var installName = OtoolInstallName(library);
                 if (installName == null || !installName.StartsWith(prefix, StringComparison.Ordinal))
                     continue;

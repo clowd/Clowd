@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
-using Avalonia.Input;
 
 namespace Clowd
 {
@@ -28,11 +27,11 @@ namespace Clowd
     /// An empty list persists as "None", which is also what a cleared gesture was written as before
     /// actions could hold more than one, and a single old-style gesture ("Control+Snapshot") is
     /// simply a one-item list — so settings files from before the change load unchanged.
-    /// <para>Never holds null, <see cref="Key.None"/> or the same gesture twice: those are dropped
+    /// <para>Never holds null, <see cref="HotkeyKey.None"/> or the same gesture twice: those are dropped
     /// on the way in.</para>
     /// </summary>
     [TypeConverter(typeof(GestureListConverter))]
-    public sealed class GestureList : IReadOnlyList<SimpleKeyGesture>, IEquatable<GestureList>
+    public sealed class GestureList : IReadOnlyList<HotkeyGesture>, IEquatable<GestureList>
     {
         /// <summary>What an empty list is written as (see the type's remarks).</summary>
         public const string EmptySerializedString = "None";
@@ -51,46 +50,46 @@ namespace Clowd
         /// <summary>Between gestures in the display form, which nothing parses.</summary>
         private const string DisplaySeparator = ", ";
 
-        public static GestureList Empty { get; } = new GestureList(Array.Empty<SimpleKeyGesture>());
+        public static GestureList Empty { get; } = new GestureList(Array.Empty<HotkeyGesture>());
 
-        private readonly SimpleKeyGesture[] _items;
+        private readonly HotkeyGesture[] _items;
 
-        public GestureList(IEnumerable<SimpleKeyGesture> gestures)
+        public GestureList(IEnumerable<HotkeyGesture> gestures)
         {
-            _items = (gestures ?? Enumerable.Empty<SimpleKeyGesture>())
-                     .Where(g => g != null && g.Key != Key.None)
+            _items = (gestures ?? Enumerable.Empty<HotkeyGesture>())
+                     .Where(g => g != null && g.Key != HotkeyKey.None)
                      .Distinct()
                      .ToArray();
         }
 
-        public static GestureList Of(params SimpleKeyGesture[] gestures) => new GestureList(gestures);
+        public static GestureList Of(params HotkeyGesture[] gestures) => new GestureList(gestures);
 
         public int Count => _items.Length;
 
-        public SimpleKeyGesture this[int index] => _items[index];
+        public HotkeyGesture this[int index] => _items[index];
 
-        public bool Contains(SimpleKeyGesture gesture) => gesture != null && Array.IndexOf(_items, gesture) >= 0;
+        public bool Contains(HotkeyGesture gesture) => gesture != null && Array.IndexOf(_items, gesture) >= 0;
 
-        public int IndexOf(SimpleKeyGesture gesture) => gesture == null ? -1 : Array.IndexOf(_items, gesture);
+        public int IndexOf(HotkeyGesture gesture) => gesture == null ? -1 : Array.IndexOf(_items, gesture);
 
         /// <summary>This list with <paramref name="gesture"/> appended — or this same list when it
         /// already holds it, or the gesture is empty.</summary>
-        public GestureList Add(SimpleKeyGesture gesture) =>
-            gesture == null || gesture.Key == Key.None || Contains(gesture) ? this : new GestureList(_items.Append(gesture));
+        public GestureList Add(HotkeyGesture gesture) =>
+            gesture == null || gesture.Key == HotkeyKey.None || Contains(gesture) ? this : new GestureList(_items.Append(gesture));
 
         /// <summary>This list with the gesture at <paramref name="index"/> replaced in place. An
         /// empty gesture removes it instead; one the list already holds (here or at another index)
         /// leaves the list as it is, since an action cannot hold a gesture twice.</summary>
-        public GestureList SetItem(int index, SimpleKeyGesture gesture)
+        public GestureList SetItem(int index, HotkeyGesture gesture)
         {
             if ((uint)index >= (uint)_items.Length)
                 throw new ArgumentOutOfRangeException(nameof(index));
-            if (gesture == null || gesture.Key == Key.None)
+            if (gesture == null || gesture.Key == HotkeyKey.None)
                 return RemoveAt(index);
             if (Contains(gesture))
                 return this;
 
-            var items = (SimpleKeyGesture[])_items.Clone();
+            var items = (HotkeyGesture[])_items.Clone();
             items[index] = gesture;
             return new GestureList(items);
         }
@@ -104,14 +103,14 @@ namespace Clowd
 
         /// <summary>This list without any of <paramref name="gestures"/> (this same list when it holds
         /// none of them).</summary>
-        public GestureList Except(IEnumerable<SimpleKeyGesture> gestures)
+        public GestureList Except(IEnumerable<HotkeyGesture> gestures)
         {
-            var remove = gestures as ICollection<SimpleKeyGesture> ?? gestures.ToList();
+            var remove = gestures as ICollection<HotkeyGesture> ?? gestures.ToList();
             return _items.Any(remove.Contains) ? new GestureList(_items.Where(g => !remove.Contains(g))) : this;
         }
 
         /// <summary>The settings-file form: each gesture's
-        /// <see cref="SimpleKeyGesture.ToSerializedString"/>, joined with "; " ("Control+PrintScreen; F9"),
+        /// <see cref="HotkeyGesture.ToSerializedString"/>, joined with "; " ("Control+PrintScreen; F9"),
         /// or "None" when empty. Key and modifier names never contain a ';' (or a ','), so the
         /// separator cannot be ambiguous.</summary>
         public string ToSerializedString() =>
@@ -119,7 +118,7 @@ namespace Clowd
 
         /// <summary>
         /// Parses the <see cref="ToSerializedString"/> form, which includes a lone pre-multi-gesture
-        /// value. Tolerant, like <see cref="SimpleKeyGesture.Parse"/>: an entry it cannot read is
+        /// value. Tolerant, like <see cref="HotkeyGesture.Parse"/>: an entry it cannot read is
         /// dropped rather than failing the whole settings file, and null, empty or "None" is the
         /// empty list.
         /// </summary>
@@ -128,14 +127,14 @@ namespace Clowd
             if (string.IsNullOrWhiteSpace(value))
                 return Empty;
 
-            return new GestureList(value.Split(new[] { Separator, LegacySeparator }).Select(SimpleKeyGesture.Parse));
+            return new GestureList(value.Split(new[] { Separator, LegacySeparator }).Select(HotkeyGesture.Parse));
         }
 
-        /// <summary>Display text: each gesture's pretty <see cref="SimpleKeyGesture.ToString"/>
+        /// <summary>Display text: each gesture's pretty <see cref="HotkeyGesture.ToString"/>
         /// ("PrtScr, Ctrl+Shift+1"), empty when there are none. Not parseable.</summary>
         public override string ToString() => string.Join(DisplaySeparator, _items.Select(g => g.ToString()));
 
-        public IEnumerator<SimpleKeyGesture> GetEnumerator() => ((IEnumerable<SimpleKeyGesture>)_items).GetEnumerator();
+        public IEnumerator<HotkeyGesture> GetEnumerator() => ((IEnumerable<HotkeyGesture>)_items).GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
 
