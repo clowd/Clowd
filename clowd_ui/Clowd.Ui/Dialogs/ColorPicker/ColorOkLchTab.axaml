@@ -1,0 +1,147 @@
+<cp:ColorDialogTab xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
+                   xmlns:helpers="using:Clowd.UI.Helpers"
+                   x:Class="Clowd.UI.Dialogs.ColorPicker.ColorOkLchTab">
+
+    <cp:ColorDialogTab.Styles>
+        <!--  A quadrant's channel name, left of its value field  -->
+        <Style Selector="TextBlock.channel">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource ColorDialogMutedTextBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Grid.header">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Margin" Value="0,8,0,4" />
+        </Style>
+        <!--  as wide as the chart above it, so the track's ends line up with the chart's edges (the
+              thumb overhangs half its width into the gutters at either end); out of the tab order,
+              as on Simple: Tab walks the value fields, which take exact input  -->
+        <Style Selector="cp|ChannelSlider">
+            <Setter Property="IsTabStop" Value="False" />
+        </Style>
+        <!--  the empty track shows where the gamut ends, as the charts' empty area does  -->
+        <Style Selector="cp|ChannelSlider.gamut">
+            <Setter Property="Background" Value="{DynamicResource ColorDialogGamutEmptyBrush}" />
+        </Style>
+        <Style Selector="cp|OkLchChart">
+            <Setter Property="Background" Value="{DynamicResource ColorDialogGamutEmptyBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogInputBorderBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="TextBox.colorDialogField.value">
+            <Setter Property="Width" Value="72" />
+            <Setter Property="helpers:SelectTextOnFocus.Active" Value="True" />
+        </Style>
+        <!--  The color's text: wide enough for oklch() at full precision with an alpha  -->
+        <Style Selector="TextBox.colorDialogField.text">
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="TextAlignment" Value="Left" />
+            <Setter Property="helpers:SelectTextOnFocus.Active" Value="True" />
+        </Style>
+        <Style Selector="Button.copy">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+    </cp:ColorDialogTab.Styles>
+
+    <!--  Four equal quadrants, each the same three rows: its picture (the color and its text, or a
+          gamut chart), its channel's name and value, and its channel's slider, so the names, fields
+          and sliders line up across the tab. Each slider sits under the chart that shows its
+          channel along an axis (oklch.com puts each under the chart it holds fixed instead).  -->
+    <Grid ColumnDefinitions="*,20,*" RowDefinitions="*,16,*">
+
+        <!--  ===== Color: the swatch, its hex and oklch() text, and alpha =====  -->
+        <Grid RowDefinitions="*,Auto,Auto">
+            <Grid RowDefinitions="*,8,Auto,6,Auto">
+                <Panel>
+                    <Border Background="{DynamicResource ColorDialogCheckerBrush}" CornerRadius="8" />
+                    <Border x:Name="swatch"
+                            BorderBrush="{DynamicResource ColorDialogSwatchEdgeBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                        <!--  oklch.com's fallback note: the color asked for is past sRGB, so the swatch
+                              (and the hex, and OK) carry the nearest color sRGB has  -->
+                        <TextBlock x:Name="gamutNote"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="11.5"
+                                   Text="Outside sRGB · nearest shown" />
+                    </Border>
+                </Panel>
+
+                <Grid Grid.Row="2" ColumnDefinitions="*,6,Auto">
+                    <TextBox x:Name="txtHex"
+                             AutomationProperties.Name="Hex"
+                             Classes="colorDialogField text" />
+                    <Button x:Name="btnCopyHex"
+                            Grid.Column="2"
+                            AutomationProperties.Name="Copy as HEX"
+                            Classes="copy"
+                            Theme="{StaticResource ColorDialogBarChipButton}"
+                            ToolTip.Tip="Copy as HEX">
+                        <cp:LineIcon x:Name="copyHexIcon" Width="14" Height="14" Data="{StaticResource ColorDialogIconCopy}" />
+                    </Button>
+                </Grid>
+
+                <Grid Grid.Row="4" ColumnDefinitions="*,6,Auto">
+                    <TextBox x:Name="txtOkLch"
+                             AutomationProperties.Name="OKLCH"
+                             Classes="colorDialogField text" />
+                    <Button x:Name="btnCopyOkLch"
+                            Grid.Column="2"
+                            AutomationProperties.Name="Copy as OKLCH"
+                            Classes="copy"
+                            Theme="{StaticResource ColorDialogBarChipButton}"
+                            ToolTip.Tip="Copy as OKLCH">
+                        <cp:LineIcon x:Name="copyOkLchIcon" Width="14" Height="14" Data="{StaticResource ColorDialogIconCopy}" />
+                    </Button>
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="1" Classes="header" ColumnDefinitions="*,Auto">
+                <TextBlock Classes="channel" Text="Alpha" />
+                <TextBox x:Name="txtA" Grid.Column="1" AutomationProperties.Name="Alpha" Classes="colorDialogField value" />
+            </Grid>
+            <cp:ChannelSlider x:Name="sliderA"
+                              Grid.Row="2"
+                              Background="{DynamicResource ColorDialogCheckerBrush}"
+                              ValueMax="1" />
+        </Grid>
+
+        <!--  ===== Chroma: under the chart with chroma up (the Lightness plane) =====  -->
+        <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto">
+            <cp:OkLchChart x:Name="chartL" Plane="Lightness" />
+            <Grid Grid.Row="1" Classes="header" ColumnDefinitions="*,Auto">
+                <TextBlock Classes="channel" Text="Chroma" />
+                <TextBox x:Name="txtC" Grid.Column="1" AutomationProperties.Name="Chroma" Classes="colorDialogField value" />
+            </Grid>
+            <cp:ChannelSlider x:Name="sliderC" Grid.Row="2" Classes="gamut" ValueMax="0.37" />
+        </Grid>
+
+        <!--  ===== Lightness: under the chart with lightness across (the Hue plane), so the
+              slider runs along the chart's own axis =====  -->
+        <Grid Grid.Row="2" RowDefinitions="*,Auto,Auto">
+            <cp:OkLchChart x:Name="chartH" Plane="Hue" />
+            <Grid Grid.Row="1" Classes="header" ColumnDefinitions="*,Auto">
+                <TextBlock Classes="channel" Text="Lightness" />
+                <TextBox x:Name="txtL" Grid.Column="1" AutomationProperties.Name="Lightness" Classes="colorDialogField value" />
+            </Grid>
+            <cp:ChannelSlider x:Name="sliderL" Grid.Row="2" Classes="gamut" ValueMax="100" />
+        </Grid>
+
+        <!--  ===== Hue: under the chart with hue across and lightness up (the Chroma plane), so
+              the slider runs along the chart's own axis =====  -->
+        <Grid Grid.Row="2" Grid.Column="2" RowDefinitions="*,Auto,Auto">
+            <cp:OkLchChart x:Name="chartC" Plane="Chroma" />
+            <Grid Grid.Row="1" Classes="header" ColumnDefinitions="*,Auto">
+                <TextBlock Classes="channel" Text="Hue" />
+                <TextBox x:Name="txtH" Grid.Column="1" AutomationProperties.Name="Hue" Classes="colorDialogField value" />
+            </Grid>
+            <cp:ChannelSlider x:Name="sliderH" Grid.Row="2" Classes="gamut" ValueMax="360" />
+        </Grid>
+    </Grid>
+</cp:ColorDialogTab>

@@ -162,7 +162,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         /// <summary>Flashes the button green and fades it back (the theme's <c>.copied</c>
         /// animation). The class comes off and goes back on a tick later, so a second copy while
         /// the first is still fading starts it over.</summary>
-        private static void FlashCopied(Button button)
+        internal static void FlashCopied(Button button)
         {
             button.Classes.Remove("copied");
             Dispatcher.UIThread.Post(() => button.Classes.Add("copied"));

@@ -10,7 +10,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// Hidden harness that renders the color dialog to a PNG without putting it in front of anyone:
-    /// <c>clowd --color-dialog-snapshot out.png [--theme light|dark] [--tab simple|image|palette]
+    /// <c>clowd --color-dialog-snapshot out.png [--theme light|dark] [--tab simple|image|palette|oklch]
     /// [--initial #RRGGBB] [--viewer] [--scale 2]</c>. The window opens off-screen and never
     /// activates; its content is drawn through a RenderTargetBitmap and the process exits.
     /// </summary>
@@ -80,6 +80,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             {
                 "image" => ColorDialogTabKind.Image,
                 "palette" => ColorDialogTabKind.Palette,
+                "oklch" => ColorDialogTabKind.OkLch,
                 _ => ColorDialogTabKind.Simple,
             };
 

@@ -138,18 +138,24 @@
                                  IconPath="{StaticResource IconCopySmall}"
                                  ToolTip.Tip="Copy selected hex" />
 
-            <!--  Carry the Selected color to another tab: as the Palette tab's base, or as the Simple
-                  tab's color. Each is hidden on the tab it would open (OnActiveTabChanged).  -->
-            <controls:ToolButton x:Name="btnOpenPalette"
-                                 Classes="wide"
-                                 AutomationProperties.Name="Open selected in Palette"
-                                 IconPath="{StaticResource IconPaletteSwatches}"
-                                 ToolTip.Tip="Open selected in Palette" />
+            <!--  Carry the Selected color to another tab: as the Simple tab's color, the Palette tab's
+                  base, or the Oklch tab's color. In rail order; each is hidden on the tab it would
+                  open (OnActiveTabChanged).  -->
             <controls:ToolButton x:Name="btnOpenSimple"
                                  Classes="wide"
                                  AutomationProperties.Name="Open selected in Simple"
                                  IconPath="{StaticResource IconColorWheel}"
                                  ToolTip.Tip="Open selected in Simple" />
+            <controls:ToolButton x:Name="btnOpenPalette"
+                                 Classes="wide"
+                                 AutomationProperties.Name="Open selected in Palette"
+                                 IconPath="{StaticResource IconPaletteSwatches}"
+                                 ToolTip.Tip="Open selected in Palette" />
+            <controls:ToolButton x:Name="btnOpenOklch"
+                                 Classes="wide"
+                                 AutomationProperties.Name="Open selected in Oklch"
+                                 IconPath="{StaticResource IconOklch}"
+                                 ToolTip.Tip="Open selected in Oklch" />
 
             <!--  Samples into the Simple tab, or the Palette tab's base, live while dragging. The
                   tooltip lives in EyedropperButton (it swaps to the permission hint).  -->
@@ -193,16 +199,22 @@
                     <TextBlock HorizontalAlignment="Center" Text="Palette" />
                 </StackPanel>
             </TabStripItem>
+            <TabStripItem AutomationProperties.Name="OKLCH">
+                <StackPanel Spacing="3">
+                    <Image Width="30" Height="30" HorizontalAlignment="Center" Source="{DynamicResource ColorDialogRailIconOklch}" />
+                    <TextBlock HorizontalAlignment="Center" Text="Oklch" />
+                </StackPanel>
+            </TabStripItem>
         </TabStrip>
 
         <!--  ===== Content surface =====
-              The editors' canvas surround, its shadow cast over both bars. The hairline along the
-              two edges that face the bars is a sibling laid over the content (as in the editors),
-              so nothing inside can cover it.  -->
+              The editors' canvas surround (a little lighter in the light theme), its shadow cast
+              over both bars. The hairline along the two edges that face the bars is a sibling laid
+              over the content (as in the editors), so nothing inside can cover it.  -->
         <Border x:Name="contentSurface"
                 Grid.Row="1"
                 Grid.Column="1"
-                Background="{DynamicResource ClowdEditorCanvasBrush}"
+                Background="{DynamicResource ColorDialogSurfaceBrush}"
                 BoxShadow="{DynamicResource ClowdEditorSurfaceShadow}"
                 CornerRadius="12,0,0,0" />
 
@@ -222,6 +234,7 @@
                 <cp:ColorSimpleTab x:Name="simpleTab" />
                 <cp:ColorImageTab x:Name="imageTab" IsVisible="False" />
                 <cp:ColorPaletteTab x:Name="paletteTab" IsVisible="False" />
+                <cp:ColorOkLchTab x:Name="oklchTab" IsVisible="False" />
             </Panel>
 
             <Border Grid.Row="1"

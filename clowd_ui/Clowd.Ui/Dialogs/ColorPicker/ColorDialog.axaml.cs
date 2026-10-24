@@ -14,7 +14,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The "Color Wheel" window (COLOR_VIEWER_REWORK.md): a top bar with the Initial / Selected
-    /// colors, a rail of three tabs (Simple, Image, Palette) and the footer.
+    /// colors, a rail of four tabs (Simple, Image, Palette, OKLCH) and the footer.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -27,7 +27,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
     /// Selection model (brief §8): each tab reports its own Selected color
     /// (<see cref="ColorDialogTab.SelectedColor"/>); <see cref="SelectedColor"/> follows whichever
     /// tab is showing, and the Selected chip and OK follow it. Tabs move between
-    /// each other through <see cref="ShowInSimple"/> and <see cref="ShowInPalette"/>.
+    /// each other through <see cref="ShowInSimple"/>, <see cref="ShowInPalette"/> and <see cref="ShowInOklch"/>.
     /// </para>
     /// </remarks>
     public partial class ColorDialog : SystemThemedWindow
@@ -55,6 +55,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         public ColorSimpleTab SimpleTab => simpleTab;
         public ColorImageTab ImageTab => imageTab;
         public ColorPaletteTab PaletteTab => paletteTab;
+        public ColorOkLchTab OkLchTab => oklchTab;
 
         /// <summary>The tab showing in the content surface; setting it is the rail's click.</summary>
         public ColorDialogTabKind ActiveTab
@@ -87,6 +88,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (initialColor is { } initial)
             {
                 simpleTab.SetColor(initial);
+                oklchTab.SetColor(initial);
                 PaintChip(initialChip, initialHex, initial);
             }
 
@@ -94,6 +96,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             btnCopy.Click += async (_, _) => await CopySelectedHex();
             btnOpenPalette.Click += (_, _) => ShowInPalette(new HarmonyPalette(paletteTab.Preset, HsvColor.FromColor(SelectedColor)));
             btnOpenSimple.Click += (_, _) => ShowInSimple(SelectedColor);
+            btnOpenOklch.Click += (_, _) => ShowInOklch(SelectedColor);
             UpdateOpenButtons();
             WireEyedropper();
 
@@ -123,12 +126,12 @@ namespace Clowd.UI.Dialogs.ColorPicker
         private DispatcherTimer _copiedTimer;
         private Geometry _copyIcon;
 
-        private ColorDialogTab[] Tabs =>new ColorDialogTab[] { simpleTab, imageTab, paletteTab };
+        private ColorDialogTab[] Tabs => new ColorDialogTab[] { simpleTab, imageTab, paletteTab, oklchTab };
 
         private ColorDialogTab ActiveTabControl => Tabs[(int)ActiveTab];
 
         // what the top bar calls each tab: the rail's labels, in rail order
-        private static readonly string[] TabNames = { "Simple", "Image", "Palette" };
+        private static readonly string[] TabNames = { "Simple", "Image", "Palette", "Oklch" };
 
         /// <summary>Switches to the Simple tab with <paramref name="color"/> as its current color
         /// (a palette bar's Go to Simple, the top bar's Initial and Open in Simple).</summary>
@@ -136,6 +139,15 @@ namespace Clowd.UI.Dialogs.ColorPicker
         {
             simpleTab.SetColor(color);
             ActiveTab = ColorDialogTabKind.Simple;
+            SyncSelection();
+        }
+
+        /// <summary>Switches to the Oklch tab with <paramref name="color"/> as its current color
+        /// (the top bar's Open in Oklch).</summary>
+        public void ShowInOklch(Color color)
+        {
+            oklchTab.SetColor(color);
+            ActiveTab = ColorDialogTabKind.OkLch;
             SyncSelection();
         }
 
@@ -243,12 +255,13 @@ namespace Clowd.UI.Dialogs.ColorPicker
             active.OnShown();
         }
 
-        /// <summary>The top bar's Open in Palette / Open in Simple: each is hidden on the tab it
-        /// would open, so Simple shows Palette, Palette shows Simple, and Image shows both.</summary>
+        /// <summary>The top bar's Open in Simple / Palette / Oklch: each is hidden on the tab it
+        /// would open, so the Image tab shows all three and the others show the other two.</summary>
         private void UpdateOpenButtons()
         {
-            btnOpenPalette.IsVisible = ActiveTab != ColorDialogTabKind.Palette;
             btnOpenSimple.IsVisible = ActiveTab != ColorDialogTabKind.Simple;
+            btnOpenPalette.IsVisible = ActiveTab != ColorDialogTabKind.Palette;
+            btnOpenOklch.IsVisible = ActiveTab != ColorDialogTabKind.OkLch;
         }
 
         /// <summary>Takes the active tab's selection as the dialog's, and repaints the Selected chip.</summary>

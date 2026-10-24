@@ -6,12 +6,13 @@ using Clowd.Util;
 
 namespace Clowd.UI.Dialogs.ColorPicker
 {
-    /// <summary>The color dialog's three tabs, in rail order.</summary>
+    /// <summary>The color dialog's tabs, in rail order.</summary>
     public enum ColorDialogTabKind
     {
         Simple,
         Image,
         Palette,
+        OkLch,
     }
 
     /// <summary>

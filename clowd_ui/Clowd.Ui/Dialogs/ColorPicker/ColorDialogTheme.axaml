@@ -35,6 +35,10 @@
                     <SolidColorBrush x:Key="ColorDialogInputBorderBrush" Color="#3A3D43" />
                     <SolidColorBrush x:Key="ColorDialogInputHoverBorderBrush" Color="#4D5158" />
 
+                    <!--  the OKLCH tab's charts and tracks where sRGB has no color: the field fill,
+                          dark enough to set off every color but the darkest  -->
+                    <SolidColorBrush x:Key="ColorDialogGamutEmptyBrush" Color="#161618" />
+
                     <!--  neutral chips and buttons on the surface (Cancel, mood chips, the bottom slots)  -->
                     <SolidColorBrush x:Key="ColorDialogChipBrush" Color="#262629" />
                     <SolidColorBrush x:Key="ColorDialogChipHoverBrush" Color="#2F2F33" />
@@ -65,6 +69,8 @@
                     <SolidColorBrush x:Key="ColorDialogGlyphLineBrush" Color="#80FFFFFF" />
                     <!--  the same for a palette bar, fainter since a bar is far bigger than a chip  -->
                     <SolidColorBrush x:Key="ColorDialogBarEdgeBrush" Color="#14FFFFFF" />
+                    <!--  the content surface: the editors' canvas surround  -->
+                    <SolidColorBrush x:Key="ColorDialogSurfaceBrush" Color="#1E1E1E" />
                     <!--  what shows through the gap between a palette bar and its accent ring: the surface  -->
                     <Color x:Key="ColorDialogSurfaceColor">#1E1E1E</Color>
 
@@ -96,6 +102,10 @@
                     <SolidColorBrush x:Key="ColorDialogInputBorderBrush" Color="#C4C7CC" />
                     <SolidColorBrush x:Key="ColorDialogInputHoverBorderBrush" Color="#A9ADB4" />
 
+                    <!--  the OKLCH tab's charts and tracks where sRGB has no color: a mid gray, not the
+                          white field fill, so the lightest colors still show where the gamut ends  -->
+                    <SolidColorBrush x:Key="ColorDialogGamutEmptyBrush" Color="#C9C9CE" />
+
                     <SolidColorBrush x:Key="ColorDialogChipBrush" Color="#F7F7F8" />
                     <SolidColorBrush x:Key="ColorDialogChipHoverBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="ColorDialogChipBorderBrush" Color="#C4C7CC" />
@@ -119,7 +129,10 @@
                     <SolidColorBrush x:Key="ColorDialogSwatchEdgeBrush" Color="#24000000" />
                     <SolidColorBrush x:Key="ColorDialogGlyphLineBrush" Color="#59000000" />
                     <SolidColorBrush x:Key="ColorDialogBarEdgeBrush" Color="#14000000" />
-                    <Color x:Key="ColorDialogSurfaceColor">#E9E9E9</Color>
+                    <!--  the content surface: a touch lighter than the editors' #E9E9E9 canvas surround,
+                          nearer white, since here it holds the controls rather than framing a canvas  -->
+                    <SolidColorBrush x:Key="ColorDialogSurfaceBrush" Color="#F2F2F2" />
+                    <Color x:Key="ColorDialogSurfaceColor">#F2F2F2</Color>
 
                     <DrawingBrush x:Key="ColorDialogCheckerBrush"
                                   DestinationRect="0,0,8,8"
@@ -172,48 +185,11 @@
 
             <DrawingImage x:Key="ColorDialogRailIconImage">
                 <DrawingGroup>
-                    <GeometryDrawing Brush="Transparent" Geometry="M0.399,0.399 h31.201 v31.201 h-31.201 Z" />
-                    <GeometryDrawing Geometry="F1 M29,21.5H3V6c0-0.552,0.448-1,1-1h24c0.552,0,1,0.448,1,1V21.5z">
-                        <GeometryDrawing.Brush>
-                            <LinearGradientBrush StartPoint="16,5" EndPoint="16,21.5">
-                                <GradientStop Offset="0" Color="#009CF7" />
-                                <GradientStop Offset="0.63" Color="#00BFF8" />
-                                <GradientStop Offset="1" Color="#00CFF9" />
-                            </LinearGradientBrush>
-                        </GeometryDrawing.Brush>
-                    </GeometryDrawing>
-                    <GeometryDrawing Brush="#FFF4DB" Geometry="F1 M22,10 A2,2 0 1 0 26,10 A2,2 0 1 0 22,10 Z" />
-                    <GeometryDrawing Geometry="F1 M28,27H16v-8l4.696-2.625 c0.818-0.457,1.806-0.488,2.651-0.083L29,19v7C29,26.552,28.552,27,28,27z">
-                        <GeometryDrawing.Brush>
-                            <LinearGradientBrush StartPoint="23.166,16.818" EndPoint="21.893,27.728">
-                                <GradientStop Offset="0" Color="#0096D6" />
-                                <GradientStop Offset="0.095" Color="#0087CB" />
-                                <GradientStop Offset="0.352" Color="#0065AF" />
-                                <GradientStop Offset="0.596" Color="#004C9C" />
-                                <GradientStop Offset="0.818" Color="#003D90" />
-                                <GradientStop Offset="1" Color="#00388C" />
-                            </LinearGradientBrush>
-                        </GeometryDrawing.Brush>
-                    </GeometryDrawing>
-                    <GeometryDrawing Geometry="F1 M28,27H4c-0.552,0-1-0.448-1-1v-8 l6.15-3.734c0.527-0.32,1.184-0.337,1.726-0.044L29,24v2C29,26.552,28.552,27,28,27z">
-                        <GeometryDrawing.Brush>
-                            <LinearGradientBrush StartPoint="16,14.014" EndPoint="16,27">
-                                <GradientStop Offset="0" Color="#0096D6" />
-                                <GradientStop Offset="0.186" Color="#0090D2" />
-                                <GradientStop Offset="0.431" Color="#0080C8" />
-                                <GradientStop Offset="0.708" Color="#0065B8" />
-                                <GradientStop Offset="1" Color="#0040A1" />
-                            </LinearGradientBrush>
-                        </GeometryDrawing.Brush>
-                    </GeometryDrawing>
-                    <GeometryDrawing Geometry="F1 M28,5H4C3.448,5,3,5.448,3,6v20 c0,0.552,0.448,1,1,1h24c0.552,0,1-0.448,1-1V6C29,5.448,28.552,5,28,5z M28.75,26c0,0.414-0.336,0.75-0.75,0.75H4 c-0.414,0-0.75-0.336-0.75-0.75V6c0-0.414,0.336-0.75,0.75-0.75h24c0.414,0,0.75,0.336,0.75,0.75V26z">
-                        <GeometryDrawing.Brush>
-                            <LinearGradientBrush StartPoint="16,5" EndPoint="16,27">
-                                <GradientStop Offset="0" Color="#0D000000" />
-                                <GradientStop Offset="1" Color="#26000000" />
-                            </LinearGradientBrush>
-                        </GeometryDrawing.Brush>
-                    </GeometryDrawing>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 h48 v48 h-48 Z" />
+                    <GeometryDrawing Brush="#F57C00" Geometry="M40,41H8c-2.2,0-4-1.8-4-4V11c0-2.2,1.8-4,4-4h32c2.2,0,4,1.8,4,4v26C44,39.2,42.2,41,40,41z" />
+                    <GeometryDrawing Brush="#FFF9C4" Geometry="M35 13A3 3 0 1 0 35 19A3 3 0 1 0 35 13Z" />
+                    <GeometryDrawing Brush="#942A09" Geometry="M20 16L9 32 31 32z" />
+                    <GeometryDrawing Brush="#BF360C" Geometry="M31 22L23 32 39 32z" />
                 </DrawingGroup>
             </DrawingImage>
 
@@ -321,6 +297,36 @@
                             <LinearGradientBrush StartPoint="8.5,5" EndPoint="8.5,27">
                                 <GradientStop Offset="0" Color="#05000000" />
                                 <GradientStop Offset="1" Color="#26000000" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage>
+
+            <!--  The Oklch tab: a thumbnail of its Lightness chart at L 0.45 over the whole hue
+                  circle (hue across, the most chroma sRGB has at each hue as the skyline), with the
+                  skyline's lowest point a little below halfway so the valleys stay shallow. The
+                  shape is generated from the gamut, not drawn, with a point every 3 degrees of hue.
+                  The fill is not the chart's: five of the Simple icon's colors as five equal strips,
+                  red to purple (its orange left out, too close to the yellow at this size), as a
+                  gradient with paired stops so each edge is hard; the gamut's own colors read
+                  muddy here.  -->
+            <DrawingImage x:Key="ColorDialogRailIconOklch">
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 h32 v32 h-32 Z" />
+                    <GeometryDrawing Geometry="F1 M3,11.26 L3.22,11.31 3.43,11.35 3.65,11.38 3.87,11.39 4.08,11.38 4.30,11.36 4.52,11.33 4.73,11.28 4.95,11.21 5.17,11.36 5.38,12.07 5.60,12.66 5.82,13.15 6.03,13.57 6.25,13.92 6.47,14.22 6.68,14.48 6.90,14.70 7.12,14.90 7.33,15.06 7.55,15.21 7.77,15.33 7.98,15.43 8.20,15.52 8.42,15.59 8.63,15.64 8.85,15.69 9.07,15.72 9.28,15.73 9.50,15.74 9.72,15.73 9.93,15.70 10.15,15.67 10.37,15.62 10.58,15.56 10.80,15.48 11.02,15.39 11.23,15.28 11.45,15.15 11.67,15.00 11.88,14.82 12.10,14.62 12.32,14.38 12.53,14.10 12.75,13.78 12.97,13.41 13.18,12.96 13.40,13.07 13.62,13.67 13.83,14.15 14.05,14.55 14.27,14.89 14.48,15.16 14.70,15.40 14.92,15.60 15.13,15.78 15.35,15.92 15.57,16.05 15.78,16.16 16.00,16.25 16.22,16.32 16.43,16.38 16.65,16.43 16.87,16.46 17.08,16.49 17.30,16.50 17.52,16.50 17.73,16.49 17.95,16.47 18.17,16.43 18.38,16.39 18.60,16.33 18.82,16.26 19.03,16.17 19.25,16.07 19.47,15.94 19.68,15.80 19.90,15.63 20.12,15.42 20.33,15.19 20.55,14.90 20.77,14.56 20.98,14.14 21.20,13.62 21.42,12.95 21.63,12.04 21.85,10.66 22.07,7.37 22.28,5.29 22.50,5.69 22.72,6.06 22.93,6.40 23.15,6.72 23.37,7.01 23.58,7.28 23.80,7.53 24.02,7.76 24.23,7.99 24.45,8.20 24.67,8.40 24.88,8.59 25.10,8.78 25.32,8.96 25.53,9.14 25.75,9.32 25.97,9.49 26.18,9.66 26.40,9.82 26.62,9.98 26.83,10.14 27.05,10.29 27.27,10.43 27.48,10.57 27.70,10.70 27.92,10.82 28.13,10.93 28.35,11.03 28.57,11.12 28.78,11.19 29.00,11.26 L29,24 A3,3 0 0 1 26,27 L6,27 A3,3 0 0 1 3,24 Z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="3,16" EndPoint="29,16">
+                                <GradientStop Offset="0.0" Color="#FF4030" />
+                                <GradientStop Offset="0.2" Color="#FF4030" />
+                                <GradientStop Offset="0.2" Color="#FFD200" />
+                                <GradientStop Offset="0.4" Color="#FFD200" />
+                                <GradientStop Offset="0.4" Color="#49DB23" />
+                                <GradientStop Offset="0.6" Color="#49DB23" />
+                                <GradientStop Offset="0.6" Color="#0099FF" />
+                                <GradientStop Offset="0.8" Color="#0099FF" />
+                                <GradientStop Offset="0.8" Color="#D738FF" />
+                                <GradientStop Offset="1.0" Color="#D738FF" />
                             </LinearGradientBrush>
                         </GeometryDrawing.Brush>
                     </GeometryDrawing>
