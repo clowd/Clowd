@@ -15,15 +15,16 @@ using Clowd.Util;
 namespace Clowd.UI.Dialogs.ColorPicker
 {
     /// <summary>
-    /// The color dialog's Palette tab (brief §7.2): a harmony preset and a base, generating five
-    /// colors through <see cref="ColorHarmony"/>. Every edit — a marker dragged on the wheel, a
-    /// color changed in the mini flyout, the brightness strip — works out the base that edit
-    /// implies and regenerates the whole palette from it, so the preset's relationship always holds.
+    /// The color dialog's Palette tab (brief §7.2): a <see cref="HarmonyPalette"/>, a preset and a
+    /// base generating five colors. Every edit — a marker dragged on the wheel, a color changed in
+    /// the mini flyout, the brightness strip — moves one member (<see cref="HarmonyPalette.WithMember"/>):
+    /// its hue turns the whole palette, so the preset's angles always hold, while its saturation and
+    /// brightness are its own. Editing the base takes every member with it.
     /// </summary>
     /// <remarks>
     /// Selected color: the selected bar's, the base by default (brief §7.2). Dragging a marker or
-    /// opening a bar's flyout selects that bar, so the top bar's Selected line and the copy buttons
-    /// follow whatever is being edited. The tab is seeded the first time it is shown, from the
+    /// opening a bar's flyout selects that bar, so the top bar's Selected line, the copy buttons and
+    /// the brightness strip follow whatever is being edited. The tab is seeded the first time it is shown, from the
     /// dialog's initial color, unless something (the Image tab's "To closest palette") has loaded
     /// a harmony into it first.
     /// </remarks>
@@ -36,11 +37,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
         /// every member of its harmony would come out gray too.</summary>
         private const double MinSeedSaturation = 0.12;
 
-        public HarmonyPreset Preset { get; private set; } = HarmonyPreset.SplitComplementary;
+        public HarmonyPalette Palette { get; private set; } = new(HarmonyPreset.SplitComplementary, DefaultBase);
 
-        public HsvColor Base { get; private set; } = DefaultBase;
-
-        private HsvColor[] _palette;
+        public HarmonyPreset Preset => Palette.Preset;
 
         private readonly RadioButton[] _presetButtons;
 
@@ -50,8 +49,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
         // the member the open flyout is editing, or -1
         private int _flyoutIndex = -1;
 
-        // the base and selected bar to put back if an eyedropper drag ends without a pick
-        private (HsvColor Base, int SelectedIndex)? _eyedropperRestore;
+        // the palette and selected bar to put back if an eyedropper drag ends without a pick
+        private (HarmonyPalette Palette, int SelectedIndex)? _eyedropperRestore;
 
         public ColorPaletteTab()
         {
@@ -68,7 +67,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
             presetGrid.AddHandler(KeyDownEvent, OnPresetKeyDown, RoutingStrategies.Tunnel);
 
             bars.BaseIndex = ColorHarmony.BaseIndex;
-            bars.SelectedIndexChanged += (_, _) => SyncSelection();
+            bars.SelectedIndexChanged += (_, _) =>
+            {
+                SyncSelection();
+                UpdateBrightnessSlider();
+            };
             bars.GoToSimpleRequested += (_, color) => Host?.ShowInSimple(color);
             bars.HexClicked += (_, e) => OpenFlyout(e.Index, e.Anchor);
             bars.PropertyChanged += (_, e) =>
@@ -81,11 +84,15 @@ namespace Clowd.UI.Dialogs.ColorPicker
             wheel.DragStarted += (_, index) => bars.SelectedIndex = index;
             wheel.MemberDragged += (_, e) =>
             {
-                var member = _palette[e.Index];
-                ApplyBase(ColorHarmony.BaseFor(Preset, e.Index, new HsvColor(e.Hue, e.Saturation, member.Value)));
+                var member = Palette.Colors[e.Index];
+                Apply(Palette.WithMember(e.Index, new HsvColor(e.Hue, e.Saturation, member.Value)));
             };
 
-            brightnessSlider.ValueChanged += (_, value) => ApplyBase(Base with { Value = value });
+            brightnessSlider.ValueChanged += (_, value) =>
+            {
+                var index = SelectedMember;
+                Apply(Palette.WithMember(index, Palette.Colors[index] with { Value = value }));
+            };
 
             miniColor.Canceled += (_, _) => flyoutPopup.IsOpen = false;
             flyoutPopup.Closed += (_, _) =>
@@ -94,32 +101,31 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 UpdateHighlight();
             };
 
-            LoadHarmony(Preset, Base);
+            LoadHarmony(Palette);
             _seeded = false;
         }
 
-        /// <summary>Shows <paramref name="preset"/> generated from <paramref name="baseColor"/>, with
-        /// the base bar selected. What the window's <see cref="ColorDialog.ShowInPalette"/> calls.</summary>
-        public void LoadHarmony(HarmonyPreset preset, HsvColor baseColor)
+        /// <summary>Shows <paramref name="palette"/>, with the base bar selected. What the window's
+        /// <see cref="ColorDialog.ShowInPalette"/> calls.</summary>
+        public void LoadHarmony(HarmonyPalette palette)
         {
             _seeded = true;
             flyoutPopup.IsOpen = false;
-            Preset = preset;
-            ApplyBase(baseColor);
+            Apply(palette);
             UpdatePresetButtons();
             bars.SelectedIndex = ColorHarmony.BaseIndex;
         }
 
         /// <summary>Switches the preset, keeping the base (a preset button, or a keyboard move
-        /// through the grid). The selected bar stays selected.</summary>
+        /// through the grid). Members' own tones start over from the new preset's. The selected bar
+        /// stays selected.</summary>
         public void SetPreset(HarmonyPreset preset)
         {
             if (preset == Preset)
                 return;
 
             flyoutPopup.IsOpen = false;
-            Preset = preset;
-            ApplyBase(Base);
+            Apply(Palette.WithPreset(preset));
             UpdatePresetButtons();
         }
 
@@ -129,7 +135,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 return;
 
             var seed = Host?.InitialColor is { } initial ? HsvColor.FromColor(initial) : DefaultBase;
-            LoadHarmony(Preset, seed.Saturation < MinSeedSaturation ? DefaultBase : seed);
+            LoadHarmony(new HarmonyPalette(Preset, seed.Saturation < MinSeedSaturation ? DefaultBase : seed));
         }
 
         protected internal override bool HandleEscape()
@@ -144,42 +150,60 @@ namespace Clowd.UI.Dialogs.ColorPicker
         protected internal override bool AcceptsEyedropper => true;
 
         /// <summary>The top bar's eyedropper sets the base, live, with the base bar selected so the
-        /// Selected chip shows the sample; a cancel puts back the base and the selection.</summary>
+        /// Selected chip shows the sample; a cancel puts back the palette and the selection.</summary>
         protected internal override void BeginEyedropper()
         {
             flyoutPopup.IsOpen = false;
-            _eyedropperRestore = (Base, bars.SelectedIndex);
+            _eyedropperRestore = (Palette, bars.SelectedIndex);
             bars.SelectedIndex = ColorHarmony.BaseIndex;
         }
 
-        protected internal override void PreviewEyedropper(Color sampled) => ApplyBase(HsvColor.FromColor(sampled));
+        protected internal override void PreviewEyedropper(Color sampled) => SampleBase(sampled);
 
         protected internal override void EndEyedropper(Color? picked)
         {
             if (picked is { } color)
             {
-                ApplyBase(HsvColor.FromColor(color));
+                SampleBase(color);
             }
             else if (_eyedropperRestore is { } restore)
             {
-                ApplyBase(restore.Base);
+                Apply(restore.Palette);
                 bars.SelectedIndex = restore.SelectedIndex;
             }
 
             _eyedropperRestore = null;
         }
 
-        /// <summary>Makes <paramref name="baseColor"/> the base and regenerates everything shown
-        /// from it: the bars, the markers, the brightness strip and the preset glyphs.</summary>
-        private void ApplyBase(HsvColor baseColor)
+        // the sampled color as the new base, the members' tones kept
+        private void SampleBase(Color color) => Apply(Palette.WithBase(HsvColor.FromColor(color)));
+
+        /// <summary>The member being edited: the selected bar's, the base when nothing is.</summary>
+        private int SelectedMember =>
+            bars.SelectedIndex is >= 0 and < ColorHarmony.ColorCount ? bars.SelectedIndex : ColorHarmony.BaseIndex;
+
+        /// <summary>Shows <paramref name="palette"/>: the bars, the markers, the brightness strip and
+        /// the preset glyphs.</summary>
+        private void Apply(HarmonyPalette palette)
         {
-            Base = baseColor.Normalized();
-            _palette = ColorHarmony.Generate(Preset, Base);
+            Palette = palette;
 
-            bars.Colors = _palette.Select(c => c.ToColor()).ToArray();
-            wheel.Palette = _palette;
+            bars.Colors = Palette.Colors.Select(c => c.ToColor()).ToArray();
+            wheel.Palette = Palette.Colors;
 
-            brightnessSlider.Value = Base.Value;
+            foreach (var button in _presetButtons)
+                ((HarmonyGlyph)button.Content).BaseHue = Palette.Base.Hue;
+
+            UpdateBrightnessSlider();
+            SyncSelection();
+        }
+
+        /// <summary>The brightness strip is the selected member's: its value, over a ramp from black
+        /// to that member at full brightness.</summary>
+        private void UpdateBrightnessSlider()
+        {
+            var member = Palette.Colors[SelectedMember];
+            brightnessSlider.Value = member.Value;
             brightnessSlider.SliderBrush = new LinearGradientBrush
             {
                 StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
@@ -187,14 +211,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 GradientStops =
                 {
                     new GradientStop(Colors.Black, 0),
-                    new GradientStop((Base with { Value = 1 }).ToColor(), 1),
+                    new GradientStop((member with { Value = 1 }).ToColor(), 1),
                 },
             };
-
-            foreach (var button in _presetButtons)
-                ((HarmonyGlyph)button.Content).BaseHue = Base.Hue;
-
-            SyncSelection();
         }
 
         private void SyncSelection()
@@ -292,17 +311,17 @@ namespace Clowd.UI.Dialogs.ColorPicker
             _flyoutIndex = index;
             UpdateHighlight();
 
-            // the member's color as the flyout opens, and the base that made it: Cancel hands the
+            // the member's color as the flyout opens, and the palette it was in: Cancel hands the
             // color back once the popup has already closed, and the palette is put back exactly
-            // from the base rather than re-derived from a color that has been through 8-bit RGB
-            var original = _palette[index].ToColor();
-            var restoreBase = Base;
+            // rather than re-derived from a color that has been through 8-bit RGB
+            var original = Palette.Colors[index].ToColor();
+            var restore = Palette;
 
             miniColor.ParentWindow = Host;
             miniColor.Reset(original, color =>
             {
                 if (color == original)
-                    ApplyBase(restoreBase);
+                    Apply(restore);
                 else
                     MoveMember(index, color);
             });
@@ -316,7 +335,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         internal void OpenFlyoutForSnapshot(int index)
         {
             var anchor = bars.GetVisualDescendants().OfType<Button>()
-                .FirstOrDefault(b => b.IsVisible && AutomationProperties.GetName(b) == "Edit " + ColorTextHelper.GetHex(_palette[index].ToColor()));
+                .FirstOrDefault(b => b.IsVisible && AutomationProperties.GetName(b) == "Edit " + ColorTextHelper.GetHex(Palette.Colors[index].ToColor()));
             if (anchor == null)
                 return;
 
@@ -325,8 +344,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
         }
 
         /// <summary>
-        /// The flyout's color, live (it is Realtime): the edited member moves there and the other
-        /// four re-derive from the preset, exactly as a marker drag does. The picker's own HSL is
+        /// The flyout's color, live (it is Realtime): the edited member moves there, exactly as a
+        /// marker drag does (its hue turns the palette; its saturation and brightness are its own). The picker's own HSL is
         /// read for the hue rather than the RGB it hands over, so taking a member to gray does not
         /// swing the whole palette round to red. Alpha is not part of a harmony and is dropped.
         /// </summary>
@@ -337,7 +356,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 ? new HsvColor(hsl.Hue, ColorWheel.HsvSaturation(hsl), ColorWheel.HsvValue(hsl))
                 : HsvColor.FromColor(color);
 
-            ApplyBase(ColorHarmony.BaseFor(Preset, index, member));
+            Apply(Palette.WithMember(index, member));
         }
     }
 }

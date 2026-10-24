@@ -92,7 +92,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
             btnInitial.Click += (_, _) => RestoreInitial();
             btnCopy.Click += async (_, _) => await CopySelectedHex();
-            btnOpenPalette.Click += (_, _) => ShowInPalette(paletteTab.Preset, HsvColor.FromColor(SelectedColor));
+            btnOpenPalette.Click += (_, _) => ShowInPalette(new HarmonyPalette(paletteTab.Preset, HsvColor.FromColor(SelectedColor)));
             btnOpenSimple.Click += (_, _) => ShowInSimple(SelectedColor);
             UpdateOpenButtons();
             WireEyedropper();
@@ -139,11 +139,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
             SyncSelection();
         }
 
-        /// <summary>Switches to the Palette tab showing <paramref name="preset"/> from
-        /// <paramref name="baseColor"/> (the Image tab's "To closest palette").</summary>
-        public void ShowInPalette(HarmonyPreset preset, HsvColor baseColor)
+        /// <summary>Switches to the Palette tab showing <paramref name="palette"/>
+        /// (the Image tab's "To closest palette", or the selected color in the current preset).</summary>
+        public void ShowInPalette(HarmonyPalette palette)
         {
-            paletteTab.LoadHarmony(preset, baseColor);
+            paletteTab.LoadHarmony(palette);
             ActiveTab = ColorDialogTabKind.Palette;
             SyncSelection();
         }

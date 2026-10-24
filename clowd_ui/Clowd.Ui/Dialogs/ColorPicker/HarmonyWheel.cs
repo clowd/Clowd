@@ -15,8 +15,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
     /// preset's relationship holds and every marker follows.
     /// </summary>
     /// <remarks>
-    /// The wheel's own <see cref="ColorWheel.CurrentColor"/> is not used. Positions come from HSV
-    /// hue and saturation alone, so a palette dimmed by the brightness slider keeps its shape.
+    /// The wheel's own <see cref="ColorWheel.CurrentColor"/> is not used. Positions come from hue
+    /// and HSV saturation alone, so a palette dimmed by the brightness slider keeps its shape. Hues
+    /// are laid out round the artistic wheel the harmonies are defined on
+    /// (<see cref="ColorHarmony.ToArtistic"/>), wheel and markers alike, so a preset's angles read
+    /// true: a triad is an equilateral triangle, a complement sits straight across.
     /// </remarks>
     public class HarmonyWheel : ColorWheel
     {
@@ -102,6 +105,10 @@ namespace Clowd.UI.Dialogs.ColorPicker
         /// <summary>The dragged marker's new hue and saturation, live through the drag. Value is
         /// left as the member had it; the wheel does not show brightness.</summary>
         public event EventHandler<(int Index, double Hue, double Saturation)> MemberDragged;
+
+        protected override double AngleOfHue(double hue) => ColorHarmony.ToArtistic(hue);
+
+        protected override double HueAtAngle(double angle) => ColorHarmony.FromArtistic(angle);
 
         private double DiameterOf(int index) => index == _baseIndex ? BaseMarkerDiameter : MarkerDiameter;
 
@@ -192,7 +199,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                         p[k] = lo + (p[k] - p[0]) / span * (hi - lo);
                 }
 
-                var angle = _palette[first].Hue * Math.PI / 180;
+                var angle = AngleOfHue(_palette[first].Hue) * Math.PI / 180;
                 for (var k = 0; k < group.Length; k++)
                     centers[group[k]] = new Point(c.X + Math.Cos(angle) * p[k], c.Y - Math.Sin(angle) * p[k]);
             }

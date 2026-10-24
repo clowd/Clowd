@@ -174,6 +174,11 @@ namespace Clowd
                 if (UI.TraySpike.TryHandleArgs(args))
                     return;
 
+                // hidden color dialog harness (`--color-dialog-snapshot out.png`): renders the color
+                // dialog off-screen to a PNG and exits. Same single-instance rules as above.
+                if (UI.Dialogs.ColorPicker.ColorDialogSnapshot.TryHandleArgs(args))
+                    return;
+
                 await SetupMutex(args);
                 bool firstRun = await SetupSettings() || Program.IsVelopackFirstRun;
 

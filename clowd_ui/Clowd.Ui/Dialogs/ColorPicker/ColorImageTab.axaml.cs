@@ -105,7 +105,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             btnClosest.Click += (_, _) =>
             {
                 if (_closest != null)
-                    Host?.ShowInPalette(_closest.Preset, _closest.Base);
+                    Host?.ShowInPalette(_closest.Palette);
             };
 
             foreach (var chip in moodChips.Children.OfType<RadioButton>())
@@ -422,7 +422,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             bars.Colors = colors;
 
             _closest = ColorHarmony.FitClosest(colors);
-            var name = ColorHarmony.DisplayName(_closest.Preset);
+            var name = ColorHarmony.DisplayName(_closest.Palette.Preset);
             closestName.Text = name;
             AutomationProperties.SetName(btnClosest, "To closest palette: " + name);
 

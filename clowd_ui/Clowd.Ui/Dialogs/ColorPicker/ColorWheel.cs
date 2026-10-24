@@ -214,7 +214,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         {
             var c = Bounds.Width / 2;
             var radius = c * Math.Clamp(saturation, 0, 1);
-            var angle = hue * Math.PI / 180;
+            var angle = AngleOfHue(hue) * Math.PI / 180;
             return new Point(c + Math.Cos(angle) * radius, (Bounds.Height / 2) - Math.Sin(angle) * radius);
         }
 
@@ -225,12 +225,20 @@ namespace Clowd.UI.Dialogs.ColorPicker
             var dx = point.X - Bounds.Width / 2;
             var dy = (Bounds.Height / 2) - point.Y;
             var radius = Bounds.Width / 2;
-            var hue = Math.Atan2(dy, dx) * 180 / Math.PI;
-            if (hue < 0)
-                hue += 360;
+            var angle = Math.Atan2(dy, dx) * 180 / Math.PI;
+            if (angle < 0)
+                angle += 360;
             var saturation = radius > 0 ? Math.Min(1, Math.Sqrt(dx * dx + dy * dy) / radius) : 0;
-            return (hue, saturation);
+            return (HueAtAngle(angle), saturation);
         }
+
+        /// <summary>Where <paramref name="hue"/> is drawn round the wheel, in degrees counter-clockwise
+        /// from three o'clock. Here the hue itself; the Palette tab's wheel spaces the hues out as
+        /// an artistic wheel does.</summary>
+        protected virtual double AngleOfHue(double hue) => hue;
+
+        /// <summary>The hue drawn at <paramref name="angle"/>: the inverse of <see cref="AngleOfHue"/>.</summary>
+        protected virtual double HueAtAngle(double angle) => angle;
 
         /// <summary>HSV value (brightness) of an HSL color.</summary>
         public static double HsvValue(HslRgbColor color) =>
@@ -300,7 +308,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                             continue;
 
                         double chroma = Math.Min(saturation, 1.0); // value = 1
-                        double hue = 3.0 * (Math.PI - Math.Atan2(uvy, -uvx)) / Math.PI;
+                        double hue = HueAtAngle(180.0 * (Math.PI - Math.Atan2(uvy, -uvx)) / Math.PI) / 60.0;
                         double second = chroma * (1.0 - Math.Abs((hue % 2.0) - 1.0));
                         double m = 1.0 - chroma;
 
