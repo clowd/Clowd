@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
+             x:Class="Clowd.UI.Dialogs.ColorPicker.PaletteBars"
+             cp:ColorDialogTips.Side="Right"
+             ClipToBounds="False">
+
+    <!--  The five palette bars shared by the Image and Palette tabs (brief §6): a caption row, the
+          bars (built in code, PaletteBars.axaml.cs), and a 38px slot pinned to the bottom of the
+          column for whatever the tab puts there.  -->
+    <DockPanel>
+        <Grid Height="24"
+              Margin="0,0,0,8"
+              ColumnDefinitions="*,Auto"
+              DockPanel.Dock="Top">
+            <TextBlock x:Name="captionText" Classes="colorDialogCaption" />
+            <Button x:Name="btnCopyAll"
+                    Grid.Column="1"
+                    Width="26"
+                    Height="24"
+                    Padding="0"
+                    AutomationProperties.Name="Copy all colors"
+                    CornerRadius="5"
+                    Foreground="{DynamicResource ColorDialogMutedTextBrush}"
+                    Theme="{StaticResource ColorDialogGhostButton}"
+                    ToolTip.Tip="Copy all">
+                <cp:LineIcon x:Name="copyAllIcon"
+                             Width="14"
+                             Height="14"
+                             Data="{StaticResource ColorDialogIconCopy}" />
+            </Button>
+        </Grid>
+
+        <ContentPresenter x:Name="bottomSlot"
+                          Height="38"
+                          DockPanel.Dock="Bottom" />
+
+        <StackPanel x:Name="barsPanel"
+                    VerticalAlignment="Top"
+                    Spacing="6" />
+    </DockPanel>
+</UserControl>

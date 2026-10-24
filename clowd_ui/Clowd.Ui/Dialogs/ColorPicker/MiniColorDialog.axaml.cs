@@ -33,6 +33,28 @@ namespace Clowd.UI.Dialogs.ColorPicker
             set => SetValue(RealtimeProperty, value);
         }
 
+        public static readonly StyledProperty<bool> ShowPopoutButtonProperty =
+            AvaloniaProperty.Register<MiniColorDialog, bool>(nameof(ShowPopoutButton), true);
+
+        /// <summary>Whether the "open in full color picker" button shows. Off inside the full color
+        /// dialog itself (its Palette tab's flyout), where the user is already in that picker.</summary>
+        public bool ShowPopoutButton
+        {
+            get => GetValue(ShowPopoutButtonProperty);
+            set => SetValue(ShowPopoutButtonProperty, value);
+        }
+
+        public static readonly StyledProperty<bool> RecordsRecentColorsProperty =
+            AvaloniaProperty.Register<MiniColorDialog, bool>(nameof(RecordsRecentColors), true);
+
+        /// <summary>Whether a color chosen here (accepted, or kept by a light dismiss) goes into the
+        /// shared recent list. Off inside the full color dialog, where only its own OK records one.</summary>
+        public bool RecordsRecentColors
+        {
+            get => GetValue(RecordsRecentColorsProperty);
+            set => SetValue(RecordsRecentColorsProperty, value);
+        }
+
         public event EventHandler Canceled;
 
         public Action<Color> ColorSelectFn { get; set; }
@@ -251,7 +273,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
             _committed = true;
 
-            if (color.HasValue && color.Value != _originalColor)
+            if (RecordsRecentColors && color.HasValue && color.Value != _originalColor)
                 RecentColorHistory.Add(color.Value);
         }
 
@@ -312,6 +334,10 @@ namespace Clowd.UI.Dialogs.ColorPicker
                     newValue.PropertyChanged += ColorPropertyChanged;
                     if (_initialized) Update();
                 }
+            }
+            else if (change.Property == ShowPopoutButtonProperty && _initialized)
+            {
+                btnPopout.IsVisible = ShowPopoutButton;
             }
         }
 
@@ -617,16 +643,14 @@ namespace Clowd.UI.Dialogs.ColorPicker
             _committed = true;
             Canceled?.Invoke(this, EventArgs.Empty);
 
-            // Clone: ColorDialog keeps the instance it is handed as its live CurrentColor, so
-            // sharing ours would let its edits mutate (and, in Realtime, re-broadcast) this one.
-            var clr = new ColorDialog(CurrentColor?.Clone(), true);
+            var clr = new ColorDialog(CurrentColor?.ToColor(), true);
             var result = await clr.ShowAsync(ParentWindow);
 
             if (fn == null)
                 return;
 
             if (result == true)
-                fn(clr.CurrentColor.ToColor());
+                fn(clr.SelectedColor);
             else if (Realtime && original.HasValue)
                 fn(original.Value); // canceled — undo the live edits made before popping out
         }

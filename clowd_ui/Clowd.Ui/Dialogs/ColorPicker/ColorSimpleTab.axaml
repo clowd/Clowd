@@ -1,0 +1,216 @@
+<cp:ColorDialogTab xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:controls="using:Clowd.UI.Controls"
+                   xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
+                   xmlns:helpers="using:Clowd.UI.Helpers"
+                   x:Class="Clowd.UI.Dialogs.ColorPicker.ColorSimpleTab">
+
+    <cp:ColorDialogTab.Resources>
+        <!--  The copy buttons' key letters. The mono font's own underline sits too high (it clipped
+              the glyphs) and is under a pixel thick (it rendered faint), so draw a crisp 1px line
+              a little lower, like the one Inter gives the footer buttons.  -->
+        <TextDecorationCollection x:Key="AccessKeyUnderline">
+            <TextDecoration Location="Underline"
+                            StrokeOffset="1"
+                            StrokeOffsetUnit="Pixel"
+                            StrokeThickness="1"
+                            StrokeThicknessUnit="Pixel" />
+        </TextDecorationCollection>
+    </cp:ColorDialogTab.Resources>
+
+    <cp:ColorDialogTab.Styles>
+        <!--  A channel row's letter, and the Hex field's label  -->
+        <Style Selector="TextBlock.channel">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource ColorDialogMutedTextBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Grid.row">
+            <Setter Property="Height" Value="30" />
+        </Style>
+        <!--  out of the tab order: Tab walks the value fields beside them, which take exact input  -->
+        <Style Selector="cp|ChannelSlider">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="IsTabStop" Value="False" />
+        </Style>
+        <!--  The value boxes and the copy buttons share one width, so the right edge reads as a
+              single column from the Hex row down.  -->
+        <Style Selector="TextBox.colorDialogField.value">
+            <Setter Property="Width" Value="64" />
+            <Setter Property="helpers:SelectTextOnFocus.Active" Value="True" />
+        </Style>
+        <Style Selector="Border.divider">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Margin" Value="0,4" />
+            <Setter Property="Background" Value="{DynamicResource ColorDialogDividerBrush}" />
+        </Style>
+        <!--  A section's CSS text ("rgb(0, 175, 240)"), and the copy button beside it  -->
+        <Style Selector="TextBlock.readout">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.copy">
+            <Setter Property="Width" Value="64" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.copy TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="WrapPanel.swatches">
+            <Setter Property="Width" Value="236" />
+            <Setter Property="ItemSpacing" Value="4" />
+            <Setter Property="LineSpacing" Value="4" />
+        </Style>
+        <Style Selector="WrapPanel.swatches > cp|ColorPaletteItem">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="EdgeBrush" Value="{DynamicResource ColorDialogSwatchEdgeBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+    </cp:ColorDialogTab.Styles>
+
+    <Grid ColumnDefinitions="260,24,*">
+
+        <!--  Left: the wheel (the same place and size as on Palette) and the swatches under it.
+              The eyedropper is the window's, in the top bar.  -->
+        <StackPanel HorizontalAlignment="Center" Spacing="18">
+            <cp:ColorWheel x:Name="wheel" Width="220" Height="220" />
+
+            <StackPanel Width="236"
+                        cp:ColorDialogTips.Side="Bottom"
+                        Spacing="10">
+                <!--  Recent colors (RecentColorHistory), one row of up to 12; it and its divider
+                      are hidden while the history is empty.  -->
+                <WrapPanel x:Name="recentPanel" Classes="swatches" />
+                <Border x:Name="recentDivider"
+                        Height="1"
+                        Background="{DynamicResource ColorDialogDividerBrush}" />
+                <WrapPanel x:Name="standardPanel" Classes="swatches" />
+            </StackPanel>
+        </StackPanel>
+
+        <!--  Right: one slider per row (an earlier two-column RGB | HSL layout made them too small).
+              Each format heads its own section with its copy button: Hex beside its field, RGB and
+              HSL beside their CSS readouts, on the slider rows' columns (as the old dialog had them,
+              underlined letter and all: X, R and H click them). Packed tight enough that the alpha
+              row still clears the footer.  -->
+        <StackPanel Grid.Column="2" Spacing="4">
+            <Grid ColumnDefinitions="32,12,Auto,*,Auto">
+                <TextBlock VerticalAlignment="Center"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ColorDialogMutedTextBrush}"
+                           Text="Hex" />
+                <TextBox x:Name="txtHex"
+                         Grid.Column="2"
+                         Width="132"
+                         Height="32"
+                         Padding="10,0"
+                         AutomationProperties.Name="Hex"
+                         Classes="colorDialogField"
+                         CornerRadius="7"
+                         FontSize="15"
+                         FontWeight="Medium"
+                         TextAlignment="Left"
+                         helpers:SelectTextOnFocus.Active="True" />
+                <controls:AcceleratedButton x:Name="btnCopyHex"
+                        Grid.Column="4"
+                        Accelerator="X"
+                        AutomationProperties.Name="Copy as HEX"
+                        Classes="copy"
+                        Theme="{StaticResource ColorDialogBarChipButton}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <cp:LineIcon x:Name="copyHexIcon" Width="14" Height="14" Data="{StaticResource ColorDialogIconCopy}" />
+                        <TextBlock>HE<Run Text="X" TextDecorations="{StaticResource AccessKeyUnderline}" /></TextBlock>
+                    </StackPanel>
+                </controls:AcceleratedButton>
+            </Grid>
+
+            <Border Classes="divider" />
+
+            <Grid ColumnDefinitions="20,8,*,20,64">
+                <TextBlock x:Name="txtRgbReadout" Grid.Column="2" Classes="readout" />
+                <controls:AcceleratedButton x:Name="btnCopyRgb"
+                        Grid.Column="4"
+                        Accelerator="R"
+                        AutomationProperties.Name="Copy as RGB"
+                        Classes="copy"
+                        Theme="{StaticResource ColorDialogBarChipButton}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <cp:LineIcon x:Name="copyRgbIcon" Width="14" Height="14" Data="{StaticResource ColorDialogIconCopy}" />
+                        <TextBlock><Run Text="R" TextDecorations="{StaticResource AccessKeyUnderline}" />GB</TextBlock>
+                    </StackPanel>
+                </controls:AcceleratedButton>
+            </Grid>
+
+            <!--  Slider values are synced from code-behind (UpdateChannels / ValueChanged): TwoWay
+                  bindings to CurrentColor.* do not reliably write drag values back.  -->
+            <Grid Classes="row" ColumnDefinitions="20,8,*,20,64">
+                <TextBlock Classes="channel" Text="R" />
+                <cp:ChannelSlider x:Name="sliderR" Grid.Column="2" ValueMax="255" />
+                <TextBox x:Name="txtR" Grid.Column="4" AutomationProperties.Name="Red" Classes="colorDialogField value" />
+            </Grid>
+            <Grid Classes="row" ColumnDefinitions="20,8,*,20,64">
+                <TextBlock Classes="channel" Text="G" />
+                <cp:ChannelSlider x:Name="sliderG" Grid.Column="2" ValueMax="255" />
+                <TextBox x:Name="txtG" Grid.Column="4" AutomationProperties.Name="Green" Classes="colorDialogField value" />
+            </Grid>
+            <Grid Classes="row" ColumnDefinitions="20,8,*,20,64">
+                <TextBlock Classes="channel" Text="B" />
+                <cp:ChannelSlider x:Name="sliderB" Grid.Column="2" ValueMax="255" />
+                <TextBox x:Name="txtB" Grid.Column="4" AutomationProperties.Name="Blue" Classes="colorDialogField value" />
+            </Grid>
+
+            <Border Classes="divider" />
+
+            <Grid ColumnDefinitions="20,8,*,20,64">
+                <TextBlock x:Name="txtHslReadout" Grid.Column="2" Classes="readout" />
+                <controls:AcceleratedButton x:Name="btnCopyHsl"
+                        Grid.Column="4"
+                        Accelerator="H"
+                        AutomationProperties.Name="Copy as HSL"
+                        Classes="copy"
+                        Theme="{StaticResource ColorDialogBarChipButton}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <cp:LineIcon x:Name="copyHslIcon" Width="14" Height="14" Data="{StaticResource ColorDialogIconCopy}" />
+                        <TextBlock><Run Text="H" TextDecorations="{StaticResource AccessKeyUnderline}" />SL</TextBlock>
+                    </StackPanel>
+                </controls:AcceleratedButton>
+            </Grid>
+
+            <Grid Classes="row" ColumnDefinitions="20,8,*,20,64">
+                <TextBlock Classes="channel" Text="H" />
+                <cp:ChannelSlider x:Name="sliderH" Grid.Column="2" ValueMax="360" />
+                <TextBox x:Name="txtH" Grid.Column="4" AutomationProperties.Name="Hue" Classes="colorDialogField value" />
+            </Grid>
+            <Grid Classes="row" ColumnDefinitions="20,8,*,20,64">
+                <TextBlock Classes="channel" Text="S" />
+                <cp:ChannelSlider x:Name="sliderS" Grid.Column="2" ValueMax="1" />
+                <TextBox x:Name="txtS" Grid.Column="4" AutomationProperties.Name="Saturation" Classes="colorDialogField value" />
+            </Grid>
+            <Grid Classes="row" ColumnDefinitions="20,8,*,20,64">
+                <TextBlock Classes="channel" Text="L" />
+                <cp:ChannelSlider x:Name="sliderL" Grid.Column="2" ValueMax="1" />
+                <TextBox x:Name="txtL" Grid.Column="4" AutomationProperties.Name="Lightness" Classes="colorDialogField value" />
+            </Grid>
+
+            <Border Classes="divider" />
+
+            <Grid Classes="row" ColumnDefinitions="20,8,*,20,64">
+                <TextBlock Classes="channel" Text="A" />
+                <cp:ChannelSlider x:Name="sliderA"
+                                  Grid.Column="2"
+                                  Background="{DynamicResource ColorDialogCheckerBrush}"
+                                  ValueMax="1" />
+                <TextBox x:Name="txtA" Grid.Column="4" AutomationProperties.Name="Alpha" Classes="colorDialogField value" />
+            </Grid>
+        </StackPanel>
+    </Grid>
+</cp:ColorDialogTab>

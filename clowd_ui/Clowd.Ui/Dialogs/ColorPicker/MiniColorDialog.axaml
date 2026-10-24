@@ -187,7 +187,8 @@
             <DockPanel Grid.Row="6"
                        Margin="0,8,0,0"
                        HorizontalAlignment="Stretch">
-                <controls:ToolButton Click="ButtonPopoutClicked"
+                <controls:ToolButton x:Name="btnPopout"
+                                     Click="ButtonPopoutClicked"
                                      DockPanel.Dock="Left"
                                      IconPath="{StaticResource IconPopout}"
                                      ToolTip.Tip="Open in full color picker" />

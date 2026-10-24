@@ -2,286 +2,263 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:Clowd.UI.Controls"
         xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
-        xmlns:helpers="using:Clowd.UI.Helpers"
         xmlns:ui="using:Clowd.UI"
-        xmlns:util="using:Clowd.Util"
         x:Class="Clowd.UI.Dialogs.ColorPicker.ColorDialog"
-        Title="Color Editor"
-        SizeToContent="WidthAndHeight"
+        Title="Color Wheel"
+        Width="720"
+        Height="520"
         CanResize="False"
+        CanMinimize="False"
+        CanMaximize="False"
+        FontSize="13"
         UseLayoutRounding="True">
 
+    <!--  The color dialog (COLOR_VIEWER_REWORK.md): the editors' modern chrome at dialog size. The
+          top bar and the rail sit on the window's own backdrop (Mica where the compositor grants
+          it); the tabs sit on the raised surface, rounded where the two bars meet it.  -->
     <Window.Styles>
-        <!-- labels and value readouts are monospaced (channel data aligns nicely); the grid is
-             sized generously so Cascadia Mono at theme size never clips -->
-        <Style Selector="TextBlock.lbl">
-            <Setter Property="HorizontalAlignment" Value="Right" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
-        </Style>
-        <Style Selector="cp|ColorSlider">
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Height" Value="16" />
-            <Setter Property="Background" Value="{x:Static util:CheckerBrushes.Medium}" />
-        </Style>
-        <!-- .val and .copy share the fixed value column: identical left margin + Stretch keeps
-             the textboxes and copy buttons the exact same width -->
-        <Style Selector="TextBox.val">
-            <Setter Property="Margin" Value="10,2,0,2" />
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="Padding" Value="4,2" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="TextAlignment" Value="Center" />
-            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
-        </Style>
-        <Style Selector="Button.copy">
-            <Setter Property="Margin" Value="10,0,0,0" />
-            <Setter Property="Padding" Value="6,0" />
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="VerticalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
+        <StyleInclude Source="avares://Clowd.Ui/Dialogs/ColorPicker/ColorDialogTheme.axaml" />
     </Window.Styles>
 
-    <Grid ColumnDefinitions="Auto,Auto">
+    <!--  "modern" is the editors' chrome class: the shared bar styles key off it.  -->
+    <Grid x:Name="rootGrid"
+          Classes="modern"
+          ColumnDefinitions="64,*"
+          RowDefinitions="42,*"
+          TextElement.Foreground="{DynamicResource ColorDialogTextBrush}">
+        <Grid.Styles>
+            <!--  The editors' tool buttons, and their top bar's metrics (VideoEditorWindow's TopBar
+                  rules): a 32px lane, 5px above and below it, groups 6px apart, buttons 2px apart.  -->
+            <StyleInclude Source="avares://Clowd.Ui/Assets/EditorChromeStyles.axaml" />
+            <Style Selector="controls|DockAndWrapPanel#topBar">
+                <Setter Property="ItemHeight" Value="32" />
+                <Setter Property="Margin" Value="4,5,4,5" />
+            </Style>
+            <Style Selector="controls|DockAndWrapPanel#topBar &gt; controls|ToolButton">
+                <Setter Property="Margin" Value="1,0" />
+            </Style>
+            <Style Selector="Border.colorChip">
+                <Setter Property="Height" Value="24" />
+                <Setter Property="MinWidth" Value="84" />
+                <Setter Property="Padding" Value="9,0" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogSwatchEdgeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style Selector="Border.colorChip &gt; TextBlock">
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
+                <Setter Property="FontSize" Value="12" />
+            </Style>
+            <Style Selector="controls|DockAndWrapPanel#topBar &gt; StackPanel">
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Margin" Value="6,0" />
+                <Setter Property="Orientation" Value="Horizontal" />
+            </Style>
+        </Grid.Styles>
 
-        <Grid Grid.Column="0" RowDefinitions="*,Auto,Auto">
-            <cp:ColorWheel Width="200"
-                           Height="200"
-                           Margin="20"
-                           CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+        <!--  Parks focus when a click lands on anything but a text field, so a field being typed
+              in commits (on focus loss) the moment the user moves on. Focusable, never a tab stop.  -->
+        <Control x:Name="focusSink"
+                 Focusable="True"
+                 IsTabStop="False" />
 
-            <!-- recently used custom colors (RecentColorHistory), populated from code-behind.
-                 One 16px row; hidden entirely while the history is empty. -->
-            <WrapPanel x:Name="RecentPalette"
-                       Grid.Row="1"
-                       Width="256"
-                       Height="16"
-                       Margin="10,0,10,8"
-                       VerticalAlignment="Bottom"
-                       Background="{x:Static util:CheckerBrushes.Medium}"
-                       ItemHeight="16"
-                       ItemWidth="16"
-                       Orientation="Horizontal" />
+        <!--  ===== Top bar =====
+              The editors' modern strip, item for item: the same panel and chrome classes, the same
+              32px lane with 5px either side, the same groups 6px apart, the same tool buttons
+              (Assets/EditorChromeStyles.axaml). Everything packs to the left after the tab's name,
+              where the editors show their session's; only the pin docks to the far end.  -->
+        <controls:DockAndWrapPanel x:Name="topBar"
+                                   Grid.ColumnSpan="2"
+                                   Background="Transparent"
+                                   Classes="chromeBar tipBridge"
+                                   Orientation="Horizontal">
 
-            <WrapPanel x:Name="ColorPalette"
-                       Grid.Row="2"
-                       Width="256"
-                       Height="96"
-                       Margin="10,0,10,10"
-                       VerticalAlignment="Bottom"
-                       Background="{x:Static util:CheckerBrushes.Medium}"
-                       ItemHeight="16"
-                       ItemWidth="16"
-                       Orientation="Horizontal" />
-        </Grid>
+            <!--  Clears the macOS traffic lights, which sit in this bar; zero-width elsewhere.  -->
+            <Border Width="{DynamicResource MacTitleBarGutterHorz}" />
 
-        <!-- The readouts and buttons sit in a panel drawn with the settings pages' GroupBox
-             tokens (same border, radius and surface), only without a header — the GroupBox
-             theme itself always reserves the header row, so this is a bare Border on the same
-             resources. -->
-        <Border Grid.Column="1"
-                Margin="0,10,10,10"
-                Padding="12"
-                Background="{DynamicResource HeaderedContentControlBackground}"
-                BorderBrush="{DynamicResource HeaderedContentControlBorderBrush}"
-                BorderThickness="{DynamicResource HeaderedContentControlBorderThickness}"
-                CornerRadius="{DynamicResource HeaderedContentControlCornerRadius}">
-        <Grid RowDefinitions="*,Auto">
-
-        <!-- rows/columns are sized for the theme font (the old 24px rows and 58px value
-             column were tuned for 9px Consolas and clipped anything larger). The middle
-             column is Auto so it tracks the font rather than clipping again; its width comes
-             from the MinWidth on the HSL readout below, which is the widest content. -->
-        <Grid ColumnDefinitions="Auto,Auto,86"
-              RowDefinitions="30,12,30,30,30,30,30,12,30,30,30,30">
-
-            <!-- Focus sink for OnPreviewPointerPressed: focusable so a click off the
-                 textboxes can park focus somewhere harmless, but never a tab stop itself. -->
-            <Control x:Name="tabReset"
-                     Focusable="True"
-                     IsTabStop="False" />
-
-            <TextBlock Classes="lbl" Text="HEX:" />
-            <TextBox x:Name="txtHex"
-                     Grid.Column="1"
-                     Classes="val"
-                     Margin="0"
-                     helpers:SelectTextOnFocus.Active="True" />
-            <controls:AcceleratedButton x:Name="btnCopyHex"
-                                        Grid.Column="2"
-                                        Classes="copy"
-                                        Click="CopyHexExecuted"
-                                        Content="Copy HE_X" />
-
-            <TextBlock Classes="lbl"
-                       Grid.Row="2"
-                       Grid.Column="1"
-                       HorizontalAlignment="Left"
-                       Text="{Binding TextRgb}" />
-            <controls:AcceleratedButton x:Name="btnCopyRgb"
-                                        Grid.Row="2"
-                                        Grid.Column="2"
-                                        Classes="copy"
-                                        Click="CopyRgbExecuted"
-                                        Content="Copy _RGB" />
-
-            <TextBlock Classes="lbl" Grid.Row="3" Text="R:" />
-            <!-- Slider values are synced from code-behind (UpdateBrushes / ValueChanged);
-                 TwoWay bindings to CurrentColor.* do not reliably write drag values back. -->
-            <cp:ColorSlider x:Name="sliderR"
-                            Grid.Row="3"
-                            Grid.Column="1"
-                            SliderBrush="{Binding SliderR}"
-                            ValueMax="255" />
-            <TextBox x:Name="txtClrR"
-                     Grid.Row="3"
-                     Grid.Column="2"
-                     Classes="val"
-                     helpers:SelectTextOnFocus.Active="True" />
-
-            <TextBlock Classes="lbl" Grid.Row="4" Text="G:" />
-            <cp:ColorSlider x:Name="sliderG"
-                            Grid.Row="4"
-                            Grid.Column="1"
-                            SliderBrush="{Binding SliderG}"
-                            ValueMax="255" />
-            <TextBox x:Name="txtClrG"
-                     Grid.Row="4"
-                     Grid.Column="2"
-                     Classes="val"
-                     helpers:SelectTextOnFocus.Active="True" />
-
-            <TextBlock Classes="lbl" Grid.Row="5" Text="B:" />
-            <cp:ColorSlider x:Name="sliderB"
-                            Grid.Row="5"
-                            Grid.Column="1"
-                            SliderBrush="{Binding SliderB}"
-                            ValueMax="255" />
-            <TextBox x:Name="txtClrB"
-                     Grid.Row="5"
-                     Grid.Column="2"
-                     Classes="val"
-                     helpers:SelectTextOnFocus.Active="True" />
-
-            <TextBlock Classes="lbl" Grid.Row="6" Text="A:" />
-            <cp:ColorSlider x:Name="sliderA"
-                            Grid.Row="6"
-                            Grid.Column="1"
-                            SliderBrush="{Binding SliderA}"
-                            ValueMax="1" />
-            <TextBox x:Name="txtClrA"
-                     Grid.Row="6"
-                     Grid.Column="2"
-                     Classes="val"
-                     helpers:SelectTextOnFocus.Active="True" />
-
-            <!-- widest readout in the dialog, so this MinWidth sets the column width. The
-                 longest string the formatter can produce is "hsla(360, 100%, 100%, 0.55)" —
-                 27 Cascadia Mono chars, ~222px at the theme's 14px — and reserving it here keeps
-                 the window a constant size instead of resizing as the alpha slider moves. -->
-            <TextBlock Classes="lbl"
-                       Grid.Row="8"
-                       Grid.Column="1"
-                       HorizontalAlignment="Left"
-                       MinWidth="230"
-                       Text="{Binding TextHsl}" />
-            <controls:AcceleratedButton x:Name="btnCopyHsl"
-                                        Grid.Row="8"
-                                        Grid.Column="2"
-                                        Classes="copy"
-                                        Click="CopyHslExecuted"
-                                        Content="Copy _HSL" />
-
-            <TextBlock Classes="lbl" Grid.Row="9" Text="H:" />
-            <cp:ColorSlider x:Name="sliderH"
-                            Grid.Row="9"
-                            Grid.Column="1"
-                            SliderBrush="{Binding SliderH}"
-                            ValueMax="360" />
-            <TextBox x:Name="txtClrH"
-                     Grid.Row="9"
-                     Grid.Column="2"
-                     Classes="val"
-                     helpers:SelectTextOnFocus.Active="True" />
-
-            <TextBlock Classes="lbl" Grid.Row="10" Text="S:" />
-            <cp:ColorSlider x:Name="sliderS"
-                            Grid.Row="10"
-                            Grid.Column="1"
-                            SliderBrush="{Binding SliderS}"
-                            ValueMax="1" />
-            <TextBox x:Name="txtClrS"
-                     Grid.Row="10"
-                     Grid.Column="2"
-                     Classes="val"
-                     helpers:SelectTextOnFocus.Active="True" />
-
-            <TextBlock Classes="lbl" Grid.Row="11" Text="L:" />
-            <cp:ColorSlider x:Name="sliderL"
-                            Grid.Row="11"
-                            Grid.Column="1"
-                            SliderBrush="{Binding SliderL}"
-                            ValueMax="1" />
-            <TextBox x:Name="txtClrL"
-                     Grid.Row="11"
-                     Grid.Column="2"
-                     Classes="val"
-                     helpers:SelectTextOnFocus.Active="True" />
-
-        </Grid>
-
-            <StackPanel Grid.Row="1"
-                        Margin="0,12,0,0"
-                        HorizontalAlignment="Right"
-                        Orientation="Horizontal"
-                        Spacing="10">
-                <!-- Foreground follows the window (the ToolButton theme defaults to white, which
-                     disappears against the light theme) -->
-                <!-- tooltip text lives in EyedropperButton (see MiniColorDialog) -->
-                <cp:EyedropperButton x:Name="btnEyedropper"
-                                     VerticalAlignment="Center"
-                                     Foreground="{Binding Foreground}"
-                                     IconPath="{StaticResource IconEyedropper}" />
-                <Border Width="108"
-                        Height="30"
-                        VerticalAlignment="Center"
-                        CornerRadius="4"
-                        Background="{x:Static util:CheckerBrushes.Medium}"
-                        BorderBrush="{Binding Foreground}"
-                        BorderThickness="1">
-                    <!-- the rounded Clip (not just ClipToBounds) keeps the previous-color
-                         wedge from poking out of the corners -->
-                    <Border x:Name="currentSwatch" ClipToBounds="True" CornerRadius="3">
-                        <Border.Clip>
-                            <RectangleGeometry Rect="0,0,106,28" RadiusX="3" RadiusY="3" />
-                        </Border.Clip>
-                        <Path x:Name="pathPrevColor"
-                              Data="M 0,0 H 60 L 48,28 H 0 Z"
-                              PointerPressed="PrevColorClicked" />
-                    </Border>
-                </Border>
-                <!-- affirmative-first, matching MessageDialog / FontDialog (Windows order) -->
-                <controls:AcceleratedButton x:Name="btnOK"
-                                            Theme="{StaticResource SolidButton}"
-                                            Classes="Primary"
-                                            Padding="14,0"
-                                            Click="OKClicked"
-                                            IsDefault="True"
-                                            Content="_OK" />
-                <controls:AcceleratedButton x:Name="btnCancel"
-                                            Padding="12,0"
-                                            Click="CloseClicked"
-                                            IsCancel="True"
-                                            Content="_Cancel" />
+            <!--  The active tab's name. The window's own title stays "Color Wheel". The panel also
+                  holds an invisible copy of every name (added in code), so it is as wide as the
+                  longest and the rest of the bar holds still as the tab changes.  -->
+            <StackPanel>
+                <Panel x:Name="tabNameHost">
+                    <TextBlock x:Name="tabNameText"
+                               VerticalAlignment="Center"
+                               FontWeight="Bold" />
+                </Panel>
             </StackPanel>
+
+            <!--  The colors as small chips, the hex inside in ink chosen against the fill: "Initial"
+                  (it restores that color) only when the dialog opened with one, then "Selected".
+                  A checkerboard sits under each so a translucent color reads as such, and
+                  the swatches' hairline keeps white visible on the light bar.  -->
+            <StackPanel>
+                <Button x:Name="btnInitial"
+                        AutomationProperties.Name="Restore initial color"
+                        Theme="{StaticResource ColorDialogGhostButton}"
+                        ToolTip.Tip="Restore initial color">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock VerticalAlignment="Center"
+                                   FontSize="11.5"
+                                   Foreground="{DynamicResource ColorDialogBarLabelBrush}"
+                                   Text="Initial" />
+                        <Panel VerticalAlignment="Center">
+                            <Border Background="{DynamicResource ColorDialogCheckerBrush}" CornerRadius="6" />
+                            <Border x:Name="initialChip"
+                                    Classes="colorChip">
+                                <TextBlock x:Name="initialHex" />
+                            </Border>
+                        </Panel>
+                    </StackPanel>
+                </Button>
+                <!--  Not a button (the Open buttons carry it to another tab): a plain readout, padded
+                      as the Initial button is so the two line up.  -->
+                <Border Padding="8,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock VerticalAlignment="Center"
+                                   FontSize="11.5"
+                                   Foreground="{DynamicResource ColorDialogBarLabelBrush}"
+                                   Text="Selected" />
+                        <Panel VerticalAlignment="Center">
+                            <Border Background="{DynamicResource ColorDialogCheckerBrush}" CornerRadius="6" />
+                            <Border x:Name="selectedChip"
+                                    Classes="colorChip">
+                                <TextBlock x:Name="selectedHex" />
+                            </Border>
+                        </Panel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!--  Copies the Selected color's hex; the icon turns into a check for a moment.  -->
+            <controls:ToolButton x:Name="btnCopy"
+                                 Classes="wide"
+                                 AutomationProperties.Name="Copy selected hex"
+                                 IconPath="{StaticResource IconCopySmall}"
+                                 ToolTip.Tip="Copy selected hex" />
+
+            <!--  Carry the Selected color to another tab: as the Palette tab's base, or as the Simple
+                  tab's color. Each is hidden on the tab it would open (OnActiveTabChanged).  -->
+            <controls:ToolButton x:Name="btnOpenPalette"
+                                 Classes="wide"
+                                 AutomationProperties.Name="Open selected in Palette"
+                                 IconPath="{StaticResource IconPaletteSwatches}"
+                                 ToolTip.Tip="Open selected in Palette" />
+            <controls:ToolButton x:Name="btnOpenSimple"
+                                 Classes="wide"
+                                 AutomationProperties.Name="Open selected in Simple"
+                                 IconPath="{StaticResource IconColorWheel}"
+                                 ToolTip.Tip="Open selected in Simple" />
+
+            <!--  Samples into the Simple tab, or the Palette tab's base, live while dragging. The
+                  tooltip lives in EyedropperButton (it swaps to the permission hint).  -->
+            <cp:EyedropperButton x:Name="btnEyedropper"
+                                 controls:DockAndWrapPanel.DockToEnd="True"
+                                 AutomationProperties.Name="Pick from screen"
+                                 IconPath="{StaticResource IconEyedropper}" />
+
+            <!--  The editors' pin, declared as they declare it: a toggle on the window's own Topmost.  -->
+            <controls:ToolButton Classes="wide"
+                                 controls:DockAndWrapPanel.DockToEnd="True"
+                                 CanToggle="True"
+                                 IconPath="{StaticResource IconPinned}"
+                                 IsChecked="{Binding $parent[Window].Topmost, Mode=TwoWay}"
+                                 ToolTip.Tip="Always on top" />
+        </controls:DockAndWrapPanel>
+
+        <!--  ===== Rail =====  -->
+        <TabStrip x:Name="rail"
+                  Grid.Row="1"
+                  Margin="0,4,0,0"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Top"
+                  AutomationProperties.Name="Mode"
+                  Classes="colorDialogRail">
+            <TabStripItem AutomationProperties.Name="Simple">
+                <StackPanel Spacing="3">
+                    <Image Width="30" Height="30" HorizontalAlignment="Center" Source="{DynamicResource ColorDialogRailIconSimple}" />
+                    <TextBlock HorizontalAlignment="Center" Text="Simple" />
+                </StackPanel>
+            </TabStripItem>
+            <TabStripItem AutomationProperties.Name="Image">
+                <StackPanel Spacing="3">
+                    <Image Width="30" Height="30" HorizontalAlignment="Center" Source="{DynamicResource ColorDialogRailIconImage}" />
+                    <TextBlock HorizontalAlignment="Center" Text="Image" />
+                </StackPanel>
+            </TabStripItem>
+            <TabStripItem AutomationProperties.Name="Palette">
+                <StackPanel Spacing="3">
+                    <Image Width="30" Height="30" HorizontalAlignment="Center" Source="{DynamicResource ColorDialogRailIconPalette}" />
+                    <TextBlock HorizontalAlignment="Center" Text="Palette" />
+                </StackPanel>
+            </TabStripItem>
+        </TabStrip>
+
+        <!--  ===== Content surface =====
+              The editors' canvas surround, its shadow cast over both bars. The hairline along the
+              two edges that face the bars is a sibling laid over the content (as in the editors),
+              so nothing inside can cover it.  -->
+        <Border x:Name="contentSurface"
+                Grid.Row="1"
+                Grid.Column="1"
+                Background="{DynamicResource ClowdEditorCanvasBrush}"
+                BoxShadow="{DynamicResource ClowdEditorSurfaceShadow}"
+                CornerRadius="12,0,0,0" />
+
+        <!--  The body's tips are the bars' strip tips (ColorDialogTips), shown by this one host. The
+              transparent fill keeps the gaps (between swatches, say) inside the host, as tipBridge's
+              does, so the tip is carried across them instead of closing and reopening.  -->
+        <Grid Grid.Row="1"
+              Grid.Column="1"
+              Margin="20"
+              Background="Transparent"
+              controls:StripToolTips.IsEnabled="True"
+              RowDefinitions="*,Auto">
+
+            <!--  Every tab lives for the whole session and is only hidden while another shows, so
+                  each keeps its state across trips round the rail.  -->
+            <Panel x:Name="tabHost">
+                <cp:ColorSimpleTab x:Name="simpleTab" />
+                <cp:ColorImageTab x:Name="imageTab" IsVisible="False" />
+                <cp:ColorPaletteTab x:Name="paletteTab" IsVisible="False" />
+            </Panel>
+
+            <Border Grid.Row="1"
+                    Margin="0,14,0,0"
+                    Padding="0,14,0,0"
+                    BorderBrush="{DynamicResource ColorDialogDividerBrush}"
+                    BorderThickness="0,1,0,0">
+                <!--  ordered, and pruned to the mode's buttons, in code (ColorDialog.BuildFooter); the
+                     underlined letter clicks each, as in the old dialog  -->
+                <StackPanel x:Name="footer"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                    <controls:AcceleratedButton x:Name="btnOK"
+                                                MinWidth="80"
+                                                HorizontalContentAlignment="Center"
+                                                Classes="Primary"
+                                                Content="_OK"
+                                                Theme="{StaticResource SolidButton}" />
+                    <controls:AcceleratedButton x:Name="btnCancel"
+                                                MinWidth="80"
+                                                HorizontalContentAlignment="Center"
+                                                Content="_Cancel" />
+                    <controls:AcceleratedButton x:Name="btnClose"
+                                                MinWidth="80"
+                                                HorizontalContentAlignment="Center"
+                                                Content="_Close" />
+                </StackPanel>
+            </Border>
         </Grid>
-        </Border>
+
+        <Border x:Name="contentOutline"
+                Grid.Row="1"
+                Grid.Column="1"
+                BorderBrush="{DynamicResource ClowdEditorSurfaceEdgeBrush}"
+                BorderThickness="1,1,0,0"
+                CornerRadius="12,0,0,0"
+                IsHitTestVisible="False" />
     </Grid>
 </ui:SystemThemedWindow>

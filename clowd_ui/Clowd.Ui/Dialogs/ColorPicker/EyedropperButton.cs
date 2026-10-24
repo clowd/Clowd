@@ -45,6 +45,12 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private bool _leftButton;
 
+        // the pointer that holds the capture, so a keyboard cancel can release it
+        private IPointer _capturedPointer;
+
+        /// <summary>Whether a press-and-drag sample is under way.</summary>
+        public bool IsSampling => _dragging;
+
         private Color? _lastSampled;
 
         /// <summary>What the button is for. Explains the press-and-drag gesture, which is not
@@ -55,9 +61,13 @@ namespace Clowd.UI.Dialogs.ColorPicker
             "Clowd needs Screen Recording permission to pick a color from the screen. "
             + "Grant it under Settings → General → Permissions.";
 
+        // a hand says "press here"; the crosshair takes over once the press starts a sample
+        private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
+        private static readonly Cursor CrossCursor = new(StandardCursorType.Cross);
+
         public EyedropperButton()
         {
-            Cursor = new Cursor(StandardCursorType.Cross);
+            Cursor = HandCursor;
 
             // Sampling is a press-and-drag gesture over the desktop, so there is nothing the
             // keyboard can do with this button — keep it out of the tab order (it stays
@@ -118,7 +128,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
             _dragging = true;
             _leftButton = false;
             _lastSampled = null;
+            _capturedPointer = e.Pointer;
             e.Pointer.Capture(this);
+            Cursor = CrossCursor;
             e.Handled = true;
             Started?.Invoke();
         }
@@ -154,6 +166,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 return;
 
             _dragging = false;
+            _capturedPointer = null;
+            Cursor = HandCursor;
             e.Pointer.Capture(null);
             e.Handled = true;
 
@@ -175,6 +189,25 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 return;
 
             _dragging = false;
+            _capturedPointer = null;
+            Cursor = HandCursor;
+            Canceled?.Invoke();
+        }
+
+        /// <summary>
+        /// Abandons a sample under way, as Escape does: the drag ends with <see cref="Canceled"/>,
+        /// so the caller puts back the color the live preview replaced. No-op when not sampling.
+        /// </summary>
+        public void CancelSampling()
+        {
+            if (!_dragging)
+                return;
+
+            var pointer = _capturedPointer;
+            _dragging = false;
+            _capturedPointer = null;
+            Cursor = HandCursor;
+            pointer?.Capture(null);
             Canceled?.Invoke();
         }
 

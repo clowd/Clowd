@@ -1,0 +1,296 @@
+<cp:ColorDialogTab xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:clowd="using:Clowd"
+                   xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
+                   x:Class="Clowd.UI.Dialogs.ColorPicker.ColorImageTab"
+                   DragDrop.AllowDrop="True">
+
+    <cp:ColorDialogTab.Styles>
+        <!--  A sample ring on the picture: a white ring with a thin dark outline, filled with its
+              color (brief §10), and the accent halo for the bar being hovered or the ring holding
+              keyboard focus. Size, fill and position are set in code.  -->
+        <Style Selector="Border.sampleRing">
+            <Setter Property="BorderBrush" Value="White" />
+            <Setter Property="BoxShadow" Value="0 0 0 1 #73000000, 0 2 6 0 #66000000" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="True" />
+        </Style>
+        <Style Selector="Border.sampleRing.halo, Border.sampleRing:focus-visible">
+            <Setter Property="BoxShadow" Value="0 0 0 1 #80000000, 0 0 0 4 #D94CC8F5" />
+        </Style>
+    </cp:ColorDialogTab.Styles>
+
+    <cp:ColorDialogTab.Resources>
+        <!--  A mood chip: a pill that is a radio button. Checked wears the accent border over a
+              faint accent fill (brief §7.1).  -->
+        <ControlTheme x:Key="ColorImageMoodChip" TargetType="RadioButton">
+            <Setter Property="Background" Value="{DynamicResource ColorDialogChipBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogChipBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource ColorDialogTextBrush}" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="11,0" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalContentAlignment="Center"
+                                          VerticalContentAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource ColorDialogChipHoverBrush}" />
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Background" Value="{DynamicResource ColorDialogAccentFaintBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogAccentStrongBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+            <Style Selector="^:focus-visible /template/ Border#PART_Border">
+                <Setter Property="BoxShadow" Value="{DynamicResource ColorDialogFocusRing}" />
+            </Style>
+        </ControlTheme>
+
+        <!--  Replace: a dark glass pill over the picture. It sits on the image, not the surface, so
+              it keeps the same look in both themes.  -->
+        <ControlTheme x:Key="ColorImagePillButton" TargetType="Button">
+            <Setter Property="Background" Value="#C7141518" />
+            <Setter Property="BorderBrush" Value="#24FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#E8EAED" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalContentAlignment="Center"
+                                          VerticalContentAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="#E6141518" />
+            </Style>
+            <Style Selector="^:pressed">
+                <Setter Property="Background" Value="#F2000000" />
+            </Style>
+            <Style Selector="^:focus-visible /template/ Border#PART_Border">
+                <Setter Property="BoxShadow" Value="{DynamicResource ColorDialogFocusRing}" />
+            </Style>
+        </ControlTheme>
+    </cp:ColorDialogTab.Resources>
+
+    <!--  The Image tab (brief §7.1): extract five colors from a picture.  -->
+    <Grid ColumnDefinitions="260,24,*">
+
+        <!--  Left: the picture takes the wheel's slot (260 x 220, 10px radius), then the mood chips
+              and the hint.  -->
+        <StackPanel Spacing="12">
+            <Panel x:Name="imageArea"
+                   Width="260"
+                   Height="220"
+                   cp:ColorDialogTips.Side="Bottom">
+
+                <!--  Empty: a dashed drop zone (direction A), with the two ways in that need a
+                      click.  -->
+                <Panel x:Name="emptyState">
+                    <Rectangle x:Name="dropZone"
+                               RadiusX="10"
+                               RadiusY="10"
+                               Stroke="{DynamicResource ColorDialogChipBorderBrush}"
+                               StrokeDashArray="4,3"
+                               StrokeThickness="1.5" />
+                    <StackPanel HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="4">
+                        <Border Width="48"
+                                Height="48"
+                                Margin="0,0,0,8"
+                                HorizontalAlignment="Center"
+                                Background="{DynamicResource ColorDialogAccentFaintBrush}"
+                                CornerRadius="12">
+                            <cp:LineIcon Width="24"
+                                         Height="24"
+                                         Data="{StaticResource ColorDialogIconImage}"
+                                         Foreground="{DynamicResource ColorDialogAccentStrongBrush}" />
+                        </Border>
+                        <TextBlock HorizontalAlignment="Center"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorDialogTextBrush}"
+                                   Text="Drop an image here" />
+                        <TextBlock x:Name="pasteHint"
+                                   MaxWidth="230"
+                                   HorizontalAlignment="Center"
+                                   Classes="colorDialogMuted"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap" />
+                        <StackPanel Margin="0,10,0,0"
+                                    HorizontalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
+                            <Button x:Name="btnBrowse"
+                                    Content="Browse…" />
+                        </StackPanel>
+                    </StackPanel>
+                </Panel>
+
+                <!--  Loaded: the picture, cropped to fill the slot (the crop is what is sampled,
+                      so a ring can never sit somewhere the user cannot see), the Replace pill over
+                      its bottom-left corner, and the five rings (built in code) above both, so a
+                      ring parked on the pill can still be dragged off it.  -->
+                <Panel x:Name="loadedState" IsVisible="False">
+                    <Border x:Name="pictureHitArea"
+                            Background="Transparent"
+                            ClipToBounds="True"
+                            CornerRadius="10"
+                            Cursor="Cross">
+                        <Image x:Name="picture"
+                               RenderOptions.BitmapInterpolationMode="HighQuality"
+                               Stretch="Fill" />
+                    </Border>
+                    <Border BorderBrush="{DynamicResource ColorDialogSwatchEdgeBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            IsHitTestVisible="False" />
+
+                    <Button x:Name="btnReplace"
+                            Margin="10"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            AutomationProperties.Name="Replace image"
+                            Theme="{StaticResource ColorImagePillButton}"
+                            ToolTip.Tip="Replace image">
+                        <Button.Flyout>
+                            <MenuFlyout Placement="TopEdgeAlignedLeft">
+                                <MenuItem x:Name="miBrowse" Header="Browse…" />
+                                <MenuItem x:Name="miPaste" Header="Paste" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <cp:LineIcon Width="14"
+                                         Height="14"
+                                         VerticalAlignment="Center"
+                                         Data="{StaticResource ColorDialogIconReplace}" />
+                            <TextBlock VerticalAlignment="Center" Text="Replace" />
+                        </StackPanel>
+                    </Button>
+
+                    <Canvas x:Name="ringLayer" ClipToBounds="False" />
+                </Panel>
+
+                <!--  Lit while a droppable picture is dragged over the tab  -->
+                <Border x:Name="dropHighlight"
+                        Background="{DynamicResource ColorDialogAccentFaintBrush}"
+                        BorderBrush="{DynamicResource ColorDialogAccentStrongBrush}"
+                        BorderThickness="2"
+                        CornerRadius="10"
+                        IsHitTestVisible="False"
+                        IsVisible="False" />
+            </Panel>
+
+            <StackPanel Margin="0,4,0,0" Spacing="7">
+                <TextBlock Classes="colorDialogCaption" Text="MOOD" />
+                <WrapPanel x:Name="moodChips"
+                           AutomationProperties.Name="Mood"
+                           ItemSpacing="6"
+                           KeyboardNavigation.TabNavigation="Once"
+                           LineSpacing="6">
+                    <RadioButton Content="Colorful"
+                                 GroupName="ColorImageMood"
+                                 IsChecked="True"
+                                 Tag="{x:Static clowd:PaletteMood.Colorful}"
+                                 Theme="{StaticResource ColorImageMoodChip}" />
+                    <RadioButton Content="Bright"
+                                 GroupName="ColorImageMood"
+                                 Tag="{x:Static clowd:PaletteMood.Bright}"
+                                 Theme="{StaticResource ColorImageMoodChip}" />
+                    <RadioButton Content="Muted"
+                                 GroupName="ColorImageMood"
+                                 Tag="{x:Static clowd:PaletteMood.Muted}"
+                                 Theme="{StaticResource ColorImageMoodChip}" />
+                    <RadioButton Content="Deep"
+                                 GroupName="ColorImageMood"
+                                 Tag="{x:Static clowd:PaletteMood.Deep}"
+                                 Theme="{StaticResource ColorImageMoodChip}" />
+                    <RadioButton Content="Dark"
+                                 GroupName="ColorImageMood"
+                                 Tag="{x:Static clowd:PaletteMood.Dark}"
+                                 Theme="{StaticResource ColorImageMoodChip}" />
+                </WrapPanel>
+            </StackPanel>
+
+            <TextBlock x:Name="hintText"
+                       Classes="colorDialogMuted"
+                       LineHeight="16.5"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!--  Right: the shared palette bars, captioned FROM IMAGE, plain-text hex codes (no flyout
+              on this tab), and "To closest palette" in the slot under them.  -->
+        <cp:PaletteBars x:Name="bars"
+                        Grid.Column="2"
+                        Caption="FROM IMAGE"
+                        HexMode="Text">
+            <cp:PaletteBars.BottomContent>
+                <Button x:Name="btnClosest"
+                        Height="38"
+                        Padding="12,0,10,0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        CornerRadius="8"
+                        FontSize="12.5"
+                        FontWeight="SemiBold">
+                    <DockPanel>
+                        <cp:LineIcon Width="16"
+                                     Height="16"
+                                     Margin="0,0,8,0"
+                                     VerticalAlignment="Center"
+                                     Data="{StaticResource ColorDialogIconPalette}"
+                                     DockPanel.Dock="Left"
+                                     Foreground="{DynamicResource ColorDialogAccentStrongBrush}" />
+                        <cp:LineIcon Width="16"
+                                     Height="16"
+                                     Margin="8,0,0,0"
+                                     VerticalAlignment="Center"
+                                     Data="{StaticResource ColorDialogIconArrowRight}"
+                                     DockPanel.Dock="Right" />
+                        <TextBlock x:Name="closestName"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   DockPanel.Dock="Right"
+                                   FontWeight="Normal"
+                                   Foreground="{DynamicResource ColorDialogMutedTextBrush}" />
+                        <TextBlock VerticalAlignment="Center" Text="To closest palette" />
+                    </DockPanel>
+                </Button>
+            </cp:PaletteBars.BottomContent>
+        </cp:PaletteBars>
+    </Grid>
+</cp:ColorDialogTab>

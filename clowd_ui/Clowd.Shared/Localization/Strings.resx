@@ -232,8 +232,8 @@
     <comment>Tray menu item: start a screen capture.</comment>
   </data>
   <data name="Tray_ColorPicker" xml:space="preserve">
-    <value>Color Picker</value>
-    <comment>Tray menu item: opens the screen color picker.</comment>
+    <value>Color Wheel</value>
+    <comment>Tray menu item: opens the color dialog ("Color Wheel").</comment>
   </data>
   <data name="Tray_DrawOnScreen" xml:space="preserve">
     <value>Draw on Screen</value>

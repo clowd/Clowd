@@ -136,7 +136,8 @@ namespace Clowd
             args != null && args.Any(a =>
                 String.Equals(a, UI.VideoEditor.VideoSpikeWindow.ArgName, StringComparison.OrdinalIgnoreCase)
                 || String.Equals(a, UI.VideoEditor.VideoEditorWindow.ArgName, StringComparison.OrdinalIgnoreCase)
-                || String.Equals(a, UI.TraySpike.ArgName, StringComparison.OrdinalIgnoreCase));
+                || String.Equals(a, UI.TraySpike.ArgName, StringComparison.OrdinalIgnoreCase)
+                || String.Equals(a, UI.Dialogs.ColorPicker.ColorDialogSnapshot.ArgName, StringComparison.OrdinalIgnoreCase));
 
         private async void Startup(string[] args)
         {
@@ -494,7 +495,10 @@ namespace Clowd
                 menu.Add(draw);
             }
 
-            var colorp = new NativeMenuItem("Color Picker");
+            // the capture actions above, the tool windows below
+            menu.Add(new NativeMenuItemSeparator());
+
+            var colorp = new NativeMenuItem("Color Wheel");
             colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
             menu.Add(colorp);
 

@@ -11,7 +11,6 @@ using Avalonia.Platform.Storage;
 using Clowd.Config;
 using Clowd.UI.Dialogs;
 using Clowd.UI.Dialogs.ColorPicker;
-using Clowd.Util;
 
 namespace Clowd.UI.Helpers
 {
@@ -116,23 +115,19 @@ namespace Clowd.UI.Helpers
 
         public static async Task<Color> ShowColorPromptAsync(Visual parent, Color initial)
         {
-            var dialog = new ColorDialog(HslRgbColor.FromColor(initial), true);
+            var dialog = new ColorDialog(initial, true);
             ComeForwardWhenOpened(dialog);
             var result = await dialog.ShowAsync(TryGetWindowFromVisual(parent));
 
             if (result == true)
-                return dialog.CurrentColor.ToColor();
+                return dialog.SelectedColor;
 
             return initial;
         }
 
         public static void ShowColorViewer(Color? initial = null)
         {
-            HslRgbColor color = null;
-            if (initial.HasValue)
-                color = HslRgbColor.FromColor(initial.Value);
-
-            var dialog = new ColorDialog(color, false);
+            var dialog = new ColorDialog(initial, false);
             dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             ComeForwardWhenOpened(dialog);
             dialog.Show();

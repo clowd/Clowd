@@ -13,12 +13,19 @@ using Clowd.Util;
 namespace Clowd.UI.Dialogs.ColorPicker
 {
     /// <summary>
-    /// Hue/saturation color wheel. The WPF HLSL pixel shader is replaced by a CPU-generated
-    /// WriteableBitmap using the same sector math, with a 1.5 device-pixel feathered alpha rim
-    /// (decision table #60). The bitmap is rebuilt when the control size or the window render
-    /// scaling changes.
+    /// Hue/saturation color wheel: hue around the circle (red at three o'clock, turning
+    /// counter-clockwise), HSV saturation from the white centre out to the pure hue at the rim. The
+    /// wheel itself is a CPU-generated WriteableBitmap with a 1.5 device-pixel feathered alpha rim,
+    /// rebuilt when the control size or the window render scaling changes.
     /// </summary>
-    public partial class ColorWheel : Control
+    /// <remarks>
+    /// The Simple tab uses it as it stands: one marker for <see cref="CurrentColor"/>, and a click
+    /// or drag picks hue and saturation while keeping the color's brightness (that is the L slider's
+    /// job). The Palette tab's multi-marker wheel derives from it, overriding
+    /// <see cref="RenderMarkers"/> and <see cref="OnPick"/> and reusing the geometry helpers
+    /// (<see cref="PointFor"/>, <see cref="HueSaturationAt"/>, <see cref="DrawMarker"/>).
+    /// </remarks>
+    public class ColorWheel : Control
     {
         public static readonly StyledProperty<HslRgbColor> CurrentColorProperty =
             AvaloniaProperty.Register<ColorWheel, HslRgbColor>(nameof(CurrentColor), defaultBindingMode: BindingMode.TwoWay);
@@ -29,11 +36,16 @@ namespace Clowd.UI.Dialogs.ColorPicker
             set => SetValue(CurrentColorProperty, value);
         }
 
-        private const int CursorSize = 10;
-        private const int HalfCursorSize = CursorSize / 2;
+        /// <summary>The Simple tab's marker: the mockup's 20px ring.</summary>
+        public const double MarkerDiameter = 20;
+
         private const double FeatherPx = 1.5;
 
-        private static readonly IPen _cursorPen = new Pen(Brushes.Black, 1);
+        private static readonly IPen MarkerRing = new Pen(Brushes.White, 2);
+
+        // the marker's thin dark outline and its drop, so a white ring still reads on the wheel's
+        // white centre
+        private static readonly BoxShadows MarkerShadow = BoxShadows.Parse("0 0 0 1 #80000000, 0 2 5 0 #66000000");
 
         private WriteableBitmap _wheelBitmap;
         private int _bitmapPixelWidth;
@@ -73,8 +85,6 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
             if (change.Property == CurrentColorProperty)
             {
-                // NOTE: the WPF source detached the handler from the NEW value here (bug);
-                // fixed deliberately per MIGRATION.md §4 WP10 — detach from the OLD value.
                 var oldValue = (HslRgbColor)change.OldValue;
                 var newValue = (HslRgbColor)change.NewValue;
 
@@ -100,7 +110,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && IsPointInWheel(pt))
             {
                 e.Pointer.Capture(this);
-                SetColor(pt);
+                e.Handled = true;
+                OnPick(pt, true);
             }
         }
 
@@ -110,7 +121,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (Equals(e.Pointer.Captured, this))
             {
                 e.Pointer.Capture(null);
-                SetColor(e.GetPosition(this));
+                OnPick(e.GetPosition(this), false);
             }
         }
 
@@ -118,7 +129,28 @@ namespace Clowd.UI.Dialogs.ColorPicker
         {
             base.OnPointerMoved(e);
             if (Equals(e.Pointer.Captured, this))
-                SetColor(e.GetPosition(this));
+                OnPick(e.GetPosition(this), false);
+        }
+
+        /// <summary>
+        /// A press on the wheel (<paramref name="isStart"/>) or a drag that began on it. Picks hue
+        /// and saturation at the point and keeps the current color's brightness and alpha — except
+        /// from pure black, where every hue is black and the pick would show nothing, so it comes
+        /// up to full brightness instead.
+        /// </summary>
+        protected virtual void OnPick(Point point, bool isStart)
+        {
+            var (hue, saturation) = HueSaturationAt(point);
+            var current = CurrentColor;
+            var value = current == null ? 1 : HsvValue(current);
+            if (value <= 0)
+                value = 1;
+
+            // straight from HSV to HSL rather than through RGB, which would lose the hue at the
+            // white centre (and so the marker's angle)
+            var lightness = value * (1 - saturation / 2);
+            var hslSaturation = lightness is <= 0 or >= 1 ? 0 : (value - lightness) / Math.Min(lightness, 1 - lightness);
+            CurrentColor = new HslRgbColor(hue, hslSaturation, lightness, current?.Alpha ?? 1);
         }
 
         public override void Render(DrawingContext context)
@@ -138,17 +170,84 @@ namespace Clowd.UI.Dialogs.ColorPicker
                                   new Rect(0, 0, w, h));
             }
 
+            RenderMarkers(context);
+        }
+
+        /// <summary>Draws the markers over the wheel: by default the one for <see cref="CurrentColor"/>.</summary>
+        protected virtual void RenderMarkers(DrawingContext context)
+        {
             var color = CurrentColor;
-            if (color != null)
+            if (color == null)
+                return;
+
+            var center = PointFor(color.Hue, HsvSaturation(color));
+            DrawMarker(context, center, MarkerDiameter, color.ToColor());
+        }
+
+        /// <summary>
+        /// A wheel marker: a disc of <paramref name="fill"/> inside a 2px white ring, with a thin
+        /// dark outline and a soft drop so it reads on any color. A <paramref name="halo"/> (the
+        /// Palette tab's highlighted marker) is drawn as a 3px band outside the outline.
+        /// </summary>
+        public static void DrawMarker(DrawingContext context, Point center, double diameter, Color fill, IBrush halo = null)
+        {
+            var radius = diameter / 2;
+            var disc = new RoundedRect(new Rect(center.X - radius, center.Y - radius, diameter, diameter), radius);
+
+            if (halo != null)
             {
-                var lc = GetColorLocation(color);
-                var rect = new Rect(lc.X - HalfCursorSize, lc.Y - HalfCursorSize, CursorSize, CursorSize);
-                var rotation = Matrix.CreateTranslation(-lc.X, -lc.Y)
-                               * Matrix.CreateRotation(Math.PI / 4)
-                               * Matrix.CreateTranslation(lc.X, lc.Y);
-                using (context.PushTransform(rotation))
-                    context.DrawRectangle(new SolidColorBrush(color.ToColor()), _cursorPen, rect);
+                // 4px past the disc: the 1px outline, then the 3px band (the mockup's 4px spread)
+                var haloRadius = radius + 4;
+                context.DrawEllipse(halo, null, center, haloRadius, haloRadius);
             }
+
+            context.DrawRectangle(new SolidColorBrush(fill), null, disc, MarkerShadow);
+            context.DrawEllipse(null, MarkerRing, center, radius - 1, radius - 1);
+        }
+
+        /// <summary>
+        /// Where a color at <paramref name="hue"/> / HSV <paramref name="saturation"/> sits on the
+        /// wheel. A marker is centred on its color, as a slider's thumb is on its value, so a fully
+        /// saturated color's marker sits on the rim and overhangs the wheel by half its width.
+        /// </summary>
+        public Point PointFor(double hue, double saturation)
+        {
+            var c = Bounds.Width / 2;
+            var radius = c * Math.Clamp(saturation, 0, 1);
+            var angle = hue * Math.PI / 180;
+            return new Point(c + Math.Cos(angle) * radius, (Bounds.Height / 2) - Math.Sin(angle) * radius);
+        }
+
+        /// <summary>The hue (degrees) and HSV saturation under <paramref name="point"/>; points
+        /// outside the wheel clamp to the rim.</summary>
+        public (double Hue, double Saturation) HueSaturationAt(Point point)
+        {
+            var dx = point.X - Bounds.Width / 2;
+            var dy = (Bounds.Height / 2) - point.Y;
+            var radius = Bounds.Width / 2;
+            var hue = Math.Atan2(dy, dx) * 180 / Math.PI;
+            if (hue < 0)
+                hue += 360;
+            var saturation = radius > 0 ? Math.Min(1, Math.Sqrt(dx * dx + dy * dy) / radius) : 0;
+            return (hue, saturation);
+        }
+
+        /// <summary>HSV value (brightness) of an HSL color.</summary>
+        public static double HsvValue(HslRgbColor color) =>
+            color.Lightness + color.Saturation * Math.Min(color.Lightness, 1 - color.Lightness);
+
+        /// <summary>HSV saturation of an HSL color: what places it out from the wheel's centre.</summary>
+        public static double HsvSaturation(HslRgbColor color)
+        {
+            var value = HsvValue(color);
+            return value <= 0 ? 0 : 2 * (1 - color.Lightness / value);
+        }
+
+        protected bool IsPointInWheel(Point point)
+        {
+            Point normalized = new Point(point.X - (Bounds.Width / 2), point.Y - (Bounds.Height / 2));
+            double radius = Bounds.Width / 2;
+            return normalized.X * normalized.X + normalized.Y * normalized.Y <= radius * radius;
         }
 
         private void DisposeBitmap()
@@ -227,63 +326,6 @@ namespace Clowd.UI.Dialogs.ColorPicker
             _wheelBitmap = bitmap;
             _bitmapPixelWidth = pw;
             _bitmapPixelHeight = ph;
-        }
-
-        protected virtual Point GetColorLocation(HslRgbColor color)
-        {
-            double angle = color.Hue * Math.PI / 180;
-            double radius = Bounds.Width / 2;
-
-            if (color.Saturation == 0)
-            {
-                radius = 0;
-            }
-            else
-            {
-                double mult = 1 - (Math.Max(0.5, color.Lightness) / 0.5 - 1);
-                radius *= mult;
-            }
-
-            return this.GetColorLocation(angle, radius);
-        }
-
-        protected Point GetColorLocation(double angleR, double radius)
-        {
-            double x = (Bounds.Width / 2) + Math.Cos(angleR) * radius;
-            double y = (Bounds.Height / 2) - Math.Sin(angleR) * radius;
-            return new Point(x, y);
-        }
-
-        protected bool IsPointInWheel(Point point)
-        {
-            // http://my.safaribooksonline.com/book/programming/csharp/9780672331985/graphics-with-windows-forms-and-gdiplus/ch17lev1sec21
-            Point normalized = new Point(point.X - (Bounds.Width / 2), point.Y - (Bounds.Height / 2));
-            double radius = Bounds.Width / 2;
-            return normalized.X * normalized.X + normalized.Y * normalized.Y <= radius * radius;
-        }
-
-        protected virtual void SetColor(Point point)
-        {
-            double radius = Bounds.Width / 2;
-            double dx = Math.Abs(point.X - (Bounds.Width / 2));
-            double dy = Math.Abs(point.Y - (Bounds.Height / 2));
-            double angle = Math.Atan(dy / dx) / Math.PI * 180;
-            if (double.IsNaN(angle)) angle = 0; // dx == dy == 0 (exact center click)
-            double distance = Math.Pow(Math.Pow(dx, 2) + Math.Pow(dy, 2), 0.5);
-            double saturation = Math.Min(1, distance / radius);
-            double lightness = 1 - (saturation * 0.5);
-
-            if (point.X < (Bounds.Width / 2))
-            {
-                angle = 180 - angle;
-            }
-
-            if (point.Y > (Bounds.Height / 2))
-            {
-                angle = 360 - angle;
-            }
-
-            CurrentColor = new HslRgbColor(angle, 1, lightness, CurrentColor?.Alpha ?? 1);
         }
     }
 }

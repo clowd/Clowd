@@ -15,26 +15,46 @@ namespace Clowd.UI.Controls
     /// always-visible underline, and pressing that key anywhere in the owning window clicks
     /// the button. The bare key is suppressed while a TextBox has focus (the letter is being
     /// typed); Alt+key works regardless. Set Content the same way from XAML or code-behind.
+    /// Content that is not a string (an icon beside the label, say) can't declare its key, so it
+    /// is named with <see cref="Accelerator"/> instead, and the content underlines its own letter.
     /// </summary>
     public class AcceleratedButton : Button
     {
+        public static readonly StyledProperty<Key> AcceleratorProperty =
+            AvaloniaProperty.Register<AcceleratedButton, Key>(nameof(Accelerator));
+
+        /// <summary>The key that clicks the button when Content is not a string; ignored when a
+        /// string Content declares one with an underscore.</summary>
+        public Key Accelerator
+        {
+            get => GetValue(AcceleratorProperty);
+            set => SetValue(AcceleratorProperty, value);
+        }
+
         private Key? _key;
         private TopLevel _topLevel;
 
         // keep the plain Button style key so theme styles ("Button.copy", SolidButton) apply
         protected override Type StyleKeyOverride => typeof(Button);
 
-        public AcceleratedButton()
-        {
-            ContentTemplate = new FuncDataTemplate<string>((text, _) => BuildLabel(text));
-        }
+        private static readonly FuncDataTemplate<string> LabelTemplate = new((text, _) => BuildLabel(text));
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
 
             if (change.Property == ContentProperty)
-                _key = ParseKey(change.NewValue as string);
+            {
+                // the underlining template is for string Content only: given a control it doesn't
+                // match, and the presenter falls back to printing the control's type name
+                if (Content is string)
+                    ContentTemplate = LabelTemplate;
+                else if (ContentTemplate == LabelTemplate)
+                    ClearValue(ContentTemplateProperty);
+            }
+
+            if (change.Property == ContentProperty || change.Property == AcceleratorProperty)
+                _key = ParseKey(Content as string) ?? (Accelerator != Key.None ? Accelerator : null);
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)

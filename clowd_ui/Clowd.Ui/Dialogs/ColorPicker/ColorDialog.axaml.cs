@@ -1,276 +1,181 @@
 using System;
-using System.ComponentModel;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Clowd.UI.Converters;
 using Clowd.Util;
 
 namespace Clowd.UI.Dialogs.ColorPicker
 {
+    /// <summary>
+    /// The "Color Wheel" window (COLOR_VIEWER_REWORK.md): a top bar with the Initial / Selected
+    /// colors, a rail of three tabs (Simple, Image, Palette) and the footer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two modes (brief §9). As a picker (<c>asDialog</c>) it opens on the caller's color with OK and
+    /// Cancel, and OK returns <see cref="SelectedColor"/>. As a viewer (from the tray, or after a
+    /// screen color pick) it often has no initial color, and its footer is a single Close. Either
+    /// way the tabs' copy buttons are always live and never close the window.
+    /// </para>
+    /// <para>
+    /// Selection model (brief §8): each tab reports its own Selected color
+    /// (<see cref="ColorDialogTab.SelectedColor"/>); <see cref="SelectedColor"/> follows whichever
+    /// tab is showing, and the Selected chip and OK follow it. Tabs move between
+    /// each other through <see cref="ShowInSimple"/> and <see cref="ShowInPalette"/>.
+    /// </para>
+    /// </remarks>
     public partial class ColorDialog : SystemThemedWindow
     {
         /// <summary>Swatches, sliders and a hex field — chrome rather than prose, so the
         /// backdrop is worth more here than the sharper text an opaque window would give.</summary>
         protected override bool AllowMicaInLightTheme => true;
 
-        public static readonly StyledProperty<HslRgbColor> CurrentColorProperty =
-            AvaloniaProperty.Register<ColorDialog, HslRgbColor>(nameof(CurrentColor));
+        /// <summary>The color the dialog was opened with, fixed for the session; null when there was
+        /// none (a viewer opened from the tray).</summary>
+        public Color? InitialColor { get; }
 
-        public HslRgbColor CurrentColor
-        {
-            get => GetValue(CurrentColorProperty);
-            set => SetValue(CurrentColorProperty, value);
-        }
+        /// <summary>The active tab's Selected color. While the active tab has no selection (the
+        /// Image tab before an image is loaded) it keeps the last one it had.</summary>
+        public Color SelectedColor { get; private set; }
 
-        public static readonly StyledProperty<HslRgbColor> PreviousColorProperty =
-            AvaloniaProperty.Register<ColorDialog, HslRgbColor>(nameof(PreviousColor));
+        /// <summary>Raised whenever <see cref="SelectedColor"/> changes, live during drags too.</summary>
+        public event EventHandler SelectedColorChanged;
 
-        public HslRgbColor PreviousColor
-        {
-            get => GetValue(PreviousColorProperty);
-            set => SetValue(PreviousColorProperty, value);
-        }
-
-        public static readonly StyledProperty<IBrush> SliderRProperty =
-            AvaloniaProperty.Register<ColorDialog, IBrush>(nameof(SliderR));
-
-        public IBrush SliderR
-        {
-            get => GetValue(SliderRProperty);
-            set => SetValue(SliderRProperty, value);
-        }
-
-        public static readonly StyledProperty<IBrush> SliderGProperty =
-            AvaloniaProperty.Register<ColorDialog, IBrush>(nameof(SliderG));
-
-        public IBrush SliderG
-        {
-            get => GetValue(SliderGProperty);
-            set => SetValue(SliderGProperty, value);
-        }
-
-        public static readonly StyledProperty<IBrush> SliderBProperty =
-            AvaloniaProperty.Register<ColorDialog, IBrush>(nameof(SliderB));
-
-        public IBrush SliderB
-        {
-            get => GetValue(SliderBProperty);
-            set => SetValue(SliderBProperty, value);
-        }
-
-        public static readonly StyledProperty<IBrush> SliderHProperty =
-            AvaloniaProperty.Register<ColorDialog, IBrush>(nameof(SliderH));
-
-        public IBrush SliderH
-        {
-            get => GetValue(SliderHProperty);
-            set => SetValue(SliderHProperty, value);
-        }
-
-        public static readonly StyledProperty<IBrush> SliderSProperty =
-            AvaloniaProperty.Register<ColorDialog, IBrush>(nameof(SliderS));
-
-        public IBrush SliderS
-        {
-            get => GetValue(SliderSProperty);
-            set => SetValue(SliderSProperty, value);
-        }
-
-        public static readonly StyledProperty<IBrush> SliderLProperty =
-            AvaloniaProperty.Register<ColorDialog, IBrush>(nameof(SliderL));
-
-        public IBrush SliderL
-        {
-            get => GetValue(SliderLProperty);
-            set => SetValue(SliderLProperty, value);
-        }
-
-        public static readonly StyledProperty<IBrush> SliderAProperty =
-            AvaloniaProperty.Register<ColorDialog, IBrush>(nameof(SliderA));
-
-        public IBrush SliderA
-        {
-            get => GetValue(SliderAProperty);
-            set => SetValue(SliderAProperty, value);
-        }
-
-        public static readonly StyledProperty<string> TextRgbProperty =
-            AvaloniaProperty.Register<ColorDialog, string>(nameof(TextRgb));
-
-        public string TextRgb
-        {
-            get => GetValue(TextRgbProperty);
-            set => SetValue(TextRgbProperty, value);
-        }
-
-        public static readonly StyledProperty<string> TextHslProperty =
-            AvaloniaProperty.Register<ColorDialog, string>(nameof(TextHsl));
-
-        public string TextHsl
-        {
-            get => GetValue(TextHslProperty);
-            set => SetValue(TextHslProperty, value);
-        }
+        /// <summary>True for the picker (OK / Cancel), false for the viewer (Close).</summary>
+        public bool IsDialogMode { get; }
 
         public bool? MyDialogResult { get; private set; }
 
-        protected bool HandleTextEvents { get; private set; }
+        public ColorSimpleTab SimpleTab => simpleTab;
+        public ColorImageTab ImageTab => imageTab;
+        public ColorPaletteTab PaletteTab => paletteTab;
 
-        protected bool IsDialogMode { get; private set; }
+        /// <summary>The tab showing in the content surface; setting it is the rail's click.</summary>
+        public ColorDialogTabKind ActiveTab
+        {
+            get => (ColorDialogTabKind)Math.Max(0, rail.SelectedIndex);
+            set => rail.SelectedIndex = (int)value;
+        }
 
-        private bool _initialized;
-
-        // color to put back if an eyedropper drag ends without a pick
-        private HslRgbColor _eyedropperRestore;
-
-        // the optional-parameter ctor is not parameterless in metadata, so without this the
-        // XAML compiler emits AVLN3001 (resource unreachable via runtime loader)
+        // the XAML loader needs a parameterless constructor (AVLN3001 otherwise)
         public ColorDialog() : this(null)
         { }
 
-        public ColorDialog(HslRgbColor previousColor = null, bool asDialog = true) : base(applyDefaultSize: false)
+        public ColorDialog(Color? initialColor, bool asDialog = true) : base(applyDefaultSize: false)
         {
+            InitialColor = initialColor;
             IsDialogMode = asDialog;
-            DataContext = this;
-
-            if (previousColor != null)
-            {
-                PreviousColor = previousColor;
-                // sliders mutate CurrentColor in place; sharing the instance would corrupt
-                // PreviousColor and break restoring it
-                CurrentColor = previousColor.Clone();
-            }
-            else
-            {
-                PreviousColor = HslRgbColor.Transparent;
-                CurrentColor = HslRgbColor.White;
-            }
 
             InitializeComponent();
-            _initialized = true;
 
-            CreateColorPalette();
-
-            if (!asDialog)
+            foreach (var tab in Tabs)
             {
-                btnOK.IsVisible = false;
-                btnCancel.Content = "_Close";
-                Title = "Clowd - Color Viewer";
-            }
-            else
-            {
-                Title = "Clowd - Color Picker";
-            }
-
-            // WPF used RoutedUICommands whose CanExecute was !IsDialogMode.
-            btnCopyHex.IsEnabled = !IsDialogMode;
-            btnCopyRgb.IsEnabled = !IsDialogMode;
-            btnCopyHsl.IsEnabled = !IsDialogMode;
-
-            const double stop = 1d / 6d;
-            SliderH = new LinearGradientBrush()
-            {
-                StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(1, 0.5, RelativeUnit.Relative),
-                GradientStops =
+                tab.Host = this;
+                tab.SelectedColorChanged += (s, _) =>
                 {
-                    new GradientStop(Colors.Red, 0),
-                    new GradientStop(Colors.Yellow, stop),
-                    new GradientStop(Colors.Lime, stop * 2),
-                    new GradientStop(Colors.Cyan, stop * 3),
-                    new GradientStop(Colors.Blue, stop * 4),
-                    new GradientStop(Colors.Magenta, stop * 5),
-                    new GradientStop(Colors.Red, stop * 6),
-                }
-            };
-
-            pathPrevColor.Fill = new SolidColorBrush(PreviousColor.ToColor());
-
-            // value guard: replacing CurrentColor with an RGB round-trip loses hue/saturation
-            // for desaturated colors, so ignore hex input that matches the current color
-            HandleSet(txtHex, ColorTextHelper.FromHex, (c) =>
-            {
-                if (CurrentColor == null || c != CurrentColor.ToColor())
-                    CurrentColor = HslRgbColor.FromColor(c);
-            });
-            HandleSet(txtClrR, int.Parse, (c) => CurrentColor.R = c);
-            HandleSet(txtClrG, int.Parse, (c) => CurrentColor.G = c);
-            HandleSet(txtClrB, int.Parse, (c) => CurrentColor.B = c);
-            HandleSet(txtClrA, double.Parse, (c) => CurrentColor.Alpha = c / 100d);
-            HandleSet(txtClrH, double.Parse, (c) => CurrentColor.Hue = c);
-            HandleSet(txtClrS, double.Parse, (c) => CurrentColor.Saturation = c / 100d);
-            HandleSet(txtClrL, double.Parse, (c) => CurrentColor.Lightness = c / 100d);
-
-            // ValueChanged only fires on user drag, so syncing slider positions back in
-            // UpdateBrushes cannot loop.
-            sliderR.ValueChanged += (s, v) => CurrentColor.R = (int)Math.Round(v);
-            sliderG.ValueChanged += (s, v) => CurrentColor.G = (int)Math.Round(v);
-            sliderB.ValueChanged += (s, v) => CurrentColor.B = (int)Math.Round(v);
-            sliderA.ValueChanged += (s, v) => CurrentColor.Alpha = v;
-            sliderH.ValueChanged += (s, v) => CurrentColor.Hue = v;
-            sliderS.ValueChanged += (s, v) => CurrentColor.Saturation = v;
-            sliderL.ValueChanged += (s, v) => CurrentColor.Lightness = v;
-
-            btnEyedropper.Started += () => _eyedropperRestore = CurrentColor?.Clone();
-            btnEyedropper.Preview += ApplyEyedropperSample;
-            btnEyedropper.Picked += (c) =>
-            {
-                // no auto-accept here: unlike the mini picker this dialog has an explicit OK, and
-                // the user may well want to tweak the sampled color before committing it
-                ApplyEyedropperSample(c);
-                _eyedropperRestore = null;
-            };
-            btnEyedropper.Canceled += () =>
-            {
-                if (_eyedropperRestore != null)
-                    CurrentColor = _eyedropperRestore;
-                _eyedropperRestore = null;
-            };
-
-            RecentColorHistory.Changed += OnRecentColorsChanged;
-            Closed += (_, _) => RecentColorHistory.Changed -= OnRecentColorsChanged;
-            BuildRecentSwatches();
-
-            // Reset focus when clicking on anything other than a textbox (the WPF
-            // OnPreviewMouseLeftButtonDown + tabReset mechanism).
-            AddHandler(PointerPressedEvent, OnPreviewPointerPressed, RoutingStrategies.Tunnel);
-
-            UpdateBrushes();
-        }
-
-        /// <summary>Applies a color sampled off the screen. The sample is always fully opaque:
-        /// what you picked off the screen is what you saw, and a partially transparent brush would
-        /// not reproduce it.</summary>
-        private void ApplyEyedropperSample(Color sampled)
-        {
-            CurrentColor = HslRgbColor.FromColor(Color.FromArgb(255, sampled.R, sampled.G, sampled.B));
-        }
-
-        private void OnRecentColorsChanged(object sender, EventArgs e) => BuildRecentSwatches();
-
-        private void BuildRecentSwatches()
-        {
-            RecentPalette.Children.Clear();
-
-            foreach (var color in RecentColorHistory.Colors)
-            {
-                var item = new ColorPaletteItem(color);
-                item.Clicked += ColorPaletteItemClicked;
-                RecentPalette.Children.Add(item);
+                    if (ReferenceEquals(s, ActiveTabControl))
+                        SyncSelection();
+                };
             }
 
-            // an empty row would just be a strip of checkerboard with no meaning
-            RecentPalette.IsVisible = RecentPalette.Children.Count > 0;
+            if (initialColor is { } initial)
+            {
+                simpleTab.SetColor(initial);
+                PaintChip(initialChip, initialHex, initial);
+            }
+
+            btnInitial.Click += (_, _) => RestoreInitial();
+            btnCopy.Click += async (_, _) => await CopySelectedHex();
+            btnOpenPalette.Click += (_, _) => ShowInPalette(paletteTab.Preset, HsvColor.FromColor(SelectedColor));
+            btnOpenSimple.Click += (_, _) => ShowInSimple(SelectedColor);
+            UpdateOpenButtons();
+            WireEyedropper();
+
+            BuildFooter();
+
+            rail.SelectedIndex = 0;
+            rail.SelectionChanged += (_, _) => OnActiveTabChanged();
+            rail.KeyDown += OnRailKeyDown;
+
+            // the bar drags the window (it is the title bar on macOS, and sits right under it on
+            // Windows), and on macOS carries the traffic lights, as the editors' bars do
+            EnableTitleBarDrag(topBar);
+            CenterMacTrafficLightsIn(topBar);
+            tabNameText.Text = TabNames[0];
+            foreach (var name in TabNames)
+                tabNameHost.Children.Add(new TextBlock { Text = name, FontWeight = FontWeight.Bold, Opacity = 0 });
+
+            AddHandler(PointerPressedEvent, OnPreviewPointerPressed, RoutingStrategies.Tunnel);
+            AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+
+            SyncSelection();
+        }
+
+        // the tab an eyedropper drag is sampling into, from its start to its end
+        private ColorDialogTab _eyedropperTab;
+
+        private DispatcherTimer _copiedTimer;
+        private Geometry _copyIcon;
+
+        private ColorDialogTab[] Tabs =>new ColorDialogTab[] { simpleTab, imageTab, paletteTab };
+
+        private ColorDialogTab ActiveTabControl => Tabs[(int)ActiveTab];
+
+        // what the top bar calls each tab: the rail's labels, in rail order
+        private static readonly string[] TabNames = { "Simple", "Image", "Palette" };
+
+        /// <summary>Switches to the Simple tab with <paramref name="color"/> as its current color
+        /// (a palette bar's Go to Simple, the top bar's Initial and Open in Simple).</summary>
+        public void ShowInSimple(Color color)
+        {
+            simpleTab.SetColor(color);
+            ActiveTab = ColorDialogTabKind.Simple;
+            SyncSelection();
+        }
+
+        /// <summary>Switches to the Palette tab showing <paramref name="preset"/> from
+        /// <paramref name="baseColor"/> (the Image tab's "To closest palette").</summary>
+        public void ShowInPalette(HarmonyPreset preset, HsvColor baseColor)
+        {
+            paletteTab.LoadHarmony(preset, baseColor);
+            ActiveTab = ColorDialogTabKind.Palette;
+            SyncSelection();
+        }
+
+        /// <summary>Puts the initial color back as the current color, on the Simple tab.</summary>
+        public void RestoreInitial()
+        {
+            if (InitialColor is { } initial)
+                ShowInSimple(initial);
         }
 
         /// <summary>
+        /// Confirms the picker with <see cref="SelectedColor"/>, recording it in the shared recent
+        /// list: OK, Enter, and a double-clicked swatch. The viewer has nothing to confirm, so there
+        /// this does nothing and the window stays open.
+        /// </summary>
+        public void Accept()
+        {
+            if (!IsDialogMode)
+                return;
+
+            RecentColorHistory.Add(SelectedColor);
+            MyDialogResult = true;
+            Close(true);
+        }
+
+        /// <summary>Puts <paramref name="text"/> on the clipboard (the tabs' Copy buttons).</summary>
+        public Task CopyTextAsync(string text) => ClipboardImpl.SetClipboardText(Clipboard, text);
+
+        /// <summary>
         /// Shows the dialog: modal (ShowDialog) when an owner is supplied, otherwise non-modal
-        /// with the result delivered when the window closes (§2.8).
+        /// with the result delivered when the window closes.
         /// </summary>
         public Task<bool?> ShowAsync(Window owner)
         {
@@ -288,214 +193,189 @@ namespace Clowd.UI.Dialogs.ColorPicker
             return tcs.Task;
         }
 
-        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        /// <summary>
+        /// Picker: OK and Cancel, affirmative first on Windows (as every other Clowd dialog has it)
+        /// and trailing on macOS. Viewer: Close alone. Enter is OK and Escape is Cancel or Close.
+        /// </summary>
+        private void BuildFooter()
         {
-            base.OnPropertyChanged(change);
+            footer.Children.Clear();
 
-            if (change.Property == CurrentColorProperty)
+            if (!IsDialogMode)
             {
-                // NOTE: the WPF source detached the handler from the NEW value here (bug);
-                // fixed deliberately per MIGRATION.md §4 WP10 — detach from the OLD value.
-                var oldValue = (HslRgbColor)change.OldValue;
-                var newValue = (HslRgbColor)change.NewValue;
+                btnClose.IsCancel = true;
+                btnClose.Click += (_, _) => Close();
+                footer.Children.Add(btnClose);
+                return;
+            }
 
-                if (oldValue != null)
-                    oldValue.PropertyChanged -= ColorPropertyChanged;
+            btnOK.IsDefault = true;
+            btnCancel.IsCancel = true;
+            btnOK.Click += (_, _) => Accept();
+            btnCancel.Click += (_, _) =>
+            {
+                MyDialogResult = false;
+                Close(false);
+            };
 
-                if (newValue != null)
-                    newValue.PropertyChanged += ColorPropertyChanged;
-
-                if (_initialized) UpdateBrushes();
+            if (OperatingSystem.IsMacOS())
+            {
+                footer.Children.Add(btnCancel);
+                footer.Children.Add(btnOK);
+            }
+            else
+            {
+                footer.Children.Add(btnOK);
+                footer.Children.Add(btnCancel);
             }
         }
 
-        private void ColorPropertyChanged(object sender, PropertyChangedEventArgs e)
+        private void OnActiveTabChanged()
         {
-            if (_initialized) UpdateBrushes();
+            var active = ActiveTabControl;
+            foreach (var tab in Tabs)
+                tab.IsVisible = ReferenceEquals(tab, active);
+
+            tabNameText.Text = TabNames[(int)ActiveTab];
+            UpdateOpenButtons();
+
+            SyncSelection();
+            active.OnShown();
         }
 
-        private void UpdateBrushes()
+        /// <summary>The top bar's Open in Palette / Open in Simple: each is hidden on the tab it
+        /// would open, so Simple shows Palette, Palette shows Simple, and Image shows both.</summary>
+        private void UpdateOpenButtons()
         {
-            var rgb = CurrentColor.ToColor();
+            btnOpenPalette.IsVisible = ActiveTab != ColorDialogTabKind.Palette;
+            btnOpenSimple.IsVisible = ActiveTab != ColorDialogTabKind.Simple;
+        }
 
-            HslRgbColor hsl;
+        /// <summary>Takes the active tab's selection as the dialog's, and repaints the Selected chip.</summary>
+        private void SyncSelection()
+        {
+            if (ActiveTabControl.SelectedColor is not { } color || color == SelectedColor && selectedChip.Background != null)
+                return;
 
-            // R
-            SliderR = Horizontal(Color.FromArgb(rgb.A, 0, rgb.G, rgb.B),
-                                 Color.FromArgb(rgb.A, 255, rgb.G, rgb.B));
+            SelectedColor = color;
+            PaintChip(selectedChip, selectedHex, color);
+            // Initial only when there is something to compare: shown beside an identical Selected
+            // it is noise (and restoring it would do nothing)
+            btnInitial.IsVisible = InitialColor is { } initial && initial != color;
+            SelectedColorChanged?.Invoke(this, EventArgs.Empty);
+        }
 
-            // G
-            SliderG = Horizontal(Color.FromArgb(rgb.A, rgb.R, 0, rgb.B),
-                                 Color.FromArgb(rgb.A, rgb.R, 255, rgb.B));
+        private static void PaintChip(Border chip, TextBlock hex, Color color)
+        {
+            chip.Background = new SolidColorBrush(color);
+            hex.Text = ColorTextHelper.GetHex(color);
+            // a translucent fill shows the light checkerboard through it, so judge the ink on that
+            var a = color.A / 255d;
+            byte Over(byte c) => (byte)Math.Round(c * a + 230 * (1 - a));
+            hex.Foreground = ColorDialogInk.For(Color.FromRgb(Over(color.R), Over(color.G), Over(color.B)));
+        }
 
-            // B
-            SliderB = Horizontal(Color.FromArgb(rgb.A, rgb.R, rgb.G, 0),
-                                 Color.FromArgb(rgb.A, rgb.R, rgb.G, 255));
+        private async Task CopySelectedHex()
+        {
+            await CopyTextAsync(ColorTextHelper.GetHex(SelectedColor));
 
-            // A
-            SliderA = Horizontal(Color.FromArgb(0, rgb.R, rgb.G, rgb.B),
-                                 Color.FromArgb(255, rgb.R, rgb.G, rgb.B));
-
-            // S
-            hsl = CurrentColor.Clone();
-            hsl.Saturation = 1;
-            SliderS = Horizontal(Color.FromArgb(rgb.A, 128, 128, 128), hsl.ToColor());
-
-            // L
-            hsl = CurrentColor.Clone();
-            hsl.Lightness = 0.5;
-            SliderL = new LinearGradientBrush()
+            // the icon turns into a check for a moment, as the Simple tab's copy buttons do
+            if (_copiedTimer == null)
             {
-                StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(1, 0.5, RelativeUnit.Relative),
-                GradientStops =
+                _copyIcon = btnCopy.IconPath;
+                _copiedTimer = new DispatcherTimer { Interval = LineIcon.CopiedFeedbackDuration };
+                _copiedTimer.Tick += (_, _) =>
                 {
-                    new GradientStop(Color.FromArgb(rgb.A, 0, 0, 0), 0),
-                    new GradientStop(hsl.ToColor(), 0.5),
-                    new GradientStop(Color.FromArgb(rgb.A, 255, 255, 255), 1),
-                }
+                    _copiedTimer.Stop();
+                    btnCopy.IconPath = _copyIcon;
+                };
+            }
+
+            _copiedTimer.Stop();
+            if (this.TryFindResource("IconCheckmark", out var check) && check is Geometry geometry)
+                btnCopy.IconPath = geometry;
+            _copiedTimer.Start();
+        }
+
+        /// <summary>
+        /// The top bar's eyedropper samples into the active tab, live while dragging: the Simple
+        /// tab's color, or the Palette tab's base. The Image tab has no one color to set, so a drag
+        /// started there switches to Simple first. Samples are always opaque: what was picked off
+        /// the screen is what was seen, and a translucent brush would not reproduce it.
+        /// </summary>
+        private void WireEyedropper()
+        {
+            static Color Opaque(Color c) => Color.FromRgb(c.R, c.G, c.B);
+
+            btnEyedropper.Started += () =>
+            {
+                if (!ActiveTabControl.AcceptsEyedropper)
+                    ActiveTab = ColorDialogTabKind.Simple;
+
+                _eyedropperTab = ActiveTabControl;
+                _eyedropperTab.BeginEyedropper();
+            };
+            btnEyedropper.Preview += c => _eyedropperTab?.PreviewEyedropper(Opaque(c));
+            btnEyedropper.Picked += c => EndEyedropper(Opaque(c));
+            btnEyedropper.Canceled += () => EndEyedropper(null);
+
+            void EndEyedropper(Color? picked)
+            {
+                var tab = _eyedropperTab;
+                _eyedropperTab = null;
+                tab?.EndEyedropper(picked);
+            }
+        }
+
+        /// <summary>The rail is a vertical tab list: Up and Down move between tabs (wrapping), Home
+        /// and End jump to the ends, and focus follows the selection.</summary>
+        private void OnRailKeyDown(object sender, KeyEventArgs e)
+        {
+            var count = rail.ItemCount;
+            var index = rail.SelectedIndex;
+            var next = e.Key switch
+            {
+                Key.Up => (index + count - 1) % count,
+                Key.Down => (index + 1) % count,
+                Key.Home => 0,
+                Key.End => count - 1,
+                _ => -1,
             };
 
-            // WPF bound the swatch Border to CurrentColor via HslColorToBrushConverter; the
-            // converter is not ported so the brush is assigned here instead.
-            currentSwatch.Background = new SolidColorBrush(rgb);
+            if (next < 0)
+                return;
 
-            var clr = CurrentColor;
-            sliderR.Value = clr.R;
-            sliderG.Value = clr.G;
-            sliderB.Value = clr.B;
-            sliderA.Value = clr.Alpha;
-            sliderH.Value = clr.Hue;
-            sliderS.Value = clr.Saturation;
-            sliderL.Value = clr.Lightness;
-
-            TextRgb = ColorTextHelper.GetRgb(CurrentColor);
-            TextHsl = ColorTextHelper.GetHsl(CurrentColor);
-            UpdateTextComponents();
+            rail.SelectedIndex = next;
+            (rail.ContainerFromIndex(next) as InputElement)?.Focus(NavigationMethod.Directional);
+            e.Handled = true;
         }
 
-        private static IBrush Horizontal(Color start, Color end)
+        /// <summary>Escape goes to the active tab first (ending an eyedropper drag puts the color back
+        /// rather than dismissing the dialog under it); only if the tab has nothing to end does it
+        /// reach the Cancel / Close button.</summary>
+        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
-            return new LinearGradientBrush()
+            if (e.Key != Key.Escape)
+                return;
+
+            if (btnEyedropper.IsSampling)
             {
-                StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(1, 0.5, RelativeUnit.Relative),
-                GradientStops =
-                {
-                    new GradientStop(start, 0),
-                    new GradientStop(end, 1),
-                }
-            };
-        }
-
-        private void UpdateTextComponents(bool skipFocused = true)
-        {
-            HandleTextEvents = false;
-            var clr = CurrentColor;
-            if (!skipFocused || !txtHex.IsFocused) txtHex.Text = ColorTextHelper.GetHex(clr);
-            if (!skipFocused || !txtClrR.IsFocused) txtClrR.Text = clr.R.ToString();
-            if (!skipFocused || !txtClrG.IsFocused) txtClrG.Text = clr.G.ToString();
-            if (!skipFocused || !txtClrB.IsFocused) txtClrB.Text = clr.B.ToString();
-            if (!skipFocused || !txtClrA.IsFocused) txtClrA.Text = Math.Round(clr.Alpha * 100).ToString();
-            if (!skipFocused || !txtClrH.IsFocused) txtClrH.Text = Math.Round(clr.Hue).ToString();
-            if (!skipFocused || !txtClrS.IsFocused) txtClrS.Text = Math.Round(clr.Saturation * 100).ToString();
-            if (!skipFocused || !txtClrL.IsFocused) txtClrL.Text = Math.Round(clr.Lightness * 100).ToString();
-            pathPrevColor.Cursor = (!PreviousColor.ValueEquals(HslRgbColor.Transparent) && !PreviousColor.ValueEquals(clr))
-                ? new Cursor(StandardCursorType.Hand)
-                : Cursor.Default;
-            HandleTextEvents = true;
+                btnEyedropper.CancelSampling();
+                e.Handled = true;
+            }
+            else if (ActiveTabControl.HandleEscape())
+            {
+                e.Handled = true;
+            }
         }
 
         private void OnPreviewPointerPressed(object sender, PointerPressedEventArgs e)
         {
             if ((e.Source as Visual)?.FindAncestorOfType<TextBox>(true) == null)
             {
-                // reset focus if clicking on anything other than textbox
-                tabReset.Focus();
+                // reset focus if clicking on anything other than a text field, so it commits
+                focusSink.Focus();
             }
-        }
-
-        private void CreateColorPalette()
-        {
-            ColorPalette.Children.Clear();
-            foreach (var c in ColorPalettes.PaintPalette)
-            {
-                var item = new ColorPaletteItem(c);
-                item.Clicked += ColorPaletteItemClicked;
-                ColorPalette.Children.Add(item);
-            }
-        }
-
-        private void ColorPaletteItemClicked(object sender, ColorSelectedEventArgs e)
-        {
-            CurrentColor = HslRgbColor.FromColor(e.SelectedColor);
-            if (e.ClickCount >= 2)
-                Accept();
-        }
-
-        /// <summary>Confirms the dialog, recording the chosen color in the shared recent list.</summary>
-        private void Accept()
-        {
-            RecentColorHistory.Add(CurrentColor.ToColor());
-            MyDialogResult = true;
-            Close(true);
-        }
-
-        private void HandleSet<T>(TextBox txt, Func<string, T> parse, Action<T> set)
-        {
-            txt.TextChanged += (s, e) =>
-            {
-                try
-                {
-                    // TextChanged is dispatcher-posted in Avalonia (unlike WPF), so the
-                    // HandleTextEvents flag cannot mask programmatic writes — the echo arrives
-                    // after the flag is reset. UpdateTextComponents only writes unfocused boxes,
-                    // so a change while unfocused is always an echo, never user input.
-                    if (!HandleTextEvents || !txt.IsFocused) return;
-                    set(parse(txt.Text));
-                }
-                catch {; }
-            };
-
-            txt.LostFocus += (s, e) =>
-            {
-                UpdateTextComponents(false);
-            };
-        }
-
-        private async void CopyHexExecuted(object sender, RoutedEventArgs e)
-        {
-            await ClipboardImpl.SetClipboardText(Clipboard, ColorTextHelper.GetHex(CurrentColor));
-            Close();
-        }
-
-        private async void CopyRgbExecuted(object sender, RoutedEventArgs e)
-        {
-            await ClipboardImpl.SetClipboardText(Clipboard, ColorTextHelper.GetRgb(CurrentColor));
-            Close();
-        }
-
-        private async void CopyHslExecuted(object sender, RoutedEventArgs e)
-        {
-            await ClipboardImpl.SetClipboardText(Clipboard, ColorTextHelper.GetHsl(CurrentColor));
-            Close();
-        }
-
-        private void OKClicked(object sender, RoutedEventArgs e)
-        {
-            Accept();
-        }
-
-        private void CloseClicked(object sender, RoutedEventArgs e)
-        {
-            MyDialogResult = false;
-            Close(false);
-        }
-
-        private void PrevColorClicked(object sender, PointerPressedEventArgs e)
-        {
-            if (!PreviousColor.ValueEquals(HslRgbColor.Transparent))
-                CurrentColor = PreviousColor.Clone();
         }
     }
 }

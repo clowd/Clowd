@@ -80,10 +80,16 @@ namespace Clowd.UI.Dialogs.ColorPicker
             var max = ValueMax;
             if (Bounds.Width > 0 && max > 0)
             {
-                var value = Math.Max(Math.Min(pos.X / Bounds.Width, 1), 0) * max;
-                SetCurrentValue(ValueProperty, value);
-                ValueChanged?.Invoke(this, value);
+                SetValueFromUser(Math.Max(Math.Min(pos.X / Bounds.Width, 1), 0) * max);
             }
+        }
+
+        /// <summary>A value the user chose (a click, a drag, a key): sets it and raises
+        /// <see cref="ValueChanged"/>.</summary>
+        protected void SetValueFromUser(double value)
+        {
+            SetCurrentValue(ValueProperty, value);
+            ValueChanged?.Invoke(this, value);
         }
 
         protected override void OnPointerPressed(PointerPressedEventArgs e)

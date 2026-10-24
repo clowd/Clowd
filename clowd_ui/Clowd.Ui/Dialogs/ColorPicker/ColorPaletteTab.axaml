@@ -1,0 +1,130 @@
+<cp:ColorDialogTab xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
+                   x:Class="Clowd.UI.Dialogs.ColorPicker.ColorPaletteTab">
+
+    <cp:ColorDialogTab.Resources>
+        <!--  A harmony preset: a 50px circle (one outer ring, no inner one) with the preset's glyph
+              as its content. Selected wears the strong accent at 2px over a faint accent fill.  -->
+        <ControlTheme x:Key="HarmonyPresetButton" TargetType="RadioButton">
+            <Setter Property="Width" Value="50" />
+            <Setter Property="Height" Value="50" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource ColorDialogChipBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogChipBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <Border Name="PART_Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="25" />
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}" />
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource ColorDialogChipHoverBrush}" />
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Background" Value="{DynamicResource ColorDialogAccentFaintBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogAccentStrongBrush}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:focus-visible /template/ Border#PART_Border">
+                <Setter Property="BoxShadow" Value="{DynamicResource ColorDialogFocusRing}" />
+            </Style>
+        </ControlTheme>
+    </cp:ColorDialogTab.Resources>
+
+    <!--  The Palette tab (brief §7.2): a five-color harmony on the wheel, its preset grid under it,
+          and the shared palette bars on the right.  -->
+    <Grid ColumnDefinitions="260,24,*">
+
+        <!--  Left: the wheel in the Simple tab's slot, the harmony's name, the 4 x 2 presets.  -->
+        <StackPanel HorizontalAlignment="Center" Spacing="16">
+            <cp:HarmonyWheel x:Name="wheel"
+                             Width="220"
+                             Height="220"
+                             HaloBrush="{DynamicResource ColorDialogAccentStrongBrush}" />
+
+            <StackPanel Width="236" Spacing="8">
+                <TextBlock x:Name="harmonyLabel" Classes="colorDialogMuted" />
+
+                <!--  filled in code, one button per ColorHarmony.Presets, in grid order  -->
+                <Grid x:Name="presetGrid"
+                      cp:ColorDialogTips.Side="Bottom"
+                      AutomationProperties.Name="Harmony"
+                      ColumnDefinitions="50,12,50,12,50,12,50"
+                      RowDefinitions="50,10,50" />
+            </StackPanel>
+        </StackPanel>
+
+        <!--  Right: the shared palette bars, captioned PALETTE, hex codes as buttons, BASE tagged,
+              and the brightness strip in the bottom slot.  -->
+        <cp:PaletteBars x:Name="bars"
+                        Grid.Column="2"
+                        Caption="PALETTE"
+                        HexMode="Button">
+            <cp:PaletteBars.BottomContent>
+                <Border Padding="12,0,14,0"
+                        Background="{DynamicResource ColorDialogChipBrush}"
+                        BorderBrush="{DynamicResource ColorDialogChipBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                    <Grid ColumnDefinitions="Auto,14,*">
+                        <TextBlock VerticalAlignment="Center"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorDialogMutedTextBrush}"
+                                   Text="Brightness" />
+                        <cp:ChannelSlider x:Name="brightnessSlider"
+                                          Grid.Column="2"
+                                          VerticalAlignment="Center"
+                                          AutomationProperties.Name="Brightness"
+                                          ValueMax="1" />
+                    </Grid>
+                </Border>
+            </cp:PaletteBars.BottomContent>
+        </cp:PaletteBars>
+
+        <!--  The mini color flyout a bar's hex opens: Clowd's own mini picker (eyedropper and
+              all, but not its "open in full color picker", since this is that picker; and it
+              leaves the recent colors to this dialog's OK), under a
+              caret that points up at the hex. The popup is anchored to the hex in code. Its
+              offsets cancel the picker's 10px shadow margin, so the card's left edge lines up with
+              the hex button's and the caret's tip sits just under it.  -->
+        <Popup x:Name="flyoutPopup"
+               HorizontalOffset="-10"
+               IsLightDismissEnabled="True"
+               Placement="BottomEdgeAlignedLeft"
+               VerticalOffset="-6">
+            <Panel>
+                <cp:MiniColorDialog x:Name="miniColor"
+                                    Margin="10,16,10,10"
+                                    Realtime="True"
+                                    RecordsRecentColors="False"
+                                    ShowPopoutButton="False" />
+                <!--  the caret: a fill that covers the card's top edge where they meet, and the
+                      card's border colors on its two sloped sides  -->
+                <Path Margin="22,8,0,0"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Top"
+                      Data="M0,9 L7,2 L14,9 Z"
+                      Fill="#202124" />
+                <Path Margin="22,8,0,0"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Top"
+                      Data="M0.5,8.5 L7,2 L13.5,8.5"
+                      Stroke="#464648"
+                      StrokeThickness="1" />
+            </Panel>
+        </Popup>
+    </Grid>
+</cp:ColorDialogTab>

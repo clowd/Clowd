@@ -2,114 +2,91 @@ using Avalonia.Media;
 
 namespace Clowd.UI.Dialogs.ColorPicker
 {
-    // Cyotek Color Picker controls library
-    // Copyright © 2013-2017 Cyotek Ltd.
-    // http://cyotek.com/blog/tag/colorpicker
-    // Licensed under the MIT License.
-    //
-    // Only the PaintPalette is ported (as Avalonia colors) — the other palettes in the WPF
-    // source were unused by the dialogs (MIGRATION.md §1.2).
+    /// <summary>
+    /// The color dialog's standard swatches, a 12 x 5 grid laid out as one: every column is a hue,
+    /// so a color's other versions sit directly above and below it. The top row is the grays;
+    /// under it each hue runs tint, pure, deep, then half-transparent.
+    /// </summary>
+    /// <remarks>
+    /// How the values were made, should the grid ever need regenerating: the pure hues are
+    /// full-saturation sRGB at hand-picked angles (0, 30, 45, 60, 90, 120, 165, 195, 215, 240,
+    /// 275, 315), spaced to look even rather than to be even; the tints and shades are derived in
+    /// OKLab, so each keeps its column's hue as it lightens or darkens.
+    /// </remarks>
     public static class ColorPalettes
     {
-        public static Color[] PaintPalette => new[]
+        /// <summary>The swatches in reading order, row by row; the dialog wraps them at 12.</summary>
+        public static Color[] StandardSwatches => new[]
         {
+            // grays, black to white in even steps of perceived lightness (CIE L*)
             Color.FromRgb(0, 0, 0),
+            Color.FromRgb(26, 26, 26),
+            Color.FromRgb(44, 44, 44),
             Color.FromRgb(64, 64, 64),
-            Color.FromRgb(255, 0, 0),
-            Color.FromRgb(255, 106, 0),
-            Color.FromRgb(255, 216, 0),
-            Color.FromRgb(182, 255, 0),
-            Color.FromRgb(76, 255, 0),
-            Color.FromRgb(0, 255, 33),
-            Color.FromRgb(0, 255, 144),
-            Color.FromRgb(0, 255, 255),
-            Color.FromRgb(0, 148, 255),
-            Color.FromRgb(0, 38, 255),
-            Color.FromRgb(72, 0, 255),
-            Color.FromRgb(178, 0, 255),
-            Color.FromRgb(255, 0, 220),
-            Color.FromRgb(255, 0, 110),
+            Color.FromRgb(86, 86, 86),
+            Color.FromRgb(108, 108, 108),
+            Color.FromRgb(130, 130, 130),
+            Color.FromRgb(154, 154, 154),
+            Color.FromRgb(178, 178, 178),
+            Color.FromRgb(203, 203, 203),
+            Color.FromRgb(229, 229, 229),
             Color.FromRgb(255, 255, 255),
-            Color.FromRgb(128, 128, 128),
-            Color.FromRgb(127, 0, 0),
-            Color.FromRgb(127, 51, 0),
-            Color.FromRgb(127, 106, 0),
-            Color.FromRgb(91, 127, 0),
-            Color.FromRgb(38, 127, 0),
-            Color.FromRgb(0, 127, 14),
-            Color.FromRgb(0, 127, 70),
-            Color.FromRgb(0, 127, 127),
-            Color.FromRgb(0, 74, 127),
-            Color.FromRgb(0, 19, 127),
-            Color.FromRgb(33, 0, 127),
-            Color.FromRgb(87, 0, 127),
-            Color.FromRgb(127, 0, 110),
-            Color.FromRgb(127, 0, 55),
-            Color.FromRgb(160, 160, 160),
-            Color.FromRgb(48, 48, 48),
-            Color.FromRgb(255, 127, 127),
-            Color.FromRgb(255, 178, 127),
-            Color.FromRgb(255, 233, 127),
-            Color.FromRgb(218, 255, 127),
-            Color.FromRgb(165, 255, 127),
-            Color.FromRgb(127, 255, 142),
-            Color.FromRgb(127, 255, 197),
-            Color.FromRgb(127, 255, 255),
-            Color.FromRgb(127, 201, 255),
-            Color.FromRgb(127, 146, 255),
-            Color.FromRgb(161, 127, 255),
-            Color.FromRgb(214, 127, 255),
-            Color.FromRgb(255, 127, 237),
-            Color.FromRgb(255, 127, 182),
-            Color.FromRgb(192, 192, 192),
-            Color.FromRgb(96, 96, 96),
-            Color.FromRgb(127, 63, 63),
-            Color.FromRgb(127, 89, 63),
-            Color.FromRgb(127, 116, 63),
-            Color.FromRgb(109, 127, 63),
-            Color.FromRgb(82, 127, 63),
-            Color.FromRgb(63, 127, 71),
-            Color.FromRgb(63, 127, 98),
-            Color.FromRgb(63, 127, 127),
-            Color.FromRgb(63, 100, 127),
-            Color.FromRgb(63, 73, 127),
-            Color.FromRgb(80, 63, 127),
-            Color.FromRgb(107, 63, 127),
-            Color.FromRgb(127, 63, 118),
-            Color.FromRgb(127, 63, 91),
-            Color.FromArgb(128, 0, 0, 0),
-            Color.FromArgb(128, 64, 64, 64),
+
+            // tints: each hue mixed 60% of the way to white (in OKLab)
+            Color.FromRgb(255, 181, 167),
+            Color.FromRgb(255, 207, 174),
+            Color.FromRgb(255, 231, 182),
+            Color.FromRgb(255, 255, 190),
+            Color.FromRgb(209, 255, 186),
+            Color.FromRgb(191, 255, 185),
+            Color.FromRgb(193, 255, 229),
+            Color.FromRgb(182, 231, 255),
+            Color.FromRgb(163, 200, 255),
+            Color.FromRgb(143, 182, 255),
+            Color.FromRgb(209, 179, 255),
+            Color.FromRgb(255, 181, 230),
+
+            // the pure hues, fully saturated: red, orange, amber, yellow, lime, green, aqua, sky, azure, blue, violet, magenta
+            Color.FromRgb(255, 0, 0),
+            Color.FromRgb(255, 128, 0),
+            Color.FromRgb(255, 191, 0),
+            Color.FromRgb(255, 255, 0),
+            Color.FromRgb(128, 255, 0),
+            Color.FromRgb(0, 255, 0),
+            Color.FromRgb(0, 255, 191),
+            Color.FromRgb(0, 191, 255),
+            Color.FromRgb(0, 106, 255),
+            Color.FromRgb(0, 0, 255),
+            Color.FromRgb(149, 0, 255),
+            Color.FromRgb(255, 0, 191),
+
+            // deep shades: each hue darkened in OKLab, keeping its hue
+            Color.FromRgb(125, 0, 0),
+            Color.FromRgb(101, 47, 0),
+            Color.FromRgb(82, 60, 0),
+            Color.FromRgb(67, 67, 0),
+            Color.FromRgb(33, 76, 0),
+            Color.FromRgb(0, 79, 0),
+            Color.FromRgb(0, 76, 55),
+            Color.FromRgb(0, 70, 96),
+            Color.FromRgb(0, 49, 128),
+            Color.FromRgb(0, 19, 115),
+            Color.FromRgb(72, 0, 128),
+            Color.FromRgb(114, 0, 84),
+
+            // the pure hues at half opacity, as the old palette had them (a highlighter's colors)
             Color.FromArgb(128, 255, 0, 0),
-            Color.FromArgb(128, 255, 106, 0),
-            Color.FromArgb(128, 255, 216, 0),
-            Color.FromArgb(128, 182, 255, 0),
-            Color.FromArgb(128, 76, 255, 0),
-            Color.FromArgb(128, 0, 255, 33),
-            Color.FromArgb(128, 0, 255, 144),
-            Color.FromArgb(128, 0, 255, 255),
-            Color.FromArgb(128, 0, 148, 255),
-            Color.FromArgb(128, 0, 38, 255),
-            Color.FromArgb(128, 72, 0, 255),
-            Color.FromArgb(128, 178, 0, 255),
-            Color.FromArgb(128, 255, 0, 220),
-            Color.FromArgb(128, 255, 0, 110),
-            //Color.FromArgb(128, 255, 255, 255),
-            Color.FromArgb(0, 255, 255, 255),
-            Color.FromArgb(128, 128, 128, 128),
-            Color.FromArgb(128, 127, 0, 0),
-            Color.FromArgb(128, 127, 51, 0),
-            Color.FromArgb(128, 127, 106, 0),
-            Color.FromArgb(128, 91, 127, 0),
-            Color.FromArgb(128, 38, 127, 0),
-            Color.FromArgb(128, 0, 127, 14),
-            Color.FromArgb(128, 0, 127, 70),
-            Color.FromArgb(128, 0, 127, 127),
-            Color.FromArgb(128, 0, 74, 127),
-            Color.FromArgb(128, 0, 19, 127),
-            Color.FromArgb(128, 33, 0, 127),
-            Color.FromArgb(128, 87, 0, 127),
-            Color.FromArgb(128, 127, 0, 110),
-            Color.FromArgb(128, 127, 0, 55)
+            Color.FromArgb(128, 255, 128, 0),
+            Color.FromArgb(128, 255, 191, 0),
+            Color.FromArgb(128, 255, 255, 0),
+            Color.FromArgb(128, 128, 255, 0),
+            Color.FromArgb(128, 0, 255, 0),
+            Color.FromArgb(128, 0, 255, 191),
+            Color.FromArgb(128, 0, 191, 255),
+            Color.FromArgb(128, 0, 106, 255),
+            Color.FromArgb(128, 0, 0, 255),
+            Color.FromArgb(128, 149, 0, 255),
+            Color.FromArgb(128, 255, 0, 191),
         };
     }
 }
