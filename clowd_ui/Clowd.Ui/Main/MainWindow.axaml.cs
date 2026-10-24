@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Config;
+using Clowd.UI.Helpers;
 using Clowd.UI.Pages;
 using Ursa.Controls;
 
@@ -405,6 +406,9 @@ namespace Clowd.UI
 
             Show();
             Activate();
+            // Activate alone loses to the foreground lock when what asked was the tray menu or a
+            // hotkey: the window turns active on its own thread but stays behind the app in front.
+            WindowNativeExtensions.ForceForeground(this);
 
             if (selectedTab != null)
                 SelectTab(selectedTab.Value);
