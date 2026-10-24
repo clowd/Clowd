@@ -108,6 +108,16 @@ namespace Clowd.Config
             set => Set(ref _drawOnScreenSizeIndex, value);
         }
 
+        /// <summary>The last drawing tool picked in a Draw on Instant Screenshot session, so the next
+        /// one opens with it in hand. Live Draw on Screen sessions neither read nor write it: they
+        /// always open in click-through. Null until one is first picked.</summary>
+        [Browsable(false)]
+        public ToolType? DrawOnScreenshotTool
+        {
+            get => _drawOnScreenshotTool;
+            set => Set(ref _drawOnScreenshotTool, value);
+        }
+
         [Browsable(false)]
         public string LastSavePath
         {
@@ -353,6 +363,7 @@ namespace Clowd.Config
         private string _mainWindowBounds;
         private int? _drawOnScreenColorIndex;
         private int? _drawOnScreenSizeIndex;
+        private ToolType? _drawOnScreenshotTool;
         private string _language;
         private bool _confirmClose = true;
         private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;

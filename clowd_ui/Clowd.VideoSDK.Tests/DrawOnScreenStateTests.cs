@@ -205,6 +205,18 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Freeze_opens_with_the_remembered_drawing_tool()
+        {
+            Assert.Equal(DrawPalette.DefaultTool, DrawOnScreenState.Initial.Freeze().Tool);
+            Assert.Equal(ToolType.Arrow, DrawOnScreenState.Initial.Freeze(ToolType.Arrow).Tool);
+            Assert.True(DrawOnScreenState.Initial.Freeze(ToolType.Arrow).IsToolLit(ToolType.Arrow));
+            // nothing to select or erase yet, and a tool the toolbar does not offer cannot be lit
+            Assert.Equal(DrawPalette.DefaultTool, DrawOnScreenState.Initial.Freeze(ToolType.Pointer).Tool);
+            Assert.Equal(DrawPalette.DefaultTool, DrawOnScreenState.Initial.Freeze(ToolType.Eraser).Tool);
+            Assert.Equal(DrawPalette.DefaultTool, DrawOnScreenState.Initial.Freeze(ToolType.Highlighter).Tool);
+        }
+
+        [Fact]
         public void Freeze_opens_drawing_with_the_keys_off()
         {
             var s = DrawOnScreenState.Restored(4, 3, showKeys: true).Freeze();

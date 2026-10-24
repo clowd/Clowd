@@ -26,7 +26,8 @@ namespace Clowd.UI.DrawOnScreen
     /// <see cref="DrawOnScreenToolbar"/> that drives them, one <see cref="DrawHistory"/> across their
     /// separate undo stacks, and the per-tool settings the canvases draw with (the session's own
     /// table — the editor's persisted tool settings are never read or written; only the palette
-    /// colour and size are remembered across sessions, in <see cref="SettingsGeneral"/>). Single-instance via
+    /// colour and size, and a frozen session's drawing tool, are remembered across sessions, in
+    /// <see cref="SettingsGeneral"/>). Single-instance via
     /// <see cref="ActiveInstance"/>, UI thread only, like the recording and share pages.
     /// <para>
     /// <see cref="Apply"/> is the one place the mode is written: every transition of
@@ -171,7 +172,7 @@ namespace Clowd.UI.DrawOnScreen
             State = DrawOnScreenState.Restored(general?.DrawOnScreenColorIndex, general?.DrawOnScreenSizeIndex,
                 _keySettings?.ShowKeystrokes ?? false);
             if (_frozen)
-                State = State.Freeze();
+                State = State.Freeze(general?.DrawOnScreenshotTool);
 
             ApplyKeystrokeStyle();
             if (_keySettings != null)
@@ -446,6 +447,9 @@ namespace Clowd.UI.DrawOnScreen
                 RememberShowKeys();
             }
 
+            if (next.Frozen && prev.Tool != next.Tool && DrawOnScreenState.IsDrawingTool(next.Tool))
+                RememberScreenshotTool();
+
             OnChanged();
         }
 
@@ -459,6 +463,18 @@ namespace Clowd.UI.DrawOnScreen
 
             general.DrawOnScreenColorIndex = State.ColorIndex;
             general.DrawOnScreenSizeIndex = State.SizeIndex;
+            try { SettingsService.Save(SettingsRoot.Current); }
+            catch { }
+        }
+
+        /// <summary>Stores a frozen session's drawing tool for the next frozen session, at the pick like
+        /// the colour. Live sessions skip this: they always open in click-through.</summary>
+        private void RememberScreenshotTool()
+        {
+            if (SettingsRoot.Current?.General is not { } general)
+                return;
+
+            general.DrawOnScreenshotTool = State.Tool;
             try { SettingsService.Save(SettingsRoot.Current); }
             catch { }
         }

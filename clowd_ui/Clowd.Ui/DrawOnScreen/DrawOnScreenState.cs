@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace Clowd.UI.DrawOnScreen
 {
@@ -42,8 +43,19 @@ namespace Clowd.UI.DrawOnScreen
         /// and the keys are not offered.</summary>
         public bool Frozen { get; init; }
 
-        /// <summary>A frozen session opens with the tool in hand: the picture is there to be drawn on.</summary>
-        public DrawOnScreenState Freeze() => this with { Frozen = true, ClickThrough = false, Hidden = false, ShowKeys = false };
+        /// <summary>A frozen session opens with the tool in hand: the picture is there to be drawn on.
+        /// <paramref name="lastTool"/> is the last frozen session's tool (null for the default); one
+        /// that is not a drawing tool on the toolbar falls back to the default.</summary>
+        public DrawOnScreenState Freeze(ToolType? lastTool = null) => this with
+        {
+            Frozen = true, ClickThrough = false, Hidden = false, ShowKeys = false,
+            Tool = lastTool is { } t && IsDrawingTool(t) ? t : DrawPalette.DefaultTool,
+        };
+
+        /// <summary>Whether <paramref name="tool"/> is a toolbar tool that puts ink down: not the
+        /// select tool or the eraser, which have nothing to work on when a session opens.</summary>
+        public static bool IsDrawingTool(ToolType tool) =>
+            tool is not (ToolType.Pointer or ToolType.Eraser) && DrawPalette.Tools.Contains(tool);
 
         /// <summary>Picking a tool always resumes drawing: the ink comes back and the canvas takes the mouse.</summary>
         public DrawOnScreenState PickTool(ToolType tool) => this with { Tool = tool, ClickThrough = false, Hidden = false };
@@ -76,7 +88,7 @@ namespace Clowd.UI.DrawOnScreen
             ResumeDrawing() with { SizeIndex = Math.Clamp(index, 0, DrawPalette.Sizes.Count - 1) };
 
         private DrawOnScreenState ResumeDrawing() =>
-            ClickThrough || Hidden || Tool is ToolType.Eraser or ToolType.Pointer ? PickTool(ToolType.Brush) : this;
+            ClickThrough || Hidden || !IsDrawingTool(Tool) ? PickTool(ToolType.Brush) : this;
 
         /// <summary>Whether the canvases are taking the mouse: the ink is up and not passed through.</summary>
         public bool IsDrawing => !ClickThrough && !Hidden;
