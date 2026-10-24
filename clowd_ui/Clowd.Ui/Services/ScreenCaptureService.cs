@@ -624,18 +624,22 @@ namespace Clowd.UI
             args.RemoveRange(0, 2);
             args.InsertRange(0, new[] { "--standby", "--session-root", sessionRoot });
 
+            // each flag is repeatable: one occurrence per gesture, in the action's own order, and
+            // none at all for an action with no gestures. The capturer reports a status per
+            // occurrence, echoing this exact string (CaptureStandbySupervisor.ApplyHotkeyStatus).
             var hotkeys = root.Hotkeys;
-            AddHotkey("--hk-main", hotkeys.CaptureRegionShortcut);
-            AddHotkey("--hk-window", hotkeys.CaptureActiveShortcut);
-            AddHotkey("--hk-monitor", hotkeys.CaptureFullscreenShortcut);
+            AddHotkeys("--hk-main", hotkeys.CaptureRegionShortcut);
+            AddHotkeys("--hk-window", hotkeys.CaptureActiveShortcut);
+            AddHotkeys("--hk-monitor", hotkeys.CaptureFullscreenShortcut);
             return args;
 
-            void AddHotkey(string flag, SimpleKeyGesture gesture)
+            void AddHotkeys(string flag, GestureList gestures)
             {
-                if (gesture == null)
-                    return;
-                args.Add(flag);
-                args.Add(gesture.ToCapturerString());
+                foreach (var gesture in gestures)
+                {
+                    args.Add(flag);
+                    args.Add(gesture.ToCapturerString());
+                }
             }
         }
     }

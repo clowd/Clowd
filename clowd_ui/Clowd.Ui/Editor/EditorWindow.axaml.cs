@@ -568,6 +568,10 @@ namespace Clowd.UI
                 wnd.WindowStartupLocation = WindowStartupLocation.CenterScreen;
                 wnd.Show();
                 wnd.Activate();
+                // a blank editor is asked for by the tray menu or the New Image Editor hotkey, and
+                // Activate alone loses to the foreground lock after a hotkey: the window turns
+                // active on its own thread but stays behind the app in front.
+                WindowNativeExtensions.ForceForeground(wnd);
             }
         }
 

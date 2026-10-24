@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -390,6 +391,13 @@ namespace Clowd.UI
                 Append(buffer, line);
         }
 
+        /// <summary>
+        /// Applies a CLOWD_SETTINGS_STATUS line: <c>"hotkeys"</c> maps each action to an array
+        /// with one <c>{"gesture","active","error"}</c> per <c>--hk-*</c> occurrence it received,
+        /// in order, the gesture echoed exactly as sent. The manager matches them back to its own
+        /// gestures by that string, so a report for a snapshot that has since been superseded
+        /// simply finds nothing to update for the gestures it did not know about.
+        /// </summary>
         private void ApplyHotkeyStatus(string json)
         {
             try
@@ -412,16 +420,22 @@ namespace Clowd.UI
                     var manager = HotkeyManager.Current;
                     if (manager == null)
                         return;
-                    foreach (var (id, active, error) in statuses)
-                        manager.GetEntry(id).SetStatus(active, error);
+                    foreach (var (id, gestures) in statuses)
+                        manager.ApplyExternalStatus(id, gestures);
                 });
 
-                (HotkeyId Id, bool Active, string Error) Read(string name, HotkeyId id)
+                (HotkeyId Id, ExternalGestureStatus[] Gestures) Read(string name, HotkeyId id)
                 {
-                    var status = hotkeys.GetProperty(name);
-                    var errorElement = status.GetProperty("error");
-                    return (id, status.GetProperty("active").GetBoolean(),
-                        errorElement.ValueKind == JsonValueKind.String ? errorElement.GetString() : "");
+                    var gestures = new List<ExternalGestureStatus>();
+                    foreach (var status in hotkeys.GetProperty(name).EnumerateArray())
+                    {
+                        var errorElement = status.GetProperty("error");
+                        gestures.Add(new ExternalGestureStatus(
+                            status.GetProperty("gesture").GetString(),
+                            status.GetProperty("active").GetBoolean(),
+                            errorElement.ValueKind == JsonValueKind.String ? errorElement.GetString() : ""));
+                    }
+                    return (id, gestures.ToArray());
                 }
             }
             catch (Exception ex)

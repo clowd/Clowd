@@ -513,6 +513,10 @@ namespace Clowd.UI.VideoEditor
             var wnd = new VideoEditorWindow(session, null, exitOnClose: false);
             wnd.Show();
             wnd.Activate();
+            // opened from the tray menu or the New Video Editor hotkey, and Activate alone loses to
+            // the foreground lock after a hotkey: the window turns active on its own thread but
+            // stays behind the app in front.
+            WindowNativeExtensions.ForceForeground(wnd);
         }
 
         /// <summary>Why the editor did not open, in the one wording both entry points use. The only

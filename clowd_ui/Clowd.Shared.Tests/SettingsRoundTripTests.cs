@@ -37,7 +37,7 @@ namespace Clowd.Shared.Tests
 
             Assert.NotNull(loaded);
             Assert.True(loaded.General.ConfirmClose);
-            Assert.Equal(new SimpleKeyGesture(Key.Snapshot), loaded.Hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot)), loaded.Hotkeys.CaptureRegionShortcut);
             Assert.Equal(Colors.Transparent, loaded.Editor.CanvasBackground);
             Assert.Equal(0.80, loaded.Capture.ObscuredWindowDetectionThreshold);
             Assert.True(loaded.Capture.RoundedWindowCorners);
@@ -92,9 +92,9 @@ namespace Clowd.Shared.Tests
             tool.FontFamily = "Consolas";
 
             // gestures: modified, and cleared (must NOT resurrect the compiled-in default)
-            original.Hotkeys.CaptureRegionShortcut = new SimpleKeyGesture(Key.S, KeyModifiers.Control | KeyModifiers.Shift);
-            original.Hotkeys.FileUploadShortcut = new SimpleKeyGesture(Key.F12, KeyModifiers.Alt);
-            original.Hotkeys.CaptureFullscreenShortcut = null; // default is Ctrl+PrtScr
+            original.Hotkeys.CaptureRegionShortcut = GestureList.Of(new SimpleKeyGesture(Key.S, KeyModifiers.Control | KeyModifiers.Shift));
+            original.Hotkeys.FileUploadShortcut = GestureList.Of(new SimpleKeyGesture(Key.F12, KeyModifiers.Alt));
+            original.Hotkeys.CaptureFullscreenShortcut = GestureList.Empty; // default is Ctrl+PrtScr
 
             SettingsService.Save(original, _path);
             var loaded = SettingsService.Load(_path);
@@ -139,12 +139,12 @@ namespace Clowd.Shared.Tests
             Assert.Equal(FontStretch.Condensed, loadedTool.FontStretch);
             Assert.Equal("Consolas", loadedTool.FontFamily);
 
-            Assert.Equal(new SimpleKeyGesture(Key.S, KeyModifiers.Control | KeyModifiers.Shift), loaded.Hotkeys.CaptureRegionShortcut);
-            Assert.Equal(new SimpleKeyGesture(Key.F12, KeyModifiers.Alt), loaded.Hotkeys.FileUploadShortcut);
-            Assert.Null(loaded.Hotkeys.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.S, KeyModifiers.Control | KeyModifiers.Shift)), loaded.Hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.F12, KeyModifiers.Alt)), loaded.Hotkeys.FileUploadShortcut);
+            Assert.Empty(loaded.Hotkeys.CaptureFullscreenShortcut);
 
             // untouched values still come back as defaults
-            Assert.Equal(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt), loaded.Hotkeys.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt)), loaded.Hotkeys.CaptureActiveShortcut);
             Assert.True(loaded.Editor.RestoreSessionsOnClowdStart);
         }
 
@@ -543,6 +543,173 @@ namespace Clowd.Shared.Tests
 
             settings.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Hide;
             Assert.False(settings.ShareRegion.ObscureUsesStrength);
+        }
+
+        [Fact]
+        public void Hotkeys_DefaultToThePrintScreenFamily_AndNothingElse()
+        {
+            var hotkeys = SettingsService.Load(_path).Hotkeys;
+
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot)), hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control)), hotkeys.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt)), hotkeys.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Shift)), hotkeys.StartStopRecordingShortcut);
+
+            Assert.Empty(hotkeys.FileUploadShortcut);
+            Assert.Empty(hotkeys.ClipboardUploadShortcut);
+            Assert.Empty(hotkeys.ShareRegionShortcut);
+            Assert.Empty(hotkeys.DrawOnScreenShortcut);
+            Assert.Empty(hotkeys.DrawOnScreenshotShortcut);
+            Assert.Empty(hotkeys.ColorWheelShortcut);
+            Assert.Empty(hotkeys.NewImageEditorShortcut);
+            Assert.Empty(hotkeys.NewVideoEditorShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_WithSeveralGestures_RoundTripInOrder_AndReplaceTheDefaults()
+        {
+            // the binder appends a bound collection's items to the compiled-in default list — which
+            // would put the default PrtScr in front of the saved pair. The list must come back as
+            // saved: these exact gestures, in this order, and no default in front of them.
+            var original = new SettingsRoot();
+            original.Hotkeys.CaptureRegionShortcut = GestureList.Of(
+                new SimpleKeyGesture(Key.D1, KeyModifiers.Control | KeyModifiers.Shift),
+                new SimpleKeyGesture(Key.Snapshot));
+            original.Hotkeys.ColorWheelShortcut = GestureList.Of(
+                new SimpleKeyGesture(Key.C, KeyModifiers.Control | KeyModifiers.Alt),
+                new SimpleKeyGesture(Key.F9));
+            original.Hotkeys.NewImageEditorShortcut = GestureList.Of(new SimpleKeyGesture(Key.I, KeyModifiers.Meta));
+            original.Hotkeys.NewVideoEditorShortcut = GestureList.Of(new SimpleKeyGesture(Key.V, KeyModifiers.Alt | KeyModifiers.Shift));
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path).Hotkeys;
+
+            Assert.Equal(original.Hotkeys.CaptureRegionShortcut, loaded.CaptureRegionShortcut);
+            Assert.Equal(original.Hotkeys.ColorWheelShortcut, loaded.ColorWheelShortcut);
+            Assert.Equal(original.Hotkeys.NewImageEditorShortcut, loaded.NewImageEditorShortcut);
+            Assert.Equal(original.Hotkeys.NewVideoEditorShortcut, loaded.NewVideoEditorShortcut);
+            Assert.Equal(2, loaded.CaptureRegionShortcut.Count);
+
+            // ...and it is one string in the file, not an array the binder would merge
+            Assert.Contains("\"CaptureRegionShortcut\": \"Control+Shift+D1; PrintScreen\"", File.ReadAllText(_path));
+        }
+
+        [Fact]
+        public void Hotkeys_ClearedOfEveryGesture_StayCleared()
+        {
+            // the binder skips an empty array outright, so a list written as [] would load as the
+            // default again — the user's "remove all" silently undone on the next start.
+            var original = new SettingsRoot();
+            original.Hotkeys.CaptureRegionShortcut = GestureList.Empty;
+            original.Hotkeys.StartStopRecordingShortcut = null; // null clears too
+
+            Assert.Empty(original.Hotkeys.StartStopRecordingShortcut);
+
+            SettingsService.Save(original, _path);
+            Assert.Contains("\"CaptureRegionShortcut\": \"None\"", File.ReadAllText(_path));
+
+            var loaded = SettingsService.Load(_path).Hotkeys;
+            Assert.Empty(loaded.CaptureRegionShortcut);
+            Assert.Empty(loaded.StartStopRecordingShortcut);
+            Assert.NotEmpty(loaded.CaptureActiveShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_FromBeforeMultipleGestures_LoadAsOneOrNone()
+        {
+            // a settings file written when each action held a single gesture: one gesture string
+            // per property, and "None" for one the user cleared. Neither may lose anything, and a
+            // gesture never brings the default it replaced back alongside it.
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, """
+                {
+                  "Hotkeys": {
+                    "CaptureRegionShortcut": "Control+Snapshot",
+                    "CaptureFullscreenShortcut": "None",
+                    "DrawOnScreenShortcut": "Control+Shift+D"
+                  }
+                }
+                """);
+
+            var loaded = SettingsService.Load(_path).Hotkeys;
+
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control)), loaded.CaptureRegionShortcut);
+            Assert.Empty(loaded.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.D, KeyModifiers.Control | KeyModifiers.Shift)), loaded.DrawOnScreenShortcut);
+
+            // absent from the old file: defaults, the new actions included
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt)), loaded.CaptureActiveShortcut);
+            Assert.Empty(loaded.ColorWheelShortcut);
+            Assert.Empty(loaded.NewVideoEditorShortcut);
+        }
+
+        [Fact]
+        public void GestureList_SerializedString_RoundTrips_AndParsesTolerantly()
+        {
+            var list = GestureList.Of(
+                new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control),
+                new SimpleKeyGesture(Key.F1, KeyModifiers.Alt | KeyModifiers.Shift));
+            Assert.Equal("Control+PrintScreen; Alt+Shift+F1", list.ToSerializedString());
+            Assert.Equal(list, GestureList.Parse(list.ToSerializedString()));
+            Assert.Equal("Ctrl+Del, Alt+Shift+F1", GestureList.Of(
+                new SimpleKeyGesture(Key.Delete, KeyModifiers.Control),
+                new SimpleKeyGesture(Key.F1, KeyModifiers.Alt | KeyModifiers.Shift)).ToString());
+
+            Assert.Equal("None", GestureList.Empty.ToSerializedString());
+            Assert.Empty(GestureList.Parse("None"));
+            Assert.Empty(GestureList.Parse(null));
+            Assert.Empty(GestureList.Parse(""));
+
+            // an entry it cannot read is dropped, not the whole list; repeats and None collapse
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.A), new SimpleKeyGesture(Key.B)),
+                GestureList.Parse("A; NotAKey; None, A, B"));
+
+            // lists written with the comma separator, before the switch to ';', still load
+            Assert.Equal(list, GestureList.Parse("Control+PrintScreen, Alt+Shift+F1"));
+        }
+
+        [Fact]
+        public void GestureList_SerializedString_IsUnreadableToThePreMultiGestureParser()
+        {
+            // a list ending in an unmodified key is the dangerous case: a build from before actions
+            // held several gestures splits the value on '+' only and hands the last segment to
+            // Enum.TryParse<Key>, which reads "PrintScreen, F9" as PrintScreen|F9 — a made-up key
+            // it would register system-wide. That segment must fail to parse instead.
+            var serialized = GestureList.Of(
+                new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control),
+                new SimpleKeyGesture(Key.F9)).ToSerializedString();
+            var parts = serialized.Split('+');
+
+            Assert.False(Enum.TryParse<Key>(parts[^1], true, out _));
+            Assert.True(Enum.TryParse<Key>("PrintScreen, F9", true, out _)); // why ',' is not used
+        }
+
+        [Fact]
+        public void GestureList_Edits_KeepOrder_AndNeverHoldAGestureTwice()
+        {
+            var a = new SimpleKeyGesture(Key.A);
+            var b = new SimpleKeyGesture(Key.B);
+            var c = new SimpleKeyGesture(Key.C);
+            var list = GestureList.Of(a, b);
+
+            Assert.Equal(GestureList.Of(a, b, c), list.Add(c));
+            Assert.Same(list, list.Add(b)); // already there: a no-op
+            Assert.Same(list, list.Add(null));
+            Assert.Same(list, list.Add(new SimpleKeyGesture(Key.None)));
+
+            Assert.Equal(GestureList.Of(c, b), list.SetItem(0, c));
+            Assert.Same(list, list.SetItem(0, b)); // held at another index: a no-op
+            Assert.Equal(GestureList.Of(b), list.SetItem(0, null));
+            Assert.Throws<ArgumentOutOfRangeException>(() => list.SetItem(2, c));
+
+            Assert.Equal(GestureList.Of(b), list.RemoveAt(0));
+            Assert.Equal(GestureList.Of(a), list.Except(new[] { b, c }));
+            Assert.Same(list, list.Except(new[] { c }));
+
+            // value equality, order included
+            Assert.Equal(GestureList.Of(a, b), list);
+            Assert.NotEqual(GestureList.Of(b, a), list);
+            Assert.Equal(GestureList.Of(a, b).GetHashCode(), list.GetHashCode());
         }
 
         [Fact]

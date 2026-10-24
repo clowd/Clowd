@@ -76,8 +76,8 @@ namespace Clowd.UI.Config
             var rows = all.Except(selectors).ToList();
 
             // pages whose properties carry [Category] render as GroupBox sections (matching the
-            // hand-written System page); pages without categories (Hotkeys, upload provider
-            // settings) keep the flat list.
+            // hand-written System page); pages without categories (upload provider settings) keep
+            // the flat list.
             var grouped = rows.Any(r => GetFirstAttributeOrDefault<CategoryAttribute>(r.Pd) != null);
 
             var content = grouped ? BuildGroupedPanel(rows) : BuildFlatPanel(rows);
@@ -154,7 +154,7 @@ namespace Clowd.UI.Config
                 if (app != null && app.TryGetResource("GroupBox", app.ActualThemeVariant, out var theme) && theme is ControlTheme groupBoxTheme)
                     box.Theme = groupBoxTheme;
 
-                GateGroupVisibility(box, group.ToList());
+                GateGroupVisibility(box, group.Select(r => (r.Owner._obj, r.Pd)).ToList());
                 stack.Children.Add(box);
             }
 
@@ -167,14 +167,16 @@ namespace Clowd.UI.Config
         /// always visible, so a section holding one is never gated at all. A binding rather than
         /// a PropertyChanged subscription, for the same reason the rows use one: the settings
         /// objects outlive every settings window, and Avalonia's bindings subscribe weakly.
+        /// Public for the hand-built pages that group [VisibleWhen] rows of their own (Hotkeys).
         /// </summary>
-        private static void GateGroupVisibility(Control box, List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> group)
+        /// <param name="group">Each row's settings object and the property it edits.</param>
+        public static void GateGroupVisibility(Control box, IReadOnlyList<(object Obj, PropertyDescriptor Pd)> group)
         {
             var gates = new List<(object Source, VisibleWhenAttribute Attr)>();
-            foreach (var (owner, pd) in group)
+            foreach (var (obj, pd) in group)
             {
                 var attr = GetFirstAttributeOrDefault<VisibleWhenAttribute>(pd);
-                var source = attr == null ? null : ResolveGateSource(owner._obj, attr);
+                var source = attr == null ? null : ResolveGateSource(obj, attr);
                 if (source == null)
                     return;
                 gates.Add((source, attr));
@@ -191,6 +193,28 @@ namespace Clowd.UI.Config
                 binding.Bindings.Add(new Binding(attr.PropertyName) { Source = source, Mode = BindingMode.OneWay });
 
             box.Bind(Visual.IsVisibleProperty, binding);
+        }
+
+        /// <summary>
+        /// Shows <paramref name="target"/> only while the [VisibleWhen] on <paramref name="pd"/>
+        /// (a property of <paramref name="obj"/>) matches, following the gating property live; a
+        /// property without the attribute leaves the target alone. One call per part of the row
+        /// (label, editor, caption). Public for the hand-built pages whose rows carry the
+        /// attribute too (Hotkeys), so the rule stays the one the generated pages follow.
+        /// </summary>
+        public static void BindVisibleWhen(Control target, object obj, PropertyDescriptor pd)
+        {
+            var visibleWhen = GetFirstAttributeOrDefault<VisibleWhenAttribute>(pd);
+            var source = visibleWhen == null ? null : ResolveGateSource(obj, visibleWhen);
+            if (source == null)
+                return;
+
+            target.Bind(Visual.IsVisibleProperty, new Binding(visibleWhen.PropertyName)
+            {
+                Source = source,
+                Mode = BindingMode.OneWay,
+                Converter = new FuncValueConverter<object, bool>(visibleWhen.Matches),
+            });
         }
 
         /// <summary>The object a [VisibleWhen] reads its gating property from: the row's own
@@ -270,21 +294,7 @@ namespace Clowd.UI.Config
             // [VisibleWhen] rows leave the page altogether — label, editor and caption — while the
             // property they defer to holds a value they were not declared for; the section goes
             // with them once its last row is gone (see GateGroupVisibility).
-            var visibleWhen = GetFirstAttributeOrDefault<VisibleWhenAttribute>(pd);
-
-            void ApplyVisibleWhen(Control target)
-            {
-                var source = visibleWhen == null ? null : ResolveGateSource(_obj, visibleWhen);
-                if (source == null)
-                    return;
-
-                target.Bind(Visual.IsVisibleProperty, new Binding(visibleWhen.PropertyName)
-                {
-                    Source = source,
-                    Mode = BindingMode.OneWay,
-                    Converter = new FuncValueConverter<object, bool>(visibleWhen.Matches),
-                });
-            }
+            void ApplyVisibleWhen(Control target) => BindVisibleWhen(target, _obj, pd);
 
             // the caption hugs its own row (2px); rows without one carry the full bottom gap
             // themselves so vertical rhythm stays even either way (12+12 = ~24px between settings).
@@ -517,9 +527,6 @@ namespace Clowd.UI.Config
                 };
                 return stack;
             }
-
-            if (Is(pd, typeof(SimpleKeyGesture)))
-                return new GlobalTriggerEditor { Entry = HotkeyManager.Current?.GetEntryForProperty(pd.Name) };
 
             if (Is(pd, typeof(Control)))
             {

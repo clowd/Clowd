@@ -10,61 +10,292 @@ using Xunit;
 namespace Clowd.VideoSDK.Tests
 {
     /// <summary>
-    /// Assigning a gesture another hotkey already holds moves it: the previous owner is left unset
-    /// and its OS registration is released before the new one is made.
+    /// Every action holds an ordered list of gestures, each registered on its own. A gesture
+    /// belongs to one action: assigning one another action already holds moves it — the previous
+    /// owner keeps the rest of its list, and its OS registration is released before the new one is
+    /// made.
     /// </summary>
     public class HotkeyManagerTests
     {
-        [Fact]
-        public void Taking_a_gesture_already_in_use_unsets_the_other_hotkey()
+        private static readonly SimpleKeyGesture PrintScreen = new(Key.Snapshot);
+        private static readonly SimpleKeyGesture CtrlShift1 = new(Key.D1, KeyModifiers.Control | KeyModifiers.Shift);
+        private static readonly SimpleKeyGesture CtrlShift2 = new(Key.D2, KeyModifiers.Control | KeyModifiers.Shift);
+        private static readonly SimpleKeyGesture CtrlShift3 = new(Key.D3, KeyModifiers.Control | KeyModifiers.Shift);
+
+        private static (HotkeyManager Manager, FakeHost Host, SettingsHotkey Settings) Create(bool wireActions = true)
         {
             var host = new FakeHost();
             var settings = new SettingsHotkey();
             var manager = new HotkeyManager(host, settings);
-            foreach (var id in Enum.GetValues<HotkeyId>())
-                manager.SetAction(id, () => { });
+            if (wireActions)
+            {
+                foreach (var id in Enum.GetValues<HotkeyId>())
+                    manager.SetAction(id, () => { });
+            }
+            return (manager, host, settings);
+        }
 
+        [Fact]
+        public void Taking_a_gesture_already_in_use_unsets_it_on_the_other_hotkey()
+        {
+            var (manager, host, settings) = Create();
             var region = manager.GetEntry(HotkeyId.CaptureRegion);
             var draw = manager.GetEntry(HotkeyId.DrawOnScreen);
             var regionChanged = false;
-            region.PropertyChanged += (_, e) => regionChanged |= e.PropertyName == nameof(HotkeyEntry.Gesture);
+            region.PropertyChanged += (_, e) => regionChanged |= e.PropertyName == nameof(HotkeyEntry.Gestures);
 
-            var printScreen = new SimpleKeyGesture(Key.Snapshot);
-            Assert.Equal(printScreen, region.Gesture);
+            Assert.Equal(GestureList.Of(PrintScreen), region.Gestures);
 
-            draw.Gesture = printScreen;
+            draw.AddGesture(PrintScreen);
 
-            Assert.Equal(printScreen, draw.Gesture);
-            Assert.Null(region.Gesture);
-            Assert.Null(settings.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(PrintScreen), draw.Gestures);
+            Assert.Empty(region.Gestures);
+            Assert.Empty(region.Shortcuts);
+            Assert.Empty(settings.CaptureRegionShortcut);
             Assert.True(regionChanged);
-            Assert.Single(host.Live, r => Equals(r.Gesture, printScreen));
+            Assert.Single(host.Live, r => Equals(r.Gesture, PrintScreen));
+        }
+
+        [Fact]
+        public void The_other_hotkey_keeps_the_rest_of_its_gestures()
+        {
+            var (manager, host, _) = Create();
+            var region = manager.GetEntry(HotkeyId.CaptureRegion);
+            region.AddGesture(CtrlShift1);
+            Assert.Equal(GestureList.Of(PrintScreen, CtrlShift1), region.Gestures);
+
+            manager.GetEntry(HotkeyId.ColorWheel).AddGesture(PrintScreen);
+
+            Assert.Equal(GestureList.Of(CtrlShift1), region.Gestures);
+            Assert.True(region.Shortcuts.Single().IsRegistered);
+            Assert.Single(host.Live, r => Equals(r.Gesture, PrintScreen));
+            Assert.Single(host.Live, r => Equals(r.Gesture, CtrlShift1));
         }
 
         [Fact]
         public void Distinct_gestures_leave_other_hotkeys_alone()
         {
-            var settings = new SettingsHotkey();
-            var manager = new HotkeyManager(new FakeHost(), settings);
+            var (manager, _, settings) = Create(wireActions: false);
+            var draw = manager.GetEntry(HotkeyId.DrawOnScreen);
 
-            manager.GetEntry(HotkeyId.DrawOnScreen).Gesture = new SimpleKeyGesture(Key.D, KeyModifiers.Control | KeyModifiers.Shift);
-            manager.GetEntry(HotkeyId.DrawOnScreen).Gesture = null;
+            draw.AddGesture(new SimpleKeyGesture(Key.D, KeyModifiers.Control | KeyModifiers.Shift));
+            draw.RemoveGestureAt(0);
 
-            Assert.Equal(new SimpleKeyGesture(Key.Snapshot), settings.CaptureRegionShortcut);
-            Assert.Equal(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control), settings.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(PrintScreen), settings.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Control)), settings.CaptureFullscreenShortcut);
+        }
+
+        [Fact]
+        public void Add_replace_and_remove_edit_the_list_in_order_and_register_every_gesture()
+        {
+            var (manager, host, settings) = Create();
+            var editor = manager.GetEntry(HotkeyId.NewImageEditor);
+            Assert.Empty(editor.Gestures);
+
+            editor.AddGesture(CtrlShift1);
+            editor.AddGesture(CtrlShift2);
+            Assert.Equal(GestureList.Of(CtrlShift1, CtrlShift2), settings.NewImageEditorShortcut);
+
+            // a gesture the action already has: no-op, wherever it is
+            var shortcuts = editor.Shortcuts;
+            editor.AddGesture(CtrlShift1);
+            editor.ReplaceGesture(1, CtrlShift1);
+            Assert.Same(shortcuts, editor.Shortcuts);
+            Assert.Equal(GestureList.Of(CtrlShift1, CtrlShift2), editor.Gestures);
+
+            editor.ReplaceGesture(0, CtrlShift3);
+            Assert.Equal(GestureList.Of(CtrlShift3, CtrlShift2), editor.Gestures);
+            Assert.Equal(editor.Gestures, editor.Shortcuts.Select(s => s.Gesture));
+            Assert.All(editor.Shortcuts, s => Assert.True(s.IsRegistered));
+            Assert.DoesNotContain(host.Live, r => Equals(r.Gesture, CtrlShift1));
+            Assert.Single(host.Live, r => Equals(r.Gesture, CtrlShift3));
+
+            editor.RemoveGestureAt(1);
+            Assert.Equal(GestureList.Of(CtrlShift3), settings.NewImageEditorShortcut);
+            Assert.DoesNotContain(host.Live, r => Equals(r.Gesture, CtrlShift2));
+        }
+
+        [Fact]
+        public void A_gesture_survives_edits_to_the_rest_of_the_list_with_the_same_status_object()
+        {
+            var (manager, _, _) = Create();
+            var region = manager.GetEntry(HotkeyId.CaptureRegion);
+            var printScreen = region.Shortcuts.Single();
+
+            region.AddGesture(CtrlShift1);
+            manager.SetEnabled(HotkeyId.CaptureRegion, false);
+            manager.SetEnabled(HotkeyId.CaptureRegion, true);
+
+            Assert.Same(printScreen, region.Shortcuts[0]);
+            Assert.True(printScreen.IsRegistered);
+        }
+
+        [Fact]
+        public void Replacing_with_a_gesture_takes_it_from_a_hidden_feature_switched_row()
+        {
+            var (manager, host, settings) = Create();
+            settings.FileUploadShortcut = GestureList.Of(CtrlShift1, CtrlShift2);
+            manager.Refresh();
+            manager.SetEnabled(HotkeyId.FileUpload, false);
+            Assert.DoesNotContain(host.Live, r => Equals(r.Gesture, CtrlShift1));
+
+            manager.GetEntry(HotkeyId.CaptureRegion).ReplaceGesture(0, CtrlShift1);
+
+            Assert.Equal(GestureList.Of(CtrlShift1), settings.CaptureRegionShortcut);
+            // otherwise it would collide the moment uploads come back on
+            Assert.Equal(GestureList.Of(CtrlShift2), settings.FileUploadShortcut);
+        }
+
+        [Fact]
+        public void Each_gesture_carries_its_own_status_and_the_first_registered_one_is_exposed()
+        {
+            var (manager, host, _) = Create();
+            host.Refuse(CtrlShift1, "Taken by another app.");
+            var wheel = manager.GetEntry(HotkeyId.ColorWheel);
+            Assert.Null(wheel.FirstRegisteredGesture);
+
+            var changes = 0;
+            manager.Changed += (_, _) => changes++;
+            wheel.AddGesture(CtrlShift1);
+            wheel.AddGesture(CtrlShift2);
+
+            Assert.False(wheel.Shortcuts[0].IsRegistered);
+            Assert.Equal("Taken by another app.", wheel.Shortcuts[0].Error);
+            Assert.True(wheel.Shortcuts[1].IsRegistered);
+            Assert.Equal("", wheel.Shortcuts[1].Error);
+            Assert.Equal(CtrlShift2, wheel.FirstRegisteredGesture);
+            Assert.True(changes > 0);
+
+            // statuses also change on their own (the hook failing to start, macOS permission)
+            var raised = new List<string>();
+            wheel.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+            changes = 0;
+            host.Live.Single(r => Equals(r.Gesture, CtrlShift2)).Fail("Hook stopped.");
+
+            Assert.False(wheel.Shortcuts[1].IsRegistered);
+            Assert.Equal("Hook stopped.", wheel.Shortcuts[1].Error);
+            Assert.Null(wheel.FirstRegisteredGesture);
+            Assert.Contains(nameof(HotkeyEntry.FirstRegisteredGesture), raised);
+            Assert.True(changes > 0);
+        }
+
+        [Fact]
+        public void A_switched_off_feature_unregisters_its_gestures_but_keeps_them()
+        {
+            var (manager, host, settings) = Create();
+            var video = manager.GetEntry(HotkeyId.NewVideoEditor);
+            video.AddGesture(CtrlShift1);
+            video.AddGesture(CtrlShift2);
+            Assert.Equal(2, host.Live.Count(r => Equals(r.Gesture, CtrlShift1) || Equals(r.Gesture, CtrlShift2)));
+
+            manager.SetEnabled(HotkeyId.NewVideoEditor, false);
+
+            Assert.False(video.IsEnabled);
+            Assert.DoesNotContain(host.Live, r => Equals(r.Gesture, CtrlShift1) || Equals(r.Gesture, CtrlShift2));
+            Assert.All(video.Shortcuts, s => Assert.False(s.IsRegistered));
+            Assert.All(video.Shortcuts, s => Assert.Equal("This feature is turned off in settings.", s.Error));
+            Assert.Null(video.FirstRegisteredGesture);
+            Assert.Equal(GestureList.Of(CtrlShift1, CtrlShift2), settings.NewVideoEditorShortcut);
+
+            manager.SetEnabled(HotkeyId.NewVideoEditor, true);
+
+            Assert.True(video.IsEnabled);
+            Assert.All(video.Shortcuts, s => Assert.True(s.IsRegistered));
+            Assert.Equal(CtrlShift1, video.FirstRegisteredGesture);
+        }
+
+        [Fact]
+        public void The_tool_window_actions_map_to_their_settings_and_ship_without_gestures()
+        {
+            var (manager, host, _) = Create();
+
+            Assert.Equal(nameof(SettingsHotkey.ColorWheelShortcut), manager.GetEntry(HotkeyId.ColorWheel).SettingsProperty);
+            Assert.Equal(nameof(SettingsHotkey.NewImageEditorShortcut), manager.GetEntry(HotkeyId.NewImageEditor).SettingsProperty);
+            Assert.Equal(nameof(SettingsHotkey.NewVideoEditorShortcut), manager.GetEntry(HotkeyId.NewVideoEditor).SettingsProperty);
+            Assert.Same(manager.GetEntry(HotkeyId.ColorWheel), manager.GetEntryForProperty(nameof(SettingsHotkey.ColorWheelShortcut)));
+
+            foreach (var id in new[] { HotkeyId.ColorWheel, HotkeyId.NewImageEditor, HotkeyId.NewVideoEditor })
+                Assert.Empty(manager.GetEntry(id).Gestures);
+
+            // the four defaults, one registration each, and nothing else
+            Assert.Equal(4, host.Live.Count);
+
+            // and every action has an entry, so the page can show a row for each
+            Assert.Equal(Enum.GetValues<HotkeyId>().Order(), manager.Entries.Select(e => e.Id).Order());
+        }
+
+        [Fact]
+        public void Statuses_reported_by_the_capturer_land_on_the_matching_gestures()
+        {
+            var (manager, host, _) = Create(wireActions: false);
+            // warm capture: the standby capturer, not SharpHook, owns the screenshot gestures
+            manager.SetAction(HotkeyId.CaptureRegion, null);
+            var region = manager.GetEntry(HotkeyId.CaptureRegion);
+            region.AddGesture(CtrlShift1);
+            region.AddGesture(CtrlShift2);
+            Assert.Empty(host.Live);
+            Assert.All(region.Shortcuts, s => Assert.False(s.IsRegistered));
+
+            manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[]
+            {
+                new ExternalGestureStatus("Control+Shift+1", false, "duplicate gesture"),
+                new ExternalGestureStatus("PrintScreen", true, ""),
+                // not one of ours (a report for a superseded settings snapshot): ignored
+                new ExternalGestureStatus("Alt+F4", true, ""),
+            });
+
+            Assert.True(region.Shortcuts[0].IsRegistered);
+            Assert.False(region.Shortcuts[1].IsRegistered);
+            Assert.Equal("duplicate gesture", region.Shortcuts[1].Error);
+            // no report yet: left as it was until the next one arrives
+            Assert.False(region.Shortcuts[2].IsRegistered);
+            Assert.Equal("", region.Shortcuts[2].Error);
+            Assert.Equal(PrintScreen, region.FirstRegisteredGesture);
+
+            // and once SharpHook owns the action again, a stale capturer report must not stomp it
+            host.Refuse(PrintScreen, "Taken by another app.");
+            manager.SetAction(HotkeyId.CaptureRegion, () => { });
+            manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[] { new ExternalGestureStatus("PrintScreen", true, "") });
+            Assert.False(region.Shortcuts[0].IsRegistered);
+        }
+
+        [Fact]
+        public void The_standby_command_line_repeats_each_flag_once_per_gesture_in_order()
+        {
+            var root = new SettingsRoot();
+            root.General.UseSystemAccentColor = false;
+            root.Hotkeys.CaptureRegionShortcut = GestureList.Of(PrintScreen, CtrlShift1);
+            root.Hotkeys.CaptureActiveShortcut = GestureList.Empty;
+
+            var args = CaptureArguments.BuildStandby(@"C:\sessions", root).ToList();
+
+            Assert.Equal(new[] { "PrintScreen", "Control+Shift+1" }, ValuesOf("--hk-main"));
+            Assert.Empty(ValuesOf("--hk-window"));
+            Assert.Equal(new[] { "Control+PrintScreen" }, ValuesOf("--hk-monitor"));
+
+            IEnumerable<string> ValuesOf(string flag) =>
+                args.Select((a, i) => (a, i)).Where(t => t.a == flag).Select(t => args[t.i + 1]).ToList();
         }
 
         private sealed class FakeHost : IGlobalTriggerHost
         {
             public readonly List<FakeRegistration> Live = new();
+            private readonly Dictionary<SimpleKeyGesture, string> _refused = new();
 
             public bool IsPaused { get; set; }
 
+            /// <summary>Makes every later registration of <paramref name="gesture"/> fail up front,
+            /// as the real host does for a key it cannot hook.</summary>
+            public void Refuse(SimpleKeyGesture gesture, string error) => _refused[gesture] = error;
+
             public IGlobalTriggerRegistration RegisterTrigger(SimpleKeyGesture gesture, Action executed)
             {
+                if (_refused.TryGetValue(gesture, out var error))
+                    return new FakeRegistration(null, gesture, false, error);
+
                 // a real backend refuses a gesture that is still held by another registration.
                 Assert.DoesNotContain(Live, r => Equals(r.Gesture, gesture));
-                var registration = new FakeRegistration(this, gesture);
+                var registration = new FakeRegistration(this, gesture, true, "");
                 Live.Add(registration);
                 return registration;
             }
@@ -72,13 +303,22 @@ namespace Clowd.VideoSDK.Tests
             public IDisposable ObserveKeys(Action<GlobalKeyEvent> observer) => throw new NotSupportedException();
         }
 
-        private sealed class FakeRegistration(FakeHost host, SimpleKeyGesture gesture) : IGlobalTriggerRegistration
+        private sealed class FakeRegistration(FakeHost host, SimpleKeyGesture gesture, bool isRegistered, string error)
+            : IGlobalTriggerRegistration
         {
             public SimpleKeyGesture Gesture { get; } = gesture;
-            public bool IsRegistered => true;
-            public string Error => "";
-            public event EventHandler StatusChanged { add { } remove { } }
-            public void Dispose() => host.Live.Remove(this);
+            public bool IsRegistered { get; private set; } = isRegistered;
+            public string Error { get; private set; } = error;
+            public event EventHandler StatusChanged;
+
+            public void Fail(string message)
+            {
+                IsRegistered = false;
+                Error = message;
+                StatusChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            public void Dispose() => host?.Live.Remove(this);
         }
     }
 }

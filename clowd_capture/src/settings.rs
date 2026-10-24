@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{ArgAction, Parser};
 
 use crate::filename_pattern::DEFAULT_FILENAME_PATTERN;
 use crate::ui::components::panel::model::{ButtonStyle, PanelFeatures};
@@ -206,17 +206,19 @@ pub struct CliArgs {
     pub session_root: Option<PathBuf>,
 
     /// Global hotkey for a region capture, in handy-keys grammar
-    /// (for example `Control+Shift+PrintScreen`).
-    #[arg(long, value_name = "GESTURE", requires = "standby")]
-    pub hk_main: Option<String>,
+    /// (for example `Control+Shift+PrintScreen`). Repeatable: one occurrence
+    /// per gesture, in the shell's list order, which is also the order the
+    /// per-gesture statuses come back in. No occurrence = no hotkey.
+    #[arg(long, value_name = "GESTURE", requires = "standby", action = ArgAction::Append)]
+    pub hk_main: Vec<String>,
 
-    /// Global hotkey for an active-window capture.
-    #[arg(long, value_name = "GESTURE", requires = "standby")]
-    pub hk_window: Option<String>,
+    /// Global hotkey for an active-window capture. Repeatable, like `--hk-main`.
+    #[arg(long, value_name = "GESTURE", requires = "standby", action = ArgAction::Append)]
+    pub hk_window: Vec<String>,
 
-    /// Global hotkey for an active-monitor capture.
-    #[arg(long, value_name = "GESTURE", requires = "standby")]
-    pub hk_monitor: Option<String>,
+    /// Global hotkey for an active-monitor capture. Repeatable, like `--hk-main`.
+    #[arg(long, value_name = "GESTURE", requires = "standby", action = ArgAction::Append)]
+    pub hk_monitor: Vec<String>,
 
     /// Directory to write the session payload into. When set, the
     /// EDIT/UPLOAD/SELECT-COLOR actions write their payload here and

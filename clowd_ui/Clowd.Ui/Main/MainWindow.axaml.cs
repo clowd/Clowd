@@ -129,7 +129,7 @@ namespace Clowd.UI
                 SettingsPageTab.SettingsSystem =>
                     "Choose how Clowd looks and behaves.",
                 SettingsPageTab.SettingsHotkeys =>
-                    "Click a shortcut and press a new key combination, or Esc to cancel.",
+                    "Global shortcuts work from anywhere, even while Clowd is in the background. An action can have more than one.",
                 SettingsPageTab.SettingsCapture => GetCaptureIntroText(),
                 SettingsPageTab.SettingsRecording =>
                     "Changes apply to your next recording.",
@@ -150,7 +150,8 @@ namespace Clowd.UI
 
         private static string GetCaptureIntroText()
         {
-            var gesture = SettingsRoot.Current.Hotkeys.CaptureRegionShortcut?.ToString();
+            // the first of the action's gestures: the caption names one key, not the whole list
+            var gesture = SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.FirstOrDefault()?.ToString();
             return String.IsNullOrEmpty(gesture)
                 ? "These settings apply to the capture overlay, opened from the tray menu."
                 : $"These settings apply to the capture overlay, opened with {gesture}.";
@@ -264,7 +265,8 @@ namespace Clowd.UI
             {
                 SettingsPageTab.RecentSessions => new RecentSessionsPage(),
                 SettingsPageTab.SettingsSystem => CreateSystemPage(),
-                SettingsPageTab.SettingsHotkeys => CreateFactoryPage(getWindow, SettingsRoot.Current.Hotkeys),
+                // saves nothing itself: every hotkey change is saved by HotkeyManager as it is made
+                SettingsPageTab.SettingsHotkeys => new HotkeySettingsPage(),
                 SettingsPageTab.SettingsCapture => CreateFactoryPage(getWindow, SettingsRoot.Current.Capture),
                 SettingsPageTab.SettingsRecording => CreateFactoryPage(getWindow, SettingsRoot.Current.Recording),
                 SettingsPageTab.SettingsShareRegion => CreateFactoryPage(getWindow, SettingsRoot.Current.ShareRegion),

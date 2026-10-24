@@ -26,6 +26,7 @@ namespace Clowd
 
         private MutexArgsForwarder _processor;
         private TrayIcon _trayIcon;
+        private bool _trayRebuildQueued;
         private HotkeyManager _hotkeys;
         private CaptureStandbySupervisor _captureStandby;
         private readonly object _captureStandbyLock = new();
@@ -226,10 +227,8 @@ namespace Clowd
 
                 SetupTrayIcon();
 
-                // rebuild the tray menu when any hotkey gesture changes so the shortcut text shown
-                // beside each item stays current (decision table #48 / §6). SettingsHotkey is pure
-                // data now — every PropertyChanged is a gesture change.
-                SettingsRoot.Current.Hotkeys.PropertyChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
+                // the tray menu also follows the hotkeys — their gestures and whether each one is
+                // registered — but that subscription is made with the manager, in SetupGlobalHotkeys.
 
                 // …and for the feature modes: Recording Off and Uploads Off each take their items
                 // out of the menu (native, so it is rebuilt) and their hotkeys out of the hook.
@@ -427,9 +426,13 @@ namespace Clowd
             // Shortcuts are surfaced as separate, right-aligned menu text — Avalonia binds
             // NativeMenuItem.Gesture → MenuItem.InputGesture on the Windows managed tray menu (the
             // Semi theme renders it in muted, right-aligned gesture text) and to the native key
-            // equivalent on macOS. Only assign when a gesture is actually set.
-            static void ApplyGesture(NativeMenuItem item, SimpleKeyGesture gesture)
+            // equivalent on macOS. An action can have several gestures; the menu quotes the first
+            // one that is actually registered, and none at all when none is — a key that does
+            // nothing (taken by another app, its feature off, the hook not running) must not be
+            // advertised as the way to reach the item.
+            void ApplyGesture(NativeMenuItem item, HotkeyId id)
             {
+                var gesture = _hotkeys?.GetEntry(id).FirstRegisteredGesture;
                 if (gesture != null && !String.IsNullOrEmpty(gesture.ToString()))
                     item.Gesture = gesture.ToKeyGesture();
             }
@@ -438,7 +441,7 @@ namespace Clowd
             menu.Items.Clear();
 
             var capture = new NativeMenuItem("Capture Screen");
-            ApplyGesture(capture, SettingsRoot.Current.Hotkeys.CaptureRegionShortcut);
+            ApplyGesture(capture, HotkeyId.CaptureRegion);
             capture.Click += async (s, e) =>
             {
                 // wait long enough for the menu to disappear (matches WPF).
@@ -454,7 +457,7 @@ namespace Clowd
             if (recordingEnabled)
             {
                 var record = new NativeMenuItem("Start / Stop Recording");
-                ApplyGesture(record, SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut);
+                ApplyGesture(record, HotkeyId.StartStopRecording);
                 record.Click += async (s, e) =>
                 {
                     // wait long enough for the menu to disappear (matches WPF).
@@ -469,7 +472,7 @@ namespace Clowd
             if (SettingsRoot.Current.ShareRegion.IsEnabled)
             {
                 var share = new NativeMenuItem("Share Region");
-                ApplyGesture(share, SettingsRoot.Current.Hotkeys.ShareRegionShortcut);
+                ApplyGesture(share, HotkeyId.ShareRegion);
                 share.Click += async (s, e) =>
                 {
                     // wait long enough for the menu to disappear (matches WPF) — and here it also
@@ -485,7 +488,7 @@ namespace Clowd
             if (SettingsRoot.Current.DrawOnScreen.IsEnabled)
             {
                 var draw = new NativeMenuItem(Loc.T("Tray_DrawOnScreen"));
-                ApplyGesture(draw, SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut);
+                ApplyGesture(draw, HotkeyId.DrawOnScreen);
                 draw.Click += async (s, e) =>
                 {
                     // let the tray menu disappear first, or it is still on screen under the new overlay
@@ -499,17 +502,20 @@ namespace Clowd
             menu.Add(new NativeMenuItemSeparator());
 
             var colorp = new NativeMenuItem("Color Wheel");
-            colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
+            ApplyGesture(colorp, HotkeyId.ColorWheel);
+            colorp.Click += (s, e) => ShowColorWheel();
             menu.Add(colorp);
 
             var editor = new NativeMenuItem("Image Editor");
-            editor.Click += (s, e) => EditorWindow.ShowSession(null);
+            ApplyGesture(editor, HotkeyId.NewImageEditor);
+            editor.Click += (s, e) => ShowNewImageEditor();
             menu.Add(editor);
 
             if (recordingEnabled)
             {
                 var videoEditor = new NativeMenuItem("Video Editor");
-                videoEditor.Click += (s, e) => Clowd.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
+                ApplyGesture(videoEditor, HotkeyId.NewVideoEditor);
+                videoEditor.Click += (s, e) => ShowNewVideoEditor();
                 menu.Add(videoEditor);
             }
 
@@ -521,12 +527,12 @@ namespace Clowd
                 // every supported action that has a global hotkey is also reachable from this menu —
                 // the menu is the fallback when a hotkey fails to register (see the Hotkeys page).
                 var uploadFile = new NativeMenuItem("Upload File…");
-                ApplyGesture(uploadFile, SettingsRoot.Current.Hotkeys.FileUploadShortcut);
+                ApplyGesture(uploadFile, HotkeyId.FileUpload);
                 uploadFile.Click += (s, e) => UploadFilePrompt();
                 menu.Add(uploadFile);
 
                 var uploadClip = new NativeMenuItem("Upload Clipboard");
-                ApplyGesture(uploadClip, SettingsRoot.Current.Hotkeys.ClipboardUploadShortcut);
+                ApplyGesture(uploadClip, HotkeyId.ClipboardUpload);
                 uploadClip.Click += (s, e) => UploadClipboard();
                 menu.Add(uploadClip);
 
@@ -602,6 +608,40 @@ namespace Clowd
         /// session back to the front as <see cref="ToggleDrawOnScreen"/> does.</summary>
         public void ToggleDrawOnScreenshot() => DrawOnScreenSession.ToggleOnScreenshot();
 
+        // the tool windows, for their tray items and hotkeys alike. Each window takes the
+        // foreground itself as it opens (WindowNativeExtensions.ForceForeground): a hotkey swallowed
+        // by the keyboard hook was never input to us, so a plain Activate would leave it behind the
+        // app in front.
+        public void ShowColorWheel() => NiceDialog.ShowColorViewer();
+
+        public void ShowNewImageEditor() => EditorWindow.ShowSession(null);
+
+        /// <summary>A no-op while recording is switched off, like <see cref="ToggleRecording"/>: the
+        /// video editor leaves the app with it (and its hotkey is unregistered then anyway).</summary>
+        public void ShowNewVideoEditor()
+        {
+            if (SettingsRoot.Current.Recording.IsEnabled)
+                Clowd.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
+        }
+
+        /// <summary>One <see cref="SetupTrayIcon"/> for any number of hotkey changes made in the
+        /// same dispatcher turn.</summary>
+        private void QueueTrayRebuild()
+        {
+            if (_trayRebuildQueued)
+                return;
+
+            _trayRebuildQueued = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                _trayRebuildQueued = false;
+                // disposing the manager on exit clears every status, which lands here too; the
+                // tray is on its way out by then
+                if (_hotkeys != null)
+                    SetupTrayIcon();
+            });
+        }
+
         private void ApplyTheme()
         {
             RequestedThemeVariant = SettingsRoot.Current?.General?.Theme switch
@@ -645,10 +685,20 @@ namespace Clowd
             _hotkeys.SetAction(HotkeyId.ShareRegion, ToggleShareRegion);
             _hotkeys.SetAction(HotkeyId.DrawOnScreen, ToggleDrawOnScreen);
             _hotkeys.SetAction(HotkeyId.DrawOnScreenshot, ToggleDrawOnScreenshot);
+            _hotkeys.SetAction(HotkeyId.ColorWheel, ShowColorWheel);
+            _hotkeys.SetAction(HotkeyId.NewImageEditor, ShowNewImageEditor);
+            _hotkeys.SetAction(HotkeyId.NewVideoEditor, ShowNewVideoEditor);
+
+            // rebuild the tray menu whenever a gesture or its registration status changes, so the
+            // shortcut text beside each item stays current (decision table #48 / §6). Statuses
+            // change on their own schedule — the hook failing to start, the standby capturer
+            // reporting back — and one edit rebinds several actions, so the rebuilds are coalesced.
+            _hotkeys.Changed += (s, e) => QueueTrayRebuild();
 
             HotkeyManager.Current = _hotkeys;
             ApplyFeatureHotkeys();
             ConfigureCaptureHotkeys();
+            QueueTrayRebuild();
 
             SettingsRoot.Current.Capture.PropertyChanged += (s, e) =>
             {
@@ -671,6 +721,7 @@ namespace Clowd
             _hotkeys.SetEnabled(HotkeyId.FileUpload, uploads);
             _hotkeys.SetEnabled(HotkeyId.ClipboardUpload, uploads);
             _hotkeys.SetEnabled(HotkeyId.StartStopRecording, SettingsRoot.Current.Recording.IsEnabled);
+            _hotkeys.SetEnabled(HotkeyId.NewVideoEditor, SettingsRoot.Current.Recording.IsEnabled);
             _hotkeys.SetEnabled(HotkeyId.ShareRegion, SettingsRoot.Current.ShareRegion.IsEnabled);
             _hotkeys.SetEnabled(HotkeyId.DrawOnScreen, SettingsRoot.Current.DrawOnScreen.IsEnabled);
             _hotkeys.SetEnabled(HotkeyId.DrawOnScreenshot, SettingsRoot.Current.DrawOnScreen.IsEnabled);

@@ -21,12 +21,12 @@ namespace Clowd.Config
     public static class SettingsService
     {
         /// <summary>Both paths (Microsoft.Extensions.Configuration in, System.Text.Json out) share
-        /// one representation: enums by name, Color as "#AARRGGBB", SimpleKeyGesture as
-        /// "Modifier+Modifier+Key" (see <see cref="SimpleKeyGesture.ToSerializedString"/>).</summary>
+        /// one representation: enums by name, Color as "#AARRGGBB", a hotkey's GestureList as
+        /// "Modifier+Key; Modifier+Key" (see <see cref="GestureList.ToSerializedString"/>).</summary>
         static SettingsService()
         {
             // the M.E.C binder converts string values via TypeDescriptor — register a converter
-            // for the external Avalonia Color struct (SimpleKeyGesture carries its own
+            // for the external Avalonia Color struct (GestureList carries its own
             // [TypeConverter] attribute).
             TypeDescriptor.AddAttributes(typeof(Color), new TypeConverterAttribute(typeof(ColorTypeConverter)));
         }
@@ -112,7 +112,7 @@ namespace Clowd.Config
             };
             options.Converters.Add(new JsonStringEnumConverter());
             options.Converters.Add(new ColorJsonConverter());
-            options.Converters.Add(new SimpleKeyGestureJsonConverter());
+            options.Converters.Add(new GestureListJsonConverter());
             return options;
         }
 
@@ -148,20 +148,19 @@ namespace Clowd.Config
                 value is string s ? Color.Parse(s) : base.ConvertFrom(context, culture, value);
         }
 
-        /// <summary>SimpleKeyGesture ↔ "Control+Shift+S" for System.Text.Json (save path; the load
-        /// path uses the [TypeConverter] on SimpleKeyGesture). A cleared gesture is written as
-        /// "None" rather than JSON null: the configuration binder never assigns null converted
-        /// values, so a null here would silently resurrect the compiled-in default gesture.
-        /// SettingsHotkey normalizes the resulting Key.None gesture back to null.</summary>
-        private sealed class SimpleKeyGestureJsonConverter : JsonConverter<SimpleKeyGesture>
+        /// <summary>GestureList ↔ "Control+Shift+S; Alt+F1" for System.Text.Json (save path; the
+        /// load path uses the [TypeConverter] on GestureList). Always one JSON string, never an
+        /// array, and an empty list is written as "None" rather than "" or null — see GestureList
+        /// for what the configuration binder does with the alternatives.</summary>
+        private sealed class GestureListJsonConverter : JsonConverter<GestureList>
         {
             public override bool HandleNull => true;
 
-            public override SimpleKeyGesture Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-                SimpleKeyGesture.Parse(reader.GetString());
+            public override GestureList Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+                GestureList.Parse(reader.GetString());
 
-            public override void Write(Utf8JsonWriter writer, SimpleKeyGesture value, JsonSerializerOptions options) =>
-                writer.WriteStringValue(value?.ToSerializedString() ?? "None");
+            public override void Write(Utf8JsonWriter writer, GestureList value, JsonSerializerOptions options) =>
+                writer.WriteStringValue((value ?? GestureList.Empty).ToSerializedString());
         }
     }
 }

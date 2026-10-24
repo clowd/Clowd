@@ -66,9 +66,11 @@ The shell pre-creates the session directory and passes it via
 `--session-dir`. Which files appear depends on how the capture ended:
 
 Standby mode intentionally reverses creation ownership. With
-`--standby`, the shell supplies `--session-root` plus `--hk-main`,
-`--hk-window`, and/or `--hk-monitor` (hotkeys take effect when the first
-settings snapshot arrives — see below). The capturer prints
+`--standby`, the shell supplies `--session-root` plus any number of
+`--hk-main`, `--hk-window`, and `--hk-monitor` occurrences — each flag is
+repeatable, one occurrence per gesture in the action's list order, and zero
+occurrences means that action has no hotkey (hotkeys take effect when the
+first settings snapshot arrives — see below). The capturer prints
 `CLOWD_STANDBY_READY` and waits event-driven without initializing capture/GPU
 resources (the main loop is fully blocked; the crate's hook thread wakes on a
 short internal timer), then creates a unique child directory and
@@ -105,14 +107,29 @@ code 3 (permission revoked), or repeated crashes.
 While waiting, stdin is also a newline-delimited JSON control channel. A
 `{"type":"settings","args":[...]}` message replaces the complete standby CLI
 snapshot (including hotkeys) after parsing it through `CliArgs`; every
-snapshot is answered with `CLOWD_SETTINGS_STATUS <json>` carrying an
-active/error result for each of `main`, `window`, and `monitor` (statuses
-cannot arrive out of order: one pipe, one sequential reader). Hook-based
-hotkeys cannot conflict with other applications, so a gesture is active
-exactly when it parses and the hook is running; an unparseable gesture or a
-failed hook is non-fatal and does not prevent other hotkeys or settings from
-being applied. A snapshot that fails to parse changes nothing and is
-answered with the surviving hotkeys' real state. A
+snapshot is answered with `CLOWD_SETTINGS_STATUS <json>` (statuses cannot
+arrive out of order: one pipe, one sequential reader). Its `hotkeys` object
+maps each of `main`, `window`, and `monitor` to an array with one entry per
+gesture received for that action, in the order received; `gesture` echoes
+the received string verbatim, which is what the shell matches back to
+`ToCapturerString()` of its own gestures:
+
+```json
+{"hotkeys":{
+  "main":[{"gesture":"PrintScreen","active":true,"error":null},
+          {"gesture":"Control+Shift+1","active":true,"error":null}],
+  "window":[],
+  "monitor":[{"gesture":"Control+PrintScreen","active":true,"error":null}]}}
+```
+
+Hook-based hotkeys cannot conflict with other applications, so a gesture is
+active exactly when it parses and the hook is running; an unparseable gesture
+or a failed hook is non-fatal and does not prevent other hotkeys or settings
+from being applied. The shell gives each gesture to at most one action; as
+defense in depth, a gesture repeated anywhere in the snapshot (compared after
+parsing) registers at its first occurrence and every later one reports
+`"active":false,"error":"duplicate gesture"`. A snapshot that fails to parse
+changes nothing and is answered with the surviving hotkeys' real state. A
 `{"type":"capture","mode":"region|screen|window"}` message starts the same
 single capture cycle as a native hotkey. This is how shell and tray capture
 buttons reuse the waiting process instead of spawning a second one; the shell

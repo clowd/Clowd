@@ -62,7 +62,8 @@ namespace Clowd.UI
         {
             get
             {
-                var gesture = Clowd.Config.SettingsRoot.Current?.Hotkeys?.CaptureRegionShortcut?.ToString();
+                // the first of the action's gestures: the hint names one key, not the whole list
+                var gesture = Clowd.Config.SettingsRoot.Current?.Hotkeys?.CaptureRegionShortcut?.FirstOrDefault()?.ToString();
                 return String.IsNullOrEmpty(gesture)
                     ? "Use the tray icon to take your first screenshot."
                     : $"Press {gesture} or use the tray icon to take your first screenshot.";
