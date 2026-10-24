@@ -78,6 +78,7 @@ namespace Clowd.UI.VideoEditor
         private readonly SessionInfo _session; // null in --video-edit dev mode
         private readonly string _videoPath; // null for a blank project (there is no recording)
         private readonly string _editDocPath; // null when persistence is disabled (dev mode)
+        private readonly string _fallbackSessionName; // the top bar's title when the session has no name
         private readonly bool _exitOnClose; // dev mode bypasses the tray lifetime entirely
 
         private CompositionPlayer _player;
@@ -364,18 +365,18 @@ namespace Clowd.UI.VideoEditor
             // the properties panel opens itself on the first selection (see AutoShowSidebar)
             ApplySidebarVisible(false);
 
-            txtSessionName.Text = !String.IsNullOrEmpty(session?.Name) ? session.Name
-                : !String.IsNullOrEmpty(videoPath) ? Path.GetFileName(videoPath)
-                : BlankProjectName;
+            _fallbackSessionName = !String.IsNullOrEmpty(videoPath) ? Path.GetFileName(videoPath) : BlankProjectName;
 
-            // the star acts on a Recents entry, so it only exists when there is one: a dev-mode
-            // window opened straight onto a file (--video-edit) has no session to star.
+            // the star and rename act on a Recents entry, so they only exist when there is one: a
+            // dev-mode window opened straight onto a file (--video-edit) has no session to star.
             if (_session != null)
                 _session.PropertyChanged += Session_PropertyChanged;
             else
-                btnStar.IsVisible = false;
+                btnStar.IsVisible = btnRename.IsVisible = false;
 
             SyncStarButton();
+            SyncSessionName();
+            renamePopup.FallbackFocus = preview;
 
             RestoreWindowBounds();
 
@@ -3045,6 +3046,20 @@ namespace Clowd.UI.VideoEditor
         {
             if (e.PropertyName == nameof(SessionInfo.Starred))
                 SyncStarButton(); // the Recent page, or another window, can star the same session
+            else if (e.PropertyName == nameof(SessionInfo.Name))
+                SyncSessionName(); // ...and rename it
+        }
+
+        private void rename_Click(object sender, RoutedEventArgs e) => renamePopup.Open(_session, btnRename);
+
+        /// <summary>Shows the session's name in the top bar and the window title (the video's file
+        /// name, or the blank project's, when there is no session or it has none) and in the rename
+        /// tooltip.</summary>
+        private void SyncSessionName()
+        {
+            txtSessionName.Text = !String.IsNullOrEmpty(_session?.Name) ? _session.Name : _fallbackSessionName;
+            Title = $"{txtSessionName.Text} - Clowd";
+            ToolTip.SetTip(btnRename, _session?.RenameTooltip);
         }
 
         private void star_Click(object sender, RoutedEventArgs e)

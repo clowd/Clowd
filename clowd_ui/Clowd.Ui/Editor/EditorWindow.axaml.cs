@@ -273,6 +273,8 @@ namespace Clowd.UI
             _session.PropertyChanged += Session_PropertyChanged;
             SyncUploadProgress();
             SyncStarButton();
+            SyncRenameButton();
+            renamePopup.FallbackFocus = drawingCanvas;
         }
 
         private void Session_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -281,6 +283,18 @@ namespace Clowd.UI
                 SyncUploadProgress();
             else if (e.PropertyName == nameof(SessionInfo.Starred))
                 SyncStarButton(); // the Recent page, or another window, can star the same session
+            else if (e.PropertyName == nameof(SessionInfo.Name))
+                SyncRenameButton(); // ...and rename it
+        }
+
+        private void rename_Click(object sender, RoutedEventArgs e) => renamePopup.Open(_session, btnRename);
+
+        /// <summary>Puts the session's name in the window title (the taskbar and Alt+Tab read it)
+        /// and in the rename tooltip.</summary>
+        private void SyncRenameButton()
+        {
+            Title = !String.IsNullOrEmpty(_session?.Name) ? $"{_session.Name} - Clowd" : "Edit - Clowd";
+            ToolTip.SetTip(btnRename, _session?.RenameTooltip);
         }
 
         private void star_Click(object sender, RoutedEventArgs e)
@@ -669,6 +683,10 @@ namespace Clowd.UI
                 measureUnitsPopup_KeyDown(sender, e);
                 return;
             }
+
+            // likewise the rename flyout, before its posted focus has landed in its field
+            if (renamePopup.IsOpen && renamePopup.HandleKey(e))
+                return;
 
             if (e.Source is TextBox)
                 return;

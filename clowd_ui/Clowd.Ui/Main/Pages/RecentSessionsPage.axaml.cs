@@ -692,6 +692,14 @@ namespace Clowd.UI
                 SessionManager.Current.OpenSession(session);
         }
 
+        private void RenameItemClicked(object sender, RoutedEventArgs e)
+        {
+            // a rename can rebuild the page's rows (under a filter, say) and take the button with
+            // it; the keyboard then goes back to the list instead
+            renamePopup.FallbackFocus = (sender as Control)?.FindAncestorOfType<ListBox>();
+            renamePopup.Open(GetSessionFromEvent(sender), sender as Control);
+        }
+
         private void ToggleStarClicked(object sender, RoutedEventArgs e)
         {
             var session = GetSessionFromEvent(sender);

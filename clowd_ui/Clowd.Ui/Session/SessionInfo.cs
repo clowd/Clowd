@@ -237,11 +237,22 @@ namespace Clowd
             set => Set(value);
         }
 
+        /// <summary>What the Recent page lists the entry as and the editors' top bars show. Set
+        /// from the kind of capture when the session is made; the user can rename it from the
+        /// rename flyout (Controls/RenameSessionPopup) on either editor or the Recent row.</summary>
         public string Name
         {
             get => Get<string>();
-            set => Set(value);
+            set
+            {
+                if (Set(value))
+                    OnPropertyChanged(nameof(RenameTooltip));
+            }
         }
+
+        /// <summary>The rename button's tooltip, on both editors and the Recent row.</summary>
+        [JsonIgnore]
+        public string RenameTooltip => $"Rename \"{Name}\"";
 
         /// <summary>Whether the user has starred this entry. Two things follow from it: the Recent
         /// page's "Starred" filter, and — see SessionManager's cleanup timer — that the automatic

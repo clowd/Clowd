@@ -385,8 +385,17 @@
                 </controls:ToolButton.Flyout>
             </controls:ToolButton>
 
-            <!--  Star/unstar this session — the same toggle as the Recent page's row star, and
-                  first in the docked group so it lands leftmost in the right-hand cluster. Glyph,
+            <!--  Rename this session (renamePopup) — first in the docked group so it lands
+                  leftmost in the right-hand cluster, beside the star. The tooltip names the
+                  session, so it is pushed from code (SyncRenameButton) like the star's.  -->
+            <controls:ToolButton
+                x:Name="btnRename"
+                Classes="wide"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Click="rename_Click"
+                IconPath="{StaticResource IconRenameSession}" />
+
+            <!--  Star/unstar this session — the same toggle as the Recent page's row star. Glyph,
                   tint and tooltip are pushed from code (SyncStarButton) rather than bound: this
                   window is its own DataContext and does not raise PropertyChanged.  -->
             <controls:ToolButton
@@ -814,6 +823,9 @@
               and reset buttons all live in there; this window supplies the tools and acts on what
               the user does to them (see InitCustomizePopup).  -->
         <controls:CustomizeToolbarPopup x:Name="customizePopup" />
+
+        <!--  The shared rename flyout (Controls/RenameSessionPopup), opened from btnRename.  -->
+        <controls:RenameSessionPopup x:Name="renamePopup" />
 
     </Grid>
 </local:SystemThemedWindow>
