@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace Clowd.Config
@@ -58,7 +60,9 @@ namespace Clowd.Config
         /// recorded). Only a Mac has anything to do: there every build before per-OS defaults wrote
         /// out the PrintScreen family, which a Mac cannot register — so each screenshot action
         /// still holding exactly its old default gets this OS's default instead. A gesture the user
-        /// chose is left alone, as is everything on any other OS.
+        /// chose is left alone, as is everything on any other OS. A gesture belongs to one action
+        /// (HotkeyManager enforces that only on an edit), so a new default another action already
+        /// holds stays with it: the user bound it there while the old defaults were dead.
         /// </summary>
         public void MigrateDefaults(int writtenWith, OSPlatform platform)
         {
@@ -67,14 +71,17 @@ namespace Clowd.Config
 
             var old = new SettingsHotkey(OSPlatform.Windows);
             var now = new SettingsHotkey(platform);
-            if (Equals(CaptureRegionShortcut, old.CaptureRegionShortcut))
-                CaptureRegionShortcut = now.CaptureRegionShortcut;
-            if (Equals(CaptureFullscreenShortcut, old.CaptureFullscreenShortcut))
-                CaptureFullscreenShortcut = now.CaptureFullscreenShortcut;
-            if (Equals(CaptureActiveShortcut, old.CaptureActiveShortcut))
-                CaptureActiveShortcut = now.CaptureActiveShortcut;
-            if (Equals(StartStopRecordingShortcut, old.StartStopRecordingShortcut))
-                StartStopRecordingShortcut = now.StartStopRecordingShortcut;
+            var actions = TypeDescriptor.GetProperties(this).Cast<PropertyDescriptor>()
+                .Where(p => p.PropertyType == typeof(GestureList) && !p.IsReadOnly)
+                .ToList();
+            var moving = actions.Where(p => Equals(p.GetValue(this), p.GetValue(old))).ToList();
+            var taken = new HashSet<HotkeyGesture>(actions.Except(moving).SelectMany(p => (GestureList)p.GetValue(this)));
+            foreach (var action in moving)
+            {
+                var gestures = ((GestureList)action.GetValue(now)).Except(taken);
+                action.SetValue(this, gestures);
+                taken.UnionWith(gestures);
+            }
         }
 
         // the rows for a feature that can be switched off (uploads, recording) go with it: the

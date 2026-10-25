@@ -20,8 +20,9 @@
 //!   `Control+Alt+X` also swallows AltGr+X — and `Alt+E` never eats AltGr+E.
 //! - Windows: a hook Windows removed silently (callback timeouts, e.g. a debugger pause) is
 //!   re-installed after a few keystrokes it missed, which moves it to the front of the hook chain.
-//!   The watchdog needs the process's keyboard raw input, so it is off where someone else already
-//!   took that (winit's event loop in `clowd_capture`).
+//!   The watchdog needs the process's keyboard raw input, so it is off in a process that keeps
+//!   that for itself (a winit event loop takes it; `clowd_capture` hands it back when it builds
+//!   its loop, so the watchdog runs there).
 //! - macOS: needs the Accessibility permission (`start` fails with `PermissionDenied`, never
 //!   prompts; losing it later ends the hook with `Event::Stopped` within about a second, as does a
 //!   tap that times out a 6th time within 10 s). Secure Input (password fields, in any app) hides
@@ -68,6 +69,6 @@ pub use std::sync::mpsc::RecvTimeoutError;
 
 pub use error::Error;
 pub use gesture::{Gesture, ParseGestureError};
-pub use hotkeys::{Event, Events, HotkeyId, Hotkeys, KeyEvent};
+pub use hotkeys::{Event, Events, HotkeyId, Hotkeys, KeyEvent, REVOKED_REASON};
 pub use key::Key;
 pub use modifiers::Modifiers;

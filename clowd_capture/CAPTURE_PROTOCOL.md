@@ -103,7 +103,8 @@ reports success and then never fires. Gestures travel in the settings form:
 clowd_hotkeys' key table, which the shell's `HotkeyKey` is generated from —
 and a key with no code on this OS surfaces as an explicit per-hotkey error.
 A hook that cannot start, or dies later, is fatal only on Windows, where the
-failure (`HookFailed`, or the hook's message loop failing) is specific to
+failure (`HookFailed`, the hook's message loop failing, or a silently
+removed hook that could not be re-installed) is specific to
 this process: it exits with code 1 — a death noticed under an open overlay
 waits until that capture has finished — so the shell's crash accounting
 restarts it or falls back. Everywhere else the process stays up for tray
@@ -114,8 +115,9 @@ the Accessibility grant, which the shell's own hook shares, or are transient,
 so the capturer retries the hook every 2 s while the last snapshot holds a
 gesture it would register — not before the first snapshot, nor with no
 gestures or only refused ones (a settings snapshot also retries it, once 2 s
-have passed since the last try) — logs a failure once per change of reason
-rather than per try, and announces each change (the
+have passed since the last try) — logs a start failure once per change of
+reason rather than per try and a death as an error only the first time per
+run (a revoked grant never), and announces each change (the
 hook coming up, going down, failing differently, or dying and coming straight
 back with its gestures registered again) with an unsolicited
 `CLOWD_SETTINGS_STATUS`; granting
@@ -152,8 +154,11 @@ the received string verbatim, which is what the shell matches back to
 `error` is display text (clowd_hotkeys' error text, echoed verbatim) and may
 change; `error_code` is its stable, machine-readable twin, and the one to
 branch on. Both are null exactly when `active` is true. Codes: `permission`
-(macOS Accessibility not granted — the shell's cue to prompt for it, and to
-show its own grant instructions in place of `error`),
+(macOS Accessibility not granted, or a stale grant: listed and trusted, but
+the tap gets no key events — the shell tells the two apart with
+`AXIsProcessTrusted`, prompting and showing its grant instructions in place
+of `error` only for a missing grant, and its re-add instructions for a stale
+one),
 `unsupported` (no hook on this OS), `hook_failed` (the OS refused the hook),
 `hook_stopped` (the hook died and is not back yet), `invalid_gesture` (does
 not parse), `no_key`, `modifier_key` (a bare modifier), `unsupported_key` (no

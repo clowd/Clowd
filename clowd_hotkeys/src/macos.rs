@@ -221,7 +221,7 @@ impl Ctx {
     }
 }
 
-const REVOKED: &str = "the Accessibility permission was revoked";
+const REVOKED: &str = crate::REVOKED_REASON;
 
 /// The last `MAX_REENABLES` timeout re-enables, oldest at `next`.
 #[derive(Copy, Clone, Default)]

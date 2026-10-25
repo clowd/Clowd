@@ -450,10 +450,13 @@ namespace Clowd.UI
         /// <summary>Asks for Accessibility when the capturer reports a gesture down for want of it —
         /// in warm-capture mode the shell may own no gesture at all, so its own hook never gets to
         /// ask. The capturer runs inside Clowd.app, so the grant covers it; it retries its hook by
-        /// itself and reports again once the grant lands.</summary>
-        internal static void PromptIfNeeded(StandbyHotkeyStatus status, AccessibilityPrompt prompt)
+        /// itself and reports again once the grant lands. A process macOS already trusts got a stale
+        /// grant: the prompt would show nothing yet spend this run's one, which the grant missing
+        /// for real (once the user removes Clowd from the list) still needs.</summary>
+        /// <param name="isTrusted">AXIsProcessTrusted; never prompts.</param>
+        internal static void PromptIfNeeded(StandbyHotkeyStatus status, AccessibilityPrompt prompt, Func<bool> isTrusted)
         {
-            if (status.NeedsAccessibility)
+            if (status.NeedsAccessibility && !isTrusted())
                 prompt.RequestOnce();
         }
 
@@ -478,7 +481,7 @@ namespace Clowd.UI
                         return;
                     // in warm mode the shell registers none of the screenshot gestures itself, so
                     // this report is its only sign that it should ask for Accessibility
-                    PromptIfNeeded(status, AccessibilityPrompt.Shared);
+                    PromptIfNeeded(status, AccessibilityPrompt.Shared, () => MacPermissions.HasAccessibility);
                     var manager = HotkeyManager.Current;
                     if (manager == null)
                         return;

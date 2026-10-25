@@ -677,6 +677,31 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public void Hotkeys_WrittenBeforeTheMacDefaults_NeverGiveAMacDefaultTheUserBoundElsewhere()
+        {
+            // with the PrintScreen defaults dead on a Mac, the user bound F13 and Cmd+Shift+1 to
+            // other actions themselves: a gesture belongs to one action, and theirs keep it
+            WriteFromBeforeTheMacDefaults(
+                "\"CaptureRegionShortcut\": \"Snapshot\"",
+                "\"CaptureFullscreenShortcut\": \"Control+Snapshot\"",
+                "\"CaptureActiveShortcut\": \"F13\"",
+                "\"StartStopRecordingShortcut\": \"Shift+Meta+D1\"");
+
+            var loaded = SettingsService.Load(_path, OSPlatform.OSX).Hotkeys;
+
+            const HotkeyModifiers CmdShift = HotkeyModifiers.Meta | HotkeyModifiers.Shift;
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D2, CmdShift)), loaded.CaptureRegionShortcut);
+            Assert.Empty(loaded.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.F13)), loaded.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D1, CmdShift)), loaded.StartStopRecordingShortcut);
+            var all = TypeDescriptor.GetProperties(loaded).Cast<PropertyDescriptor>()
+                .Where(p => p.PropertyType == typeof(GestureList))
+                .SelectMany(p => (GestureList)p.GetValue(loaded))
+                .ToList();
+            Assert.Equal(all.Count, all.Distinct().Count());
+        }
+
+        [Fact]
         public void Hotkeys_WrittenBeforeTheMacDefaults_LoadUnchangedOnWindows()
         {
             WriteFromBeforeTheMacDefaults(

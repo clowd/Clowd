@@ -111,7 +111,8 @@ fn recovery(err: &Error) -> Recovery {
         // restarting Clowd.
         Error::PermissionDenied | Error::HookFailed(_) | Error::Stopped if cfg!(target_os = "macos") => Recovery::Retry,
         // Windows: the OS refused or lost this process's hook (a failed
-        // SetWindowsHookEx, a message-loop error), which a fresh process or
+        // SetWindowsHookEx, a message-loop error, or a silently removed hook
+        // that could not be re-installed), which a fresh process or
         // the shell's own hook need not share.
         Error::HookFailed(_) | Error::Stopped => Recovery::Exit,
         _ => Recovery::Report,
@@ -204,6 +205,9 @@ pub struct StandbyHotkeys<H: Hook = Hotkeys> {
     /// The earliest the next start may be tried: at most one per
     /// `RETRY_INTERVAL`, so a hook that dies at once cannot spin.
     next_try: Instant,
+    /// True once a retried death was logged at error: a tap that keeps dying
+    /// is restarted every time, and each error! is a Sentry event.
+    reported_death: bool,
     /// The gesture lists of the last settings snapshot, applied again when
     /// the hook comes or goes. None until the first snapshot, which is when
     /// hotkeys take effect.
@@ -251,6 +255,7 @@ impl<H: Hook> StandbyHotkeys<H> {
             }))),
             error: None,
             next_try: now,
+            reported_death: false,
             requested: None,
             wants_hook: false,
             registered: HashMap::new(),
@@ -323,11 +328,19 @@ impl<H: Hook> StandbyHotkeys<H> {
         let before = (self.slot.hook().is_some(), self.error.clone());
         let died = match self.lost_rx.try_recv() {
             Ok(reason) => {
-                log::error!("standby hotkey hook died: {reason}");
                 self.stop();
                 self.error = Some(Error::Stopped);
                 if recovery(&Error::Stopped) == Recovery::Exit {
+                    log::error!("standby hotkey hook died: {reason}");
                     return Poll::Fatal(reason);
+                }
+                // Retried, so reported once per run like the shell's own hook:
+                // a revoked grant is the user's choice, not a defect.
+                if reason == clowd_hotkeys::REVOKED_REASON || self.reported_death {
+                    log::warn!("standby hotkey hook died: {reason}");
+                } else {
+                    self.reported_death = true;
+                    log::error!("standby hotkey hook died: {reason}");
                 }
                 true
             }
@@ -1142,6 +1155,45 @@ mod tests {
             "{reported:#?}"
         );
         assert_eq!(records("hook still unavailable").len(), 4, "repeats stay in the debug log");
+    }
+
+    /// A death on macOS is retried, so a tap that keeps dying would file a
+    /// Sentry event per death: the first fault is an error, later ones are
+    /// warnings, and a revoked grant (the user's choice, which the shell does
+    /// not report either) is never an error.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_retried_death_is_an_error_once_and_a_revocation_never() {
+        records("");
+        let mut rig = rig(vec![Ok(()), Ok(()), Ok(()), Ok(())]);
+        rig.hotkeys.apply(&snapshot(&["F12"]));
+        let start = Instant::now();
+        for (k, reason) in [
+            "the event tap kept timing out",
+            "the event tap was invalidated",
+            clowd_hotkeys::REVOKED_REASON,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (_hook, events) = rig.hooks.try_recv().expect("the hook is up");
+            events
+                .send(HookEvent::Stopped(reason.into()))
+                .unwrap();
+            rig.woke
+                .recv_timeout(Duration::from_secs(5))
+                .expect("the forwarding thread wakes the loop");
+            assert!(matches!(
+                rig.hotkeys
+                    .poll(start + RETRY_INTERVAL * (k as u32 + 1)),
+                Poll::Statuses(_)
+            ));
+        }
+        let levels: Vec<_> = records("hook died")
+            .into_iter()
+            .map(|(level, _)| level)
+            .collect();
+        assert_eq!(levels, [log::Level::Error, log::Level::Warn, log::Level::Warn]);
     }
 
     /// A hook nothing would be registered on is not worth a thread start and

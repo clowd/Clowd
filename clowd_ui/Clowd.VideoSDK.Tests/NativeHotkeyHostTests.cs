@@ -105,11 +105,11 @@ namespace Clowd.VideoSDK.Tests
                 """);
 
             // warm capture with no shell-owned gesture: the capturer's report is the only cue
-            CaptureStandbySupervisor.PromptIfNeeded(permission, rig.Prompt);
+            CaptureStandbySupervisor.PromptIfNeeded(permission, rig.Prompt, () => rig.Trusted);
             rig.RunUi();
             Assert.Equal(1, rig.Prompts);
 
-            CaptureStandbySupervisor.PromptIfNeeded(permission, rig.Prompt);
+            CaptureStandbySupervisor.PromptIfNeeded(permission, rig.Prompt, () => rig.Trusted);
             rig.Host.RegisterTrigger(ShiftA, () => { });
             rig.RunUi();
             Assert.Equal(1, rig.Prompts);
@@ -124,10 +124,32 @@ namespace Clowd.VideoSDK.Tests
                             "window":[],"monitor":[]}}
                 """);
 
-            CaptureStandbySupervisor.PromptIfNeeded(other, rig.Prompt);
+            CaptureStandbySupervisor.PromptIfNeeded(other, rig.Prompt, () => rig.Trusted);
             rig.RunUi();
 
             Assert.Equal(0, rig.Prompts);
+        }
+
+        [Fact]
+        public void A_capturer_permission_status_under_a_trusted_grant_keeps_the_prompt_for_a_missing_one()
+        {
+            using var rig = new Rig();
+            var permission = CaptureStandbySupervisor.ParseHotkeyStatus("""
+                {"hotkeys":{"main":[{"gesture":"F12","active":false,"error":"x","error_code":"permission"}],
+                            "window":[],"monitor":[]}}
+                """);
+
+            // a stale grant: the prompt would show nothing, yet spend this run's only one
+            rig.Trusted = true;
+            CaptureStandbySupervisor.PromptIfNeeded(permission, rig.Prompt, () => rig.Trusted);
+            rig.RunUi();
+            Assert.Equal(0, rig.Prompts);
+
+            // the user removed Clowd from the list as the stale-grant text says: now it is missing
+            rig.Trusted = false;
+            CaptureStandbySupervisor.PromptIfNeeded(permission, rig.Prompt, () => rig.Trusted);
+            rig.RunUi();
+            Assert.Equal(1, rig.Prompts);
         }
 
         [Fact]

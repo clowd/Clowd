@@ -22,6 +22,10 @@ impl HotkeyId {
     }
 }
 
+/// The `Event::Stopped` reason when the Accessibility permission was revoked under a running tap
+/// (macOS), so a consumer can tell the user's choice from a fault without matching its own copy.
+pub const REVOKED_REASON: &str = "the Accessibility permission was revoked";
+
 /// What the hook reports, in order, on `Events`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
@@ -35,7 +39,8 @@ pub enum Event {
     /// Observe stream (only while `set_observe(true)`): every key edge, nothing swallowed by observe itself.
     Key(KeyEvent),
     /// The hook died unexpectedly (macOS: Accessibility revoked or the tap invalidated, noticed within about a second,
-    /// or the tap's 6th timeout within 10 s; Windows: message loop error). Last event; the queue then closes.
+    /// or the tap's 6th timeout within 10 s; Windows: message loop error, or a silently removed hook that could not
+    /// be re-installed). Last event; the queue then closes.
     Stopped(String),
 }
 

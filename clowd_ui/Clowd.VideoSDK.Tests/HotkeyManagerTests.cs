@@ -265,6 +265,7 @@ namespace Clowd.VideoSDK.Tests
         public void A_capturer_permission_failure_shows_the_same_text_as_the_shells_own()
         {
             var (manager, _, _) = Create(wireActions: false);
+            manager.AccessibilityTrustedProbe = () => false;
             manager.SetAction(HotkeyId.CaptureRegion, null);
             var region = manager.GetEntry(HotkeyId.CaptureRegion);
             region.AddGesture(CtrlShift1);
@@ -282,6 +283,27 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(NativeHotkeyHost.PermissionMessage, region.Shortcuts[0].Error);
             Assert.Equal("duplicate gesture", region.Shortcuts[1].Error);
             Assert.Equal("some new failure", region.Shortcuts[2].Error);
+        }
+
+        [Fact]
+        public void A_capturer_permission_failure_under_a_trusted_grant_shows_the_shells_stale_grant_text()
+        {
+            // the capturer's tap shares the shell's TCC answer: macOS lists Clowd as allowed, yet the
+            // tap lost its key events, so asking for the grant (which the System page shows) is wrong
+            var (manager, _, _) = Create(wireActions: false);
+            manager.AccessibilityTrustedProbe = () => true;
+            manager.SetAction(HotkeyId.CaptureRegion, null);
+            var region = manager.GetEntry(HotkeyId.CaptureRegion);
+            region.AddGesture(CtrlShift1);
+
+            manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[]
+            {
+                new ExternalGestureStatus("PrintScreen", false, "reworded crate text", CaptureStandbySupervisor.PermissionErrorCode),
+                new ExternalGestureStatus("Control+Shift+D1", false, "duplicate gesture", "duplicate"),
+            });
+
+            Assert.Equal(NativeHotkeyHost.StaleGrantMessage, region.Shortcuts[0].Error);
+            Assert.Equal("duplicate gesture", region.Shortcuts[1].Error);
         }
 
         [Fact]
