@@ -284,7 +284,7 @@ namespace Clowd.VideoSDK.Tests
             manager.RecordingChanged += (_, _) => states.Add(manager.IsRecording);
             HotkeyGesture recorded = null;
 
-            var session = manager.StartRecording(_ => { }, g => recorded = g, out var error);
+            var session = manager.StartRecording(_ => { }, g => recorded = g, _ => { }, out var error);
 
             Assert.NotNull(session);
             Assert.Null(error);
@@ -292,7 +292,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(new[] { true }, states);
 
             // one recording at a time: a second is refused without an error
-            Assert.Null(manager.StartRecording(_ => { }, _ => { }, out error));
+            Assert.Null(manager.StartRecording(_ => { }, _ => { }, _ => { }, out error));
             Assert.Null(error);
 
             host.Recording.Recorded(CtrlShift1);
@@ -304,7 +304,7 @@ namespace Clowd.VideoSDK.Tests
             // disposing after the end changes nothing, and a new recording can start
             session.Dispose();
             Assert.Equal(new[] { true, false }, states);
-            Assert.NotNull(manager.StartRecording(_ => { }, _ => { }, out _));
+            Assert.NotNull(manager.StartRecording(_ => { }, _ => { }, _ => { }, out _));
         }
 
         [Fact]
@@ -314,7 +314,7 @@ namespace Clowd.VideoSDK.Tests
             var states = new List<bool>();
             manager.RecordingChanged += (_, _) => states.Add(manager.IsRecording);
 
-            var session = manager.StartRecording(_ => { }, _ => { }, out _);
+            var session = manager.StartRecording(_ => { }, _ => { }, _ => { }, out _);
             var inner = host.Recording;
             session.Dispose();
 
@@ -327,7 +327,7 @@ namespace Clowd.VideoSDK.Tests
         public void A_recorded_callback_that_throws_still_ends_the_recording()
         {
             var (manager, host, _) = Create();
-            manager.StartRecording(_ => { }, _ => throw new InvalidOperationException("boom"), out _);
+            manager.StartRecording(_ => { }, _ => throw new InvalidOperationException("boom"), _ => { }, out _);
 
             Assert.Throws<InvalidOperationException>(() => host.Recording.Recorded(CtrlShift1));
 
@@ -342,12 +342,35 @@ namespace Clowd.VideoSDK.Tests
             var raised = false;
             manager.RecordingChanged += (_, _) => raised = true;
 
-            var session = manager.StartRecording(_ => { }, _ => { }, out var error);
+            var session = manager.StartRecording(_ => { }, _ => { }, _ => { }, out var error);
 
             Assert.Null(session);
             Assert.Equal("Grant Accessibility permission.", error);
             Assert.False(manager.IsRecording);
             Assert.False(raised);
+        }
+
+        [Fact]
+        public void A_recording_the_host_ends_with_an_error_ends_and_hands_the_error_over()
+        {
+            // the hook dying mid-recording: no gesture will ever come, and the standby capturer's
+            // hotkeys (paused through RecordingChanged) must not stay paused waiting for one
+            var (manager, host, _) = Create();
+            var states = new List<bool>();
+            manager.RecordingChanged += (_, _) => states.Add(manager.IsRecording);
+            HotkeyGesture recorded = null;
+            string failure = null;
+            var session = manager.StartRecording(_ => { }, g => recorded = g, e => failure = e, out _);
+
+            host.Recording.Fail("The global hotkey listener stopped.");
+
+            Assert.Equal("The global hotkey listener stopped.", failure);
+            Assert.Null(recorded);
+            Assert.False(manager.IsRecording);
+            Assert.Equal(new[] { true, false }, states);
+
+            session.Dispose();
+            Assert.Equal(new[] { true, false }, states);
         }
 
         private sealed class FakeHost : IGlobalTriggerHost
@@ -379,21 +402,24 @@ namespace Clowd.VideoSDK.Tests
 
             public IDisposable ObserveKeys(Action<GlobalKeyEvent> observer) => throw new NotSupportedException();
 
-            public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, out string error)
+            public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded,
+                Action<string> failed, out string error)
             {
                 error = RecordingError;
                 if (error != null)
                     return null;
 
-                return Recording = new FakeRecording(recorded);
+                return Recording = new FakeRecording(recorded, failed);
             }
         }
 
-        private sealed class FakeRecording(Action<HotkeyGesture> recorded) : IDisposable
+        private sealed class FakeRecording(Action<HotkeyGesture> recorded, Action<string> failed) : IDisposable
         {
             public bool Canceled { get; private set; }
 
             public void Recorded(HotkeyGesture gesture) => recorded(gesture);
+
+            public void Fail(string error) => failed(error);
 
             public void Dispose() => Canceled = true;
         }

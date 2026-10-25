@@ -61,7 +61,8 @@ namespace Clowd.UI.Config
 
         public bool IsListening { get; private set; }
 
-        /// <summary>Why the last <see cref="BeginListening"/> could not record (no hook), or null.</summary>
+        /// <summary>Why the last <see cref="BeginListening"/> could not record (no hook) or its
+        /// recording ended without a gesture (the hook died), or null.</summary>
         public string RecordingError => _recordingError;
 
         /// <summary>The gesture button was clicked: the owner decides whether to start listening.</summary>
@@ -278,7 +279,7 @@ namespace Clowd.UI.Config
             if (TopLevel.GetTopLevel(this) is not Window { IsActive: true } window)
                 return false;
 
-            var session = manager.StartRecording(OnRecordModifiers, OnRecorded, out var error);
+            var session = manager.StartRecording(OnRecordModifiers, OnRecorded, OnRecordingFailed, out var error);
             if (session == null)
             {
                 if (error != null)
@@ -334,6 +335,13 @@ namespace Clowd.UI.Config
         }
 
         private void OnRecorded(HotkeyGesture gesture) => FinishListening(gesture);
+
+        // the hook died mid-recording: a cancel, with the field saying why instead of listening on
+        private void OnRecordingFailed(string error)
+        {
+            _recordingError = error;
+            FinishListening(null);
+        }
 
         private void FinishListening(HotkeyGesture gesture)
         {

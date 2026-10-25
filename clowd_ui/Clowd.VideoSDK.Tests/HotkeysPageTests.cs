@@ -310,7 +310,7 @@ namespace Clowd.VideoSDK.Tests
 
             public IDisposable ObserveKeys(Action<GlobalKeyEvent> observer) => throw new NotSupportedException();
 
-            public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, out string error) =>
+            public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, Action<string> failed, out string error) =>
                 throw new NotSupportedException();
 
             private sealed class Registration : IGlobalTriggerRegistration

@@ -26,11 +26,14 @@ namespace Clowd.UI
     /// disposed; the event thread is the only other user of the handle, and the handle is freed
     /// only after that thread has ended.</para>
     /// <para>If the hook cannot start (no Accessibility permission on macOS, Linux, the library
-    /// missing), every registration and recording reports why, and the app keeps running.</para>
+    /// missing), every registration and recording reports why, and the app keeps running. If it
+    /// dies later (it reports itself stopped, or its event queue fails), the hook is stopped for
+    /// good — so the gestures it swallowed reach apps again — and every live registration and
+    /// recording fails with the reason. Nothing restarts it short of restarting the app.</para>
     /// </remarks>
     internal sealed class NativeHotkeyHost : IGlobalTriggerHost, IDisposable
     {
-        private const string StoppedMessage = "The global hotkey listener has stopped.";
+        private static readonly string StoppedMessage = StoppedError("");
         private const int EventTimeoutMs = 500;
         private static readonly TimeSpan PumpJoinTimeout = TimeSpan.FromSeconds(2);
 
@@ -64,6 +67,16 @@ namespace Clowd.UI
                 if (result != CH_OK)
                     return Registration.Failed(RegisterError(result, gesture));
 
+                return AddRegistration(id, executed, fireOnRepeat);
+            }
+        }
+
+        /// <summary>Tracks a registration the hook accepted under <paramref name="id"/>: from here
+        /// its presses run <paramref name="executed"/> until it is disposed.</summary>
+        internal Registration AddRegistration(uint id, Action executed, bool fireOnRepeat)
+        {
+            lock (_gate)
+            {
                 var registration = new Registration(this, id, executed, fireOnRepeat);
                 _registrations[id] = registration;
                 return registration;
@@ -113,10 +126,12 @@ namespace Clowd.UI
             }
         }
 
-        public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, out string error)
+        public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded,
+            Action<string> failed, out string error)
         {
             if (modifiersChanged == null) throw new ArgumentNullException(nameof(modifiersChanged));
             if (recorded == null) throw new ArgumentNullException(nameof(recorded));
+            if (failed == null) throw new ArgumentNullException(nameof(failed));
 
             uint token;
             lock (_gate)
@@ -147,9 +162,17 @@ namespace Clowd.UI
                 }
             }
 
-            var session = new Session(this, token, modifiersChanged, recorded);
-            _recording = session;
             error = null;
+            return BeginSession(token, modifiersChanged, recorded, failed);
+        }
+
+        /// <summary>UI thread: makes the session the hook just armed under <paramref name="token"/>
+        /// the live one, which the posted recording events are delivered to.</summary>
+        internal IDisposable BeginSession(uint token, Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded,
+            Action<string> failed)
+        {
+            var session = new Session(this, token, modifiersChanged, recorded, failed);
+            _recording = session;
             return session;
         }
 
@@ -191,16 +214,24 @@ namespace Clowd.UI
             }
 
             var buffer = new byte[512];
-            int result = HotkeysNative.clowd_hotkeys_start(out var handle, buffer, (uint)buffer.Length);
+            int result;
+            IntPtr handle;
+            try
+            {
+                result = HotkeysNative.clowd_hotkeys_start(out handle, buffer, (uint)buffer.Length);
+            }
+            catch (Exception ex)
+            {
+                // a library that loaded but cannot be called: a defect, like a missing one
+                _hookError = StartError(ex);
+                Debug.WriteLine("[NativeHotkeyHost] start threw: " + ex);
+                SentryConfig.CaptureHandled(ex, "hotkey.hook-start");
+                return;
+            }
+
             if (result != CH_OK)
             {
-                _hookError = result switch
-                {
-                    CH_ERR_PERMISSION => "Could not start the global hotkey listener. Grant Accessibility permission to Clowd under " +
-                                         "Settings → General → Permissions, then restart Clowd.",
-                    CH_ERR_UNSUPPORTED => "Global hotkeys are not supported on Linux yet.",
-                    _ => "Could not start the global hotkey listener: " + Utf8(buffer, buffer.Length),
-                };
+                _hookError = StartError(result, Utf8(buffer, buffer.Length));
                 Debug.WriteLine("[NativeHotkeyHost] " + _hookError);
                 if (result == CH_ERR_HOOK_FAILED)
                     SentryConfig.CaptureHandled(new InvalidOperationException(_hookError), "hotkey.hook-start");
@@ -217,9 +248,51 @@ namespace Clowd.UI
             _pump.Start();
         }
 
+        /// <summary>Why <c>clowd_hotkeys_start</c> refused, from its code and the message it
+        /// copied out.</summary>
+        internal static string StartError(int result, string detail) => result switch
+        {
+            CH_ERR_PERMISSION => "Could not start the global hotkey listener. Grant Accessibility permission to Clowd under " +
+                                 "Settings → System → Permissions, then restart Clowd.",
+            CH_ERR_UNSUPPORTED => "Global hotkeys are not supported on Linux yet.",
+            _ => "Could not start the global hotkey listener: " + (String.IsNullOrEmpty(detail) ? $"error {result}" : detail),
+        };
+
+        /// <summary>Why the hook could not start when the call itself threw.</summary>
+        internal static string StartError(Exception exception) =>
+            "Could not start the global hotkey listener: " + exception.Message;
+
+        /// <summary>What every registration and recording reports once the hook has died, with the
+        /// reason it gave (or none).</summary>
+        internal static string StoppedError(string reason) =>
+            "The global hotkey listener stopped" + (String.IsNullOrEmpty(reason) ? "." : ": " + reason.TrimEnd('.') + ".")
+            + " Restart Clowd to use global hotkeys again.";
+
+        /// <summary>What a <c>clowd_hotkeys_next_event</c> result means for the event thread.</summary>
+        internal enum NextEvent
+        {
+            /// <summary>An event was filled in.</summary>
+            Event,
+            Timeout,
+            /// <summary>The queue closed: the hook stopped and everything it queued was delivered.
+            /// The only clean end.</summary>
+            Closed,
+            /// <summary>Anything else (<c>CH_ERR_PANIC</c>, <c>CH_ERR_NULL</c>): the queue failed
+            /// with the hook possibly still running and swallowing its gestures.</summary>
+            Failed,
+        }
+
+        internal static NextEvent ClassifyNextEvent(int result) => result switch
+        {
+            1 => NextEvent.Event,
+            0 => NextEvent.Timeout,
+            -1 => NextEvent.Closed,
+            _ => NextEvent.Failed,
+        };
+
         /// <summary>The event thread: the only user of <paramref name="handle"/> outside
         /// <see cref="_gate"/>. Ends when the queue closes (the hook stopped and everything it
-        /// queued was delivered).</summary>
+        /// queued was delivered), or fails — the hook is then stopped here.</summary>
         private void Pump(IntPtr handle)
         {
             while (true)
@@ -233,14 +306,20 @@ namespace Clowd.UI
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[NativeHotkeyHost] next_event threw: " + ex);
-                    SentryConfig.CaptureHandled(ex, "hotkey.events");
+                    HookFailed(handle, StoppedError(ex.Message), ex, "hotkey.events", stopHook: true);
                     return;
                 }
 
-                if (result == 0)
-                    continue;
-                if (result < 0)
-                    return;
+                switch (ClassifyNextEvent(result))
+                {
+                    case NextEvent.Timeout:
+                        continue;
+                    case NextEvent.Closed:
+                        return;
+                    case NextEvent.Failed:
+                        HookFailed(handle, StoppedError($"error {result}"), null, "hotkey.events", stopHook: true);
+                        return;
+                }
 
                 try
                 {
@@ -270,19 +349,7 @@ namespace Clowd.UI
                     if (registration == null || (repeat && !registration.FireOnRepeat))
                         return;
 
-                    var executed = registration.Executed;
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        try
-                        {
-                            executed();
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine("[NativeHotkeyHost] hotkey callback threw: " + ex);
-                            SentryConfig.CaptureHandled(ex, "hotkey.callback");
-                        }
-                    });
+                    Dispatcher.UIThread.Post(() => RunHotkey(registration));
                     break;
                 }
 
@@ -322,43 +389,106 @@ namespace Clowd.UI
 
                 case CH_EVENT_RECORDED:
                 {
-                    // an event whose token is not the live session's belongs to a canceled one
                     uint token = ev.Id;
                     var gesture = new HotkeyGesture((HotkeyKey)ev.Key, modifiers);
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        var session = _recording;
-                        if (session == null || session.Token != token)
-                            return;
-
-                        _recording = null;
-                        session.OnRecorded(gesture);
-                    });
+                    Dispatcher.UIThread.Post(() => DeliverRecorded(token, gesture));
                     break;
                 }
 
                 case CH_EVENT_STOPPED:
                 {
+                    // the hook ended itself; the queue drains and closes after this
                     var buffer = new byte[512];
                     int length = (int)HotkeysNative.clowd_hotkeys_stop_reason(handle, buffer, (uint)buffer.Length);
-                    var error = "The global hotkey listener stopped: " + Utf8(buffer, length);
-
-                    Registration[] failed;
-                    lock (_gate)
-                    {
-                        _hookError = error;
-                        failed = _registrations.Values.ToArray();
-                    }
-
-                    Debug.WriteLine("[NativeHotkeyHost] " + error);
-                    SentryConfig.CaptureHandled(new InvalidOperationException(error), "hotkey.stopped");
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        foreach (var registration in failed)
-                            registration.SetStatus(false, error);
-                    });
+                    HookFailed(handle, StoppedError(Utf8(buffer, length)), null, "hotkey.stopped", stopHook: false);
                     break;
                 }
+            }
+        }
+
+        /// <summary>UI thread: runs a press's action, unless its registration was disposed (or the
+        /// host shut down) after the press was posted — its owner has already let it go.</summary>
+        internal void RunHotkey(Registration registration)
+        {
+            lock (_gate)
+            {
+                if (!_registrations.TryGetValue(registration.Id, out var live) || !ReferenceEquals(live, registration))
+                    return;
+            }
+
+            try
+            {
+                registration.Executed();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[NativeHotkeyHost] hotkey callback threw: " + ex);
+                SentryConfig.CaptureHandled(ex, "hotkey.callback");
+            }
+        }
+
+        /// <summary>UI thread: hands a recorded gesture to the live session. One whose token is not
+        /// the live session's belongs to a canceled (or failed) one, and is dropped.</summary>
+        internal void DeliverRecorded(uint token, HotkeyGesture gesture)
+        {
+            var session = _recording;
+            if (session == null || session.Token != token)
+                return;
+
+            _recording = null;
+            session.OnRecorded(gesture);
+        }
+
+        /// <summary>
+        /// Event thread: the hook is dead — it reported itself stopped, or its queue failed. Latches
+        /// <see cref="_hookError"/> so every later registration and recording fails fast with it,
+        /// stops the hook when it may still be running (<paramref name="stopHook"/>), so the gestures
+        /// it swallowed reach apps again, and fails everything live on the UI thread. Acts once.
+        /// </summary>
+        private void HookFailed(IntPtr handle, string error, Exception exception, string operation, bool stopHook)
+        {
+            if (stopHook)
+            {
+                try
+                {
+                    // thread-safe and idempotent; the handle is freed only after this thread ends
+                    HotkeysNative.clowd_hotkeys_stop(handle);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[NativeHotkeyHost] stop threw: " + ex);
+                }
+            }
+
+            Registration[] failed;
+            lock (_gate)
+            {
+                if (_disposed || _hookError != null)
+                    return;
+
+                _hookError = error;
+                failed = _registrations.Values.ToArray();
+            }
+
+            Debug.WriteLine("[NativeHotkeyHost] " + error);
+            SentryConfig.CaptureHandled(exception ?? new InvalidOperationException(error), operation);
+            Dispatcher.UIThread.Post(() => ApplyHookFailure(error, failed));
+        }
+
+        /// <summary>UI thread: the hook died. Every registration it held fails with
+        /// <paramref name="error"/>, and a live recording ends with it — no gesture will come, and
+        /// the recording's owner (and through it the standby capturer's paused hotkeys) must not
+        /// wait for one.</summary>
+        internal void ApplyHookFailure(string error, Registration[] failed)
+        {
+            foreach (var registration in failed)
+                registration.SetStatus(false, error);
+
+            var session = _recording;
+            if (session != null)
+            {
+                _recording = null;
+                session.OnFailed(error);
             }
         }
 
@@ -432,7 +562,8 @@ namespace Clowd.UI
             }
         }
 
-        /// <summary>One recording (UI thread). Ends once: recorded, or disposed (a cancel).</summary>
+        /// <summary>One recording (UI thread). Ends once: recorded, failed (the hook died), or
+        /// disposed (a cancel).</summary>
         private sealed class Session : IDisposable
         {
             public uint Token { get; }
@@ -440,14 +571,17 @@ namespace Clowd.UI
             private readonly NativeHotkeyHost _host;
             private readonly Action<HotkeyModifiers> _modifiersChanged;
             private readonly Action<HotkeyGesture> _recorded;
+            private readonly Action<string> _failed;
             private bool _finished;
 
-            public Session(NativeHotkeyHost host, uint token, Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded)
+            public Session(NativeHotkeyHost host, uint token, Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded,
+                Action<string> failed)
             {
                 _host = host;
                 Token = token;
                 _modifiersChanged = modifiersChanged;
                 _recorded = recorded;
+                _failed = failed;
             }
 
             public void OnModifiersChanged(HotkeyModifiers modifiers)
@@ -483,6 +617,23 @@ namespace Clowd.UI
                 }
             }
 
+            public void OnFailed(string error)
+            {
+                if (_finished)
+                    return;
+
+                _finished = true;
+                try
+                {
+                    _failed(error);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[NativeHotkeyHost] recording failure callback threw: " + ex);
+                    SentryConfig.CaptureHandled(ex, "hotkey.recording");
+                }
+            }
+
             public void Dispose()
             {
                 if (_finished)
@@ -495,12 +646,12 @@ namespace Clowd.UI
             }
         }
 
-        private sealed class Registration : IGlobalTriggerRegistration
+        internal sealed class Registration : IGlobalTriggerRegistration
         {
+            public readonly uint Id;
             public readonly Action Executed;
             public readonly bool FireOnRepeat;
 
-            private readonly uint _id;
             private NativeHotkeyHost _host;
 
             public bool IsRegistered { get; private set; }
@@ -512,7 +663,7 @@ namespace Clowd.UI
             public Registration(NativeHotkeyHost host, uint id, Action executed, bool fireOnRepeat)
             {
                 _host = host;
-                _id = id;
+                Id = id;
                 Executed = executed;
                 FireOnRepeat = fireOnRepeat;
                 IsRegistered = host != null;
@@ -538,7 +689,7 @@ namespace Clowd.UI
             {
                 var host = _host;
                 _host = null;
-                host?.Unregister(_id);
+                host?.Unregister(Id);
             }
         }
     }

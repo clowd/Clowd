@@ -18,6 +18,10 @@
 //!   can't be suppressed (Win+L can still be recorded; registering it fires but Windows still
 //!   locks). AltGr is Ctrl+Alt (as with SharpHook, Avalonia and RegisterHotKey), so a registered
 //!   `Control+Alt+X` also swallows AltGr+X — and `Alt+E` never eats AltGr+E.
+//! - Windows: a hook Windows removed silently (callback timeouts, e.g. a debugger pause) is
+//!   re-installed after a few keystrokes it missed, which moves it to the front of the hook chain.
+//!   The watchdog needs the process's keyboard raw input, so it is off where someone else already
+//!   took that (winit's event loop in `clowd_capture`).
 //! - macOS: needs the Accessibility permission (`start` fails with `PermissionDenied`, never
 //!   prompts). Secure Input (password fields) hides all keys from the tap, and media-key
 //!   swallowing must be verified live on current macOS.
@@ -33,6 +37,8 @@ mod hotkeys;
 mod key;
 mod modifiers;
 // Used only by windows.rs outside tests; compiled and tested on every OS.
+#[cfg_attr(not(windows), allow(dead_code))]
+mod watchdog;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod winstate;
 

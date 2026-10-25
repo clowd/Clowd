@@ -156,13 +156,19 @@ fn run_cycle(
 
 fn build_event_loop() -> anyhow::Result<winit::event_loop::EventLoop<()>> {
     #[cfg(target_os = "macos")]
-    {
+    let event_loop = {
         use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
-        Ok(winit::event_loop::EventLoop::builder()
+        winit::event_loop::EventLoop::builder()
             .with_activation_policy(ActivationPolicy::Accessory)
             .with_activate_ignoring_other_apps(false)
-            .build()?)
-    }
+            .build()?
+    };
     #[cfg(not(target_os = "macos"))]
-    Ok(winit::event_loop::EventLoop::new()?)
+    let event_loop = winit::event_loop::EventLoop::new()?;
+    // winit takes the process's keyboard and mouse raw input when the loop is built, and Windows
+    // gives a process one raw-input target per device. Nothing here reads DeviceEvents, and the
+    // standby hotkey hook's watchdog (clowd_hotkeys) needs keyboard raw input to notice a hook
+    // Windows removed silently — so hand it back before the hook starts.
+    event_loop.listen_device_events(winit::event_loop::DeviceEvents::Never);
+    Ok(event_loop)
 }

@@ -33,12 +33,15 @@ namespace Clowd.UI
         /// press that is not a modifier is swallowed and handed to <paramref name="recorded"/>,
         /// with the modifiers held. Registered hotkeys do not fire meanwhile.
         /// <paramref name="modifiersChanged"/> follows the modifiers held as they change, for a
-        /// preview. Both run on the UI thread; <paramref name="recorded"/> fires at most once and
+        /// preview. <paramref name="failed"/> fires instead of <paramref name="recorded"/> when
+        /// the hook dies mid-recording, with why — no gesture will ever come. All three run on the
+        /// UI thread; <paramref name="recorded"/> or <paramref name="failed"/> fires at most once and
         /// ends the session, and disposing the handle cancels it. Null when the hook is unavailable
         /// (<paramref name="error"/> says why, e.g. the Accessibility message) or another recording
         /// is already active (<paramref name="error"/> is null).
         /// </summary>
-        IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, out string error);
+        IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded,
+            Action<string> failed, out string error);
     }
 
     /// <summary>One key edge seen by <see cref="IGlobalTriggerHost.ObserveKeys"/>.</summary>

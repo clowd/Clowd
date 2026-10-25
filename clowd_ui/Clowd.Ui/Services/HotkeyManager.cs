@@ -326,20 +326,23 @@ namespace Clowd.UI
         /// one recording at a time. Null if recording is unavailable (<paramref name="error"/> says
         /// why) or another recording is active (<paramref name="error"/> is null). While it is
         /// active <see cref="IsRecording"/> is true and <see cref="RecordingChanged"/> has been
-        /// raised; it ends — raising it again — when the gesture is recorded or the handle is
-        /// disposed, even if a callback or the host throws.
+        /// raised; it ends — raising it again — when the gesture is recorded, the hook dies
+        /// (<paramref name="failed"/>) or the handle is disposed, even if a callback or the host
+        /// throws.
         /// </summary>
-        public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, out string error)
+        public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded,
+            Action<string> failed, out string error)
         {
             if (modifiersChanged == null) throw new ArgumentNullException(nameof(modifiersChanged));
             if (recorded == null) throw new ArgumentNullException(nameof(recorded));
+            if (failed == null) throw new ArgumentNullException(nameof(failed));
 
             error = null;
             if (_disposed || _recording != null)
                 return null;
 
-            var session = new RecordingSession(this, recorded);
-            var inner = _host.StartRecording(modifiersChanged, session.OnRecorded, out error);
+            var session = new RecordingSession(this, recorded, failed);
+            var inner = _host.StartRecording(modifiersChanged, session.OnRecorded, session.OnFailed, out error);
             if (inner == null)
                 return null;
 
@@ -482,13 +485,15 @@ namespace Clowd.UI
         {
             private readonly HotkeyManager _manager;
             private readonly Action<HotkeyGesture> _recorded;
+            private readonly Action<string> _failed;
 
             public IDisposable Inner { get; set; }
 
-            public RecordingSession(HotkeyManager manager, Action<HotkeyGesture> recorded)
+            public RecordingSession(HotkeyManager manager, Action<HotkeyGesture> recorded, Action<string> failed)
             {
                 _manager = manager;
                 _recorded = recorded;
+                _failed = failed;
             }
 
             public void OnRecorded(HotkeyGesture gesture)
@@ -501,6 +506,18 @@ namespace Clowd.UI
                 finally
                 {
                     _recorded(gesture);
+                }
+            }
+
+            public void OnFailed(string error)
+            {
+                try
+                {
+                    _manager.EndRecording(this);
+                }
+                finally
+                {
+                    _failed(error);
                 }
             }
 

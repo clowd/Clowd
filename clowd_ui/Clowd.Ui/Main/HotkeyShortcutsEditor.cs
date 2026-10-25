@@ -295,6 +295,13 @@ namespace Clowd.UI.Config
             // press is still in progress and its slot is held until it is over.
             var leaving = index < 0;
             var hadFocus = field.IsKeyboardFocusWithin;
+            if (leaving && field.RecordingError != null && _subscribed)
+            {
+                // the hook died mid-recording: the field that would say so leaves, so the add
+                // button says it instead (as when recording cannot start at all)
+                ToolTip.SetTip(_addButton, field.RecordingError);
+                ToolTip.SetIsOpen(_addButton, true);
+            }
             if (leaving && !hadFocus && _subscribed && HoldCanceledSlot(field))
                 return;
 
