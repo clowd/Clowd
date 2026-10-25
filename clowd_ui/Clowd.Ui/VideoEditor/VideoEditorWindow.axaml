@@ -712,6 +712,25 @@
                 </controls:ToolButton>
 
                 <controls:ToolButton
+                    x:Name="btnAddShape"
+                    Classes="wide"
+                    Command="{Binding CommandAddShape}"
+                    IconPath="{StaticResource IconShapes}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddShape"
+                                DemoName="shape"
+                                Description="Adds a rectangle at the playhead that you can turn into an ellipse, star, arrow or another shape. Drag it in the preview to place it, and drag an arrow's middle handle to curve it."
+                                Header="Add Shape Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
                     x:Name="btnAddObscure"
                     Classes="wide"
                     Command="{Binding CommandAddObscure}"

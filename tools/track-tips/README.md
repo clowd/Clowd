@@ -1,7 +1,7 @@
 # Track tip demo GIFs
 
 The looping demos shown in the rich flyouts behind the add-track buttons on the video editor's left
-tool strip (Video, Audio, Image, Text, Obscure, Background, Zoom, Speed, Cursor, Keyboard, Voice-over). Each flyout is a
+tool strip (Video, Audio, Image, Text, Shape, Obscure, Background, Zoom, Speed, Cursor, Keyboard, Voice-over). Each flyout is a
 header, a
 one or two sentence description, a demo GIF, and, when the button is disabled, the reason why.
 
@@ -29,7 +29,7 @@ file just hides the demo area, so the app builds and runs with or without the GI
 
 - Python 3 with Pillow: `pip3 install Pillow` (any Pillow 10+ works; 11 was used).
 - Run from the repo root:
-  - `python3 tools/track-tips/generate.py` regenerates all eleven into the assets folder.
+  - `python3 tools/track-tips/generate.py` regenerates all twelve into the assets folder.
   - `python3 tools/track-tips/generate.py speed cursor` regenerates only the GIFs whose names contain
     those words.
   - `python3 tools/track-tips/generate.py --sheet /tmp/contact.png` also writes a review contact
@@ -73,7 +73,9 @@ Every demo tells the same short story so the family reads as one set (70 ms per 
 4. Hold, about 8 frames, then loop.
 
 Nominal length is 52 frames. Speed is the exception: its playhead runs at 1x before the item, 2x across
-it and 1x after, so it has a few more frames and its own path code.
+it and 1x after, so it has a few more frames and its own path code. Shape is the other: its sweep tells
+three beats (a kind change, another kind change, then two handle drags), so it runs 48 sweep frames
+(`N_SHAPE_SWEEP`, 70 in all) to keep each beat eased rather than rushed.
 
 ## Composition
 
@@ -86,14 +88,15 @@ it and 1x after, so it has a few more frames and its own path code.
   with `0:00 / 0:04 / 0:08` timestamps, the Screen row (accent filmstrip of desktop thumbnails) and
   the Audio row (green waveform), block gutters with the faint hatch.
 - New rows go where `TimelineRowLayout` puts them: Speed pinned at the top above a hatched gutter;
-  Zoom, Text, Image, Obscure and an imported clip above Screen; Cursor and Keys glued directly above Screen and
+  Zoom, Text, Image, Obscure, Shape and an imported clip above Screen; Cursor and Keys glued directly above Screen and
   spanning the whole recording (with motion / click blips and key blips); Background under Screen,
   because the video block composites bottom up and a backdrop draws behind the recording; imported
   audio in the audio block under Audio.
 - A row name that does not fit the 34px header column is condensed rather than left to spill over the
   items next to it (`fitted_text`); "Background" is the only one so far that needs it.
 - Item labels use the editor's own formats: `200%` (zoom), `2x` (speed), `photo.png`, `clip`,
-  `music`, `Hello!`, `Cursor`, `Keys`, and the obscure mode (`Mosaic`, `Blur`, `Blackout`).
+  `music`, `Hello!`, `Cursor`, `Keys`, the obscure mode (`Mosaic`, `Blur`, `Blackout`) and the shape
+  kind (`Rectangle`, `Star`, `Arrow`).
 
 ## Style rules
 
@@ -101,7 +104,7 @@ it and 1x after, so it has a few more frames and its own path code.
   (228,228,230), header text (140,140,140).
 - Row kind colours, exactly as `TimelinePalette.cs` (dark variant): recording / video accent
   (84,169,255), audio (52,140,108), text (118,92,176), image (176,122,52), speed (184,70,92),
-  zoom (46,136,150), cursor (158,74,158), keyboard (132,144,56), background (64,142,76), obscure (98,106,120). Playhead
+  zoom (46,136,150), cursor (158,74,158), keyboard (132,144,56), background (64,142,76), obscure (98,106,120), shape (196,96,72). Playhead
   (240,82,82). Selection
   outline in the accent. Waveform ink (226,244,236), cursor motion blips (246,228,246), key blips
   (246,248,226). Speed's stopwatch tints rose while it runs fast.
@@ -118,7 +121,10 @@ it and 1x after, so it has a few more frames and its own path code.
   repainting the full canvas for no story reason: `optimize=True` can only drop the pixels a frame
   shares with the one before it, so a backdrop that moves under everything else costs more than the
   motion is worth. The background demo hit 296 KB while its mesh gradient drifted, and its still
-  mesh reads the same at 504x288 for 72 KB less.
+  mesh reads the same at 504x288 for 72 KB less. Shape lands near 234 KB for a story reason: its
+  longer sweep has about 20 more frames that move something in the preview, and each costs 2 to 5 KB
+  because a frame's changed box runs from the shape down to the playhead in the timeline. Each sweep
+  frame cut saves about 2.5 KB, but below 48 the crossfades and drags start to look rushed.
 
 ## Copy rules (flyout text)
 
@@ -167,3 +173,11 @@ it and 1x after, so it has a few more frames and its own path code.
   recording's own pixels the way `FrameComposer.DrawObscure` does it: cell averages blown back up
   with nearest sampling, a Gaussian blur of the backdrop, a black fill. The mosaic cell is
   exaggerated (3.4 logical px) so the blocks read at flyout size.
+- `track-shape.gif`: a Shape row appears above Screen and a red rectangle outline pops in at the
+  default spot (centred, a quarter of the canvas wide, square) with gizmo handles, a coral badge naming
+  the kind. A small floating picker strip of three tiles (rectangle, star, arrow) fades in beside it
+  and its ring glides to the star tile, crossfading the box into a star outline in the same box, then
+  to the arrow tile, turning it into an arrow across the box's inset diagonal (the closed to line
+  rule) with three handle discs in place of the gizmo. The strip fades out, the end handle drags onto
+  the window's button, and a pointer drags the middle handle to bow the arrow into a curve. It fades
+  out as the playhead leaves the item. The badge and the item label follow the kind.

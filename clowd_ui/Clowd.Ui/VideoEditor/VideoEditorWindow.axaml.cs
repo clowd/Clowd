@@ -164,6 +164,7 @@ namespace Clowd.UI.VideoEditor
         public RelayCommand CommandAddImage { get; }
         public RelayCommand CommandAddBackground { get; }
         public RelayCommand CommandAddObscure { get; }
+        public RelayCommand CommandAddShape { get; }
         public RelayCommand CommandAddZoomEffect { get; }
         public RelayCommand CommandAddSpeedEffect { get; }
         public RelayCommand CommandAddCursorTrack { get; }
@@ -223,6 +224,7 @@ namespace Clowd.UI.VideoEditor
             CommandAddImage = new RelayCommand { Executed = _ => _ = AddImageAsync(), Text = "Add _Image" };
             CommandAddBackground = new RelayCommand { Executed = _ => AddBackground(), Text = "Add _Background" };
             CommandAddObscure = new RelayCommand { Executed = _ => AddObscure(), Text = "Add _Obscure" };
+            CommandAddShape = new RelayCommand { Executed = _ => AddShape(), Text = "Add S_hape" };
             CommandAddZoomEffect = new RelayCommand { Executed = _ => AddZoomEffect(), Text = "Add _Zoom" };
             CommandAddSpeedEffect = new RelayCommand
             {
@@ -1203,6 +1205,19 @@ namespace Clowd.UI.VideoEditor
                 RevealNewItem(item);
         }
 
+        /// <summary>Adds a rectangle outline at the playhead, centered on the frontmost free row:
+        /// the most common annotation, and the inspector's picker turns it into any other shape
+        /// in place.</summary>
+        private void AddShape()
+        {
+            if (!CanAddToProject)
+                return;
+
+            var item = _editor.AddShape(PlayheadTicks, AddedItemDurationTicks);
+            if (item != null)
+                RevealNewItem(item);
+        }
+
         private async Task AddImageAsync()
         {
             if (!CanAddToProject)
@@ -1743,6 +1758,7 @@ namespace Clowd.UI.VideoEditor
             ("ImportAudio", "Audio", btnImportAudio),
             ("AddImage", "Image", btnAddImage),
             ("AddText", "Text", btnAddText),
+            ("AddShape", "Shape", btnAddShape),
             ("AddObscure", "Obscure", btnAddObscure),
             ("AddZoom", "Zoom", btnAddZoom),
             ("AddSpeed", "Speed", btnAddSpeed),
@@ -1754,8 +1770,8 @@ namespace Clowd.UI.VideoEditor
 
         private static readonly string[] StripToolKeys =
         {
-            "ImportMedia", "ImportAudio", "AddImage", "AddText", "AddObscure", "AddZoom",
-            "AddSpeed", "AddCursor", "AddKeyboard", "Voice", "AddBackground",
+            "ImportMedia", "ImportAudio", "AddImage", "AddText", "AddShape", "AddObscure",
+            "AddZoom", "AddSpeed", "AddCursor", "AddKeyboard", "Voice", "AddBackground",
         };
 
         /// <summary>Puts the strip's buttons in the resolved order and leaves the hidden ones out

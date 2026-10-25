@@ -137,6 +137,12 @@ namespace Clowd.VideoSDK.Composition
         private static double TextScaleOf(Project project, double canvasHeight) =>
             project?.Output is { HeightPx: > 0 } output ? canvasHeight / output.HeightPx : 1.0;
 
+        /// <summary>What one output pixel measures on a canvas <paramref name="canvasHeight"/>
+        /// tall: the factor every output-pixel quantity (a font size, an obscure strength, a
+        /// shape's stroke) is drawn at, for an editor overlay that must agree with the picture.
+        /// 1.0 at output resolution, or while the output is unknown.</summary>
+        public static double PixelScale(Project project, double canvasHeight) => TextScaleOf(project, canvasHeight);
+
         private static void ComposeItem(Project project, Item item, long timeTicks, IFrameSource frames,
             SKCanvas target, int canvasWidth, int canvasHeight, double textScale, SKMatrix frameMatrix)
         {
@@ -207,6 +213,10 @@ namespace Clowd.VideoSDK.Composition
                     // DrawObscure reads them itself to fade the obscuring in and out
                     DrawObscure(target, item, obscure, timeTicks, transform, opacity, frameMatrix,
                         canvasWidth, canvasHeight, textScale);
+                    break;
+
+                case ShapeContent shape:
+                    DrawShape(target, item, shape, transform, fx, opacity, canvasWidth, canvasHeight, textScale);
                     break;
 
                 case CursorContent cursor:
@@ -1008,6 +1018,82 @@ namespace Clowd.VideoSDK.Composition
                 new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None), shrunk);
         }
 
+        // ------------------------------------------------------------------------------- shape
+
+        /// <summary>The least extent a line kind's surround is measured against, in output pixels.</summary>
+        private const double MinLineSurroundExtentPx = 16;
+
+        /// <summary>A line kind's surround extent per output pixel of stroke width.</summary>
+        private const double LineSurroundExtentPerStroke = 12;
+
+        /// <summary>
+        /// A vector shape (<see cref="ShapeContent"/>), drawn by <see cref="ShapeRenderer"/> into a
+        /// box placed exactly like <see cref="DrawSolid"/>'s (Scale/ScaleY are fractions of the
+        /// canvas), turned and wiped by <see cref="ApplyClips"/>, and decorated through the same
+        /// two-pass surround loop as <see cref="DrawPicture"/>, so a shape fades, slides, wipes,
+        /// rotates and casts a shadow like every other visual item. Crop, aspect and mask are
+        /// ignored, as for solids; so is <see cref="Item.Effect"/>.
+        ///
+        /// <para>The wipe sweeps across the shape's <b>ink</b> rather than its box
+        /// (<see cref="ShapeRenderer.InkBounds"/>): an arrow's head can reach out of a stretched
+        /// box, and a band measured on the box would cut it off or reveal it out of step.</para>
+        ///
+        /// <para>A line kind's surround is measured from its stroke rather than its box: the box
+        /// follows the endpoints, so a box-relative shadow would breathe while an endpoint is
+        /// dragged. The extent is output pixels scaled onto this canvas, so the preview's shadow is
+        /// the export's.</para>
+        ///
+        /// <para>A draw transition (<see cref="TransitionKind.Draw"/>, shapes only) hands the
+        /// renderer the drawn part of the path; both passes draw the same part, so the shadow
+        /// grows with the ink.</para>
+        /// </summary>
+        private static void DrawShape(SKCanvas target, Item item, ShapeContent shape, Transform transform,
+            ItemEffects fx, double opacity, int canvasWidth, int canvasHeight, double textScale)
+        {
+            if (fx.HasDraw && fx.DrawFromFrac >= fx.DrawToFrac)
+                return;
+
+            double destW = transform.Scale * canvasWidth;
+            double destH = (transform.ScaleY ?? transform.Scale) * canvasHeight;
+            var rect = PlaceRect(transform, fx, destW, destH, canvasWidth, canvasHeight);
+            if (!(rect.Width > 0) || !(rect.Height > 0))
+                return;
+
+            var ink = ShapeRenderer.InkBounds(rect, shape, textScale);
+            double extent = shape.IsLine
+                ? Math.Max(MinLineSurroundExtentPx,
+                    LineSurroundExtentPerStroke * ShapeLineLayout.LineStrokeWidth(shape)) * textScale
+                : SurroundMath.ReferenceExtent(rect);
+            using var decoration = SurroundMath.CreateDecoration(item.Surround, extent);
+
+            // pass 0 paints the decoration (skipped when there is none), pass 1 the shape; the
+            // same loop as DrawPicture, for the same reasons (see its comments)
+            for (int pass = decoration != null ? 0 : 1; pass <= 1; pass++)
+            {
+                int save = target.Save();
+                try
+                {
+                    if (pass == 0)
+                    {
+                        using var layer = new SKPaint
+                        {
+                            ImageFilter = decoration,
+                            Color = SKColors.White.WithAlpha(AlphaByte(opacity)),
+                        };
+                        target.SaveLayer(layer);
+                    }
+
+                    ApplyClips(target, transform, fx, rect, wipeRect: ink, applyMask: false);
+                    ShapeRenderer.Draw(target, rect, shape, textScale, pass == 0 ? 1 : opacity,
+                        fx.HasDraw ? fx.DrawFromFrac : 0, fx.HasDraw ? fx.DrawToFrac : 1);
+                }
+                finally
+                {
+                    target.RestoreToCount(save);
+                }
+            }
+        }
+
         // --------------------------------------------------------------------------- background
 
         /// <summary>
@@ -1259,14 +1345,18 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>Rotation about the item center, then the mask clip, then the wipe clip —
-        /// all in the rotated space, so mask and wipe travel with the picture. Caller must
-        /// Save/Restore around this.</summary>
-        private static void ApplyClips(SKCanvas target, Transform transform, ItemEffects fx, SKRect rect)
+        /// all in the rotated space, so mask and wipe travel with the picture. The wipe band spans
+        /// <paramref name="wipeRect"/> when one is given (a shape sweeps across its ink, which can
+        /// reach past its box) and <paramref name="rect"/> otherwise; <paramref name="applyMask"/>
+        /// false skips the mask for content that never takes one. Caller must Save/Restore around
+        /// this.</summary>
+        private static void ApplyClips(SKCanvas target, Transform transform, ItemEffects fx, SKRect rect,
+            SKRect? wipeRect = null, bool applyMask = true)
         {
             if (transform.Rotation != 0)
                 target.RotateDegrees((float)transform.Rotation, rect.MidX, rect.MidY);
 
-            if (transform.Mask is { } mask)
+            if (applyMask && transform.Mask is { } mask)
             {
                 if (mask.Shape == MaskShape.Circle)
                 {
@@ -1294,9 +1384,10 @@ namespace Clowd.VideoSDK.Composition
 
             if (fx.HasWipe)
             {
+                var span = wipeRect ?? rect;
                 var band = new SKRect(
-                    rect.Left + (float)(fx.WipeFromFrac * rect.Width), rect.Top,
-                    rect.Left + (float)(fx.WipeToFrac * rect.Width), rect.Bottom);
+                    span.Left + (float)(fx.WipeFromFrac * span.Width), span.Top,
+                    span.Left + (float)(fx.WipeToFrac * span.Width), span.Bottom);
                 target.ClipRect(band, SKClipOperation.Intersect, antialias: true);
             }
         }

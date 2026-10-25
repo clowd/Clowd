@@ -97,7 +97,7 @@ public sealed class Project
     /// alone, and nothing in this method nulls one, so the other callers (timeline ops, the
     /// recording bootstrap) can run it any number of times. An <see cref="ObscureContent"/> box is
     /// free-sized for the same reason and boxed by the same rule (FrameComposer.DrawObscure), so it
-    /// shares the fill.
+    /// shares the fill. A <see cref="ShapeContent"/> box is too (FrameComposer.DrawShape).
     /// </summary>
     public void Normalize()
     {
@@ -111,7 +111,7 @@ public sealed class Project
 
         foreach (var item in Items)
         {
-            if (item.Content is BackgroundContent or ObscureContent)
+            if (item.Content is BackgroundContent or ObscureContent or ShapeContent)
             {
                 // a null transform is the default placement (centered, Scale 1); materializing it
                 // draws the same frame and gives the height somewhere to live
@@ -292,12 +292,53 @@ public sealed class Project
                         errors.Add($"Obscure item {item.Id} has a non-ramp exit transition ({item.Exit.Kind}).");
                     break;
 
+                case ShapeContent shape:
+                    // picture content, so the audio-row rule is restated here. Colors are not
+                    // checked: an unparseable one draws the default, as a text card's does.
+                    if (track is { Kind: TrackKind.Audio })
+                        errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on audio track {track.Id}.");
+                    // a shape arrives like a picture or by being drawn, never by a ramp, which has
+                    // no picture of its own (and which the inspector's shape list does not offer)
+                    if (item.Entry?.Kind == TransitionKind.Ramp)
+                        errors.Add($"Shape item {item.Id} has a ramp entry transition.");
+                    if (item.Exit?.Kind == TransitionKind.Ramp)
+                        errors.Add($"Shape item {item.Id} has a ramp exit transition.");
+                    if (!Enum.IsDefined(shape.Kind))
+                        errors.Add($"Item {item.Id} has an unknown shape kind {shape.Kind}.");
+                    if (!Enum.IsDefined(shape.Dash))
+                        errors.Add($"Item {item.Id} has an unknown shape dash {shape.Dash}.");
+                    // negated comparisons so NaN fails the check rather than sailing through.
+                    if (!(shape.StrokeWidth >= ShapeContent.MinStrokeWidth && shape.StrokeWidth <= ShapeContent.MaxStrokeWidth))
+                        errors.Add($"Item {item.Id} has a shape stroke width {shape.StrokeWidth} outside {ShapeContent.MinStrokeWidth}..{ShapeContent.MaxStrokeWidth}.");
+                    if (!(shape.CornerRadius >= ShapeContent.MinCornerRadius && shape.CornerRadius <= ShapeContent.MaxCornerRadius))
+                        errors.Add($"Item {item.Id} has a shape corner radius {shape.CornerRadius} outside {ShapeContent.MinCornerRadius}..{ShapeContent.MaxCornerRadius}.");
+                    if (shape.PolygonSides < ShapeContent.MinPolygonSides || shape.PolygonSides > ShapeContent.MaxPolygonSides)
+                        errors.Add($"Item {item.Id} has {shape.PolygonSides} polygon sides, outside {ShapeContent.MinPolygonSides}..{ShapeContent.MaxPolygonSides}.");
+                    if (shape.StarPoints < ShapeContent.MinStarPoints || shape.StarPoints > ShapeContent.MaxStarPoints)
+                        errors.Add($"Item {item.Id} has {shape.StarPoints} star points, outside {ShapeContent.MinStarPoints}..{ShapeContent.MaxStarPoints}.");
+                    if (!(shape.StarInnerRatio >= ShapeContent.MinStarInnerRatio && shape.StarInnerRatio <= ShapeContent.MaxStarInnerRatio))
+                        errors.Add($"Item {item.Id} has a star inner ratio {shape.StarInnerRatio} outside {ShapeContent.MinStarInnerRatio}..{ShapeContent.MaxStarInnerRatio}.");
+                    CheckLineCoord(errors, item.Id, "start x", shape.StartX);
+                    CheckLineCoord(errors, item.Id, "start y", shape.StartY);
+                    CheckLineCoord(errors, item.Id, "end x", shape.EndX);
+                    CheckLineCoord(errors, item.Id, "end y", shape.EndY);
+                    if (!(Math.Abs(shape.Bend) <= ShapeContent.MaxBend))
+                        errors.Add($"Item {item.Id} has a line bend {shape.Bend} outside {-ShapeContent.MaxBend}..{ShapeContent.MaxBend}.");
+                    if (!(Math.Abs(shape.BendSkew) <= ShapeContent.MaxBendSkew))
+                        errors.Add($"Item {item.Id} has a line bend skew {shape.BendSkew} outside {-ShapeContent.MaxBendSkew}..{ShapeContent.MaxBendSkew}.");
+                    break;
+
                 default:
                     // text / image / solid are picture content — meaningless on an audio row.
                     if (track is { Kind: TrackKind.Audio })
                         errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on audio track {track.Id}.");
                     break;
             }
+
+            // drawing on means tracing a path, and only a shape has one
+            if (item.Content is not ShapeContent
+                && (item.Entry?.Kind == TransitionKind.Draw || item.Exit?.Kind == TransitionKind.Draw))
+                errors.Add($"Item {item.Id} has a draw transition, which only shapes support.");
 
             // a surround is optional on every item and ignored by the contents that do not draw a
             // silhouette, so the only questions are whether its dials are in range and whether it
@@ -404,6 +445,16 @@ public sealed class Project
         {
             errors.Add($"Item {itemId} has a cursor highlight {name} {value} outside " +
                 $"{CursorContent.MinHighlightFactor}..{CursorContent.MaxHighlightFactor}.");
+        }
+    }
+
+    private static void CheckLineCoord(List<string> errors, Guid itemId, string name, double value)
+    {
+        // negated comparison so NaN fails the check rather than sailing through.
+        if (!(value >= ShapeContent.MinLineCoord && value <= ShapeContent.MaxLineCoord))
+        {
+            errors.Add($"Item {itemId} has a line {name} {value} outside " +
+                $"{ShapeContent.MinLineCoord}..{ShapeContent.MaxLineCoord}.");
         }
     }
 }

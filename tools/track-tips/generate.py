@@ -28,7 +28,7 @@ import math
 import os
 import sys
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 LW, LH = 252, 144
 SS = 4
@@ -1214,11 +1214,374 @@ def gif_obscure():
     return frames
 
 
+# ---- 12. shape -------------------------------------------------------------------------------
+# A drawn annotation. The toolbar adds a rectangle outline at the default spot (centred, a quarter
+# of the canvas wide and square in pixels: EditorSession.AddShape, DefaultShapeExtent), selected,
+# with the gizmo around it. A small floating picker strip stands in for the inspector's shape
+# picker: its ring moves to the star tile and the box becomes a star outline in the same box (a
+# closed to closed change keeps the box), then to the arrow tile and the box becomes an arrow on
+# its inset diagonal (ShapeLineLayout.ConvertKind's closed to line rule). The arrow trades the
+# gizmo for its three handle discs, its end handle drags onto the window's button, and a pointer
+# drags the middle handle to bow it into a curve. The story has more beats than the family's
+# one-effect demos, so the sweep runs longer (N_SHAPE_SWEEP), the way speed has its own path.
+#
+# Every shape is one red outline, unfilled as AddShape makes it (a kind change never turns Fill on),
+# so a shape is just a coverage mask and two shapes crossfade by blending their masks. Strokes sit
+# inside the box, as the compositor draws them, so the ink meets the gizmo outline.
+SHAPE_KIND = (196, 96, 72)       # TimelinePalette's dark shape row, coral
+SHAPE_INK = (232, 64, 52)        # a slightly softened red, so it reads on the light window
+SHAPE_EXTENT = 0.25              # EditorSession.DefaultShapeExtent, of the canvas width
+SHAPE_STROKE = 2.0               # logical px; exaggerated (the real default is 6 of 1080) to read at flyout size
+SHAPE_ARROW_W = 2.4              # the arrow's nominal width, a little heavier so the head reads
+SHAPE_MIN_HEAD = 6.0             # ArrowGeometry.MinHeadLength, scaled to the demo
+SHAPE_BEND = -0.45               # chord lengths along the chord's left normal: negative bows it upward
+PICKER_PLATE = (116, 116, 116)   # #747474, the tile plate ShapeKindPreview draws on
+PICKER_PANEL = (36, 36, 40)
+N_SHAPE_SWEEP = 48
+
+
+def shape_phases(i):
+    """phases(i) with the longer sweep."""
+    pop = 0.0 if i < N_HOLD0 else min(1.0, (i - N_HOLD0 + 1) / N_POP)
+    s0 = N_HOLD0 + N_POP
+    sweep = 0.0 if i < s0 else min(1.0, (i - s0) / (N_SHAPE_SWEEP - 1))
+    settled = i >= s0 + N_SHAPE_SWEEP
+    return pop, sweep, settled
+
+
+def beat(sweep, t0, t1):
+    """Eased 0..1 progress of a storyboard beat that runs from sweep t0 to t1."""
+    return ease_in_out((sweep - t0) / (t1 - t0))
+
+
+def star_points(box, n=5, inner=0.5):
+    """A star's 2n vertices fit to box the way ShapeRenderer.BuildOutline fits them: vertex k on
+    the unit circle at -90 + k*180/n degrees, alternating radius 1 / inner, then the vertices'
+    own bounds mapped affinely onto the box so the ink fills the gizmo."""
+    pts = []
+    for k in range(2 * n):
+        a = -math.pi / 2 + k * math.pi / n
+        r = 1.0 if k % 2 == 0 else inner
+        pts.append((math.cos(a) * r, math.sin(a) * r))
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+    return [(box[0] + (x - x0) / (x1 - x0) * (box[2] - box[0]), box[1] + (y - y0) / (y1 - y0) * (box[3] - box[1]))
+            for x, y in pts]
+
+
+def box_points(box):
+    return [(box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])]
+
+
+def closed_mask(pts, stroke, fill_alpha):
+    """Coverage of a closed shape: the fill at fill_alpha, and an inside stroke (a band of twice
+    the stroke centred on the outline, clipped to the shape) over it."""
+    poly = [(P(x), P(y)) for x, y in pts]
+    fill = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(fill).polygon(poly, fill=255)
+    band = Image.new("L", (W, H), 0)
+    bd = ImageDraw.Draw(band)
+    bd.line(poly + poly[:2], fill=255, width=int(round(P(2 * stroke))), joint="curve")
+    for x, y in poly:
+        bd.ellipse((x - P(stroke), y - P(stroke), x + P(stroke), y + P(stroke)), fill=255)
+    ink = ImageChops.darker(fill, band)
+    if fill_alpha <= 0:
+        return ink
+    return ImageChops.screen(ink, fill.point(lambda v: int(v * fill_alpha)))
+
+
+def quad_eval(s, c, e, t):
+    u = 1 - t
+    return (u * u * s[0] + 2 * u * t * c[0] + t * t * e[0], u * u * s[1] + 2 * u * t * c[1] + t * t * e[1])
+
+
+def bend_control(s, e, bend):
+    """CurveBend.TryControlPoint with no skew: the chord midpoint plus twice the offset along the
+    chord's left normal, so the curve's own midpoint (the bend handle) sits at the offset."""
+    dx, dy = e[0] - s[0], e[1] - s[1]
+    length = math.hypot(dx, dy)
+    if bend == 0 or length <= 0:
+        return None
+    off = bend * length
+    nx, ny = -dy / length, dx / length
+    return ((s[0] + e[0]) / 2 + 2 * off * nx, (s[1] + e[1]) / 2 + 2 * off * ny)
+
+
+def bend_handle(s, e, bend):
+    """CurveBend.HandlePoint: the curve's own midpoint, or the chord's when straight."""
+    c = bend_control(s, e, bend)
+    return quad_eval(s, c, e, 0.5) if c else ((s[0] + e[0]) / 2, (s[1] + e[1]) / 2)
+
+
+def arrow_head_length(w):
+    """The head's length before the 0.45-of-the-path cap; its half-width is 0.62 of that."""
+    return max(w * 5, SHAPE_MIN_HEAD)
+
+
+def arrow_polys(s, c, e, w):
+    """The Python mirror of ArrowGeometry.Build: (taper outline or None, head polygon, corner
+    stroke). The head is max(5w, min) long, capped at 0.45 of the path, 0.62 of that wide each
+    side, with a 0.22 rear notch; the shaft tapers (ease-out by arc length) from 0.6w at the tail
+    to 1.5w where it runs into the head, and the head's corners are softened by a 0.7w outline."""
+    n_curve = 32
+    if c is not None:
+        cum, prev = [0.0], s
+        for i in range(1, n_curve + 1):
+            p = quad_eval(s, c, e, i / n_curve)
+            cum.append(cum[-1] + math.dist(prev, p))
+            prev = p
+        length = cum[-1]
+        dx, dy = e[0] - c[0], e[1] - c[1]
+    else:
+        length = math.dist(s, e)
+        dx, dy = e[0] - s[0], e[1] - s[1]
+    dl = math.hypot(dx, dy)
+    dx, dy = (dx / dl, dy / dl) if dl > 0 else (1.0, 0.0)
+    nx, ny = -dy, dx
+    head = min(length * 0.45, arrow_head_length(w))
+    half = head * 0.62
+    corner = w * 0.7
+    inset = (corner / 2) / math.sin(math.atan2(half, head))
+    tip = (e[0] - dx * inset, e[1] - dy * inset)
+    base = (tip[0] - dx * head, tip[1] - dy * head)
+    head_poly = [tip, (base[0] + nx * half, base[1] + ny * half),
+                 (base[0] + dx * head * 0.22, base[1] + dy * head * 0.22),
+                 (base[0] - nx * half, base[1] - ny * half)]
+    shaft_len = length - inset - head * (1 - 0.22 - 0.4)
+    if shaft_len <= 0:
+        return None, head_poly, corner
+    if c is not None:
+        # de Casteljau split at the shaft's end parameter, then sample the piece with its tangents
+        t_end = 1.0
+        for i in range(1, n_curve + 1):
+            if cum[i] >= shaft_len:
+                span = cum[i] - cum[i - 1]
+                t_end = (i - 1 + ((shaft_len - cum[i - 1]) / span if span > 0 else 0)) / n_curve
+                break
+        q1 = (lerp(s[0], c[0], t_end), lerp(s[1], c[1], t_end))
+        q2 = (lerp(q1[0], lerp(c[0], e[0], t_end), t_end), lerp(q1[1], lerp(c[1], e[1], t_end), t_end))
+        spine, tangents = [], []
+        for i in range(25):
+            t = i / 24
+            spine.append(quad_eval(s, q1, q2, t))
+            tx = (1 - t) * (q1[0] - s[0]) + t * (q2[0] - q1[0])
+            ty = (1 - t) * (q1[1] - s[1]) + t * (q2[1] - q1[1])
+            tl = math.hypot(tx, ty)
+            tangents.append((tx / tl, ty / tl) if tl > 0 else (tangents[-1] if tangents else (1.0, 0.0)))
+    else:
+        spine = [(s[0] + dx * shaft_len * i / 12, s[1] + dy * shaft_len * i / 12) for i in range(13)]
+        tangents = [(dx, dy)] * 13
+    along = [0.0]
+    for i in range(1, len(spine)):
+        along.append(along[-1] + math.dist(spine[i - 1], spine[i]))
+    total = along[-1]
+    head_half = max(0.8, w * 1.5) / 2
+    tail_half = min(head_half, max(0.8, w * 0.6) / 2)
+
+    def half_at(i):
+        f = 1 - along[i] / total if total > 0 else 0
+        return tail_half + (head_half - tail_half) * (1 - f * f)
+
+    left = [(p[0] - t[1] * half_at(i), p[1] + t[0] * half_at(i)) for i, (p, t) in enumerate(zip(spine, tangents))]
+    right = [(p[0] + t[1] * half_at(i), p[1] - t[0] * half_at(i)) for i, (p, t) in enumerate(zip(spine, tangents))]
+    # the round tail cap: sweep from the right side, behind the start, back to the left side
+    (tx, ty), p0 = tangents[0], spine[0]
+    cap = []
+    for k in range(1, 8):
+        a = math.pi * k / 8
+        cap.append((p0[0] + (ty * math.cos(a) - tx * math.sin(a)) * tail_half,
+                    p0[1] + (-tx * math.cos(a) - ty * math.sin(a)) * tail_half))
+    return left + right[::-1] + cap, head_poly, corner
+
+
+def arrow_mask(s, e, bend, w):
+    shaft, head, corner = arrow_polys(s, bend_control(s, e, bend), e, w)
+    m = Image.new("L", (W, H), 0)
+    d = ImageDraw.Draw(m)
+    if shaft:
+        d.polygon([(P(x), P(y)) for x, y in shaft], fill=255)
+    poly = [(P(x), P(y)) for x, y in head]
+    d.polygon(poly, fill=255)
+    # the round-joined corner outline
+    d.line(poly + poly[:2], fill=255, width=int(round(P(corner))), joint="curve")
+    for x, y in poly:
+        d.ellipse((x - P(corner / 2), y - P(corner / 2), x + P(corner / 2), y + P(corner / 2)), fill=255)
+    return m
+
+
+def paste_layer(img, layer, alpha):
+    """Composites an RGBA layer over the frame at alpha."""
+    if alpha <= 0.01:
+        return
+    a = layer.split()[3]
+    if alpha < 0.999:
+        a = a.point(lambda v: int(v * alpha))
+    img.paste(layer.convert("RGB"), (0, 0), a)
+
+
+def handle_disc(d, p, r=2.6):
+    """The preview's handle disc (PreviewHandles.Draw): an accent rim, a white ring, an accent dot."""
+    x, y = p
+    ellipse(d, (x - r, y - r, x + r, y + r), fill=ACCENT)
+    ellipse(d, (x - r * 5 / 6, y - r * 5 / 6, x + r * 5 / 6, y + r * 5 / 6), fill=(255, 255, 255))
+    ellipse(d, (x - r / 2, y - r / 2, x + r / 2, y + r / 2), fill=ACCENT)
+
+
+def picker_tile_glyph(d, kind, box):
+    x0, y0, x1, y1 = box
+    if kind == "Rectangle":
+        rect(d, box, outline=SHAPE_INK, width=1.0)
+    elif kind == "Star":
+        pts = [(P(x), P(y)) for x, y in star_points(box)]
+        d.line(pts + pts[:2], fill=SHAPE_INK, width=int(round(P(0.8))), joint="curve")
+    else:
+        shaft, head, corner = arrow_polys((x0, y1), None, (x1, y0), 1.3)
+        for poly in (shaft, head):
+            d.polygon([(P(x), P(y)) for x, y in poly], fill=SHAPE_INK)
+
+
+PICKER_KINDS = ("Rectangle", "Star", "Arrow")
+PICKER_TILE = (13, 11)
+PICKER_GAP, PICKER_PAD = 2.0, 2.5
+
+
+def picker_strip(img, x, y, ring, alpha):
+    """The small floating stand-in for the inspector's shape picker: three PickerTile plates
+    (rectangle, star, arrow) on a rounded dark panel with a soft shadow. ring is a fractional
+    tile index, so the accent selection ring glides from one tile to the next."""
+    if alpha <= 0.01:
+        return
+    tw, th = PICKER_TILE
+    sw = PICKER_PAD * 2 + tw * 3 + PICKER_GAP * 2
+    sh = PICKER_PAD * 2 + th
+    y += (1 - alpha) * 2.5          # it settles up into place as it fades in
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    shadow = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(shadow).rounded_rectangle((P(x), P(y + 1.2), P(x + sw), P(y + sh + 1.6)), radius=P(3.5), fill=170)
+    layer.paste((8, 8, 10, 255), (0, 0), shadow.filter(ImageFilter.GaussianBlur(P(1.4))))
+    d = ImageDraw.Draw(layer)
+    rrect(d, (x, y, x + sw, y + sh), 3.5, fill=PICKER_PANEL, outline=(70, 70, 78), width=0.5)
+    for k, kind in enumerate(PICKER_KINDS):
+        tx = x + PICKER_PAD + k * (tw + PICKER_GAP)
+        ty = y + PICKER_PAD
+        rrect(d, (tx, ty, tx + tw, ty + th), 2, fill=PICKER_PLATE)
+        gs = 6.6
+        gx, gy = tx + (tw - gs) / 2, ty + (th - gs) / 2
+        picker_tile_glyph(d, kind, (gx, gy, gx + gs, gy + gs))
+    rx = x + PICKER_PAD + ring * (tw + PICKER_GAP)
+    ry = y + PICKER_PAD
+    rrect(d, (rx - 1.1, ry - 1.1, rx + tw + 1.1, ry + th + 1.1), 2.8, outline=ACCENT, width=0.9)
+    paste_layer(img, layer, alpha)
+
+
+def gif_shape():
+    frames = []
+    desktop, btn = render_desktop()
+    thumb = thumb_of(desktop)
+    side = CAN_W * SHAPE_EXTENT
+    cx, cy = (CANVAS[0] + CANVAS[2]) / 2, (CANVAS[1] + CANVAS[3]) / 2
+    box = (cx - side / 2, cy - side / 2, cx + side / 2, cy + side / 2)
+    # closed to line: the arrow runs corner to corner of the same box, bottom-left to top-right,
+    # each end inset by the line pad (the ink's reach from the spine, floored at 8 output px)
+    pad = max(arrow_head_length(SHAPE_ARROW_W) * 0.62 + SHAPE_ARROW_W * 0.7 / 2, 8 * CAN_W / 1920)
+    a_start = (box[0] + pad, box[3] - pad)
+    a_end0 = (box[2] - pad, box[1] + pad)
+    bx, by = canvas_pt(btn[0] / CAN_W, btn[1] / CAN_H)
+    a_end1 = (bx - 11, by - 3)       # onto the top-left of the window's blue button
+    rect_mask = closed_mask(box_points(box), SHAPE_STROKE, 0.0)
+    star_mask = closed_mask(star_points(box), SHAPE_STROKE, 0.0)
+    ink = Image.new("RGB", (W, H), SHAPE_INK)
+    strip_x, strip_y = box[2] + 4.5, cy - (PICKER_PAD * 2 + PICKER_TILE[1]) / 2
+
+    for i in range(N_HOLD0 + N_POP + N_SHAPE_SWEEP + N_HOLD1):
+        pop, sweep, settled = shape_phases(i)
+        img = new_frame()
+        paste_canvas(img, desktop)
+
+        # the storyboard beats, as fractions of the sweep
+        to_star = beat(sweep, 0.15, 0.26)
+        to_arrow = beat(sweep, 0.35, 0.46)
+        strip = beat(sweep, 0.08, 0.14) * (1 - beat(sweep, 0.45, 0.50))
+        end_drag = beat(sweep, 0.50, 0.65)
+        bend_drag = beat(sweep, 0.68, 0.84)
+        alpha = ease_out(pop) * (1 - beat(sweep, 0.93, 1.0))
+        if settled:
+            alpha = 0.0
+        kind = "Rectangle" if to_star < 0.5 else ("Star" if to_arrow < 0.5 else "Arrow")
+
+        a_end = (lerp(a_end0[0], a_end1[0], end_drag), lerp(a_end0[1], a_end1[1], end_drag))
+        bend = SHAPE_BEND * bend_drag
+        mid = bend_handle(a_start, a_end, bend)
+
+        # the shape itself, scaled in about the box centre with the pop
+        e = back_out(pop)
+        if alpha > 0.01:
+            if to_star <= 0:
+                hw = side / 2 * e
+                mask = closed_mask(box_points((cx - hw, cy - hw, cx + hw, cy + hw)), SHAPE_STROKE, 0.0)
+            elif to_arrow <= 0:
+                mask = Image.blend(rect_mask, star_mask, to_star) if to_star < 1 else star_mask
+            else:
+                arrow = arrow_mask(a_start, a_end, bend, SHAPE_ARROW_W)
+                mask = Image.blend(star_mask, arrow, to_arrow) if to_arrow < 1 else arrow
+            if alpha < 0.999:
+                mask = mask.point(lambda v: int(v * alpha))
+            img.paste(ink, (0, 0), mask)
+
+        if pop > 0 and not settled:
+            # the closed shape's gizmo pops in with it, then trades places with the arrow's discs
+            chrome = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            d = ImageDraw.Draw(chrome)
+            hw = side / 2 * e
+            gz = (cx - hw, cy - hw, cx + hw, cy + hw)
+            rect(d, gz, outline=ACCENT, width=0.6)
+            for hx in (gz[0], gz[2]):
+                for hy in (gz[1], gz[3]):
+                    rect(d, (hx - 1.3, hy - 1.3, hx + 1.3, hy + 1.3), fill=(255, 255, 255), outline=ACCENT, width=0.4)
+            paste_layer(img, chrome, (1 - to_arrow) * min(1.0, alpha * 1.5))
+            if to_arrow > 0:
+                discs = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+                d = ImageDraw.Draw(discs)
+                for p in (a_start, a_end, mid):
+                    handle_disc(d, p)
+                paste_layer(img, discs, to_arrow * alpha)
+            if pop >= 1 and alpha > 0.01:
+                # the kind badge, in the row's coral, tucked above the box's top-left corner
+                badge = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+                d = ImageDraw.Draw(badge)
+                bw = F_BADGE.getlength(kind) / SS + 8
+                bx0, by0 = box[0], box[1] - 8.5
+                rrect(d, (bx0, by0 - 5.5, bx0 + bw, by0 + 5.5), 3, fill=SHAPE_KIND)
+                text(d, (bx0 + bw / 2, by0 + 0.4), kind, F_BADGE, (255, 255, 255), anchor="mm")
+                paste_layer(img, badge, alpha)
+
+        picker_strip(img, strip_x, strip_y, to_star + to_arrow, strip)
+
+        # the pointer that bows the arrow: it lands on the middle handle once the end handle has
+        # reached the button, drags it, then leaves. (It sits out the end drag, where it would
+        # cover the head it is pulling.)
+        cur = beat(sweep, 0.62, 0.68) * (1 - beat(sweep, 0.84, 0.89))
+        if cur > 0.01 and not settled:
+            layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            cursor_arrow(ImageDraw.Draw(layer), mid[0] - 0.4, mid[1] - 0.4, 1.0)
+            paste_layer(img, layer, cur)
+
+        d = ImageDraw.Draw(img)
+        tl = Timeline()
+        new_row = dict(name="Shape", h=R_CARD, fill=SHAPE_KIND, block="video", grow=min(1.0, pop * 1.4),
+                       items=[(x_of_sec(ITEM_T0), x_of_sec(ITEM_T1), kind, None, pop)])
+        base_rows(tl, new_row, "above_screen")
+        tl.draw(d, sweep_playhead(pop, sweep), thumb, selected=new_row if pop >= 1 else None)
+        frames.append(finish(img))
+    return frames
+
+
 GIFS = {
     "track-video.gif": gif_video,
     "track-audio.gif": gif_audio,
     "track-image.gif": gif_image,
     "track-text.gif": gif_text,
+    "track-shape.gif": gif_shape,
     "track-zoom.gif": gif_zoom,
     "track-speed.gif": gif_speed,
     "track-cursor.gif": gif_cursor,

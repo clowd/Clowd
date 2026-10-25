@@ -197,5 +197,92 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0.5, fx.WipeFromFrac, 10);
             Assert.Equal(0.5, fx.WipeToFrac, 10);            // empty band — nothing visible
         }
+
+        // --------------------------------------------------------------------------------- draw
+
+        [Fact]
+        public void Identity_draws_the_whole_path()
+        {
+            var fx = ItemEffects.Identity;
+            Assert.False(fx.HasDraw);
+            Assert.Equal(0, fx.DrawFromFrac);
+            Assert.Equal(1, fx.DrawToFrac);
+
+            fx = TransitionMath.Evaluate(NewItem(), 5 * Sec);
+            Assert.False(fx.HasDraw);
+            Assert.Equal(0, fx.DrawFromFrac);
+            Assert.Equal(1, fx.DrawToFrac);
+        }
+
+        [Fact]
+        public void Evaluate_draw_grows_from_the_start_and_erases_from_the_start()
+        {
+            var item = NewItem();
+
+            item.Entry = new Transition { Kind = TransitionKind.Draw, DurationTicks = 2 * Sec, Easing = TransitionEasing.Linear };
+            var fx = TransitionMath.Evaluate(item, Sec / 2); // shown 0.25
+            Assert.True(fx.HasDraw);
+            Assert.Equal(0, fx.DrawFromFrac, 10);
+            Assert.Equal(0.25, fx.DrawToFrac, 10);
+            // a draw is not a fade, a slide or a wipe
+            Assert.Equal(1, fx.Opacity);
+            Assert.Equal(0, fx.OffsetXFrac);
+            Assert.False(fx.HasWipe);
+
+            fx = TransitionMath.Evaluate(item, 2 * Sec); // complete: nothing cut
+            Assert.False(fx.HasDraw);
+
+            item.Entry = null;
+            item.Exit = new Transition { Kind = TransitionKind.Draw, DurationTicks = 2 * Sec, Easing = TransitionEasing.Linear };
+            fx = TransitionMath.Evaluate(item, 10 * Sec - Sec / 2); // shown 0.25, hidden 0.75
+            Assert.True(fx.HasDraw);
+            Assert.Equal(0.75, fx.DrawFromFrac, 10);
+            Assert.Equal(1, fx.DrawToFrac, 10);
+        }
+
+        [Fact]
+        public void Evaluate_overlapping_draws_intersect()
+        {
+            var item = NewItem(duration: 2 * Sec);
+            item.Entry = new Transition { Kind = TransitionKind.Draw, DurationTicks = 2 * Sec, Easing = TransitionEasing.Linear };
+            item.Exit = new Transition { Kind = TransitionKind.Draw, DurationTicks = 2 * Sec, Easing = TransitionEasing.Linear };
+
+            var fx = TransitionMath.Evaluate(item, Sec / 2); // entry shown 0.25 -> [0, 0.25], exit shown 0.75 -> [0.25, 1]
+            Assert.True(fx.HasDraw);
+            Assert.Equal(0.25, fx.DrawFromFrac, 10);
+            Assert.Equal(0.25, fx.DrawToFrac, 10);           // empty piece: nothing drawn
+        }
+
+        [Theory]
+        [InlineData(TransitionKind.Fade)]
+        [InlineData(TransitionKind.SlideLeft)]
+        [InlineData(TransitionKind.Wipe)]
+        [InlineData(TransitionKind.Ramp)]
+        public void Other_kinds_leave_the_path_whole(TransitionKind kind)
+        {
+            var item = NewItem();
+            item.Entry = new Transition { Kind = kind, DurationTicks = 2 * Sec, Easing = TransitionEasing.Linear };
+            item.Exit = new Transition { Kind = kind, DurationTicks = 2 * Sec, Easing = TransitionEasing.Linear };
+
+            foreach (var t in new[] { Sec, 9 * Sec })
+            {
+                var fx = TransitionMath.Evaluate(item, t);
+                Assert.False(fx.HasDraw);
+                Assert.Equal(0, fx.DrawFromFrac);
+                Assert.Equal(1, fx.DrawToFrac);
+            }
+        }
+
+        [Fact]
+        public void A_draw_counts_as_animated_and_is_evaluated_for_shown_fractions_too()
+        {
+            Assert.True(TransitionMath.IsAnimated(TransitionKind.Draw));
+            Assert.False(TransitionMath.IsSlide(TransitionKind.Draw));
+
+            var fx = TransitionMath.EvaluateShown(TransitionKind.Draw, 0.5, TransitionKind.None, 1);
+            Assert.True(fx.HasDraw);
+            Assert.Equal(0.5, fx.DrawToFrac, 10);
+            Assert.Equal(1, fx.Opacity);
+        }
     }
 }

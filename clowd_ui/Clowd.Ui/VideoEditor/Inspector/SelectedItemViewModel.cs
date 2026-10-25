@@ -50,6 +50,13 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// is chosen — the v1 webcam overlay's default.</summary>
         public const double DefaultCornerRadius = 0.25;
 
+        /// <summary>How far off the canvas a line kind's box center may be put from the Center
+        /// X/Y rows (see <see cref="PositionMin"/>): the same -1 to 2 canvas extents the preview's
+        /// body drag keeps the line's endpoints within.</summary>
+        public const double MinLinePosition = -1;
+
+        public const double MaxLinePosition = 2;
+
         /// <summary>The playback-speed picker's fixed menu. A class (not a bare double) so the
         /// dropdown's label can say "1.0 (normal)" while the value stays numeric; instances are
         /// singletons so reference equality works for list selection.</summary>
@@ -320,6 +327,47 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly KeystrokeFilterOption DefaultKeystrokeFilterOption =
             KeystrokeFilterOptions[0];
 
+        /// <summary>A shape-picker tile: the model's kind beside the name and tooltip the tile
+        /// shows (<see cref="ShapeKinds"/>, which the timeline card reads too). The same singleton
+        /// discipline as <see cref="SpeedOption"/>, so reference equality selects the tile.</summary>
+        public sealed class ShapeKindOption
+        {
+            public ShapeKindOption(ShapeKind value)
+            {
+                Value = value;
+                Label = ShapeKinds.Label(value);
+                Tip = ShapeKinds.Tip(value);
+            }
+
+            public ShapeKind Value { get; }
+
+            public string Label { get; }
+
+            public string Tip { get; }
+
+            public override string ToString() => Label;
+        }
+
+        /// <summary>The shape picker's tiles, one per <see cref="ShapeKind"/> in the model's own
+        /// order, so <c>ShapeKindOptions[(int)kind]</c> is the tile for a kind.</summary>
+        public static readonly IReadOnlyList<ShapeKindOption> ShapeKindOptions =
+            Enum.GetValues<ShapeKind>().Select(kind => new ShapeKindOption(kind)).ToArray();
+
+        /// <summary>The entry/exit kinds every item but a shape is offered: all of them except
+        /// <see cref="TransitionKind.Draw"/>, which only a shape has a path for. Ramp stays, so a
+        /// file that carries one still shows it.</summary>
+        public static readonly IReadOnlyList<TransitionKind> PictureTransitionKinds =
+            Enum.GetValues<TransitionKind>().Where(kind => kind != TransitionKind.Draw).ToArray();
+
+        /// <summary>The entry/exit kinds a shape is offered: the standard ones plus
+        /// <see cref="TransitionKind.Draw"/>. No Ramp, which has no picture and which validation
+        /// rejects on a shape.</summary>
+        public static readonly IReadOnlyList<TransitionKind> ShapeTransitionKinds =
+        [
+            TransitionKind.None, TransitionKind.Fade, TransitionKind.SlideLeft, TransitionKind.SlideRight,
+            TransitionKind.SlideUp, TransitionKind.SlideDown, TransitionKind.Wipe, TransitionKind.Draw,
+        ];
+
         /// <summary>The one style that draws the recorded cursor sprites instead of a themed glyph —
         /// the glyph-only rows (colorways, SURROUND) mean nothing while it is picked, so they leave
         /// the panel entirely (see <see cref="CursorGlyphEnabled"/>); the size row stays, because the
@@ -557,6 +605,17 @@ namespace Clowd.UI.VideoEditor.Inspector
         private ObscureKind _obscureKind = ObscureKind.Mosaic;
         private double _obscureStrength = ObscureContent.DefaultStrength;
         private bool _showRampEasing = true;
+        private bool _showShape;
+        private ShapeKind _shapeKind = ShapeKind.Rectangle;
+        private double _shapePolygonSides = ShapeContent.DefaultPolygonSides;
+        private double _shapeStarPoints = ShapeContent.DefaultStarPoints;
+        private double _shapeStarInnerRatio = ShapeContent.DefaultStarInnerRatio;
+        private double _shapeCornerRadius = ShapeContent.DefaultCornerRadius;
+        private double _shapeStrokeWidth = ShapeContent.DefaultStrokeWidth;
+        private string _shapeStrokeColorHex = ShapeContent.DefaultStrokeColor;
+        private ShapeDash _shapeDash = ShapeDash.Solid;
+        private bool _shapeFill;
+        private string _shapeFillColorHex = ShapeContent.DefaultFillColor;
 
         private bool _showEffect;
         private VideoEffectKind _effectKind;
@@ -774,6 +833,56 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         public bool ShowRampExitEasing => _rampExitEnabled && _showRampEasing;
 
+        /// <summary>The shape's own section: the kind picker, the kind's dials and the
+        /// stroke/fill rows. Placement, opacity, entry/exit and surround are the ordinary
+        /// sections.</summary>
+        public bool ShowShape => _showShape;
+
+        /// <summary>The side-count row: a polygon's alone.</summary>
+        public bool ShowShapeSides => _showShape && _shapeKind == ShapeKind.Polygon;
+
+        /// <summary>The point-count and inner-ratio rows: a star's alone.</summary>
+        public bool ShowShapeStar => _showShape && _shapeKind == ShapeKind.Star;
+
+        /// <summary>The corner-radius row, on the kinds with corners to round
+        /// (<see cref="ShapeContent.HasCorners"/>).</summary>
+        public bool ShowShapeCorners => _showShape && ShapeContent.HasCorners(_shapeKind);
+
+        /// <summary>The FILL rows: closed kinds only, since a line has no inside.</summary>
+        public bool ShowShapeFill => IsClosedShape;
+
+        /// <summary>The fill's color well, shown only while the fill is on. The color is kept
+        /// while it is off (<see cref="ShapeContent.Fill"/> is a flag, not an alpha), so ticking
+        /// the box brings back the color the user had.</summary>
+        public bool ShowShapeFillColor => IsClosedShape && _shapeFill;
+
+        /// <summary>A warning, never a block: a closed shape with no outline and no visible fill
+        /// draws nothing at all, which is legal (it may be on its way somewhere) but is never what
+        /// the user meant to leave. A line kind cannot get here: it draws at least
+        /// <see cref="ShapeContent.MinLineStrokeWidth"/> wide.</summary>
+        public bool ShowShapeInvisibleHint => IsClosedShape && !(_shapeStrokeWidth > 0)
+            && !(_shapeFill && FillIsVisible(_shapeFillColorHex));
+
+        /// <summary>The stroke spinner's floor: 0 (no outline) on a closed kind, 1 on a line kind,
+        /// whose stroke is all there is of it.</summary>
+        public double ShapeStrokeMin => IsLineShape ? ShapeContent.MinLineStrokeWidth : ShapeContent.MinStrokeWidth;
+
+        /// <summary>What the stroke rows are headed: an outline's STROKE, or for a line kind the
+        /// LINE itself.</summary>
+        public string ShapeStrokeHeader => IsLineShape ? "LINE" : "STROKE";
+
+        /// <summary>The Center X/Y spinners' range. 0 to 1 of the canvas for everything but a line
+        /// kind, whose box may legally sit centered off the canvas (an arrow pointing at the
+        /// frame's edge, padded by its head's reach), so it gets -1 to 2: the narrow clamp would
+        /// teleport such an arrow on the first spinner touch.</summary>
+        public double PositionMin => IsLineShape ? MinLinePosition : 0;
+
+        public double PositionMax => IsLineShape ? MaxLinePosition : 1;
+
+        private bool IsLineShape => _showShape && ShapeContent.IsLineKind(_shapeKind);
+
+        private bool IsClosedShape => _showShape && !ShapeContent.IsLineKind(_shapeKind);
+
         public bool ShowTrackHidden => _showTrackHidden;
 
         public bool ShowTrackMuted => _showTrackMuted;
@@ -781,6 +890,13 @@ namespace Clowd.UI.VideoEditor.Inspector
         public bool ShowCornerRadius => _maskRounded;
 
         public bool ShowEntryOptions => _entryKind != TransitionKind.None;
+
+        /// <summary>The entry/exit drop-downs' list for the primary item: <see cref="ShapeTransitionKinds"/>
+        /// for a shape, <see cref="PictureTransitionKinds"/> otherwise. Sync raises it before
+        /// <see cref="EntryKind"/>/<see cref="ExitKind"/> and while <c>_syncing</c> is still set,
+        /// so a drop-down that settles its selection during the swap writes nothing back.</summary>
+        public IReadOnlyList<TransitionKind> TransitionKindOptions =>
+            _showShape ? ShapeTransitionKinds : PictureTransitionKinds;
 
         public bool ShowExitOptions => _exitKind != TransitionKind.None;
 
@@ -792,13 +908,14 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         // --------------------------------------------------------------------------- transform
 
-        /// <summary>Item center X, 0-1 of the canvas width (the panel shows it as a percentage).</summary>
+        /// <summary>Item center X, 0-1 of the canvas width (the panel shows it as a percentage);
+        /// <see cref="PositionMin"/> to <see cref="PositionMax"/> for a line kind.</summary>
         public double PositionX
         {
             get => _positionX;
             set
             {
-                value = Clamp(value, 0, 1);
+                value = Clamp(value, PositionMin, PositionMax);
                 if (!Set(ref _positionX, value) || _syncing)
                     return;
 
@@ -811,7 +928,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             get => _positionY;
             set
             {
-                value = Clamp(value, 0, 1);
+                value = Clamp(value, PositionMin, PositionMax);
                 if (!Set(ref _positionY, value) || _syncing)
                     return;
 
@@ -1658,7 +1775,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // has already settled _cropFollowsWindow for this selection.
                 stretch = false;
             }
-            else if (item?.Content is BackgroundContent or ObscureContent)
+            else if (item?.Content is BackgroundContent or ObscureContent or ShapeContent)
             {
                 tile = AspectTile.Unlocked;
                 stretch = false;
@@ -2222,6 +2339,208 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 EditObscure("sel:obscurestrength", o => o.Strength = value);
             }
+        }
+
+        // --------------------------------------------------------------------------- shape
+
+        /// <summary>
+        /// The shape's kind, as one of <see cref="ShapeKindOptions"/>. Every change goes through
+        /// <see cref="ShapeLineLayout.ConvertKind"/>, which owns what a kind change does to the box,
+        /// the endpoints and the stroke (a rectangle turned into an arrow runs corner to corner
+        /// across the same box; an arrow turned back squares up a sliver box). Those are writes no
+        /// setter here mirrors, and the rows on show change with the kind, so the write re-reads
+        /// the whole panel (see <see cref="EditShapeItem"/>).
+        /// </summary>
+        public ShapeKindOption ShapeKindChoice
+        {
+            get => ShapeKindOptions[(int)_shapeKind];
+            set
+            {
+                if (value == null || _syncing || value.Value == _shapeKind)
+                    return;
+
+                var to = value.Value;
+                EditShapeItem("sel:shapekind", item => ShapeLineLayout.ConvertKind(item, to, _session.Project.Output));
+            }
+        }
+
+        /// <summary>A polygon's side count. A double for the spinner, like the keyboard timings;
+        /// the model's whole number is the rounded value.</summary>
+        public double ShapePolygonSides
+        {
+            get => _shapePolygonSides;
+            set
+            {
+                value = Math.Round(Clamp(value, ShapeContent.MinPolygonSides, ShapeContent.MaxPolygonSides));
+                if (!Set(ref _shapePolygonSides, value) || _syncing)
+                    return;
+
+                EditShape("sel:shapesides", s => s.PolygonSides = (int)value);
+            }
+        }
+
+        public double ShapeStarPoints
+        {
+            get => _shapeStarPoints;
+            set
+            {
+                value = Math.Round(Clamp(value, ShapeContent.MinStarPoints, ShapeContent.MaxStarPoints));
+                if (!Set(ref _shapeStarPoints, value) || _syncing)
+                    return;
+
+                EditShape("sel:shapepoints", s => s.StarPoints = (int)value);
+            }
+        }
+
+        /// <summary>A star's inner vertices' radius over its outer one: how deep its points
+        /// cut.</summary>
+        public double ShapeStarInnerRatio
+        {
+            get => _shapeStarInnerRatio;
+            set
+            {
+                value = Clamp(value, ShapeContent.MinStarInnerRatio, ShapeContent.MaxStarInnerRatio);
+                if (!Set(ref _shapeStarInnerRatio, value) || _syncing)
+                    return;
+
+                EditShape("sel:shapeinner", s => s.StarInnerRatio = value);
+            }
+        }
+
+        /// <summary>Output pixels, on the kinds with corners. The composer clamps each corner to
+        /// what its edges can hold, so a big number rounds as far as the shape allows.</summary>
+        public double ShapeCornerRadius
+        {
+            get => _shapeCornerRadius;
+            set
+            {
+                value = Clamp(value, ShapeContent.MinCornerRadius, ShapeContent.MaxCornerRadius);
+                if (!Set(ref _shapeCornerRadius, value) || _syncing)
+                    return;
+
+                EditShape("sel:shapecorner", s => s.CornerRadius = value);
+            }
+        }
+
+        /// <summary>
+        /// The outline's width in output pixels (0 = none) or, on a line kind, the line's (at least
+        /// <see cref="ShapeStrokeMin"/>). A line kind's box is padded by how far its ink reaches,
+        /// which the width decides, so that write re-fits the box too
+        /// (<see cref="ShapeLineLayout.Refit"/>) and re-reads the panel, whose placement rows it
+        /// moved; a closed shape's write touches nothing else.
+        /// </summary>
+        public double ShapeStrokeWidth
+        {
+            get => _shapeStrokeWidth;
+            set
+            {
+                value = Clamp(value, ShapeStrokeMin, ShapeContent.MaxStrokeWidth);
+                if (!Set(ref _shapeStrokeWidth, value))
+                    return;
+
+                OnPropertyChanged(nameof(ShowShapeInvisibleHint));
+                if (_syncing)
+                    return;
+
+                if (IsLineShape)
+                {
+                    EditShapeItem("sel:shapestroke", item =>
+                    {
+                        ((ShapeContent)item.Content).StrokeWidth = value;
+                        ShapeLineLayout.Refit(item, _session.Project.Output);
+                    });
+                }
+                else
+                {
+                    EditShape("sel:shapestroke", s => s.StrokeWidth = value);
+                }
+            }
+        }
+
+        /// <summary>The outline's (or the line's) color, as <c>#RRGGBB</c> or <c>#AARRGGBB</c>.
+        /// Half-typed values stay in the box without reaching the model, like
+        /// <see cref="TextColorHex"/>.</summary>
+        public string ShapeStrokeColorHex
+        {
+            get => _shapeStrokeColorHex;
+            set
+            {
+                if (!Set(ref _shapeStrokeColorHex, value) || _syncing)
+                    return;
+
+                if (!IsHexColor(value))
+                    return;
+
+                var color = value.Trim();
+                EditShape("sel:shapestrokecolor", s => s.StrokeColor = color);
+            }
+        }
+
+        /// <summary>The image editor's dash styles, for the outline or the line.</summary>
+        public ShapeDash ShapeDash
+        {
+            get => _shapeDash;
+            set
+            {
+                if (!Set(ref _shapeDash, value) || _syncing)
+                    return;
+
+                EditShape("sel:shapedash", s => s.Dash = value);
+            }
+        }
+
+        /// <summary>Whether a closed shape is filled. Turning it off keeps the color, so turning
+        /// it back on restores what the user had.</summary>
+        public bool ShapeFill
+        {
+            get => _shapeFill;
+            set
+            {
+                if (!Set(ref _shapeFill, value))
+                    return;
+
+                OnPropertyChanged(nameof(ShowShapeFillColor));
+                OnPropertyChanged(nameof(ShowShapeInvisibleHint));
+                if (_syncing)
+                    return;
+
+                EditShape("sel:shapefill", s => s.Fill = value);
+            }
+        }
+
+        /// <summary>The fill's color; its alpha is the fill's own opacity (the default is a 35%
+        /// red, a highlight box under the red outline).</summary>
+        public string ShapeFillColorHex
+        {
+            get => _shapeFillColorHex;
+            set
+            {
+                if (!Set(ref _shapeFillColorHex, value))
+                    return;
+
+                OnPropertyChanged(nameof(ShowShapeInvisibleHint));
+                if (_syncing || !IsHexColor(value))
+                    return;
+
+                var color = value.Trim();
+                EditShape("sel:shapefillcolor", s => s.FillColor = color);
+            }
+        }
+
+        /// <summary>Everything derived from the shape's kind, fill and width, raised together:
+        /// none of it has a backing field of its own.</summary>
+        private void RaiseShapeFlags()
+        {
+            OnPropertyChanged(nameof(ShowShapeSides));
+            OnPropertyChanged(nameof(ShowShapeStar));
+            OnPropertyChanged(nameof(ShowShapeCorners));
+            OnPropertyChanged(nameof(ShowShapeFill));
+            OnPropertyChanged(nameof(ShowShapeFillColor));
+            OnPropertyChanged(nameof(ShowShapeInvisibleHint));
+            OnPropertyChanged(nameof(ShapeStrokeMin));
+            OnPropertyChanged(nameof(ShapeStrokeHeader));
+            OnPropertyChanged(nameof(PositionMin));
+            OnPropertyChanged(nameof(PositionMax));
         }
 
         // ---------------------------------------------------------------------- background
@@ -3232,14 +3551,20 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // an obscure box is placed, sized, turned and faded like a picture, but it has no
                 // pixels of its own: no mask, crop, ratio, surround or effect applies to it
                 var isObscure = item?.Content is ObscureContent;
+                var shape = item?.Content as ShapeContent;
+                // a line kind's geometry is its endpoints, which the preview's handles drag: its
+                // box is only the line's padded bounds, so a width, a height or a turn of that box
+                // means nothing to the user. Center X/Y (which carry the line along) and the
+                // opacity stay.
+                var isLineShape = shape is { IsLine: true };
 
                 Set(ref _hasSelection, item != null, nameof(HasSelection),
                     nameof(ShowProperties), nameof(ShowNothingSelected));
                 Set(ref _showTransform, visual, nameof(ShowTransform));
-                Set(ref _showScale, visual && !isText, nameof(ShowScale));
+                Set(ref _showScale, visual && !isText && !isLineShape, nameof(ShowScale));
                 // the keystroke overlay keeps placement but not rotation: the composer draws the
                 // block upright whatever Transform.Rotation says (see DrawKeyboard).
-                Set(ref _showRotation, visual && item.Content is not KeyboardContent,
+                Set(ref _showRotation, visual && item.Content is not KeyboardContent && !isLineShape,
                     nameof(ShowRotation));
                 Set(ref _showMask, isPicture, nameof(ShowMask));
                 Set(ref _showCrop, isCroppable, nameof(ShowCrop));
@@ -3256,6 +3581,9 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _showKeyboardTrack, item?.Content is KeyboardContent, nameof(ShowKeyboardTrack));
                 Set(ref _showBackground, item?.Content is BackgroundContent, nameof(ShowBackground));
                 Set(ref _showObscure, isObscure, nameof(ShowObscure));
+                // the transition list follows it (TransitionKindOptions), raised here, ahead of
+                // the entry/exit kinds below
+                Set(ref _showShape, shape != null, nameof(ShowShape), nameof(TransitionKindOptions));
                 Set(ref _showRampEasing, !isObscure, nameof(ShowRampEasing));
                 // the eye stays: hiding an effect row is how the effect is turned off
                 Set(ref _showTrackHidden, item != null && !isAudio, nameof(ShowTrackHidden));
@@ -3352,6 +3680,28 @@ namespace Clowd.UI.VideoEditor.Inspector
                     OnPropertyChanged(nameof(ShowObscureStrength));
                 }
 
+                if (shape != null)
+                {
+                    Set(ref _shapeKind, shape.Kind, nameof(ShapeKindChoice));
+                    Set(ref _shapePolygonSides, shape.PolygonSides, nameof(ShapePolygonSides));
+                    Set(ref _shapeStarPoints, shape.StarPoints, nameof(ShapeStarPoints));
+                    Set(ref _shapeStarInnerRatio, shape.StarInnerRatio, nameof(ShapeStarInnerRatio));
+                    Set(ref _shapeCornerRadius, shape.CornerRadius, nameof(ShapeCornerRadius));
+                    Set(ref _shapeStrokeWidth, shape.StrokeWidth, nameof(ShapeStrokeWidth));
+                    Set(ref _shapeStrokeColorHex, shape.StrokeColor ?? ShapeContent.DefaultStrokeColor,
+                        nameof(ShapeStrokeColorHex));
+                    Set(ref _shapeDash, shape.Dash, nameof(ShapeDash));
+                    Set(ref _shapeFill, shape.Fill, nameof(ShapeFill));
+                    Set(ref _shapeFillColorHex, shape.FillColor ?? ShapeContent.DefaultFillColor,
+                        nameof(ShapeFillColorHex));
+                }
+
+                // the rows and ranges that follow the kind, raised whatever was selected: moving
+                // off a line kind must hand the Center rows their 0-1 range back. Before the
+                // position is read below, so a spinner never sees an off-canvas center against
+                // the narrow range.
+                RaiseShapeFlags();
+
                 if (item?.Content is KeyboardContent keyboard)
                 {
                     Set(ref _keyboardFontSize, keyboard.FontSize, nameof(KeyboardFontSize));
@@ -3373,7 +3723,9 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 // the surround section is shared by the pictures and the cursor glyph; which of the
                 // two it is decides what its dials default to, so the subject is read before them.
-                _surroundSubject = isPicture ? SurroundSubject.Picture
+                // A shape takes a picture's surround (FrameComposer.DrawShape draws one around its
+                // ink) without being a picture anywhere else: no mask, crop or ratio.
+                _surroundSubject = isPicture || shape != null ? SurroundSubject.Picture
                     : isCursor ? SurroundSubject.Cursor
                     : SurroundSubject.None;
                 OnPropertyChanged(nameof(ShowSurround));
@@ -3405,9 +3757,10 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // seeds the explicit height; a file without one shows the height the composer
                 // falls back to, Scale, so the row tells the truth about what is drawn, and the
                 // first edit of it writes ScaleY for real.
-                // an obscure box is free-sized by the same rule (DrawObscure boxes it exactly as
-                // DrawBackground does), so it offers the same two rows
-                var isBackground = item?.Content is BackgroundContent or ObscureContent;
+                // an obscure box and a shape are free-sized by the same rule (DrawObscure and
+                // DrawShape box them exactly as DrawBackground does), so they offer the same two
+                // rows (a line kind offers neither: see isLineShape)
+                var isBackground = item?.Content is BackgroundContent or ObscureContent or ShapeContent;
                 Set(ref _hasScaleY, transform.ScaleY != null || isBackground, nameof(ShowScaleHeight));
                 Set(ref _scaleHeight,
                     transform.ScaleY ?? (isBackground ? transform.Scale : _scaleHeight),
@@ -3570,6 +3923,45 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (i.Content is ObscureContent obscure)
                     edit(obscure);
             }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
+        }
+
+        /// <summary>The shape write, content-guarded on both sides like <see cref="EditText"/>.
+        /// For the writes whose every consequence the setter has already mirrored.</summary>
+        private void EditShape(string coalesceKey, Action<ShapeContent> edit)
+        {
+            var item = SelectedItem;
+            if (item?.Content is not ShapeContent)
+                return;
+
+            _session.EditItem(item.Id, i =>
+            {
+                if (i.Content is ShapeContent shape)
+                    edit(shape);
+            }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
+        }
+
+        /// <summary>
+        /// The shape write that reaches past the content: a kind change
+        /// (<see cref="ShapeLineLayout.ConvertKind"/>) or a line kind's re-fit
+        /// (<see cref="ShapeLineLayout.Refit"/>) rewrites the box, and the kind decides which rows
+        /// are on show, the stroke floor and header, the Center X/Y range and whether Rotation and
+        /// the size rows are offered at all. No setter mirrors any of that by hand, so this passes
+        /// a null origin, exactly like the aspect and crop writes (see
+        /// <see cref="EditRow(string, Action{Item}, object)"/>), and
+        /// <see cref="Session_ProjectChanged"/> re-reads every row. Never <c>this</c> here: that
+        /// handler skips its own origin's echo.
+        /// </summary>
+        private void EditShapeItem(string coalesceKey, Action<Item> edit)
+        {
+            var item = SelectedItem;
+            if (item?.Content is not ShapeContent)
+                return;
+
+            _session.EditItem(item.Id, i =>
+            {
+                if (i.Content is ShapeContent)
+                    edit(i);
+            }, $"{coalesceKey}:{item.Id}", structural: false, origin: null);
         }
 
         /// <summary>The zoom write, content-guarded on both sides like <see cref="EditText"/>: the
@@ -3969,6 +4361,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             ImageContent => "Image",
             BackgroundContent => "Background",
             ObscureContent => "Obscure",
+            // whatever the kind: the timeline card names the kind, and the picker shows it
+            ShapeContent => "Shape",
             SolidContent => "Color",
             SpeedContent => "Speed",
             ZoomContent => "Zoom",
@@ -4016,6 +4410,11 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         private static string HexOfArgb(uint argb) => "#" + argb.ToString("X8",
             System.Globalization.CultureInfo.InvariantCulture);
+
+        /// <summary>Whether a shape fill of this color draws anything: any alpha but zero. A value
+        /// that does not parse is drawn in the default (visible) fill, so it counts as
+        /// visible.</summary>
+        private static bool FillIsVisible(string hex) => !TryParseArgb(hex, out var argb) || argb >> 24 != 0;
 
         /// <summary>Math.Clamp with NaN collapsing to the lower bound — a spinner's text box hands
         /// over whatever parsed, and a NaN must not be able to poison the project.</summary>

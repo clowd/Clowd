@@ -54,6 +54,10 @@
 
     <StreamGeometry x:Key="IconToolArrow">M6.938,20.681l4.236,4.236H1.083V14.825l4.253,4.254L24.165,0.25l1.616,1.586L6.938,20.681z</StreamGeometry>
 
+    <!--  The video editor's shape tool: a solid rounded pentagon (Icons8 "pentagon", 24 unit box,
+         outer contour only so it reads filled rather than outlined)  -->
+    <StreamGeometry x:Key="IconShapes">F1 M 12 3.0019531 C 11.59042 3.001933 11.181198 3.1252013 10.832031 3.3710938 L 2.8535156 9.0019531 C 2.1234152 9.5175496 1.816356 10.469281 2.1152344 11.314453 L 2.1152344 11.316406 L 5.0703125 19.65625 C 5.3553987 20.461926 6.1256954 21 6.9765625 21 L 17.023438 21 C 17.874305 21 18.6446 20.461973 18.929688 19.65625 L 21.884766 11.316406 L 21.884766 11.314453 C 22.183644 10.469281 21.876566 9.5175496 21.146484 9.0019531 L 13.167969 3.3710938 C 12.818815 3.1245161 12.40958 3.0019732 12 3.0019531 z</StreamGeometry>
+
     <!-- Ruler: outer frame (CW) minus an inner well (CCW) plus alternating long/short graduations
          (CW). Nonzero fill rule (F1) so the graduations may overlap the top rail without punching
          holes in it, which an even-odd path would. -->

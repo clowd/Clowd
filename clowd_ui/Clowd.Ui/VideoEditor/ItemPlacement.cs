@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Clowd.Geometry2D;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Model;
 using SkiaSharp;
@@ -239,8 +240,10 @@ namespace Clowd.UI.VideoEditor
                     // the very (ScaleY ?? Scale) fallback DrawBackground draws, and with ScaleY set
                     // Compose takes the explicit height and never consults it. An obscure box
                     // (FrameComposer.DrawObscure) is boxed by the same rule and free-sized for the
-                    // same reason, so it is the same case.
+                    // same reason, so it is the same case, and so is a shape (FrameComposer.DrawShape
+                    // fills, or for a line kind places its endpoints in, exactly that box).
                 case ObscureContent:
+                case ShapeContent:
                     return canvasWidth > 0 ? canvasHeight / canvasWidth : null;
 
                 case KeyboardContent keyboard:
@@ -286,10 +289,10 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>
         /// The topmost item covering <paramref name="timeTicks"/> whose composed rect contains the
-        /// point — the preview's click-to-select. Walks the visual stack the way
-        /// <c>FrameComposer</c> paints it, from the top down (descending <c>Track.Order</c>, ties
-        /// by id, matching the composer's total ordering reversed), skipping hidden and audio rows.
-        /// Null when the click landed on bare canvas.
+        /// point (for a line or arrow: whose ink is under it), the preview's click-to-select. Walks
+        /// the visual stack the way <c>FrameComposer</c> paints it, from the top down (descending
+        /// <c>Track.Order</c>, ties by id, matching the composer's total ordering reversed),
+        /// skipping hidden and audio rows. Null when the click landed on bare canvas.
         /// </summary>
         public static Item HitTest(Project project, long timeTicks, double x, double y,
             double canvasWidth, double canvasHeight)
@@ -320,6 +323,21 @@ namespace Clowd.UI.VideoEditor
                         continue;
                     if (!TryResolve(project, item, canvasWidth, canvasHeight, out var placed, timeTicks))
                         continue;
+
+                    // a line or arrow is hit on its ink rather than its box: the box is padded
+                    // around the whole line, so its empty corners would steal clicks aimed at
+                    // whatever is under them, and an arrowhead stretched past the box would miss.
+                    // The resolved line has the rotation applied already, so the point is tested
+                    // as it is (the same test the line's own handles take a body press by).
+                    if (item.Content is ShapeContent { IsLine: true } shape)
+                    {
+                        if (ShapeLineLayout.TryResolve(item.Transform, shape, canvasWidth, canvasHeight, out var line) &&
+                            ShapeHandleMath.HitsShape(shape, line, new Vec2(x, y),
+                                FrameComposer.PixelScale(project, canvasHeight)))
+                            return item;
+
+                        continue;
+                    }
 
                     // the composer rotates the picture about its center, so test the point in the
                     // item's unrotated space — otherwise a rotated item claims its empty AABB
@@ -412,9 +430,11 @@ namespace Clowd.UI.VideoEditor
         /// EditorSession.AddBackground) or came out of an older project file without one. An
         /// obscure box is the same: a rectangle with no ratio of its own, boxed by Scale/ScaleY
         /// (FrameComposer.DrawObscure) and seeded with an explicit height by
-        /// EditorSession.AddObscure.
+        /// EditorSession.AddObscure, and so is a shape (FrameComposer.DrawShape, seeded by
+        /// EditorSession.AddShape): its outline is fitted to whatever box it is given.
         /// </summary>
-        public static bool IsFreeByContent(Item item) => item?.Content is BackgroundContent or ObscureContent;
+        public static bool IsFreeByContent(Item item) =>
+            item?.Content is BackgroundContent or ObscureContent or ShapeContent;
 
         /// <summary>
         /// What a corner drag does to the item, decided once per drag from the item itself and
@@ -429,9 +449,21 @@ namespace Clowd.UI.VideoEditor
         /// drag keeps the content's ratio rather than trusting it. A picture with an explicit
         /// height but a ratio tile in force (the Stretch fit mode) keeps the box as it stands:
         /// both scales move together, so a 16:9 stretch stays 16:9 under the drag.
+        ///
+        /// A shape has all eight handles (it is free by content), but only a rectangle and a
+        /// speech bubble take a free corner: they are annotation boxes, sized to what they frame
+        /// as in the image editor. Every other kind's corners keep the box as it stands
+        /// (<see cref="CornerResizeMode.BoxAspect"/>), so a circle stays a circle and a star keeps
+        /// its points; the edge handles are still free, which is how the ratio is changed on
+        /// purpose. The flag plays no part for either.
         /// </summary>
         public static CornerResizeMode CornerMode(bool freeResizeTile, Item item)
         {
+            if (item?.Content is ShapeContent shape)
+                return shape.Kind is ShapeKind.Rectangle or ShapeKind.Bubble
+                    ? CornerResizeMode.Free
+                    : CornerResizeMode.BoxAspect;
+
             if (IsFreeByContent(item))
                 return CornerResizeMode.Free;
 

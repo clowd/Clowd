@@ -22,6 +22,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         Keyboard,
         Background,
         Obscure,
+        Shape,
     }
 
     /// <summary>The three reorder blocks the rows stack in; see <see cref="TimelineRowLayout.BlockOf"/>.</summary>
@@ -78,6 +79,9 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Obscure rows show an icon and the mode; the box itself has no picture to draw.</summary>
         public const double ObscureRowHeight = 26;
 
+        /// <summary>Shape rows show the kind's glyph and its name; the shape itself is on the canvas.</summary>
+        public const double ShapeRowHeight = 26;
+
         /// <summary>Effect rows (speed and zoom) show a glyph and a factor label — a card row,
         /// nothing to draw taller.</summary>
         public const double EffectRowHeight = 26;
@@ -102,6 +106,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Image => ImageRowHeight,
             TimelineRowKind.Background => BackgroundRowHeight,
             TimelineRowKind.Obscure => ObscureRowHeight,
+            TimelineRowKind.Shape => ShapeRowHeight,
             TimelineRowKind.Speed => EffectRowHeight,
             TimelineRowKind.Zoom => EffectRowHeight,
             TimelineRowKind.Cursor => InputOverlayRowHeight,
@@ -130,8 +135,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>
         /// Classifies a row: audio tracks are audio; an effect track is a speed or zoom row by its
         /// earliest item's content; a video track takes its kind from its earliest item's content
-        /// (cursor overlay, keyboard overlay, text card, still image, wallpaper, otherwise
-        /// media).
+        /// (cursor overlay, keyboard overlay, text card, still image, wallpaper, obscure box,
+        /// shape, otherwise media).
         /// Order-independent — the earliest item wins
         /// however <paramref name="trackItems"/> arrives — and an empty track falls back to
         /// <see cref="TimelineRowKind.Video"/>, which is the row a media clip dropped onto it would
@@ -159,6 +164,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 ImageContent => TimelineRowKind.Image,
                 BackgroundContent => TimelineRowKind.Background,
                 ObscureContent => TimelineRowKind.Obscure,
+                ShapeContent => TimelineRowKind.Shape,
                 _ => TimelineRowKind.Video,
             };
         }

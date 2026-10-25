@@ -663,9 +663,9 @@ public static class TimelineOps
 
     /// <summary>Whether <paramref name="clip"/> — an item lifted off a row of kind
     /// <paramref name="clipTrackKind"/> — can be pasted into the gap: the gap is current and at
-    /// least <see cref="MinSegmentTicks"/> long, the clip is media, text, an image, a solid or an
-    /// obscure box (effect items and input overlays belong to rows of their own), and its row kind
-    /// matches the gap's (a picture never lands on an audio row, nor a sound on a video row).</summary>
+    /// least <see cref="MinSegmentTicks"/> long, the clip is media, text, an image, a solid, an
+    /// obscure box or a shape (effect items and input overlays belong to rows of their own), and its
+    /// row kind matches the gap's (a picture never lands on an audio row, nor a sound on a video row).</summary>
     public static bool CanPasteIntoGap(Project project, TimelineGap gap, Item clip, TrackKind clipTrackKind)
     {
         if (clip == null || !IsCurrentGap(project, gap) || gap.DurationTicks < MinSegmentTicks)
@@ -675,7 +675,7 @@ public static class TimelineOps
         return clip.Content switch
         {
             MediaContent => track?.Kind == clipTrackKind,
-            TextContent or ImageContent or SolidContent or ObscureContent => track?.Kind == TrackKind.Video,
+            TextContent or ImageContent or SolidContent or ObscureContent or ShapeContent => track?.Kind == TrackKind.Video,
             _ => false,
         };
     }

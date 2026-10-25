@@ -48,19 +48,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             InitializeComponent();
 
             comboAlign.ItemsSource = Enum.GetValues<TextAlign>();
-            comboEntryKind.ItemsSource = Enum.GetValues<TransitionKind>();
-            comboExitKind.ItemsSource = Enum.GetValues<TransitionKind>();
+            // the entry/exit lists depend on the selection (RefreshTransitionKinds)
+            comboEntryKind.ItemsSource = SelectedItemViewModel.PictureTransitionKinds;
+            comboExitKind.ItemsSource = SelectedItemViewModel.PictureTransitionKinds;
             comboEntryEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             comboExitEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             comboRampEntryEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             comboRampExitEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             comboObscureKind.ItemsSource = Enum.GetValues<ObscureKind>();
+            comboShapeDash.ItemsSource = Enum.GetValues<ShapeDash>();
             ddSpeed.ItemsSource = SelectedItemViewModel.SpeedOptions;
             ddSpeedTarget.ItemsSource = SelectedItemViewModel.SpeedTargetOptions;
             ddKeyFilter.ItemsSource = SelectedItemViewModel.KeystrokeFilterOptions;
             listCursorStyle.ItemsSource = SelectedItemViewModel.CursorStyleOptions;
             listCursorClick.ItemsSource = SelectedItemViewModel.ClickAnimationOptions;
             listBackgroundStyle.ItemsSource = SelectedItemViewModel.BackgroundStyleOptions;
+            listShapeKind.ItemsSource = SelectedItemViewModel.ShapeKindOptions;
             // the theme row's tiles and its pick are both driven from RefreshBackgroundThemes
             // rather than bound; the user's own pick comes back through here. Guarded, because
             // every programmatic swap raises this too and an unguarded write-back would store a
@@ -90,6 +93,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotRampExitEnabled.DefaultValue = false;
             // the model's own starting mode, the image editor's default
             dotObscureKind.DefaultValue = new ObscureContent().Kind;
+            dotShapeDash.DefaultValue = ShapeDash.Solid;
+            dotShapeFill.DefaultValue = false;
             dotCursorDebounce.DefaultValue = true;
             dotDenoise.DefaultValue = false;
             dotSpeedWarpExempt.DefaultValue = false;
@@ -114,6 +119,10 @@ namespace Clowd.UI.VideoEditor.Inspector
                 () => _vm.CursorClickColorHex, hex => _vm.CursorClickColorHex = hex);
             backgroundColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
                 () => _vm.BackgroundColorHex, hex => _vm.BackgroundColorHex = hex);
+            shapeStrokeColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
+                () => _vm.ShapeStrokeColorHex, hex => _vm.ShapeStrokeColorHex = hex);
+            shapeFillColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
+                () => _vm.ShapeFillColorHex, hex => _vm.ShapeFillColorHex = hex);
             miniColor.Canceled += (_, _) => colorPopup.IsOpen = false;
 
             DataContextChanged += (_, _) => AttachViewModel(DataContext as SelectedItemViewModel);
@@ -152,6 +161,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             RefreshFontButton();
             RefreshColorWells();
             RefreshTransitionDefaults();
+            RefreshTransitionKinds();
             RefreshTrackIcons();
             RefreshBackgroundThemes();
             RefreshCropWindows();
@@ -171,10 +181,15 @@ namespace Clowd.UI.VideoEditor.Inspector
                 case nameof(SelectedItemViewModel.SurroundColorHex):
                 case nameof(SelectedItemViewModel.CursorClickColorHex):
                 case nameof(SelectedItemViewModel.BackgroundColorHex):
+                case nameof(SelectedItemViewModel.ShapeStrokeColorHex):
+                case nameof(SelectedItemViewModel.ShapeFillColorHex):
                     RefreshColorWells();
                     break;
                 case nameof(SelectedItemViewModel.ShowKeyboardTrack):
                     RefreshTransitionDefaults();
+                    break;
+                case nameof(SelectedItemViewModel.TransitionKindOptions):
+                    RefreshTransitionKinds();
                     break;
                 case nameof(SelectedItemViewModel.BackgroundThemeOptions):
                 case nameof(SelectedItemViewModel.BackgroundTheme):
@@ -217,6 +232,10 @@ namespace Clowd.UI.VideoEditor.Inspector
                 SelectedItemViewModel.DefaultCursorClickColorHex);
             RefreshColorWell(txtBackgroundColorHex, backgroundColorSwatch, _vm?.BackgroundColorHex,
                 BackgroundContent.DefaultColor);
+            RefreshColorWell(txtShapeStrokeColorHex, shapeStrokeColorSwatch, _vm?.ShapeStrokeColorHex,
+                ShapeContent.DefaultStrokeColor);
+            RefreshColorWell(txtShapeFillColorHex, shapeFillColorSwatch, _vm?.ShapeFillColorHex,
+                ShapeContent.DefaultFillColor);
         }
 
         private static void RefreshColorWell(TextBlock label, Shape swatch, string hex, string fallback)
@@ -235,6 +254,19 @@ namespace Clowd.UI.VideoEditor.Inspector
             var keys = _vm?.ShowKeyboardTrack == true;
             dotEntryKind.DefaultValue = keys ? TransitionKind.SlideUp : TransitionKind.None;
             dotExitKind.DefaultValue = keys ? TransitionKind.Fade : TransitionKind.None;
+        }
+
+        /// <summary>The entry/exit lists, pushed rather than bound like the window picker's (see
+        /// <see cref="RefreshCropWindows"/>): a shape is offered Draw and no Ramp, everything else
+        /// the reverse. The view model raises <c>TransitionKindOptions</c> before the kinds, so the
+        /// list is in place before the selection resolves against it.</summary>
+        private void RefreshTransitionKinds()
+        {
+            var options = _vm?.TransitionKindOptions ?? SelectedItemViewModel.PictureTransitionKinds;
+            if (!ReferenceEquals(comboEntryKind.ItemsSource, options))
+                comboEntryKind.ItemsSource = options;
+            if (!ReferenceEquals(comboExitKind.ItemsSource, options))
+                comboExitKind.ItemsSource = options;
         }
 
         /// <summary>

@@ -21,8 +21,9 @@ namespace Clowd.UI.VideoEditor
     /// so the preview is WYSIWYG by construction.
     ///
     /// Hosts, in z-order: the composed video (this control's own render), an optional poster image
-    /// (shown until the first decoded frame lands) and the <see cref="Gizmo"/>, which is
-    /// re-positioned on every layout pass — and the preview re-runs that pass on every project
+    /// (shown until the first decoded frame lands) and the <see cref="Gizmo"/> (or, for a zoom
+    /// item or a line, the <see cref="ZoomFocus"/> reticle or the <see cref="ShapeHandles"/>),
+    /// which is re-positioned on every layout pass, and the preview re-runs that pass on every project
     /// change, selection change and playhead move. That is what keeps gizmo drags, the inspector's
     /// numerics and the composed picture in lockstep: all three read the one model in
     /// <see cref="Session"/>, and none of them caches an item.
@@ -69,11 +70,13 @@ namespace Clowd.UI.VideoEditor
             PosterImage = new Image { Stretch = Stretch.Uniform };
             Gizmo = new TransformGizmoControl();
             ZoomFocus = new ZoomFocusControl();
+            ShapeHandles = new ShapeHandlesControl();
 
             Children.Add(_surface);
             Children.Add(PosterImage);
             Children.Add(Gizmo);
             Children.Add(ZoomFocus);
+            Children.Add(ShapeHandles); // on top: its handles may sit past the video rect's edge
 
             PointerPressed += OnCanvasPressed;
         }
@@ -90,6 +93,11 @@ namespace Clowd.UI.VideoEditor
         /// place of the gizmo) while a zoom item is selected with the playhead inside its span —
         /// the zoom overlay's answer to the gizmo, resolved the same way on every layout pass.</summary>
         public ZoomFocusControl ZoomFocus { get; }
+
+        /// <summary>The start, end and bend handles of a selected line, arrow or double arrow,
+        /// shown (over the whole preview, in place of the gizmo) while one is selected with the
+        /// playhead inside its span: a line's geometry is its endpoints, not a box.</summary>
+        public ShapeHandlesControl ShapeHandles { get; }
 
         /// <summary>The letterboxed video rectangle from the last arrange, in local coordinates.</summary>
         public Rect VideoRect { get; private set; }
@@ -148,6 +156,7 @@ namespace Clowd.UI.VideoEditor
 
                 Gizmo.Session = value;
                 ZoomFocus.Session = value;
+                ShapeHandles.Session = value;
                 InvalidateArrange();
             }
         }
@@ -398,6 +407,9 @@ namespace Clowd.UI.VideoEditor
             ZoomFocus.CanvasRect = videoRect;
             ZoomFocus.Arrange(ResolveZoomFocusRect(videoRect));
 
+            ShapeHandles.CanvasRect = videoRect;
+            ShapeHandles.Arrange(ResolveShapeHandlesRect(finalSize, videoRect));
+
             return finalSize;
         }
 
@@ -519,7 +531,10 @@ namespace Clowd.UI.VideoEditor
             var ticks = ComposedTicks(project);
             Gizmo.ComposedTicks = ticks;
 
+            // a line kind is the shape handles' (ResolveShapeHandlesRect), so exactly one overlay
+            // owns the item: a box gizmo over an arrow would resize the padding, not the arrow
             if (item == null || track is not { Kind: TrackKind.Video, Hidden: false, Locked: false } ||
+                item.Content is ShapeContent { IsLine: true } ||
                 ticks < item.TimelineStartTicks || ticks >= item.TimelineEndTicks ||
                 !ItemPlacement.TryResolve(project, item, videoRect.Width, videoRect.Height, out var placed, ticks))
             {
@@ -585,6 +600,57 @@ namespace Clowd.UI.VideoEditor
 
             ZoomFocus.SetTarget(item.Id);
             return videoRect;
+        }
+
+        /// <summary>
+        /// Where the line handles belong this pass: the <b>whole preview control</b> while the
+        /// primary selection is a line, arrow or double arrow on a live (non-hidden, non-locked)
+        /// video row with the playhead inside its span (the gizmo's own gate), and the empty "no
+        /// handles" arrange otherwise. The whole control rather than the video rect because a
+        /// control only receives presses inside its own bounds, and a line's handles can sit on or
+        /// past the frame's edge; the control offsets everything by the video rect itself, and is
+        /// see-through everywhere but its handles and ink. <see cref="ResolveGizmoRect"/> turns the
+        /// gizmo away from exactly these items, so the two never share one.
+        /// </summary>
+        private Rect ResolveShapeHandlesRect(Size finalSize, Rect videoRect)
+        {
+            var empty = new Rect(0, 0, 0, 0);
+            var session = _session;
+            if (session == null || videoRect.Width <= 0 || videoRect.Height <= 0)
+            {
+                ShapeHandles.SetTarget(Guid.Empty);
+                return empty;
+            }
+
+            var project = session.Project;
+            var item = session.PrimarySelectedItem;
+
+            Track track = null;
+            if (item?.Content is ShapeContent { IsLine: true })
+            {
+                foreach (var candidate in project.Tracks)
+                {
+                    if (candidate.Id == item.TrackId)
+                    {
+                        track = candidate;
+                        break;
+                    }
+                }
+            }
+
+            var ticks = ComposedTicks(project);
+            ShapeHandles.ComposedTicks = ticks;
+
+            if (item?.Content is not ShapeContent { IsLine: true } ||
+                track is not { Kind: TrackKind.Video, Hidden: false, Locked: false } ||
+                ticks < item.TimelineStartTicks || ticks >= item.TimelineEndTicks)
+            {
+                ShapeHandles.SetTarget(Guid.Empty);
+                return empty;
+            }
+
+            ShapeHandles.SetTarget(item.Id);
+            return new Rect(finalSize);
         }
     }
 }

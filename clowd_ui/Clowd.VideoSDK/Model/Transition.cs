@@ -17,6 +17,12 @@ public enum TransitionKind
     /// <see cref="SpeedContent"/>/<see cref="ZoomContent"/> items. Appended so the
     /// string-serialized enum stays wire-compatible.</summary>
     Ramp,
+
+    /// <summary>Shapes only (<see cref="ShapeContent"/>): a line grows along its path from start
+    /// to end, a closed outline is traced while its fill fades in, and the exit erases it from the
+    /// start the same way. Appended so the string-serialized enum stays wire-compatible; like
+    /// <see cref="Ramp"/>, an older build cannot open a project that uses it.</summary>
+    Draw,
 }
 
 public enum TransitionEasing

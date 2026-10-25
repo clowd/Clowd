@@ -367,6 +367,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Image => TimelineIcons.Find("IconImage"),
             TimelineRowKind.Background => TimelineIcons.Find("IconBackground"),
             TimelineRowKind.Obscure => TimelineIcons.Find("IconToolPixelate"),
+            TimelineRowKind.Shape => TimelineIcons.Find("IconShapes"),
             TimelineRowKind.Speed => TimelineIcons.SpeedometerGeometry,
             TimelineRowKind.Zoom => TimelineIcons.MagnifierGeometry,
             TimelineRowKind.Cursor => TimelineIcons.Find("IconCursorArrow"),

@@ -47,4 +47,8 @@
          the Clowd.Ui process. Clowd.Ui's VerifySkiaSharpMatchesAvalonia target enforces it. -->
     <PackageReference Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- the arrow and curve maths the image editor draws with, so shapes match it exactly -->
+    <ProjectReference Include="..\Clowd.Geometry\Clowd.Geometry.csproj" />
+  </ItemGroup>
 </Project>

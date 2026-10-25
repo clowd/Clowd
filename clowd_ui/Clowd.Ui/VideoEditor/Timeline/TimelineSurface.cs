@@ -1428,6 +1428,11 @@ namespace Clowd.UI.VideoEditor.Timeline
                 case ObscureContent obscure:
                     (glyph, label) = (TimelineIcons.Find("IconToolPixelate"), obscure.Kind.ToString());
                     break;
+                // the kind's own glyph and name: the card is the one place a shape says what it
+                // is (the inspector titles every kind "Shape")
+                case ShapeContent shape:
+                    (glyph, label) = (TimelineIcons.Find(ShapeKinds.IconKey(shape.Kind)), ShapeKinds.Label(shape.Kind));
+                    break;
                 case SpeedContent speed:
                     (glyph, label) = (TimelineIcons.SpeedometerGeometry,
                         speed.Factor.ToString("0.##", CultureInfo.InvariantCulture) + "×");

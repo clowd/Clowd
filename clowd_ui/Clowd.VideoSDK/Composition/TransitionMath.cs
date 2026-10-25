@@ -7,7 +7,8 @@ namespace Clowd.VideoSDK.Composition
     /// The evaluated effect of an item's entry/exit transitions at one instant, in
     /// content-independent units so <see cref="FrameComposer"/> can apply it to any picture:
     /// an opacity multiplier, a positional offset in fractions of the item's own rendered
-    /// extent, and (for wipes) the visible horizontal band of the item rect.
+    /// extent, (for wipes) the visible horizontal band of the item rect, and (for draws) the
+    /// drawn part of a shape's path.
     /// </summary>
     public readonly struct ItemEffects
     {
@@ -28,8 +29,17 @@ namespace Clowd.VideoSDK.Composition
 
         public double WipeToFrac { get; init; }
 
-        /// <summary>No effect: fully opaque, no offset, no wipe.</summary>
-        public static ItemEffects Identity => new ItemEffects { Opacity = 1, WipeToFrac = 1 };
+        /// <summary>True when a draw transition is active (shapes only); the drawn part is
+        /// [<see cref="DrawFromFrac"/>, <see cref="DrawToFrac"/>] of the shape's path length,
+        /// measured from where the path starts.</summary>
+        public bool HasDraw { get; init; }
+
+        public double DrawFromFrac { get; init; }
+
+        public double DrawToFrac { get; init; }
+
+        /// <summary>No effect: fully opaque, no offset, no wipe, the whole path drawn.</summary>
+        public static ItemEffects Identity => new ItemEffects { Opacity = 1, WipeToFrac = 1, DrawToFrac = 1 };
     }
 
     /// <summary>
@@ -87,15 +97,15 @@ namespace Clowd.VideoSDK.Composition
         /// Combines the entry and exit transitions of <paramref name="item"/> at
         /// <paramref name="timeTicks"/> into one <see cref="ItemEffects"/>. When both overlap
         /// (an item shorter than its transitions) opacities multiply, slide offsets add, and
-        /// wipe bands intersect.
+        /// wipe bands (and drawn parts) intersect.
         /// </summary>
         public static ItemEffects Evaluate(Item item, long timeTicks)
         {
             ArgumentNullException.ThrowIfNull(item);
 
             double opacity = 1, dx = 0, dy = 0;
-            bool hasWipe = false;
-            double wipeFrom = 0, wipeTo = 1;
+            bool hasWipe = false, hasDraw = false;
+            double wipeFrom = 0, wipeTo = 1, drawFrom = 0, drawTo = 1;
 
             // Ramp transitions modulate an effect/audio quantity over time (speed, zoom, volume);
             // they have no visual identity of their own, so the picture evaluation skips them.
@@ -103,14 +113,16 @@ namespace Clowd.VideoSDK.Composition
             {
                 double shown = EntryProgress(item, timeTicks);
                 if (shown < 1)
-                    Apply(item.Entry.Kind, shown, isExit: false, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo);
+                    Apply(item.Entry.Kind, shown, isExit: false, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo,
+                        ref hasDraw, ref drawFrom, ref drawTo);
             }
 
             if (IsActive(item.Exit) && item.Exit.Kind != TransitionKind.Ramp)
             {
                 double shown = ExitProgress(item, timeTicks);
                 if (shown < 1)
-                    Apply(item.Exit.Kind, shown, isExit: true, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo);
+                    Apply(item.Exit.Kind, shown, isExit: true, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo,
+                        ref hasDraw, ref drawFrom, ref drawTo);
             }
 
             return new ItemEffects
@@ -121,6 +133,9 @@ namespace Clowd.VideoSDK.Composition
                 HasWipe = hasWipe,
                 WipeFromFrac = wipeFrom,
                 WipeToFrac = wipeTo,
+                HasDraw = hasDraw,
+                DrawFromFrac = drawFrom,
+                DrawToFrac = drawTo,
             };
         }
 
@@ -136,19 +151,21 @@ namespace Clowd.VideoSDK.Composition
             TransitionKind exitKind, double exitShown)
         {
             double opacity = 1, dx = 0, dy = 0;
-            bool hasWipe = false;
-            double wipeFrom = 0, wipeTo = 1;
+            bool hasWipe = false, hasDraw = false;
+            double wipeFrom = 0, wipeTo = 1, drawFrom = 0, drawTo = 1;
 
             if (IsAnimated(entryKind) && entryShown < 1)
             {
-                Apply(entryKind, entryShown, isExit: false, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo);
+                Apply(entryKind, entryShown, isExit: false, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo,
+                        ref hasDraw, ref drawFrom, ref drawTo);
                 if (IsSlide(entryKind))
                     opacity *= Math.Clamp(entryShown, 0, 1);
             }
 
             if (IsAnimated(exitKind) && exitShown < 1)
             {
-                Apply(exitKind, exitShown, isExit: true, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo);
+                Apply(exitKind, exitShown, isExit: true, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo,
+                        ref hasDraw, ref drawFrom, ref drawTo);
                 if (IsSlide(exitKind))
                     opacity *= Math.Clamp(exitShown, 0, 1);
             }
@@ -161,6 +178,9 @@ namespace Clowd.VideoSDK.Composition
                 HasWipe = hasWipe,
                 WipeFromFrac = wipeFrom,
                 WipeToFrac = wipeTo,
+                HasDraw = hasDraw,
+                DrawFromFrac = drawFrom,
+                DrawToFrac = drawTo,
             };
         }
 
@@ -181,11 +201,14 @@ namespace Clowd.VideoSDK.Composition
         /// leaves through the opposite side it came in from. SlideLeft therefore enters from the
         /// right (offset +hidden on entry) and exits to the left (offset -hidden). A wipe
         /// travels left-to-right: entry reveals the band [0, shown], exit hides from the left,
-        /// leaving [1-shown, 1] visible.
+        /// leaving [1-shown, 1] visible. A draw follows the wipe's convention along the shape's
+        /// path: entry draws [0, shown] of it from the start, exit erases from the start, so an
+        /// arrow's tail retracts into its head.
         /// </summary>
         private static void Apply(TransitionKind kind, double shown, bool isExit,
             ref double opacity, ref double dx, ref double dy,
-            ref bool hasWipe, ref double wipeFrom, ref double wipeTo)
+            ref bool hasWipe, ref double wipeFrom, ref double wipeTo,
+            ref bool hasDraw, ref double drawFrom, ref double drawTo)
         {
             double hidden = 1 - shown;
             switch (kind)
@@ -216,6 +239,14 @@ namespace Clowd.VideoSDK.Composition
                         wipeFrom = Math.Max(wipeFrom, hidden);
                     else
                         wipeTo = Math.Min(wipeTo, shown);
+                    break;
+
+                case TransitionKind.Draw:
+                    hasDraw = true;
+                    if (isExit)
+                        drawFrom = Math.Max(drawFrom, hidden);
+                    else
+                        drawTo = Math.Min(drawTo, shown);
                     break;
             }
         }

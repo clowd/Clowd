@@ -16,6 +16,7 @@ namespace Clowd.VideoSDK.Tests
     /// add, and the editor's reading of it — the inspector's sections, the free resize and the
     /// timeline row. Framework-free like <see cref="BackgroundFreeResizeTests"/>.
     /// </summary>
+    [Collection("EditorSession clipboard")] // the copy/paste tests share its one static clipboard
     public class ObscureContentTests
     {
         private static long Ms(long ms) => ms * TimeSpan.TicksPerMillisecond;

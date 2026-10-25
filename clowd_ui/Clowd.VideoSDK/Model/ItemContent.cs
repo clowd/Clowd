@@ -7,7 +7,7 @@ namespace Clowd.VideoSDK.Model;
 /// <summary>
 /// What fills an <see cref="Item"/>'s span. Polymorphic on a <c>$type</c> discriminator
 /// (<c>media</c> / <c>text</c> / <c>image</c> / <c>solid</c> / <c>speed</c> / <c>zoom</c> /
-/// <c>cursor</c> / <c>keyboard</c> / <c>background</c> / <c>obscure</c>) via System.Text.Json's built-in
+/// <c>cursor</c> / <c>keyboard</c> / <c>background</c> / <c>obscure</c> / <c>shape</c>) via System.Text.Json's built-in
 /// polymorphism, which the source-generated <see cref="ProjectJsonContext"/> supports. The
 /// discriminator strings are wire contract — renaming a class is free, renaming a discriminator
 /// breaks every saved project.
@@ -23,6 +23,7 @@ namespace Clowd.VideoSDK.Model;
 [JsonDerivedType(typeof(KeyboardContent), "keyboard")]
 [JsonDerivedType(typeof(BackgroundContent), "background")]
 [JsonDerivedType(typeof(ObscureContent), "obscure")]
+[JsonDerivedType(typeof(ShapeContent), "shape")]
 public abstract class ItemContent
 {
     /// <summary>Deep copy, used by <see cref="TimelineOps.Split"/> so the two halves never share
@@ -254,6 +255,215 @@ public sealed class ObscureContent : ItemContent
     public double Strength { get; set; } = DefaultStrength;
 
     public override ItemContent Clone() => new ObscureContent { Kind = Kind, Strength = Strength };
+}
+
+/// <summary>What a <see cref="ShapeContent"/> draws. Serialized as a string (see
+/// <see cref="ProjectJsonContext"/>), so the names are wire contract: append new kinds, never
+/// rename one. An older build refuses a name it does not know (the string enum converter throws),
+/// so a project using a newer kind does not open there; that beats silently turning the shape into
+/// a rectangle and saving it back that way.</summary>
+public enum ShapeKind
+{
+    Rectangle,
+    Ellipse,
+    Triangle,
+    Diamond,
+
+    /// <summary>A regular polygon of <see cref="ShapeContent.PolygonSides"/> sides.</summary>
+    Polygon,
+
+    /// <summary><see cref="ShapeContent.StarPoints"/> points, the inner vertices at
+    /// <see cref="ShapeContent.StarInnerRatio"/> of the outer radius.</summary>
+    Star,
+
+    Heart,
+
+    /// <summary>A speech bubble with its tail at the bottom left.</summary>
+    Bubble,
+
+    /// <summary>A stroked line between two endpoints; this and the two arrow kinds are the line
+    /// kinds (<see cref="ShapeContent.IsLineKind"/>).</summary>
+    Line,
+
+    /// <summary>The image editor's arrow: a tapered shaft and a head at the end point.</summary>
+    Arrow,
+
+    /// <summary>An arrow with a head at both endpoints.</summary>
+    DoubleArrow,
+}
+
+/// <summary>The image editor's ink dash styles; the patterns are multiples of the stroke width
+/// (Dashed 4 on, 2 off; Dotted 1 on, 2 off). Serialized as a string, with the same append-only
+/// rule as <see cref="ShapeKind"/>.</summary>
+public enum ShapeDash
+{
+    Solid,
+    Dashed,
+    Dotted,
+}
+
+/// <summary>
+/// A vector shape: a closed outline (rectangle, ellipse, polygon, star, heart, speech bubble) or a
+/// line kind (line, arrow, double arrow), drawn by the composer in both the preview and the
+/// render, so it is placed, faded, slid, wiped and surrounded exactly like every other visual item.
+///
+/// <para>Boxed like a <see cref="SolidContent"/>: its natural size is the canvas, so
+/// <see cref="Transform.Scale"/> is a fraction of the canvas width and <see cref="Transform.ScaleY"/>
+/// a fraction of its height, and like an <see cref="ObscureContent"/> it lives permanently
+/// free-sized (ScaleY set, see <see cref="Project.Normalize"/>). A closed shape fills that box and
+/// its outline is stroked <b>inside</b> it, as the image editor strokes its rectangles, so the ink
+/// never leaves the box the gizmo shows. Crop, aspect, mask and effect do not apply.</para>
+///
+/// <para>A line kind's geometry is its endpoints, stored as fractions of the box
+/// (<see cref="StartX"/>..<see cref="EndY"/>), and a bow (<see cref="Bend"/>,
+/// <see cref="BendSkew"/>) stored relative to the chord, so moving or stretching the box carries
+/// the line with it. The editor's handles rewrite the box tightly around the line on every drag
+/// (<c>ShapeLineLayout.Write</c>), and every kind change goes through
+/// <c>ShapeLineLayout.ConvertKind</c>.</para>
+///
+/// <para>Stroke widths and corner radii are output-canvas pixels, mapped onto a smaller preview
+/// canvas exactly like <see cref="TextContent.Size"/>, so the preview matches the render.</para>
+/// </summary>
+public sealed class ShapeContent : ItemContent
+{
+    /// <summary>The image editor's default ink (its <c>ObjectColor</c>).</summary>
+    public const string DefaultStrokeColor = "#FFFF0000";
+
+    /// <summary>What a bare entry reads with. A shape the editor adds is seeded from the output
+    /// height instead (<c>EditorSession.AddShape</c>), the way a text card's size is.</summary>
+    public const double DefaultStrokeWidth = 6;
+
+    /// <summary>The range <see cref="StrokeWidth"/> is validated to, and what the editor's
+    /// spinner offers. 0 draws no outline on a closed shape.</summary>
+    public const double MinStrokeWidth = 0;
+
+    public const double MaxStrokeWidth = 200;
+
+    /// <summary>The thinnest a line kind draws: it has no fill, so a width of 0 would draw
+    /// nothing at all.</summary>
+    public const double MinLineStrokeWidth = 1;
+
+    /// <summary>Red at 35%: with the red outline it makes a highlight box.</summary>
+    public const string DefaultFillColor = "#59FF0000";
+
+    public const double MinCornerRadius = 0;
+
+    public const double MaxCornerRadius = 1000;
+
+    public const double DefaultCornerRadius = 0;
+
+    public const int MinPolygonSides = 3;
+
+    public const int MaxPolygonSides = 12;
+
+    public const int DefaultPolygonSides = 6;
+
+    public const int MinStarPoints = 3;
+
+    public const int MaxStarPoints = 12;
+
+    public const int DefaultStarPoints = 5;
+
+    public const double MinStarInnerRatio = 0.1;
+
+    public const double MaxStarInnerRatio = 0.95;
+
+    public const double DefaultStarInnerRatio = 0.5;
+
+    /// <summary>The range each endpoint fraction is validated to: a line may reach well past its
+    /// box after a programmatic stretch, but not without bound.</summary>
+    public const double MinLineCoord = -1;
+
+    public const double MaxLineCoord = 2;
+
+    /// <summary>The largest <see cref="Bend"/> either way, in chord lengths.</summary>
+    public const double MaxBend = 4;
+
+    /// <summary>The largest <see cref="BendSkew"/> either way: the image editor's limit
+    /// (<c>CurveBend.MaxSkew</c>), past which the curve folds back on itself.</summary>
+    public const double MaxBendSkew = 0.25;
+
+    public ShapeKind Kind { get; set; } = ShapeKind.Rectangle;
+
+    /// <summary>The outline's color, and the whole ink of a line kind, as <c>#AARRGGBB</c> (or
+    /// <c>#RRGGBB</c>). An unparseable value draws the default red.</summary>
+    public string StrokeColor { get; set; } = DefaultStrokeColor;
+
+    /// <summary>Output-canvas pixels. 0 draws no outline on a closed shape; a line kind draws at
+    /// least <see cref="MinLineStrokeWidth"/>.</summary>
+    public double StrokeWidth { get; set; } = DefaultStrokeWidth;
+
+    public ShapeDash Dash { get; set; } = ShapeDash.Solid;
+
+    /// <summary>Whether a closed shape is filled with <see cref="FillColor"/>. A flag rather than
+    /// a zero alpha, so turning the fill off and back on keeps the color. Line kinds ignore it.</summary>
+    public bool Fill { get; set; }
+
+    public string FillColor { get; set; } = DefaultFillColor;
+
+    /// <summary>Output pixels, on the kinds with corners (<see cref="HasCorners"/>). Each
+    /// vertex's radius is clamped so its arc stays within half of each edge beside it, so a large
+    /// value rounds every corner as far as it can go.</summary>
+    public double CornerRadius { get; set; } = DefaultCornerRadius;
+
+    public int PolygonSides { get; set; } = DefaultPolygonSides;
+
+    public int StarPoints { get; set; } = DefaultStarPoints;
+
+    /// <summary>The inner vertices' radius over the outer one, before the star is stretched to
+    /// fill its box.</summary>
+    public double StarInnerRatio { get; set; } = DefaultStarInnerRatio;
+
+    /// <summary>Line kinds: the start point as a fraction of the box (0, 0 is its top left). The
+    /// default line runs from the bottom left corner to the top right one.</summary>
+    public double StartX { get; set; } = 0;
+
+    public double StartY { get; set; } = 1;
+
+    /// <summary>Line kinds: the end point (where an arrow's head is), as a fraction of the box.</summary>
+    public double EndX { get; set; } = 1;
+
+    public double EndY { get; set; } = 0;
+
+    /// <summary>Line kinds: the bow, as the image editor's <c>CurveOffset</c> divided by the chord
+    /// length: signed, along the chord's left normal in canvas space (y down). 0 is straight.</summary>
+    public double Bend { get; set; }
+
+    /// <summary>Line kinds: the image editor's <c>CurveSkew</c>, the bow's lean along the chord
+    /// as a fraction of it (positive toward the end).</summary>
+    public double BendSkew { get; set; }
+
+    public static bool IsLineKind(ShapeKind kind) =>
+        kind is ShapeKind.Line or ShapeKind.Arrow or ShapeKind.DoubleArrow;
+
+    /// <summary>The kinds <see cref="CornerRadius"/> rounds.</summary>
+    public static bool HasCorners(ShapeKind kind) => kind is ShapeKind.Rectangle or ShapeKind.Triangle
+        or ShapeKind.Diamond or ShapeKind.Polygon or ShapeKind.Star or ShapeKind.Bubble;
+
+    /// <summary>Computed from <see cref="Kind"/> and never stored: everything that changes how a
+    /// shape draws must serialize, or undo (which snapshots the JSON) would lose it.</summary>
+    [JsonIgnore]
+    public bool IsLine => IsLineKind(Kind);
+
+    public override ItemContent Clone() => new ShapeContent
+    {
+        Kind = Kind,
+        StrokeColor = StrokeColor,
+        StrokeWidth = StrokeWidth,
+        Dash = Dash,
+        Fill = Fill,
+        FillColor = FillColor,
+        CornerRadius = CornerRadius,
+        PolygonSides = PolygonSides,
+        StarPoints = StarPoints,
+        StarInnerRatio = StarInnerRatio,
+        StartX = StartX,
+        StartY = StartY,
+        EndX = EndX,
+        EndY = EndY,
+        Bend = Bend,
+        BendSkew = BendSkew,
+    };
 }
 
 /// <summary>A playback-speed effect: while the item is active the whole output plays at

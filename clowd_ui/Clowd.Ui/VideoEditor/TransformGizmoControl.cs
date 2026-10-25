@@ -49,10 +49,8 @@ namespace Clowd.UI.VideoEditor
     /// </summary>
     public sealed class TransformGizmoControl : Panel
     {
-        /// <summary>Diameter of a handle, matching the image editor's
-        /// <c>GraphicBase.UnscaledControlSize</c> — the two editors draw the same control, so they
-        /// are the same size as well as the same shape.</summary>
-        private const double HandleSize = 12;
+        /// <summary>Diameter of a handle (<see cref="PreviewHandles.Size"/>, the image editor's).</summary>
+        private const double HandleSize = PreviewHandles.Size;
 
         private const double HandleHitSize = 16;
 
@@ -1001,7 +999,7 @@ namespace Clowd.UI.VideoEditor
                         bounds);
 
                     foreach (var (_, point) in HandlePoints(bounds, withEdges: true, widthOnly: false))
-                        DrawHandle(context, point, accent);
+                        PreviewHandles.Draw(context, point, accent);
 
                     return;
                 }
@@ -1036,7 +1034,7 @@ namespace Clowd.UI.VideoEditor
                 // by its four corners alone. A width-only block gets its two side handles instead
                 // of all of these.
                 foreach (var (_, point) in HandlePoints(bounds, _owner.ShowEdgeHandles, _owner._widthOnly))
-                    DrawHandle(context, point, accent);
+                    PreviewHandles.Draw(context, point, accent);
 
                 // …and no rotate affordance for one either, for the same reason: the composer
                 // draws it upright.
@@ -1052,17 +1050,6 @@ namespace Clowd.UI.VideoEditor
                     new Point(bounds.Right, bounds.Center.Y), rotateCenter);
                 context.DrawEllipse(Brushes.Green, null, rotateCenter,
                     HandleSize / 2 - 1, HandleSize / 2 - 1);
-            }
-
-            /// <summary>The image editor's tracker, so the two editors' selection chrome reads as
-            /// one control: three concentric circles — accent, a white ring 1px in, accent again
-            /// (see <c>GraphicBase.DrawSingleTracker</c>).</summary>
-            private static void DrawHandle(DrawingContext context, Point center, IBrush accent)
-            {
-                var radius = HandleSize / 2;
-                context.DrawEllipse(accent, null, center, radius, radius);
-                context.DrawEllipse(Brushes.White, null, center, radius - 1, radius - 1);
-                context.DrawEllipse(accent, null, center, radius - 3, radius - 3);
             }
         }
     }

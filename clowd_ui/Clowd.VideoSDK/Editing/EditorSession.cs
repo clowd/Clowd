@@ -884,15 +884,16 @@ namespace Clowd.VideoSDK.Editing
         /// </summary>
         private static string s_clipboard;
 
-        /// <summary>Whether <see cref="CopyItem"/> can lift the item: media, text, images, solids
-        /// and obscure boxes on a video or audio row. Effect items and input overlays are defined by
-        /// the rows they sit on and have nowhere else to go.</summary>
+        /// <summary>Whether <see cref="CopyItem"/> can lift the item: media, text, images, solids,
+        /// obscure boxes and shapes on a video or audio row. Effect items and input overlays are
+        /// defined by the rows they sit on and have nowhere else to go.</summary>
         public bool CanCopyItem(Guid itemId)
         {
             var item = Project.Items.FirstOrDefault(i => i.Id == itemId);
             var track = item == null ? null : Project.Tracks.FirstOrDefault(t => t.Id == item.TrackId);
             return track is { Kind: TrackKind.Video or TrackKind.Audio }
-                   && item.Content is MediaContent or TextContent or ImageContent or SolidContent or ObscureContent;
+                   && item.Content is MediaContent or TextContent or ImageContent or SolidContent or ObscureContent
+                       or ShapeContent;
         }
 
         /// <summary>Copies the item to the clip clipboard (see <see cref="CanCopyItem"/>).
@@ -1467,6 +1468,48 @@ namespace Clowd.VideoSDK.Editing
 
         /// <summary>A fresh obscure box's width and height, as fractions of the canvas's.</summary>
         public const double DefaultObscureExtent = 1.0 / 3;
+
+        /// <summary>
+        /// Adds a shape (<see cref="ShapeContent"/>) on the topmost free video row (a fresh row
+        /// when none is), centered and square in output pixels: <see cref="DefaultShapeExtent"/>
+        /// of the canvas wide, its height written out so the box is square, free-sized from birth
+        /// like <see cref="AddObscure"/>'s box. The outline is the image editor's red, its width
+        /// seeded from the output size (6 px at 1080p, 4 at 720p, 12 at 4K, never under 2) the way
+        /// <see cref="AddText"/> sizes a card against the canvas. A line kind is built as that
+        /// square and then converted (<see cref="Composition.ShapeLineLayout.ConvertKind"/>), so
+        /// an arrow added here looks exactly like a rectangle turned into one: corner to corner
+        /// across the box, inset by the head's reach. Returns the live item, or null when rolled
+        /// back.
+        /// </summary>
+        public Item AddShape(long startTicks, long durationTicks, ShapeKind kind = ShapeKind.Rectangle,
+            object origin = null)
+        {
+            Item created = null;
+            var committed = Mutate("Add Shape", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                var (width, height) = Composition.ShapeLineLayout.OutputCanvas(p.Output);
+                created = new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = FindOrCreateFreeVideoTrack(p, startTicks, durationTicks).Id,
+                    TimelineStartTicks = startTicks,
+                    DurationTicks = durationTicks,
+                    Content = new ShapeContent { StrokeWidth = Math.Max(2, Math.Round(height / 180)) },
+                    Transform = new Transform
+                    {
+                        Scale = DefaultShapeExtent,
+                        ScaleY = DefaultShapeExtent * width / height,
+                    },
+                };
+                Composition.ShapeLineLayout.ConvertKind(created, kind, p.Output);
+                p.Items.Add(created);
+            });
+            return committed ? created : null;
+        }
+
+        /// <summary>A fresh shape's width, as a fraction of the canvas width; its height is set so
+        /// the box is square in pixels.</summary>
+        public const double DefaultShapeExtent = 0.25;
 
         /// <summary>
         /// Adds a wallpaper from the embedded library (<see cref="Composition.BackgroundCatalog"/>)

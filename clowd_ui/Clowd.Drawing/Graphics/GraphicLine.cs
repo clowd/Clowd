@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
 using Clowd.Drawing.Rendering;
+using Clowd.Geometry2D;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -70,15 +71,15 @@ namespace Clowd.Drawing.Graphics
 
         // the mid handle may slide this far (as a fraction of the chord length) either side of the
         // chord midpoint — enough for a lopsided bend without letting the curve fold back on itself
-        internal const double MaxCurveSkew = 0.25;
+        internal const double MaxCurveSkew = CurveBend.MaxSkew;
 
         // Shift-drag quantizes the bow to multiples of this fraction of the chord length (and drops
         // the skew), so a bend is easy to straighten exactly or repeat across several lines
-        internal const double SnappedOffsetStep = 0.1;
+        internal const double SnappedOffsetStep = CurveBend.SnappedOffsetStep;
 
         // segments used to walk the curve when converting between arc length and the bezier
         // parameter (only runs when the cached geometries are refilled, never per pointer event)
-        internal const int CurveSampleCount = 32;
+        internal const int CurveSampleCount = QuadraticCurve.SampleCount;
 
         protected GraphicLine()
         { }
@@ -129,9 +130,7 @@ namespace Clowd.Drawing.Graphics
             {
                 // the curve handle sits ON the ink (the t=0.5 point), not on the bezier control
                 // point, so it stays under the pointer while dragging
-                return TryGetControlPoint(out var control)
-                    ? EvalQuadratic(LineStart, control, LineEnd, 0.5)
-                    : ChordMidpoint();
+                return CurveBend.HandlePoint(LineStart.ToVec(), LineEnd.ToVec(), _curveOffset, _curveSkew).ToPoint();
             }
 
             return handleNumber == 1 ? LineStart : LineEnd;
@@ -171,34 +170,12 @@ namespace Clowd.Drawing.Graphics
         {
             if (handleNumber == MidHandle)
             {
-                if (!TryGetChordNormal(out var normal))
-                    return; // a zero-length chord has no normal to project onto — nothing to bow around
-
-                var length = ChordLength();
-                var tangent = new Vector(normal.Y, -normal.X);
-                var mid = ChordMidpoint();
-                var dx = point.X - mid.X;
-                var dy = point.Y - mid.Y;
-                var offset = dx * normal.X + dy * normal.Y;
-                var skew = (dx * tangent.X + dy * tangent.Y) / length;
-
-                if ((modifiers & KeyModifiers.Shift) != 0)
-                {
-                    var step = SnappedOffsetStep * length;
-                    offset = Math.Round(offset / step) * step;
-                    skew = 0;
-                }
-                else
-                {
-                    skew = Math.Clamp(skew, -MaxCurveSkew, MaxCurveSkew);
-                }
-
-                if (Math.Abs(offset) < StraightSnapDistance)
-                    offset = 0;
-
-                // a straight line has no bend to lean, so it always carries the symmetric default
-                if (offset == 0)
-                    skew = 0;
+                // the projection, the Shift snap, the skew clamp and the snap to straight live in
+                // the shared core, so the video editor's arrows bend exactly like these
+                var snap = (modifiers & KeyModifiers.Shift) != 0;
+                if (!CurveBend.TryBendFromPointer(LineStart.ToVec(), LineEnd.ToVec(), point.ToVec(), snap,
+                                                  StraightSnapDistance, out var offset, out var skew))
+                    return; // a zero-length chord has no normal to project onto, so nothing to bow around
 
                 CurveOffset = offset;
                 CurveSkew = skew;
@@ -247,35 +224,9 @@ namespace Clowd.Drawing.Graphics
         /// </summary>
         protected bool TryGetControlPoint(out Point control)
         {
-            if (_curveOffset == 0 || !TryGetChordNormal(out var normal))
-            {
-                control = default;
-                return false;
-            }
-
-            var mid = ChordMidpoint();
-            var along = _curveSkew * ChordLength();
-            control = new Point(mid.X + 2 * (_curveOffset * normal.X + along * normal.Y),
-                                mid.Y + 2 * (_curveOffset * normal.Y - along * normal.X));
-            return true;
-        }
-
-        private double ChordLength() => Distance(LineStart, LineEnd);
-
-        protected Point ChordMidpoint() => new Point((LineStart.X + LineEnd.X) / 2, (LineStart.Y + LineEnd.Y) / 2);
-
-        protected bool TryGetChordNormal(out Vector normal)
-        {
-            var chord = new Vector(LineEnd.X - LineStart.X, LineEnd.Y - LineStart.Y);
-            var length = chord.Length;
-            if (length <= 0)
-            {
-                normal = default;
-                return false;
-            }
-
-            normal = new Vector(-chord.Y / length, chord.X / length);
-            return true;
+            var curved = CurveBend.TryControlPoint(LineStart.ToVec(), LineEnd.ToVec(), _curveOffset, _curveSkew, out var c);
+            control = c.ToPoint();
+            return curved;
         }
 
         internal static Geometry BuildQuadratic(Point start, Point control, Point end)
@@ -291,41 +242,19 @@ namespace Clowd.Drawing.Graphics
             return geometry;
         }
 
+        // the quadratic helpers live in the shared core; these keep their Point-based callers as
+        // they were
+
         /// <summary>Bezier parameter at <paramref name="length"/> along the sampled polyline.</summary>
-        internal static double ParameterAtLength(ReadOnlySpan<double> cumulative, double length)
-        {
-            int segments = cumulative.Length - 1;
-            for (int i = 1; i <= segments; i++)
-            {
-                if (cumulative[i] < length)
-                    continue;
+        internal static double ParameterAtLength(ReadOnlySpan<double> cumulative, double length) =>
+            QuadraticCurve.ParameterAtLength(cumulative, length);
 
-                var span = cumulative[i] - cumulative[i - 1];
-                var fraction = span > 0 ? (length - cumulative[i - 1]) / span : 0;
-                return (i - 1 + fraction) / segments;
-            }
-
-            return 1;
-        }
-
-        internal static Point EvalQuadratic(Point start, Point control, Point end, double t)
-        {
-            var mt = 1 - t;
-            var a = mt * mt;
-            var b = 2 * mt * t;
-            var c = t * t;
-            return new Point(a * start.X + b * control.X + c * end.X,
-                             a * start.Y + b * control.Y + c * end.Y);
-        }
+        internal static Point EvalQuadratic(Point start, Point control, Point end, double t) =>
+            QuadraticCurve.Eval(start.ToVec(), control.ToVec(), end.ToVec(), t).ToPoint();
 
         internal static Point Lerp(Point from, Point to, double t) =>
-            new Point(from.X + (to.X - from.X) * t, from.Y + (to.Y - from.Y) * t);
+            QuadraticCurve.Lerp(from.ToVec(), to.ToVec(), t).ToPoint();
 
-        internal static double Distance(Point a, Point b)
-        {
-            var dx = b.X - a.X;
-            var dy = b.Y - a.Y;
-            return Math.Sqrt(dx * dx + dy * dy);
-        }
+        internal static double Distance(Point a, Point b) => QuadraticCurve.Distance(a.ToVec(), b.ToVec());
     }
 }

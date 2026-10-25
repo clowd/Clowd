@@ -170,6 +170,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         private IBrush _cursorFill;
         private IBrush _keyboardFill;
         private IBrush _obscureFill;
+        private IBrush _shapeFill;
 
         /// <summary>Body fill for an item on a row of this kind. Video keeps the accent (it is the
         /// recording, the thing the editor is about); the other kinds get their own hue so a glance
@@ -185,6 +186,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Cursor => _cursorFill,
             TimelineRowKind.Keyboard => _keyboardFill,
             TimelineRowKind.Obscure => _obscureFill,
+            TimelineRowKind.Shape => _shapeFill,
             _ => _videoFill,
         };
 
@@ -375,6 +377,11 @@ namespace Clowd.UI.VideoEditor.Timeline
             // pixels reads as a censor bar, and no other kind is anywhere near gray.
             var obscure = dark ? Color.FromRgb(98, 106, 120) : Color.FromRgb(116, 124, 138);
 
+            // the shape row: coral, the warm red-orange gap between the image row's amber (hue
+            // about 34) and the speed row's rose (about 349). Speed sits in its own pinned block
+            // above the video block, so the two never lie side by side.
+            var shape = dark ? Color.FromRgb(196, 96, 72) : Color.FromRgb(218, 116, 90);
+
             var playheadColor = dark ? Color.FromRgb(240, 82, 82) : Color.FromRgb(212, 48, 48);
 
             var surfaceColor = dark ? Color.FromRgb(30, 30, 32) : Color.FromRgb(232, 233, 236);
@@ -423,6 +430,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _cursorFill = new SolidColorBrush(cursor, dark ? 0.85 : 0.9),
                 _keyboardFill = new SolidColorBrush(keyboard, dark ? 0.85 : 0.9),
                 _obscureFill = new SolidColorBrush(obscure, dark ? 0.85 : 0.9),
+                _shapeFill = new SolidColorBrush(shape, dark ? 0.85 : 0.9),
                 ItemBorderPen = new Pen(new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.35), 1),
                 ItemLabelBrush = new SolidColorBrush(dark ? Color.FromRgb(240, 240, 240) : Colors.White),
                 FilmstripPlaceholderFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.12),

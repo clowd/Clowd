@@ -10,6 +10,7 @@ namespace Clowd.VideoSDK.Tests
 {
     // The timeline gap operations (TimelineOps.FindGap and friends), the freeze-frame media flag
     // they introduce, and the session wrappers the timeline's gap menu calls.
+    [Collection("EditorSession clipboard")] // the copy/paste tests share its one static clipboard
     public class TimelineGapTests
     {
         private static long Ms(long ms) => ms * TimeSpan.TicksPerMillisecond;

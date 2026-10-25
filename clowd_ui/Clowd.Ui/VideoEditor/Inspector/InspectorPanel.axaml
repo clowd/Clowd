@@ -671,6 +671,8 @@
                         <Rectangle Classes="sectionRule" />
                     </DockPanel>
 
+                    <!--  0-100% of the canvas, except for a line or arrow, whose padded box may
+                          legally sit centered off the canvas (see PositionMin)  -->
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding PositionX, Mode=TwoWay}" DefaultValue="0.5" />
@@ -678,8 +680,8 @@
                         <TextBlock Classes="label" Text="Center X" />
                         <controls:ThemedSpinner
                             DisplayScale="100"
-                            Max="1"
-                            Min="0"
+                            Max="{Binding PositionMax}"
+                            Min="{Binding PositionMin}"
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding PositionX, Mode=TwoWay}" />
@@ -692,8 +694,8 @@
                         <TextBlock Classes="label" Text="Center Y" />
                         <controls:ThemedSpinner
                             DisplayScale="100"
-                            Max="1"
-                            Min="0"
+                            Max="{Binding PositionMax}"
+                            Min="{Binding PositionMin}"
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding PositionY, Mode=TwoWay}" />
@@ -1611,6 +1613,249 @@
                             Suffix="px"
                             Value="{Binding ObscureStrength, Mode=TwoWay}" />
                     </DockPanel>
+                </StackPanel>
+
+                <!--  shape: the kind picker, the dials only some kinds have, and the outline (a line
+                      kind's whole ink) and fill. Placement, opacity, entry/exit and surround are
+                      the ordinary sections. Every x:Name here starts with "shape" so none can meet
+                      the mask section's shape tiles, which are also titled SHAPE (the two are never
+                      on show together: a shape takes no mask).  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowShape}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="SHAPE" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  each tile draws its kind through the composer's own ShapeRenderer in the
+                          item's current colors, dash and fill, so the row reads as "this shape in
+                          your style". The style comes off the panel, the kind off the tile's item.
+                          ItemsSource is assigned in code-behind, like the other pickers'.  -->
+                    <ListBox
+                        x:Name="listShapeKind"
+                        AutoScrollToSelectedItem="False"
+                        Margin="0,0,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        SelectedItem="{Binding ShapeKindChoice, Mode=TwoWay}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="3" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel
+                                    Margin="0,6"
+                                    HorizontalAlignment="Center"
+                                    Orientation="Vertical"
+                                    Spacing="4"
+                                    ToolTip.Tip="{Binding Tip}">
+                                    <insp:ShapeKindPreview
+                                        Width="28"
+                                        Height="22"
+                                        HorizontalAlignment="Center"
+                                        CornerRadius="{Binding $parent[ListBox].DataContext.ShapeCornerRadius}"
+                                        Dash="{Binding $parent[ListBox].DataContext.ShapeDash}"
+                                        Fill="{Binding $parent[ListBox].DataContext.ShapeFill}"
+                                        FillColor="{Binding $parent[ListBox].DataContext.ShapeFillColorHex}"
+                                        Kind="{Binding Value}"
+                                        PolygonSides="{Binding $parent[ListBox].DataContext.ShapePolygonSides}"
+                                        StarInnerRatio="{Binding $parent[ListBox].DataContext.ShapeStarInnerRatio}"
+                                        StarPoints="{Binding $parent[ListBox].DataContext.ShapeStarPoints}"
+                                        StrokeColor="{Binding $parent[ListBox].DataContext.ShapeStrokeColorHex}"
+                                        StrokeWidth="{Binding $parent[ListBox].DataContext.ShapeStrokeWidth}" />
+                                    <TextBlock
+                                        Classes="tileText"
+                                        HorizontalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowShapeSides}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ShapePolygonSides, Mode=TwoWay}" DefaultValue="6" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Sides" />
+                        <controls:ThemedSpinner
+                            Max="12"
+                            Min="3"
+                            SnapToWholeNumber="True"
+                            SpinAmount="1"
+                            Value="{Binding ShapePolygonSides, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowShapeStar}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ShapeStarPoints, Mode=TwoWay}" DefaultValue="5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Points" />
+                        <controls:ThemedSpinner
+                            Max="12"
+                            Min="3"
+                            SnapToWholeNumber="True"
+                            SpinAmount="1"
+                            Value="{Binding ShapeStarPoints, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  how deep the points cut: the inner vertices' radius over the outer one  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowShapeStar}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ShapeStarInnerRatio, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Inner" />
+                        <controls:ThemedSpinner
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0.1"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding ShapeStarInnerRatio, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  output pixels; each corner rounds as far as its edges allow  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowShapeCorners}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ShapeCornerRadius, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Corners" />
+                        <controls:ThemedSpinner
+                            Max="1000"
+                            Min="0"
+                            SpinAmount="2"
+                            Suffix="px"
+                            Value="{Binding ShapeCornerRadius, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  the outline of a closed shape, or the whole of a line kind (headed LINE
+                          then, and never thinner than 1: a line has nothing else to draw)  -->
+                    <DockPanel Margin="0,8,0,0">
+                        <TextBlock Classes="section" Text="{Binding ShapeStrokeHeader}" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ShapeStrokeWidth, Mode=TwoWay}" DefaultValue="6" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Width" />
+                        <controls:ThemedSpinner
+                            Max="200"
+                            Min="{Binding ShapeStrokeMin}"
+                            SpinAmount="1"
+                            Suffix="px"
+                            Value="{Binding ShapeStrokeWidth, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  the well shares the text card's picker (see the code-behind)  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ShapeStrokeColorHex, Mode=TwoWay}" DefaultValue="#FFFF0000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Color" />
+                        <Border
+                            x:Name="shapeStrokeColorWell"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Classes="well"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="shapeStrokeColorSwatch" Fill="Red" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtShapeStrokeColorHex"
+                                    VerticalAlignment="Center"
+                                    Classes="dim"
+                                    Text="#FFFF0000" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotShapeDash" CurrentValue="{Binding ShapeDash, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Style" />
+                        <controls:ThemedDropDown x:Name="comboShapeDash" SelectedItem="{Binding ShapeDash, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  closed kinds only: a line has no inside to fill  -->
+                    <DockPanel Margin="0,8,0,0" IsVisible="{Binding ShowShapeFill}">
+                        <TextBlock Classes="section" Text="FILL" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  a switch rather than a zero alpha, so turning the fill off and back on
+                          keeps its color  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowShapeFill}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotShapeFill" CurrentValue="{Binding ShapeFill, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Fill" />
+                        <CheckBox IsChecked="{Binding ShapeFill, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <!--  its alpha is the fill's own opacity: the default is a 35% red, a highlight
+                          box under the red outline  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowShapeFillColor}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ShapeFillColorHex, Mode=TwoWay}" DefaultValue="#59FF0000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Color" />
+                        <Border
+                            x:Name="shapeFillColorWell"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Classes="well"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="shapeFillColorSwatch" Fill="Red" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtShapeFillColorHex"
+                                    VerticalAlignment="Center"
+                                    Classes="dim"
+                                    Text="#59FF0000" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
+                    <!--  a warning, not a block: a closed shape with no outline and no visible
+                          fill draws nothing. Indented to the label column, like the voice
+                          recorder's note.  -->
+                    <TextBlock
+                        Margin="14,2,0,0"
+                        FontSize="11"
+                        Classes="caption"
+                        IsVisible="{Binding ShowShapeInvisibleHint}"
+                        Text="Nothing is drawn. Turn on the fill or give the outline a width."
+                        TextWrapping="Wrap" />
                 </StackPanel>
 
                 <!--  cursor overlay: where it is drawn is the recording's business (the capture
