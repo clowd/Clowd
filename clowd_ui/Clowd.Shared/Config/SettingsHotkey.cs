@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 
 namespace Clowd.Config
 {
@@ -13,6 +14,69 @@ namespace Clowd.Config
     /// </summary>
     public class SettingsHotkey : SimpleNotifyObject
     {
+        /// <summary>This OS's defaults — the constructor the settings binder uses, so a missing
+        /// file or value falls back to them.</summary>
+        public SettingsHotkey() : this(HotkeyGesture.CurrentPlatform) { }
+
+        /// <summary>The defaults as they are on <paramref name="platform"/>, so each OS's set can
+        /// be tested on any one. Only the screenshot actions have defaults: the PrintScreen family
+        /// on Windows (and anywhere else). A Mac has no PrintScreen key code, so there region is
+        /// Cmd+Shift+2 — first, as the one the capture page's caption names — and F13, which sits
+        /// where PrintScreen does on a PC keyboard plugged into a Mac; the active screen is
+        /// Cmd+Shift+1. The active window and recording have none there: macOS takes Cmd+Shift+3/4/5
+        /// itself, and anything further risks colliding with the user's other tools.</summary>
+        public SettingsHotkey(OSPlatform platform)
+        {
+            if (platform == OSPlatform.OSX)
+            {
+                const HotkeyModifiers CmdShift = HotkeyModifiers.Meta | HotkeyModifiers.Shift;
+                _captureRegionShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.D2, CmdShift), new HotkeyGesture(HotkeyKey.F13));
+                _captureFullscreenShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.D1, CmdShift));
+            }
+            else
+            {
+                _captureRegionShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen));
+                _captureFullscreenShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control));
+                _captureActiveShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt));
+                _startStopRecordingShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Shift));
+            }
+        }
+
+        /// <summary>Which defaults the file was written against, so a change to them can be
+        /// carried into a file that still holds the old ones (see
+        /// <see cref="MigrateDefaults"/>). Always this build's: a file is written as it now is. A
+        /// file that has no value predates per-OS defaults.</summary>
+        [Browsable(false)]
+        public int DefaultsVersion => CurrentDefaultsVersion;
+
+        /// <summary>1: the screenshot defaults depend on the OS (before, every OS got the
+        /// PrintScreen family).</summary>
+        internal const int CurrentDefaultsVersion = 1;
+
+        /// <summary>
+        /// Brings forward a file written against <paramref name="writtenWith"/>'s defaults (0: none
+        /// recorded). Only a Mac has anything to do: there every build before per-OS defaults wrote
+        /// out the PrintScreen family, which a Mac cannot register — so each screenshot action
+        /// still holding exactly its old default gets this OS's default instead. A gesture the user
+        /// chose is left alone, as is everything on any other OS.
+        /// </summary>
+        public void MigrateDefaults(int writtenWith, OSPlatform platform)
+        {
+            if (writtenWith >= 1 || platform != OSPlatform.OSX)
+                return;
+
+            var old = new SettingsHotkey(OSPlatform.Windows);
+            var now = new SettingsHotkey(platform);
+            if (Equals(CaptureRegionShortcut, old.CaptureRegionShortcut))
+                CaptureRegionShortcut = now.CaptureRegionShortcut;
+            if (Equals(CaptureFullscreenShortcut, old.CaptureFullscreenShortcut))
+                CaptureFullscreenShortcut = now.CaptureFullscreenShortcut;
+            if (Equals(CaptureActiveShortcut, old.CaptureActiveShortcut))
+                CaptureActiveShortcut = now.CaptureActiveShortcut;
+            if (Equals(StartStopRecordingShortcut, old.StartStopRecordingShortcut))
+                StartStopRecordingShortcut = now.StartStopRecordingShortcut;
+        }
+
         // the rows for a feature that can be switched off (uploads, recording) go with it: the
         // gesture is kept, but a shortcut for something the app no longer offers is noise here —
         // and HotkeyManager stops registering it, so it does not swallow the key either.
@@ -112,20 +176,23 @@ namespace Clowd.Config
 
         private GestureList _fileUploadShortcut = GestureList.Empty;
         private GestureList _clipboardUploadShortcut = GestureList.Empty;
-        private GestureList _captureRegionShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen));
-        private GestureList _captureFullscreenShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control));
-        private GestureList _captureActiveShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt));
-        private GestureList _startStopRecordingShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Shift));
+        // the screenshot actions' defaults depend on the OS, so the constructor sets them
+        private GestureList _captureRegionShortcut = GestureList.Empty;
+        private GestureList _captureFullscreenShortcut = GestureList.Empty;
+        private GestureList _captureActiveShortcut = GestureList.Empty;
+        private GestureList _startStopRecordingShortcut = GestureList.Empty;
 
-        // No default, on purpose: PrintScreen with no modifier, Ctrl, Alt and Shift are all already
-        // spoken for by the four above, and the remaining combinations (Ctrl+Shift, Ctrl+Alt, …) are
-        // worth less than the chance of stamping on something the user's other tools have claimed.
+        // No default, on purpose: the reflex keys are spoken for — on Windows PrintScreen with no
+        // modifier, Ctrl, Alt and Shift by the four above, on a Mac Cmd+Shift+1/2 by the two above
+        // and Cmd+Shift+3/4/5 by macOS — and the remaining combinations (Ctrl+Shift+PrtScr,
+        // Cmd+Shift+6, …) are worth less than the chance of stamping on something the user's other
+        // tools have claimed.
         // Sharing a region is also a deliberate, unhurried act — you are setting up a meeting — so
         // it does not need a reflex key the way taking a screenshot does. The action is on the tray
         // menu, and the Hotkeys settings page lets anyone who wants one bind it.
         private GestureList _shareRegionShortcut = GestureList.Empty;
 
-        // No default either, for the same reason: the PrintScreen family is taken, and anything
+        // No default either, for the same reason: the screenshot keys are taken, and anything
         // else risks colliding with the user's other tools. The tray menu has the action.
         private GestureList _drawOnScreenShortcut = GestureList.Empty;
 

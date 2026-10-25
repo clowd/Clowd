@@ -11,6 +11,10 @@
     <NoWarn>$(NoWarn);CA2007;xUnit1051</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <!-- headless Avalonia for the few controls tested as controls ([AvaloniaFact], see
+         HeadlessApp); every other test here is a plain [Fact] and never starts it, and never
+         runs alongside one (HeadlessApp.Collection) -->
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />

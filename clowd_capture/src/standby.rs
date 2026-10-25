@@ -7,7 +7,7 @@ use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 use clap::Parser;
 use serde::Deserialize;
@@ -16,7 +16,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy}
 use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
 
 use crate::settings::{CaptureMode, CliArgs};
-use crate::standby_hotkeys::StandbyHotkeys;
+use crate::standby_hotkeys::{Poll, StandbyHotkeys};
 
 /// Writes one protocol line to stdout. Never panics: when the shell has died the
 /// pipe is closed and `println!` would abort the process from inside a protocol
@@ -73,13 +73,11 @@ impl Standby {
         let parent_gone = Arc::new(AtomicBool::new(false));
         let capture_active = Arc::new(AtomicBool::new(false));
         let hotkeys = StandbyHotkeys::new(proxy.clone());
+        // Usually the process stays up for tray captures, reports the error on
+        // every gesture and, on macOS, keeps retrying the hook. A failure only
+        // this process has (Windows) exits so the shell's crash accounting
+        // falls back to its own clowd_hotkeys registrations.
         if let Some(err) = hotkeys.listener_error() {
-            // `Unsupported` (Linux) and `PermissionDenied` (macOS Accessibility)
-            // would fail the same way in the shell, so stay up for tray captures
-            // and report the error on every gesture. `HookFailed` is
-            // process-specific — exit so the shell's crash accounting falls back
-            // to its own clowd_hotkeys registrations.
-            log::error!("standby hotkey hook unavailable: {err}");
             if hotkeys.should_bail() {
                 anyhow::bail!("standby hotkey hook unavailable: {err}");
             }
@@ -99,9 +97,7 @@ impl Standby {
                                 Ok(Message::Pause {
                                     paused,
                                 }) => {
-                                    if let Some(hotkeys) = &pause {
-                                        hotkeys.set_paused(paused);
-                                    }
+                                    pause.set_paused(paused);
                                     continue;
                                 }
                                 Ok(message) => Input::Message(message),
@@ -154,14 +150,21 @@ impl Standby {
             emit!("CLOWD_STANDBY_READY");
             let mut app = StandbyApp {
                 args,
-                hotkeys: &self.hotkeys,
+                hotkeys: &mut self.hotkeys,
                 last_statuses: &mut self.last_statuses,
                 input_rx: &self.input_rx,
                 parent_gone: &self.parent_gone,
                 selected: None,
+                hook_died: None,
             };
             event_loop.run_app_on_demand(&mut app)?;
 
+            if let Some(reason) = app.hook_died {
+                // A standby with a dead hook is a healthy-looking process whose
+                // hotkeys never fire — exit, so the shell's crash accounting
+                // restarts us or falls back to its own hotkeys.
+                anyhow::bail!("standby hotkey hook died: {reason}");
+            }
             let Some(selected) = app.selected else {
                 return Ok(false);
             };
@@ -197,11 +200,13 @@ impl Standby {
 
 struct StandbyApp<'a> {
     args: &'a mut CliArgs,
-    hotkeys: &'a StandbyHotkeys,
+    hotkeys: &'a mut StandbyHotkeys,
     last_statuses: &'a mut serde_json::Map<String, serde_json::Value>,
     input_rx: &'a mpsc::Receiver<Input>,
     parent_gone: &'a AtomicBool,
     selected: Option<CaptureMode>,
+    /// Set when the hook died where that is fatal (see `StandbyHotkeys::poll`).
+    hook_died: Option<String>,
 }
 
 impl StandbyApp<'_> {
@@ -230,7 +235,9 @@ impl StandbyApp<'_> {
     /// and `user_event`: on Windows, `exit()` is only observed when it is set inside
     /// message dispatch — a wake-up whose work was deferred to the next
     /// `about_to_wait` would park the loop in an INFINITE wait with the exit
-    /// decision already made.
+    /// decision already made. An exit decided in `about_to_wait` itself (a hook
+    /// death whose wake a capture cycle swallowed) is why every exit also sets
+    /// the control flow: see `control_flow`.
     fn process_pending(&mut self, event_loop: &ActiveEventLoop) {
         // The loop dispatches one final AboutToWait while unwinding after exit() —
         // a press landing in that instant must not overwrite the selection or apply
@@ -238,9 +245,30 @@ impl StandbyApp<'_> {
         if self.selected.is_some() || event_loop.exiting() {
             return;
         }
-        if self.parent_gone.load(Ordering::SeqCst) {
+        let exit = self.pass();
+        event_loop.set_control_flow(control_flow(exit, self.hotkeys.next_retry()));
+        if exit {
             event_loop.exit();
-            return;
+        }
+    }
+
+    /// The work of `process_pending`; true when the loop must exit.
+    fn pass(&mut self) -> bool {
+        if self.parent_gone.load(Ordering::SeqCst) {
+            return true;
+        }
+        // Only here, between captures, so a hook that dies under an open
+        // overlay never costs the capture: the death waits for the next wait().
+        match self.hotkeys.poll(Instant::now()) {
+            Poll::Unchanged => {}
+            Poll::Statuses(statuses) => {
+                *self.last_statuses = statuses.clone();
+                report_settings_status(statuses);
+            }
+            Poll::Fatal(reason) => {
+                self.hook_died = Some(reason);
+                return true;
+            }
         }
         while let Ok(input) = self.input_rx.try_recv() {
             match input {
@@ -260,8 +288,7 @@ impl StandbyApp<'_> {
                         }
                     };
                     if self.selected.is_some() {
-                        event_loop.exit();
-                        return;
+                        return true;
                     }
                 }
                 // Applied on the reader thread; never forwarded here.
@@ -275,10 +302,22 @@ impl StandbyApp<'_> {
         }
         if let Some(mode) = self.hotkeys.try_recv() {
             self.selected = Some(mode);
-            event_loop.exit();
-            return;
+            return true;
         }
-        event_loop.set_control_flow(ControlFlow::Wait);
+        false
+    }
+}
+
+/// The control flow after a pass. Exiting must not leave `Wait`: Windows
+/// checks the exit code only after the wait returns, so an exit decided in
+/// `about_to_wait` with nothing else queued would block INFINITE. `Poll`
+/// makes that wait return at once (the capture cycle sets its own flow).
+/// Otherwise blocked indefinitely unless a hook that is down is due a retry.
+fn control_flow(exit: bool, next_retry: Option<Instant>) -> ControlFlow {
+    match next_retry {
+        _ if exit => ControlFlow::Poll,
+        Some(at) => ControlFlow::WaitUntil(at),
+        None => ControlFlow::Wait,
     }
 }
 
@@ -310,4 +349,21 @@ fn create_session_dir(root: &Path) -> anyhow::Result<PathBuf> {
     let path = root.join(format!("capture-{stamp}-{}", std::process::id()));
     std::fs::create_dir(&path)?;
     Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An exit decided in `about_to_wait` (a hook death first seen there, the
+    /// shell gone, a selection) must not leave the loop to block in `Wait`,
+    /// where Windows never gets to check the exit code.
+    #[test]
+    fn an_exit_never_waits() {
+        let at = Instant::now() + std::time::Duration::from_secs(2);
+        assert_eq!(control_flow(true, None), ControlFlow::Poll);
+        assert_eq!(control_flow(true, Some(at)), ControlFlow::Poll);
+        assert_eq!(control_flow(false, Some(at)), ControlFlow::WaitUntil(at));
+        assert_eq!(control_flow(false, None), ControlFlow::Wait);
+    }
 }

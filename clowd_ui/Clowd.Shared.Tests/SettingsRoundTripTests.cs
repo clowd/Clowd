@@ -1,5 +1,8 @@
 ﻿using System;
+using System.ComponentModel;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using Avalonia.Media;
 using Clowd.Config;
 using Xunit;
@@ -36,7 +39,7 @@ namespace Clowd.Shared.Tests
 
             Assert.NotNull(loaded);
             Assert.True(loaded.General.ConfirmClose);
-            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen)), loaded.Hotkeys.CaptureRegionShortcut);
+            Assert.Equal(new SettingsHotkey().CaptureRegionShortcut, loaded.Hotkeys.CaptureRegionShortcut); // per OS: Hotkeys_LoadedWithNoFile_AreThisOsDefaults
             Assert.Equal(Colors.Transparent, loaded.Editor.CanvasBackground);
             Assert.Equal(0.80, loaded.Capture.ObscuredWindowDetectionThreshold);
             Assert.True(loaded.Capture.RoundedWindowCorners);
@@ -46,7 +49,8 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void SaveThenLoad_PreservesNonDefaultGraph()
         {
-            var original = new SettingsRoot();
+            // the Windows hotkey defaults on every OS, so the untouched ones checked below are not empty
+            var original = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.Windows) };
 
             // strings / bools / numbers
             original.General.LastSavePath = @"C:\Users\test\Pictures";
@@ -142,7 +146,7 @@ namespace Clowd.Shared.Tests
             Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.F12, HotkeyModifiers.Alt)), loaded.Hotkeys.FileUploadShortcut);
             Assert.Empty(loaded.Hotkeys.CaptureFullscreenShortcut);
 
-            // untouched values still come back as defaults
+            // untouched values still come back as they were
             Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), loaded.Hotkeys.CaptureActiveShortcut);
             Assert.True(loaded.Editor.RestoreSessionsOnClowdStart);
         }
@@ -545,15 +549,183 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void Hotkeys_DefaultToThePrintScreenFamily_AndNothingElse()
+        public void Hotkeys_OnWindows_DefaultToThePrintScreenFamily_AndNothingElse()
         {
-            var hotkeys = SettingsService.Load(_path).Hotkeys;
+            var hotkeys = new SettingsHotkey(OSPlatform.Windows);
 
             Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen)), hotkeys.CaptureRegionShortcut);
             Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control)), hotkeys.CaptureFullscreenShortcut);
             Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), hotkeys.CaptureActiveShortcut);
             Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Shift)), hotkeys.StartStopRecordingShortcut);
+            AssertTheRestAreEmpty(hotkeys);
+        }
 
+        [Fact]
+        public void Hotkeys_OnMacOS_DefaultToCmdShiftDigitsAndF13_AndNothingElse()
+        {
+            // a Mac has no PrintScreen key code, so the Windows family would leave a fresh install
+            // with no working hotkey at all. F13 sits where PrintScreen does on a PC keyboard
+            // plugged into a Mac; Cmd+Shift+2 goes first, as the one the capture page's caption names.
+            const HotkeyModifiers CmdShift = HotkeyModifiers.Meta | HotkeyModifiers.Shift;
+            var hotkeys = new SettingsHotkey(OSPlatform.OSX);
+
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D2, CmdShift), new HotkeyGesture(HotkeyKey.F13)), hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D1, CmdShift)), hotkeys.CaptureFullscreenShortcut);
+            Assert.Empty(hotkeys.CaptureActiveShortcut);
+            Assert.Empty(hotkeys.StartStopRecordingShortcut);
+            AssertTheRestAreEmpty(hotkeys);
+        }
+
+        [Theory]
+        [InlineData("WINDOWS")]
+        [InlineData("OSX")]
+        public void Hotkeys_Defaults_AreNeverReservedByTheirOs(string os)
+        {
+            // a reserved gesture is never bound (the recorder treats it as a cancel, and
+            // HotkeyManager refuses one already saved), so a default on that list would be dead
+            // on arrival
+            var platform = OSPlatform.Create(os);
+            var hotkeys = new SettingsHotkey(platform);
+            var all = TypeDescriptor.GetProperties(hotkeys).Cast<PropertyDescriptor>()
+                .Where(p => p.PropertyType == typeof(GestureList))
+                .SelectMany(p => (GestureList)p.GetValue(hotkeys))
+                .ToList();
+
+            Assert.NotEmpty(all);
+            Assert.All(all, g => Assert.False(HotkeyGesture.IsSystemReserved(g, platform), g.ToSerializedString()));
+        }
+
+        [Fact]
+        public void Hotkeys_LoadedWithNoFile_AreThisOsDefaults()
+        {
+            // the binder builds SettingsHotkey with its parameterless constructor
+            var loaded = SettingsService.Load(_path).Hotkeys;
+            var expected = new SettingsHotkey(OperatingSystem.IsMacOS() ? OSPlatform.OSX : OSPlatform.Windows);
+
+            foreach (PropertyDescriptor property in TypeDescriptor.GetProperties(typeof(SettingsHotkey)))
+            {
+                if (property.PropertyType == typeof(GestureList))
+                    Assert.Equal(property.GetValue(expected), property.GetValue(loaded));
+            }
+        }
+
+        [Theory]
+        [InlineData("WINDOWS", "PrintScreen", "Control+PrintScreen")]
+        [InlineData("OSX", "Shift+Meta+D2; F13", "Shift+Meta+D1")]
+        public void Hotkeys_DefaultsWrittenOnOneOs_LoadUnchangedOnAnother(string os, string region, string fullscreen)
+        {
+            // every gesture is written out, defaults included, so a file carries its gestures with
+            // it: loading never swaps in the other OS's defaults behind the user's back (a PrtScr
+            // brought to a Mac shows as unsupported on the Hotkeys page, rather than vanishing).
+            var original = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.Create(os)) };
+
+            SettingsService.Save(original, _path);
+            var json = File.ReadAllText(_path);
+            Assert.Contains($"\"CaptureRegionShortcut\": \"{region}\"", json);
+            Assert.Contains($"\"CaptureFullscreenShortcut\": \"{fullscreen}\"", json);
+
+            var loaded = SettingsService.Load(_path).Hotkeys;
+            foreach (PropertyDescriptor property in TypeDescriptor.GetProperties(typeof(SettingsHotkey)))
+            {
+                if (property.PropertyType == typeof(GestureList))
+                    Assert.Equal(property.GetValue(original.Hotkeys), property.GetValue(loaded));
+            }
+        }
+
+        [Theory]
+        [InlineData("Snapshot")]
+        [InlineData("PrintScreen")]
+        public void Hotkeys_WrittenBeforeTheMacDefaults_OnAMac_TradeThePrintScreenDefaultsForThem(string printScreen)
+        {
+            // what every Mac that ran an earlier build has on disk: the PrintScreen family, which a
+            // Mac cannot register, written out as the defaults it then was. Left alone, an upgrade
+            // would start with no working screenshot hotkey at all.
+            WriteFromBeforeTheMacDefaults(
+                $"\"CaptureRegionShortcut\": \"{printScreen}\"",
+                $"\"CaptureFullscreenShortcut\": \"Control+{printScreen}\"",
+                $"\"CaptureActiveShortcut\": \"Alt+{printScreen}\"",
+                $"\"StartStopRecordingShortcut\": \"Shift+{printScreen}\"",
+                "\"DrawOnScreenShortcut\": \"Control+Shift+D\"");
+
+            var loaded = SettingsService.Load(_path, OSPlatform.OSX).Hotkeys;
+
+            var mac = new SettingsHotkey(OSPlatform.OSX);
+            Assert.Equal(mac.CaptureRegionShortcut, loaded.CaptureRegionShortcut);
+            Assert.Equal(mac.CaptureFullscreenShortcut, loaded.CaptureFullscreenShortcut);
+            Assert.Empty(loaded.CaptureActiveShortcut);
+            Assert.Empty(loaded.StartStopRecordingShortcut);
+            // not a default: kept
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.DrawOnScreenShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_WrittenBeforeTheMacDefaults_KeepWhatTheUserChose()
+        {
+            // only a value that is exactly the old default moves: an edited one is the user's
+            WriteFromBeforeTheMacDefaults(
+                "\"CaptureRegionShortcut\": \"Control+Shift+Snapshot\"",
+                "\"CaptureFullscreenShortcut\": \"Snapshot; Control+Snapshot\"",
+                "\"CaptureActiveShortcut\": \"None\"",
+                "\"StartStopRecordingShortcut\": \"Shift+Meta+D7\"");
+
+            var loaded = SettingsService.Load(_path, OSPlatform.OSX).Hotkeys;
+
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen), new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control)), loaded.CaptureFullscreenShortcut);
+            Assert.Empty(loaded.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D7, HotkeyModifiers.Shift | HotkeyModifiers.Meta)), loaded.StartStopRecordingShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_WrittenBeforeTheMacDefaults_LoadUnchangedOnWindows()
+        {
+            WriteFromBeforeTheMacDefaults(
+                "\"CaptureRegionShortcut\": \"Snapshot\"",
+                "\"CaptureFullscreenShortcut\": \"Control+Snapshot\"",
+                "\"CaptureActiveShortcut\": \"Alt+Snapshot\"",
+                "\"StartStopRecordingShortcut\": \"Shift+Snapshot\"");
+
+            var loaded = SettingsService.Load(_path, OSPlatform.Windows).Hotkeys;
+
+            var windows = new SettingsHotkey(OSPlatform.Windows);
+            Assert.Equal(windows.CaptureRegionShortcut, loaded.CaptureRegionShortcut);
+            Assert.Equal(windows.CaptureFullscreenShortcut, loaded.CaptureFullscreenShortcut);
+            Assert.Equal(windows.CaptureActiveShortcut, loaded.CaptureActiveShortcut);
+            Assert.Equal(windows.StartStopRecordingShortcut, loaded.StartStopRecordingShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_WrittenByThisBuild_AreNeverMigratedAgain()
+        {
+            // the trade happens once: a file this build wrote says so, and a PrintScreen in it —
+            // brought over from Windows, or put back by hand — is the user's from then on
+            var original = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.Windows) };
+            SettingsService.Save(original, _path);
+
+            var loaded = SettingsService.Load(_path, OSPlatform.OSX).Hotkeys;
+
+            Assert.Equal(original.Hotkeys.CaptureRegionShortcut, loaded.CaptureRegionShortcut);
+            Assert.Equal(original.Hotkeys.StartStopRecordingShortcut, loaded.StartStopRecordingShortcut);
+
+            // and one that was migrated is written out as migrated
+            WriteFromBeforeTheMacDefaults("\"CaptureRegionShortcut\": \"Snapshot\"");
+            var migrated = SettingsService.Load(_path, OSPlatform.OSX);
+            SettingsService.Save(migrated, _path);
+            migrated.Hotkeys.CaptureRegionShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen));
+            SettingsService.Save(migrated, _path);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen)), SettingsService.Load(_path, OSPlatform.OSX).Hotkeys.CaptureRegionShortcut);
+        }
+
+        /// <summary>A settings file as builds before the per-OS defaults wrote it: a Hotkeys
+        /// section with these values and nothing to say which defaults it was written against.</summary>
+        private void WriteFromBeforeTheMacDefaults(params string[] values)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, "{ \"Hotkeys\": { " + String.Join(", ", values) + " } }");
+        }
+
+        private static void AssertTheRestAreEmpty(SettingsHotkey hotkeys)
+        {
             Assert.Empty(hotkeys.FileUploadShortcut);
             Assert.Empty(hotkeys.ClipboardUploadShortcut);
             Assert.Empty(hotkeys.ShareRegionShortcut);
@@ -610,7 +782,7 @@ namespace Clowd.Shared.Tests
             var loaded = SettingsService.Load(_path).Hotkeys;
             Assert.Empty(loaded.CaptureRegionShortcut);
             Assert.Empty(loaded.StartStopRecordingShortcut);
-            Assert.NotEmpty(loaded.CaptureActiveShortcut);
+            Assert.NotEmpty(loaded.CaptureFullscreenShortcut); // has a default on every OS
         }
 
         [Fact]
@@ -636,8 +808,9 @@ namespace Clowd.Shared.Tests
             Assert.Empty(loaded.CaptureFullscreenShortcut);
             Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.DrawOnScreenShortcut);
 
-            // absent from the old file: defaults, the new actions included
-            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), loaded.CaptureActiveShortcut);
+            // absent from the old file: this OS's defaults, the new actions included
+            Assert.Equal(new SettingsHotkey().CaptureActiveShortcut, loaded.CaptureActiveShortcut);
+            Assert.Equal(new SettingsHotkey().StartStopRecordingShortcut, loaded.StartStopRecordingShortcut);
             Assert.Empty(loaded.ColorWheelShortcut);
             Assert.Empty(loaded.NewVideoEditorShortcut);
         }

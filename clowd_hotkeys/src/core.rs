@@ -5,6 +5,7 @@
 //! The callback rules apply here as in the backends: no allocation beyond the mpsc node, no I/O
 //! or logging, no calls into user code. The table lock is held for an `Arc` clone only.
 
+use std::ops::RangeFrom;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
@@ -44,6 +45,40 @@ impl HookCore {
     /// Whether the observe stream is on (backends compute `ch` only when it is).
     pub fn observing(&self) -> bool {
         self.shared.observing.load(Ordering::Relaxed)
+    }
+
+    /// Whether a media event (suppression codes `media_codes`, which have no key code) could
+    /// matter: a media key is registered (and not paused), a recording is armed, or a swallowed
+    /// media press still waits for its up. Lets the macOS backend skip decoding them otherwise.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub fn wants_media(&self, media_codes: RangeFrom<u16>) -> bool {
+        let (word, bit) = Self::slot(media_codes.start);
+        self.media_matters()
+            || self.suppressed[word] & !(bit - 1) != 0
+            || self.suppressed[word + 1..]
+                .iter()
+                .any(|&bits| bits != 0)
+    }
+
+    /// Forgets the swallowed presses in `media_codes` unless a media key is registered (and not
+    /// paused) or a recording is armed: lets `wants_media` turn false again after a lost up.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub fn forget_unwanted_media(&mut self, media_codes: RangeFrom<u16>) {
+        if self.media_matters() {
+            return;
+        }
+        let (word, bit) = Self::slot(media_codes.start);
+        self.suppressed[word] &= bit - 1;
+        self.suppressed[word + 1..].fill(0);
+        if matches!(self.fired, Some((code, _)) if code >= media_codes.start) {
+            self.fired = None;
+        }
+    }
+
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    fn media_matters(&self) -> bool {
+        (self.shared.media.load(Ordering::Acquire) && !self.shared.paused.load(Ordering::Relaxed))
+            || self.shared.recording.load(Ordering::Acquire) != 0
     }
 
     /// A modifier key edge (never swallowed). `mods` = side-agnostic modifiers AFTER this edge.
@@ -419,6 +454,42 @@ pub(crate) mod tests {
                 key(true, Key::LeftShift, Modifiers::SHIFT, 0xA0, None)
             ]
         );
+    }
+
+    #[test]
+    fn wants_media_while_a_media_key_could_match_or_is_swallowed() {
+        const MEDIA: u16 = 0x100;
+        const PLAY: u16 = MEDIA + 16;
+        let media = |core: &mut HookCore, down| core.key(PLAY, None, None, Key::MediaPlayPause, down, false, NONE);
+        let (mut core, shared, rx) = harness();
+        assert!(!core.wants_media(MEDIA..));
+        shared
+            .register(Gesture::new(Key::A, CTRL))
+            .unwrap();
+        assert!(!core.wants_media(MEDIA..));
+        // A swallowed key below the media codes does not count.
+        assert_eq!(down(&mut core, A, Key::A, CTRL), Verdict::Swallow);
+        assert!(!core.wants_media(MEDIA..));
+
+        let session = shared.start_recording();
+        assert!(core.wants_media(MEDIA..));
+        shared.stop_recording(session);
+        assert!(!core.wants_media(MEDIA..));
+
+        let id = shared
+            .register(Gesture::new(Key::MediaPlayPause, NONE))
+            .unwrap();
+        assert!(core.wants_media(MEDIA..));
+        shared.paused.store(true, Ordering::Relaxed);
+        assert!(!core.wants_media(MEDIA..));
+        shared.paused.store(false, Ordering::Relaxed);
+        assert_eq!(media(&mut core, true), Verdict::Swallow);
+        // Unregistered while held: the up must still be decoded, to be swallowed.
+        assert!(shared.unregister(id));
+        assert!(core.wants_media(MEDIA..));
+        assert_eq!(media(&mut core, false), Verdict::Swallow);
+        assert!(!core.wants_media(MEDIA..));
+        drain(&rx);
     }
 
     #[test]

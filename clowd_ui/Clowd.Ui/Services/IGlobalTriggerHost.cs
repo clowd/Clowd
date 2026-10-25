@@ -23,8 +23,8 @@ namespace Clowd.UI
         /// acting on them: nothing is swallowed. <paramref name="observer"/> runs on the host's
         /// hotkey event thread — not the hook thread (the hook only queues the edge) and not the UI
         /// thread — in the order the edges happened, so it must marshal anything it hands the UI.
-        /// Starts the hook if no hotkey has yet. Silently never fires if the hook cannot run (macOS
-        /// without the Accessibility permission). Dispose the handle to stop observing.
+        /// Starts the hook if no hotkey has yet. Silently does not fire while the hook cannot run
+        /// (macOS without the Accessibility permission). Dispose the handle to stop observing.
         /// </summary>
         IDisposable ObserveKeys(Action<GlobalKeyEvent> observer);
 
@@ -42,6 +42,14 @@ namespace Clowd.UI
         /// </summary>
         IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded,
             Action<string> failed, out string error);
+
+        /// <summary>
+        /// Raised on the UI thread when a hook that was down is running again (macOS, once the
+        /// Accessibility permission is granted), after the registrations it took along report
+        /// registered: <see cref="StartRecording"/> works from now on, so whatever said why it did
+        /// not is out of date.
+        /// </summary>
+        event EventHandler RecordingAvailable;
     }
 
     /// <summary>One key edge seen by <see cref="IGlobalTriggerHost.ObserveKeys"/>.</summary>

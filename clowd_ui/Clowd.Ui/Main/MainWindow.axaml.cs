@@ -189,7 +189,7 @@ namespace Clowd.UI
             var permissionMissing = MacPermissions.IsRelevant
                                     && !(MacPermissions.IsGranted(MacPermission.ScreenRecording)
                                          && MacPermissions.IsGranted(MacPermission.Accessibility));
-            SystemNavItem.Header = NavHeader(permissionMissing ? "Permission Needed" : "System", permissionMissing ? "ClowdNavDangerTextBrush" : null);
+            SystemNavItem.Header = NavHeader(MacPermissions.NavLabel(permissionMissing), permissionMissing ? "ClowdNavDangerTextBrush" : null);
             SystemNavIcon.Data = (Geometry)this.FindResource(permissionMissing ? "IconNavAttention" : "IconNavGeneral");
             SetIconBrush(SystemNavIcon, ref _systemIconBrush, permissionMissing ? "SemiColorDanger" : null);
 

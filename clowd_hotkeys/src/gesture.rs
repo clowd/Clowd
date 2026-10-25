@@ -261,4 +261,17 @@ mod tests {
             Err(Error::UnsupportedKey(Key::CapsLock))
         );
     }
+
+    /// The shell's macOS defaults (SettingsHotkey), in the text it sends them in: region on
+    /// Cmd+Shift+2 and F13, the active screen on Cmd+Shift+1.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn validate_accepts_the_shells_macos_defaults() {
+        for (text, key) in [("Shift+Meta+D2", Key::D2), ("F13", Key::F13), ("Shift+Meta+D1", Key::D1)] {
+            let gesture: Gesture = text.parse().unwrap();
+            assert_eq!(gesture.key, key, "{text}");
+            assert_eq!(gesture.to_string(), text);
+            assert_eq!(gesture.validate(), Ok(()), "{text}");
+        }
+    }
 }

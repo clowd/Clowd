@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Clowd;
 using Clowd.Config;
 using Clowd.UI;
@@ -43,6 +44,20 @@ namespace Clowd.VideoSDK.Tests
                 HotkeyPageLayout.Sections.Select(s => s.Title));
             Assert.Equal(new[] { HotkeyId.ColorWheel, HotkeyId.NewImageEditor, HotkeyId.NewVideoEditor },
                 HotkeyPageLayout.Sections.Single(s => s.Title == "Open").Actions);
+        }
+
+        [Fact]
+        public void Only_macOS_explains_the_top_row_function_keys()
+        {
+            // a MacBook's F-keys send brightness and media unless Fn is held or the setting is on
+            var note = HotkeyPageLayout.PlatformNote(OSPlatform.OSX);
+            Assert.NotNull(note);
+            Assert.Contains("Fn", note);
+            Assert.Contains("Use F1, F2, etc. keys as standard function keys", note);
+            // since Ventura the switch is not on the Keyboard pane itself
+            Assert.Contains("System Settings → Keyboard → Keyboard Shortcuts… → Function Keys", note);
+            Assert.Null(HotkeyPageLayout.PlatformNote(OSPlatform.Windows));
+            Assert.Null(HotkeyPageLayout.PlatformNote(OSPlatform.Linux));
         }
 
         [Fact]
@@ -168,7 +183,8 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Committing_through_the_manager_takes_the_gesture_from_its_other_owner()
         {
-            using var manager = new HotkeyManager(new FakeHost(), new SettingsHotkey());
+            // the Windows defaults, where Capture Region's only gesture is PrtScr
+            using var manager = new HotkeyManager(new FakeHost(), new SettingsHotkey(OSPlatform.Windows));
             foreach (var id in Enum.GetValues<HotkeyId>())
                 manager.SetAction(id, () => { });
 
@@ -312,6 +328,9 @@ namespace Clowd.VideoSDK.Tests
 
             public IDisposable StartRecording(Action<HotkeyModifiers> modifiersChanged, Action<HotkeyGesture> recorded, Action<string> failed, out string error) =>
                 throw new NotSupportedException();
+
+            // never down, so never back either
+            public event EventHandler RecordingAvailable { add { } remove { } }
 
             private sealed class Registration : IGlobalTriggerRegistration
             {

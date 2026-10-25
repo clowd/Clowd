@@ -96,10 +96,11 @@ impl WindowEntry {
 /// Refuse the run when the OS will silently drop what the driver is about to
 /// do.
 ///
-/// Both permissions are handed to a process at launch and cannot be picked up
-/// while it runs, so there is nothing to retry and no prompt worth showing
-/// from a background helper: the honest move is to say which permission is
-/// missing and stop. The message travels to the user as the `fatal_error`
+/// Neither permission can be picked up by this run once it has started, so
+/// there is nothing to retry and no prompt worth showing from a background
+/// helper: the honest move is to say which permission is missing and stop.
+/// Screen Recording takes a Clowd restart; an Accessibility grant reads true
+/// live, so the next run picks it up. The message travels to the user as the `fatal_error`
 /// event's text, so it is written for them and not for a log.
 pub fn preflight() -> anyhow::Result<()> {
     if !ScreenCaptureAccess.preflight() {
@@ -113,7 +114,7 @@ pub fn preflight() -> anyhow::Result<()> {
     if !unsafe { AXIsProcessTrusted() } {
         bail!(
             "Clowd needs Accessibility permission to scroll the window for you. Enable Clowd under Privacy & Security → \
-             Accessibility, then restart Clowd."
+             Accessibility, then start the scroll capture again."
         );
     }
     Ok(())

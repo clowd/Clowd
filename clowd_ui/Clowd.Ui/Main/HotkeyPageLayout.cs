@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace Clowd.UI.Config
 {
@@ -24,6 +25,16 @@ namespace Clowd.UI.Config
     /// </summary>
     public static class HotkeyPageLayout
     {
+        /// <summary>The note above the sections on <paramref name="platform"/>, or null. On macOS:
+        /// a MacBook's top row sends its printed functions, which the hook sees as system keys,
+        /// not F-keys, so an F-key shortcut seems dead until the user knows about Fn.</summary>
+        public static string PlatformNote(OSPlatform platform) =>
+            platform == OSPlatform.OSX
+                ? "On a MacBook the top row controls brightness, volume and the like unless you hold Fn, "
+                  + "so an F-key shortcut needs Fn as well, or turn on “Use F1, F2, etc. keys as standard "
+                  + "function keys” in System Settings → Keyboard → Keyboard Shortcuts… → Function Keys."
+                : null;
+
         public static IReadOnlyList<HotkeySection> Sections { get; } = new[]
         {
             new HotkeySection("Capture", new[]

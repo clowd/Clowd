@@ -57,9 +57,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
         /// discoverable from the icon — a plain click does nothing.</summary>
         private const string GestureTip = "Click and drag to a point on your screen";
 
-        private const string PermissionTip =
+        internal const string PermissionTip =
             "Clowd needs Screen Recording permission to pick a color from the screen. "
-            + "Grant it under Settings → General → Permissions.";
+            + "Grant it under " + MacPermissions.GrantLocation + ".";
 
         // a hand says "press here"; the crosshair takes over once the press starts a sample
         private static readonly Cursor HandCursor = new(StandardCursorType.Hand);

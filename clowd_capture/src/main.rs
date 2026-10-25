@@ -110,7 +110,7 @@ fn run_cycle(
     prologue.system_init = t_start.elapsed();
 
     // The shell preflights this before spawning us and owns the whole permission
-    // conversation with the user (Settings → General → Permissions), so all we do
+    // conversation with the user (Settings → System → Permissions), so all we do
     // here is refuse to run — no prompt, no System Settings, no overlay flashing up
     // over a blank desktop. This still fires if permission was revoked between the
     // shell's check and now.

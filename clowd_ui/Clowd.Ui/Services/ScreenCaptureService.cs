@@ -628,7 +628,8 @@ namespace Clowd.UI
             // none at all for an action with no gestures. The capturer reports a status per
             // occurrence, echoing this exact string (CaptureStandbySupervisor.ApplyHotkeyStatus).
             // Gestures travel in the settings form, which the capturer parses with the same
-            // clowd_hotkeys grammar: nothing is translated on the way.
+            // clowd_hotkeys grammar: nothing is translated on the way. One the OS reserves for
+            // itself is left out, as HotkeyManager refuses it, and gets no status back.
             var hotkeys = root.Hotkeys;
             AddHotkeys("--hk-main", hotkeys.CaptureRegionShortcut);
             AddHotkeys("--hk-window", hotkeys.CaptureActiveShortcut);
@@ -639,6 +640,8 @@ namespace Clowd.UI
             {
                 foreach (var gesture in gestures)
                 {
+                    if (HotkeyGesture.IsSystemReserved(gesture))
+                        continue;
                     args.Add(flag);
                     args.Add(gesture.ToSerializedString());
                 }

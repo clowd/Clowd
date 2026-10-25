@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Clowd;
 using Clowd.Config;
 using Clowd.UI;
@@ -24,7 +25,9 @@ namespace Clowd.VideoSDK.Tests
         private static (HotkeyManager Manager, FakeHost Host, SettingsHotkey Settings) Create(bool wireActions = true)
         {
             var host = new FakeHost();
-            var settings = new SettingsHotkey();
+            // the Windows defaults (the PrintScreen family) on every OS: these tests take PrtScr
+            // from Capture Region, and count the four defaults' registrations
+            var settings = new SettingsHotkey(OSPlatform.Windows);
             var manager = new HotkeyManager(host, settings);
             if (wireActions)
             {
@@ -259,9 +262,32 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void A_capturer_permission_failure_shows_the_same_text_as_the_shells_own()
+        {
+            var (manager, _, _) = Create(wireActions: false);
+            manager.SetAction(HotkeyId.CaptureRegion, null);
+            var region = manager.GetEntry(HotkeyId.CaptureRegion);
+            region.AddGesture(CtrlShift1);
+            region.AddGesture(CtrlShift2);
+
+            // keyed off the stable code, not the crate's wording (CAPTURE_PROTOCOL.md)
+            manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[]
+            {
+                new ExternalGestureStatus("PrintScreen", false, "reworded crate text", CaptureStandbySupervisor.PermissionErrorCode),
+                new ExternalGestureStatus("Control+Shift+D1", false, "duplicate gesture", "duplicate"),
+                // a capturer that predates error_code, or a code the shell does not know: shown as sent
+                new ExternalGestureStatus("Control+Shift+D2", false, "some new failure"),
+            });
+
+            Assert.Equal(NativeHotkeyHost.PermissionMessage, region.Shortcuts[0].Error);
+            Assert.Equal("duplicate gesture", region.Shortcuts[1].Error);
+            Assert.Equal("some new failure", region.Shortcuts[2].Error);
+        }
+
+        [Fact]
         public void The_standby_command_line_repeats_each_flag_once_per_gesture_in_order()
         {
-            var root = new SettingsRoot();
+            var root = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.Windows) };
             root.General.UseSystemAccentColor = false;
             root.Hotkeys.CaptureRegionShortcut = GestureList.Of(PrintScreen, CtrlShift1);
             root.Hotkeys.CaptureActiveShortcut = GestureList.Empty;
@@ -274,6 +300,109 @@ namespace Clowd.VideoSDK.Tests
 
             IEnumerable<string> ValuesOf(string flag) =>
                 args.Select((a, i) => (a, i)).Where(t => t.a == flag).Select(t => args[t.i + 1]).ToList();
+        }
+
+        [Fact]
+        public void The_macos_defaults_register_and_reach_the_standby_capturer()
+        {
+            // what a fresh Mac starts with: both region gestures and the screen one, each live
+            var host = new FakeHost();
+            using var manager = new HotkeyManager(host, new SettingsHotkey(OSPlatform.OSX));
+            foreach (var id in Enum.GetValues<HotkeyId>())
+                manager.SetAction(id, () => { });
+
+            var cmdShift = HotkeyModifiers.Meta | HotkeyModifiers.Shift;
+            var region = manager.GetEntry(HotkeyId.CaptureRegion);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D2, cmdShift), new HotkeyGesture(HotkeyKey.F13)), region.Gestures);
+            Assert.All(region.Shortcuts, s => Assert.True(s.IsRegistered));
+            Assert.Equal(3, host.Live.Count);
+
+            // ...and in the crate's text form on the warm capturer's command line
+            var root = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.OSX) };
+            root.General.UseSystemAccentColor = false;
+            var args = CaptureArguments.BuildStandby("/sessions", root).ToList();
+            Assert.Equal(new[] { "Shift+Meta+D2", "F13" }, ValuesOf("--hk-main"));
+            Assert.Empty(ValuesOf("--hk-window"));
+            Assert.Equal(new[] { "Shift+Meta+D1" }, ValuesOf("--hk-monitor"));
+
+            IEnumerable<string> ValuesOf(string flag) =>
+                args.Select((a, i) => (a, i)).Where(t => t.a == flag).Select(t => args[t.i + 1]).ToList();
+        }
+
+        [Theory]
+        [InlineData("OSX", HotkeyKey.M, HotkeyModifiers.Meta)]
+        [InlineData("OSX", HotkeyKey.Tab, HotkeyModifiers.Meta)]
+        [InlineData("WINDOWS", HotkeyKey.Tab, HotkeyModifiers.Alt)]
+        public void A_reserved_gesture_already_in_the_settings_is_never_registered(string os, HotkeyKey key, HotkeyModifiers modifiers)
+        {
+            // recorded before the recorder refused it, or edited in by hand: binding it would
+            // swallow the OS's own combination in every app
+            var reserved = new HotkeyGesture(key, modifiers);
+            var host = new FakeHost();
+            var settings = new SettingsHotkey(OSPlatform.Windows);
+            settings.DrawOnScreenShortcut = GestureList.Of(reserved, CtrlShift1);
+            using var manager = new HotkeyManager(host, settings, OSPlatform.Create(os));
+            foreach (var id in Enum.GetValues<HotkeyId>())
+                manager.SetAction(id, () => { });
+
+            var draw = manager.GetEntry(HotkeyId.DrawOnScreen);
+            Assert.DoesNotContain(host.Live, r => Equals(r.Gesture, reserved));
+            Assert.False(draw.Shortcuts[0].IsRegistered);
+            Assert.Contains("reserved", draw.Shortcuts[0].Error);
+            Assert.True(draw.Shortcuts[1].IsRegistered);
+            // kept, so the row shows it and its ✕ can remove it
+            Assert.Equal(GestureList.Of(reserved, CtrlShift1), settings.DrawOnScreenShortcut);
+        }
+
+        [Fact]
+        public void A_reserved_gesture_the_capturer_owns_says_so_and_never_reaches_it()
+        {
+            var cmdM = new HotkeyGesture(HotkeyKey.M, HotkeyModifiers.Meta);
+            var settings = new SettingsHotkey(OSPlatform.OSX);
+            settings.CaptureRegionShortcut = GestureList.Of(cmdM);
+            using var manager = new HotkeyManager(new FakeHost(), settings, OSPlatform.OSX);
+            manager.SetAction(HotkeyId.CaptureRegion, null); // warm capture: the capturer's
+
+            var shortcut = Assert.Single(manager.GetEntry(HotkeyId.CaptureRegion).Shortcuts);
+            Assert.Contains("reserved", shortcut.Error);
+            // a report for it cannot make it look active
+            manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[] { new ExternalGestureStatus("Meta+M", true, "") });
+            Assert.False(shortcut.IsRegistered);
+        }
+
+        [Fact]
+        public void The_standby_command_line_leaves_out_reserved_gestures()
+        {
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS())
+                return; // nothing is reserved elsewhere, and there is no standby capturer either
+
+            // the capturer binds what it is sent, on the OS it runs on
+            var reserved = OperatingSystem.IsMacOS()
+                ? new HotkeyGesture(HotkeyKey.M, HotkeyModifiers.Meta)
+                : new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Alt);
+            var root = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.Windows) };
+            root.General.UseSystemAccentColor = false;
+            root.Hotkeys.CaptureRegionShortcut = GestureList.Of(reserved, PrintScreen);
+
+            var args = CaptureArguments.BuildStandby("/sessions", root).ToList();
+
+            var main = args.Select((a, i) => (a, i)).Where(t => t.a == "--hk-main").Select(t => args[t.i + 1]);
+            Assert.Equal(new[] { "PrintScreen" }, main);
+        }
+
+        [Fact]
+        public void The_hook_coming_back_reaches_the_views_until_the_manager_is_disposed()
+        {
+            var (manager, host, _) = Create();
+            int raised = 0;
+            manager.RecordingAvailable += (_, _) => raised++;
+
+            host.RaiseRecordingAvailable();
+            Assert.Equal(1, raised);
+
+            manager.Dispose();
+            host.RaiseRecordingAvailable();
+            Assert.Equal(1, raised);
         }
 
         [Fact]
@@ -411,6 +540,10 @@ namespace Clowd.VideoSDK.Tests
 
                 return Recording = new FakeRecording(recorded, failed);
             }
+
+            public event EventHandler RecordingAvailable;
+
+            public void RaiseRecordingAvailable() => RecordingAvailable?.Invoke(this, EventArgs.Empty);
         }
 
         private sealed class FakeRecording(Action<HotkeyGesture> recorded, Action<string> failed) : IDisposable

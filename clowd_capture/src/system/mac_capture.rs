@@ -52,7 +52,7 @@ pub fn take_display_image(bounds: ScreenRect) -> Option<CGImage> {
 /// Whether the process may capture the screen. Reported to `main()` so the
 /// capturer can refuse to start; it never prompts and never opens System
 /// Settings, because Screen Recording is the shell's to explain and request
-/// (Settings → General → Permissions).
+/// (Settings → System → Permissions).
 pub fn has_screen_recording_permission() -> bool {
     ScreenCaptureAccess.preflight()
 }

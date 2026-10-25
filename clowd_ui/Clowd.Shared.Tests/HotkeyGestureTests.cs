@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Xunit;
 
 namespace Clowd.Shared.Tests
@@ -162,7 +163,7 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void Task_switching_combinations_are_reserved_on_windows()
+        public void Task_switching_and_task_manager_are_reserved_on_windows()
         {
             var reserved = new[]
             {
@@ -170,15 +171,67 @@ namespace Clowd.Shared.Tests
                 new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Alt | HotkeyModifiers.Shift),
                 new HotkeyGesture(HotkeyKey.Escape, HotkeyModifiers.Alt),
                 new HotkeyGesture(HotkeyKey.Escape, HotkeyModifiers.Control),
+                new HotkeyGesture(HotkeyKey.Escape, HotkeyModifiers.Control | HotkeyModifiers.Shift),
             };
 
             foreach (var gesture in reserved)
-                Assert.Equal(OperatingSystem.IsWindows(), HotkeyGesture.IsSystemReserved(gesture));
+            {
+                Assert.True(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.Windows), gesture.ToSerializedString());
+                // Alt+Tab is an ordinary combination on a Mac
+                Assert.False(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.OSX), gesture.ToSerializedString());
+                Assert.False(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.Linux), gesture.ToSerializedString());
+            }
 
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Tab)));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Control)));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Escape)));
-            Assert.False(HotkeyGesture.IsSystemReserved(null));
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Tab), OSPlatform.Windows));
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Control), OSPlatform.Windows));
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Escape), OSPlatform.Windows));
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Q, HotkeyModifiers.Meta), OSPlatform.Windows));
+            Assert.False(HotkeyGesture.IsSystemReserved(null, OSPlatform.Windows));
+        }
+
+        [Fact]
+        public void Switching_spotlight_leaving_the_window_and_the_ways_out_of_a_hang_are_reserved_on_macos()
+        {
+            const HotkeyModifiers Cmd = HotkeyModifiers.Meta;
+            var reserved = new[]
+            {
+                new HotkeyGesture(HotkeyKey.Tab, Cmd),
+                new HotkeyGesture(HotkeyKey.Tab, Cmd | HotkeyModifiers.Shift),
+                new HotkeyGesture(HotkeyKey.Oem3, Cmd),
+                new HotkeyGesture(HotkeyKey.Oem3, Cmd | HotkeyModifiers.Shift),
+                new HotkeyGesture(HotkeyKey.OemBackslash, Cmd),
+                new HotkeyGesture(HotkeyKey.Space, Cmd),
+                new HotkeyGesture(HotkeyKey.Q, Cmd),
+                new HotkeyGesture(HotkeyKey.W, Cmd),
+                new HotkeyGesture(HotkeyKey.H, Cmd),
+                new HotkeyGesture(HotkeyKey.M, Cmd),
+                new HotkeyGesture(HotkeyKey.Escape, Cmd | HotkeyModifiers.Alt),
+                new HotkeyGesture(HotkeyKey.Q, Cmd | HotkeyModifiers.Control),
+            };
+
+            foreach (var gesture in reserved)
+            {
+                Assert.True(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.OSX), gesture.ToSerializedString());
+                Assert.False(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.Windows), gesture.ToSerializedString());
+            }
+
+            // the screenshot keys are a screenshot tool's to take over
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.D3, Cmd | HotkeyModifiers.Shift), OSPlatform.OSX));
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.D4, Cmd | HotkeyModifiers.Shift), OSPlatform.OSX));
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.D5, Cmd | HotkeyModifiers.Shift), OSPlatform.OSX));
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Q, Cmd | HotkeyModifiers.Shift), OSPlatform.OSX));
+            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Alt), OSPlatform.OSX));
+            Assert.False(HotkeyGesture.IsSystemReserved(null, OSPlatform.OSX));
+        }
+
+        [Fact]
+        public void The_current_os_list_is_the_one_that_applies()
+        {
+            var cmdQ = new HotkeyGesture(HotkeyKey.Q, HotkeyModifiers.Meta);
+            var altTab = new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Alt);
+
+            Assert.Equal(OperatingSystem.IsMacOS(), HotkeyGesture.IsSystemReserved(cmdQ));
+            Assert.Equal(OperatingSystem.IsWindows(), HotkeyGesture.IsSystemReserved(altTab));
         }
 
         [Fact]
