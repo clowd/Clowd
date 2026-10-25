@@ -104,7 +104,11 @@
                                    Foreground="{DynamicResource ColorDialogBarLabelBrush}"
                                    Text="Initial" />
                         <Panel VerticalAlignment="Center">
-                            <Border Background="{DynamicResource ColorDialogCheckerBrush}" CornerRadius="6" />
+                            <!--  inset by the chip's edge so the translucent edge lies on the surface,
+                                  not the checker, which would show through it around an opaque color  -->
+                            <Border Margin="1"
+                                    Background="{DynamicResource ColorDialogCheckerBrush}"
+                                    CornerRadius="5" />
                             <Border x:Name="initialChip"
                                     Classes="colorChip">
                                 <TextBlock x:Name="initialHex" />
@@ -121,7 +125,9 @@
                                    Foreground="{DynamicResource ColorDialogBarLabelBrush}"
                                    Text="Selected" />
                         <Panel VerticalAlignment="Center">
-                            <Border Background="{DynamicResource ColorDialogCheckerBrush}" CornerRadius="6" />
+                            <Border Margin="1"
+                                    Background="{DynamicResource ColorDialogCheckerBrush}"
+                                    CornerRadius="5" />
                             <Border x:Name="selectedChip"
                                     Classes="colorChip">
                                 <TextBlock x:Name="selectedHex" />

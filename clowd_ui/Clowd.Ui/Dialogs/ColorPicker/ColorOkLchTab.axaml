@@ -58,7 +58,10 @@
         <Grid RowDefinitions="*,Auto,Auto">
             <Grid RowDefinitions="*,8,Auto,6,Auto">
                 <Panel>
-                    <Border Background="{DynamicResource ColorDialogCheckerBrush}" CornerRadius="8" />
+                    <!--  inset by the swatch's edge so the translucent edge lies on the surface  -->
+                    <Border Margin="1"
+                            Background="{DynamicResource ColorDialogCheckerBrush}"
+                            CornerRadius="7" />
                     <Border x:Name="swatch"
                             BorderBrush="{DynamicResource ColorDialogSwatchEdgeBrush}"
                             BorderThickness="1"
