@@ -158,7 +158,7 @@ namespace Clowd.Util
             }
             catch (OperationCanceledException)
             {
-                throw new TimeoutException("Unable to forward command line arguments to running Clowd instance.");
+                throw new TimeoutException("Unable to forward command line arguments to running Prisc instance.");
             }
         }
 

@@ -132,7 +132,7 @@ namespace Clowd.UI
             else if (TimeSinceInteraction < IdleThreshold)
             {
                 // no system-wide idle API here — fall back to how long ago Clowd itself was touched.
-                reason = "Clowd was used recently";
+                reason = "Prisc was used recently";
                 return false;
             }
 

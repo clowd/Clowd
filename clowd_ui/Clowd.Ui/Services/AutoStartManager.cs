@@ -77,7 +77,7 @@ namespace Clowd.UI
             try
             {
                 if (!IsSupported)
-                    throw new PlatformNotSupportedException("Starting Clowd at login is not supported on this platform.");
+                    throw new PlatformNotSupportedException("Starting Prisc at login is not supported on this platform.");
 
                 if (OperatingSystem.IsWindows())
                     SetEnabledWindows(enabled);

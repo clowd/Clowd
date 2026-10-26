@@ -28,7 +28,7 @@
          has no menu of its own, so setting one here replaces it with ours. -->
     <NativeMenu.Menu>
         <NativeMenu>
-            <NativeMenuItem Header="About Clowd" Click="AppMenuAbout_Click" />
+            <NativeMenuItem Header="About Prisc" Click="AppMenuAbout_Click" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Recents &amp; Uploads" Click="AppMenuRecents_Click" />
             <NativeMenuItem Header="Settings…" Gesture="Cmd+OemComma" Click="AppMenuSettings_Click" />

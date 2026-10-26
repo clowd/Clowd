@@ -410,7 +410,7 @@ namespace Clowd.UI
             private TimeSpan _elapsed = ClockStart;
 
             public GenericTrayWindow(BoxShadows shadow, bool vertical)
-                : base(new FloatingTrayOptions { Title = "Clowd Tray Spike", Shadow = shadow, Intro = true })
+                : base(new FloatingTrayOptions { Title = "Prisc Tray Spike", Shadow = shadow, Intro = true })
             {
                 _primary = new TrayPrimaryButton { State = TrayPrimaryState.Idle, Label = "Start" };
                 ToolTip.SetTip(_primary, "Transport · Idle");
@@ -564,7 +564,7 @@ namespace Clowd.UI
         private sealed class GlyphTrayWindow : FloatingTrayWindow
         {
             public GlyphTrayWindow(BoxShadows shadow)
-                : base(new FloatingTrayOptions { Title = "Clowd Tray Spike · glyphs", Shadow = shadow })
+                : base(new FloatingTrayOptions { Title = "Prisc Tray Spike · glyphs", Shadow = shadow })
             {
                 foreach (var glyph in TrayGlyphs.All)
                 {

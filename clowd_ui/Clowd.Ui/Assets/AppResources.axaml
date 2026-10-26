@@ -157,6 +157,10 @@
                          the glyph — darker here, paler in the dark theme. -->
                     <SolidColorBrush x:Key="ClowdNavDangerTextBrush" Color="#A8372C" />
                     <SolidColorBrush x:Key="ClowdNavWarningTextBrush" Color="#866400" />
+
+                    <!-- Ink of the logo's "prisc" wordmark (PathLogoWordmark): the brand's own
+                         text colours, #12161C on light grounds and #F2F5F8 on dark. -->
+                    <SolidColorBrush x:Key="ClowdWordmarkBrush" Color="#12161C" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="ApplicationBackgroundColor">#202020</Color>
@@ -169,6 +173,7 @@
                     <BoxShadows x:Key="ClowdEditorSurfaceShadow">0 0 9 0 #A6000000</BoxShadows>
                     <SolidColorBrush x:Key="ClowdNavDangerTextBrush" Color="#FFA89C" />
                     <SolidColorBrush x:Key="ClowdNavWarningTextBrush" Color="#F8E39A" />
+                    <SolidColorBrush x:Key="ClowdWordmarkBrush" Color="#F2F5F8" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

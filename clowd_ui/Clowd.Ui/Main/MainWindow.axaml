@@ -4,7 +4,7 @@
     xmlns:u="https://irihi.tech/ursa"
     xmlns:ui="using:Clowd.UI"
     x:Class="Clowd.UI.MainWindow"
-    Title="Clowd"
+    Title="Prisc"
     Width="800"
     Height="600"
     MinWidth="560"
@@ -44,15 +44,17 @@
                   and so keeps its own place at the top. Zero-height off macOS.  -->
             <Border Height="{DynamicResource MacTitleBarGutterVert}" />
 
-        <Grid Margin="6,0,0,24" ColumnDefinitions="Auto,*">
-            <Viewbox Width="40" Height="40" HorizontalAlignment="Left">
-                <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
-            </Viewbox>
-            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                <TextBlock FontWeight="Medium" Text="CLOWD" />
-                <TextBlock Opacity="0.6" Text="Screen Capture" />
-            </StackPanel>
-        </Grid>
+        <!-- The logo: emblem + "prisc" wordmark, both in the emblem's 16-unit space (see
+             PathLogoWordmark), so the emblem keeps the 40px box it always had. -->
+        <Viewbox Height="40" Margin="6,0,0,24" HorizontalAlignment="Left" AutomationProperties.Name="Prisc">
+            <Grid Width="51.47" Height="16">
+                <Path Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Top"
+                      Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
+                <Path HorizontalAlignment="Left" VerticalAlignment="Top"
+                      Data="{StaticResource PathLogoWordmark}" Stroke="{DynamicResource ClowdWordmarkBrush}"
+                      StrokeThickness="1.6627" StrokeLineCap="Round" StrokeJoin="Round" />
+            </Grid>
+        </Viewbox>
 
         </StackPanel>
 

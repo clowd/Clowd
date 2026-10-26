@@ -178,8 +178,8 @@ namespace Clowd.UI
                 return true;
 
             var openSettings = await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Warning,
-                "Clowd needs Accessibility permission to scroll the window for you.\n\n"
-                + "Enable Clowd under Privacy & Security → Accessibility, then start the scroll capture again.",
+                "Prisc needs Accessibility permission to scroll the window for you.\n\n"
+                + "Enable Prisc under Privacy & Security → Accessibility, then start the scroll capture again.",
                 "Accessibility permission required", "Open System Settings", "Cancel");
 
             if (openSettings)

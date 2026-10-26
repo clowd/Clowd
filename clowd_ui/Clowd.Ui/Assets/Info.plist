@@ -41,7 +41,7 @@
         <key>NSMenuItem</key>
         <dict>
           <key>default</key>
-          <string>Upload with Clowd</string>
+          <string>Upload with Prisc</string>
         </dict>
         <key>NSMessage</key>
         <string>uploadFiles</string>
@@ -62,10 +62,10 @@
       </dict>
     </array>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Clowd records your microphone when you enable it for a screen recording, and shows a live level meter so you can check the right device is selected.</string>
+    <string>Prisc records your microphone when you enable it for a screen recording, and shows a live level meter so you can check the right device is selected.</string>
     <key>NSAudioCaptureUsageDescription</key>
-    <string>Clowd captures system audio when you enable speaker sound for a screen recording, and shows a live level meter so you can check it is working.</string>
+    <string>Prisc captures system audio when you enable speaker sound for a screen recording, and shows a live level meter so you can check it is working.</string>
     <key>NSCameraUsageDescription</key>
-    <string>Clowd records your webcam when you enable it for a screen recording, so your camera can appear alongside the screen in the video editor.</string>
+    <string>Prisc records your webcam when you enable it for a screen recording, so your camera can appear alongside the screen in the video editor.</string>
   </dict>
 </plist>

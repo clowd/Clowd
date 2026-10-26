@@ -228,7 +228,7 @@ namespace Clowd.Config
     {
         [Category("Sessions")]
         [DisplayName("Restore sessions on startup")]
-        [Description("Reopen editors left open when Clowd restarts or the computer shuts down.")]
+        [Description("Reopen editors left open when Prisc restarts or the computer shuts down.")]
         public bool RestoreSessionsOnClowdStart
         {
             get => _restoreSessionsOnClowdStart;

@@ -147,8 +147,8 @@ namespace Clowd.Config
             OperatingSystem.IsWindows();
 #endif
 
-        [DisplayName("Start Clowd when your computer starts up")]
-        [Description("Clowd starts quietly in the notification area when you log in.")]
+        [DisplayName("Start Prisc when your computer starts up")]
+        [Description("Prisc starts quietly in the notification area when you log in.")]
         public bool RegisterAutoStart
         {
             get => _registerAutoStart;
@@ -167,8 +167,8 @@ namespace Clowd.Config
             OperatingSystem.IsWindows();
 #endif
 
-        [DisplayName("Add 'Upload with Clowd' to the Explorer context menu")]
-        [Description("Adds a right-click entry that uploads files and folders with Clowd.")]
+        [DisplayName("Add 'Upload with Prisc' to the Explorer context menu")]
+        [Description("Adds a right-click entry that uploads files and folders with Prisc.")]
         public bool RegisterExplorerContextMenu
         {
             get => _registerExplorerContextMenu;
@@ -176,7 +176,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Automatically check for and download updates")]
-        [Description("Look for new releases while Clowd is running and download them in the background.")]
+        [Description("Look for new releases while Prisc is running and download them in the background.")]
         public bool AutoDownloadUpdates
         {
             get => _autoDownloadUpdates;
@@ -184,14 +184,14 @@ namespace Clowd.Config
         }
 
         [DisplayName("Check for updates")]
-        [Description("How often Clowd looks for a newer release.")]
+        [Description("How often Prisc looks for a newer release.")]
         public UpdateInterval UpdateCheckInterval
         {
             get => _updateCheckInterval;
             set => Set(ref _updateCheckInterval, value);
         }
 
-        [DisplayName("Automatically restart Clowd to apply updates in the background")]
+        [DisplayName("Automatically restart Prisc to apply updates in the background")]
         [Description("Only restarts after 10 minutes of inactivity, never during a capture, recording or upload.")]
         public bool AutoApplyUpdates
         {
@@ -328,7 +328,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Shortcut click")]
-        [Description("What launching Clowd from a shortcut, the taskbar or the dock does.")]
+        [Description("What launching Prisc from a shortcut, the taskbar or the dock does.")]
         public ClickAction ShortcutClick
         {
             get => _shortcutClick;
@@ -340,8 +340,8 @@ namespace Clowd.Config
         /// <c>CaptureExclusion</c>. Tooltips by default: the tips and the region border are
         /// transient chrome nobody wants in a recording, while the toolbars stay visible unless asked.
         /// </summary>
-        [DisplayName("Hide Clowd windows from screen capture")]
-        [Description("Keep Clowd's own windows out of screenshots, recordings and screen shares.")]
+        [DisplayName("Hide Prisc windows from screen capture")]
+        [Description("Keep Prisc's own windows out of screenshots, recordings and screen shares.")]
         public HideFromCapture HideFromScreenCapture
         {
             get => _hideFromScreenCapture;
@@ -349,7 +349,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Confirm before exit")]
-        [Description("Ask before Clowd closes.")]
+        [Description("Ask before Prisc closes.")]
         public bool ConfirmClose
         {
             get => _confirmClose;

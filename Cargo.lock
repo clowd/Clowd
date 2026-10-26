@@ -863,7 +863,7 @@ dependencies = [
 
 [[package]]
 name = "clowd_shell_ext"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "windows",
  "windows-core",

@@ -177,11 +177,11 @@
                 <StackPanel Classes="SettingsGroup">
                     <StackPanel Classes="Setting">
                         <CheckBox x:Name="AutoStartCheck" IsChecked="{Binding RegisterAutoStart}">
-                            <TextBlock Text="Start Clowd when your computer starts up" />
+                            <TextBlock Text="Start Prisc when your computer starts up" />
                         </CheckBox>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="Clowd starts quietly in the notification area." />
+                                   Text="Prisc starts quietly in the notification area." />
                         <TextBlock x:Name="AutoStartStatusText" Classes="Caption" IsVisible="False" />
                     </StackPanel>
 
@@ -207,17 +207,17 @@
                         </StackPanel>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="What launching Clowd from a shortcut, the taskbar or the dock does." />
+                                   Text="What launching Prisc from a shortcut, the taskbar or the dock does." />
                     </StackPanel>
 
                     <StackPanel Classes="Setting">
                         <StackPanel Classes="SettingRow">
-                            <TextBlock VerticalAlignment="Center" Text="Hide Clowd windows from screen capture" />
+                            <TextBlock VerticalAlignment="Center" Text="Hide Prisc windows from screen capture" />
                             <ComboBox x:Name="HideFromCaptureCombo" MinWidth="160" />
                         </StackPanel>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="Keep Clowd's own windows out of screenshots, recordings and screen shares." />
+                                   Text="Keep Prisc's own windows out of screenshots, recordings and screen shares." />
                     </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>

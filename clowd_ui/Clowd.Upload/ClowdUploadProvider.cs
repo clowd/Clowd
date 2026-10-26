@@ -20,15 +20,15 @@ namespace Clowd.Upload
             {
                 // only qualify the name when pointed at a self-hosted server
                 if (String.Equals(ServerUrl?.TrimEnd('/'), DefaultServerUrl, StringComparison.OrdinalIgnoreCase))
-                    return "Clowd";
+                    return "Prisc";
 
                 try
                 {
-                    return $"Clowd ({new Uri(ServerUrl).Host})";
+                    return $"Prisc ({new Uri(ServerUrl).Host})";
                 }
                 catch
                 {
-                    return "Clowd";
+                    return "Prisc";
                 }
             }
         }
@@ -39,7 +39,7 @@ namespace Clowd.Upload
 
         public override Stream Icon => new Resource().ClowdIcon;
 
-        [Description("The Clowd server to store pastes on. Change this only if you are self-hosting.")]
+        [Description("The Prisc server to store pastes on. Change this only if you are self-hosting.")]
         public string ServerUrl
         {
             get => _serverUrl;

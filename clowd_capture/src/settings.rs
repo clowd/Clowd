@@ -188,7 +188,7 @@ impl Default for CapturerSettings {
 /// Nothing about it belongs here: the overlay's part ends when it writes
 /// the `scroll` action marker.
 #[derive(Debug, Clone, Parser)]
-#[command(version, about = "Clowd screen capturer")]
+#[command(version, about = "Prisc screen capturer")]
 pub struct CliArgs {
     /// Wait for one of the global screenshot hotkeys (or a stdin capture
     /// request) before initializing the capture stack. Each trigger runs one

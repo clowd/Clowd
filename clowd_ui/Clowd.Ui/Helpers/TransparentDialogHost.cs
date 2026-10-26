@@ -22,7 +22,7 @@ namespace Clowd.UI.Helpers
     {
         public TransparentDialogHost()
         {
-            Title = "Clowd";
+            Title = "Prisc";
             WindowDecorations = WindowDecorations.None;
             Background = Brushes.Transparent;
             TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };

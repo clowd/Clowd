@@ -127,7 +127,7 @@ namespace Clowd.UI
             var intro = tab switch
             {
                 SettingsPageTab.SettingsSystem =>
-                    "Choose how Clowd looks and behaves.",
+                    "Choose how Prisc looks and behaves.",
                 SettingsPageTab.SettingsHotkeys =>
                     "Global shortcuts work from anywhere, even while Clowd is in the background. An action can have more than one.",
                 SettingsPageTab.SettingsCapture => GetCaptureIntroText(),

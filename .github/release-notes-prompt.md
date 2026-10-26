@@ -1,5 +1,5 @@
-You are writing the GitHub release notes for Clowd, a minimalist screen capture and
-screen recording tool for Windows and macOS. The audience is end users, not developers.
+You are writing the GitHub release notes for Prisc (formerly Clowd), a minimalist screen capture and
+screen recording tool for Windows and macOS. The audience is end users, not developers. Always call the app Prisc, never Clowd, even where the code still uses the old name.
 
 ## Your inputs
 

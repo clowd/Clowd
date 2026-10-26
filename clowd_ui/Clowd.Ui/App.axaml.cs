@@ -323,7 +323,7 @@ namespace Clowd
                 Debug.WriteLine("Fatal error during startup: " + ex);
                 SentryConfig.CaptureHandled(ex, "startup");
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.ToString(),
-                    "Error starting Clowd. The program will now exit.");
+                    "Error starting Prisc. The program will now exit.");
                 ExitApp();
             }
         }
@@ -390,7 +390,7 @@ namespace Clowd
                 // there is an unresponsive clowd process; try to kill it and re-start.
                 KillOtherClowdProcess();
                 if (await _processor.Startup(args) == false)
-                    throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Clowd instance? Uninstaller?");
+                    throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Prisc instance? Uninstaller?");
             }
         }
 
@@ -401,7 +401,7 @@ namespace Clowd
                 _trayIcon = new TrayIcon
                 {
                     Icon = AppStyles.TrayIcon,
-                    ToolTipText = "Clowd",
+                    ToolTipText = "Prisc",
                     // the macOS native-menu exporter binds to the first Menu instance and
                     // throws "The menu being updated does not match" if it is replaced, so
                     // this single NativeMenu is only ever mutated in place (below).
@@ -788,8 +788,8 @@ namespace Clowd
             if (SettingsRoot.Current?.General?.ConfirmClose == true)
             {
                 var prompt = await NiceDialog.ShowVerifiableDialogAsync(null, NiceDialogIcon.Warning,
-                    "If you close Clowd, it will stop any in-progress uploads and you will be unable to upload anything new.",
-                    "Are you sure you wish to close Clowd?", "Close Clowd", "Cancel",
+                    "If you close Prisc, it will stop any in-progress uploads and you will be unable to upload anything new.",
+                    "Are you sure you wish to close Prisc?", "Close Prisc", "Cancel",
                     "Don't ask again");
 
                 if (prompt.Result)
@@ -1034,7 +1034,7 @@ namespace Clowd
             if (!SettingsRoot.Current.Uploads.IsEnabled)
             {
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information,
-                    "Uploads are turned off in Clowd's settings, so nothing was uploaded. You can turn them back on from the Uploads page.",
+                    "Uploads are turned off in Prisc's settings, so nothing was uploaded. You can turn them back on from the Uploads page.",
                     "Uploads are off");
                 return;
             }

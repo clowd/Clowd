@@ -234,7 +234,7 @@ impl Drop for ExplorerCommand {
 #[allow(non_snake_case)]
 impl IExplorerCommand_Impl for ExplorerCommand_Impl {
     fn GetTitle(&self, _psiitemarray: Ref<IShellItemArray>) -> windows::core::Result<PWSTR> {
-        guard(|| co_task_wide("Upload with Clowd"))
+        guard(|| co_task_wide("Upload with Prisc"))
     }
 
     fn GetIcon(&self, _psiitemarray: Ref<IShellItemArray>) -> windows::core::Result<PWSTR> {

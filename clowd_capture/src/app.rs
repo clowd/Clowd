@@ -1421,7 +1421,7 @@ impl App {
             ActionResult::Failed(msg) => {
                 // Retry re-shows the overlay still in pick mode, so the
                 // user lands back on the crosshair, not on the panel.
-                if xdialog::show_message_retry_cancel("Clowd Capture", "Scrolling Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                if xdialog::show_message_retry_cancel("Prisc Capture", "Scrolling Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                     self.show_all_windows();
                 } else {
                     self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1464,7 +1464,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Copy),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
                         {
                             self.show_all_windows();
                         } else {
@@ -1494,7 +1494,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Save),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Save Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Save Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1534,7 +1534,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, cycle_action),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Session Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Session Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1569,7 +1569,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SearchImage),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Image Search Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Image Search Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1599,7 +1599,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SelectColor),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Color Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Color Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1631,7 +1631,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Video),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Video Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Video Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);
@@ -1660,7 +1660,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Share),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Share Region Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Share Region Failed", &msg, ErrorIcon).unwrap_or(false) {
                             // Unlatch before re-showing, which VIDEO does not have to do: its
                             // retry can go back through the panel's VIDEO button, while SHARE is
                             // auto-dispatch only (no panel button, by design). Leaving the
@@ -1866,7 +1866,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrCopy),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
                         {
                             self.show_all_windows();
                         } else {
@@ -1944,7 +1944,7 @@ impl App {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrUpload),
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Text Upload Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if xdialog::show_message_retry_cancel("Prisc Capture", "Text Upload Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);

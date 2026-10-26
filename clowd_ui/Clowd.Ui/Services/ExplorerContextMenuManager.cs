@@ -25,7 +25,7 @@ namespace Clowd.UI
     /// </summary>
     internal static class ExplorerContextMenuManager
     {
-        private const string MenuTitle = "Upload with Clowd";
+        private const string MenuTitle = "Upload with Prisc";
 
         private const string FilesShellPath = @"Software\Classes\*\shell";
         private const string DirectoryShellPath = @"Software\Classes\Directory\shell";

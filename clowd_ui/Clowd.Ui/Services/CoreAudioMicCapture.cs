@@ -459,7 +459,7 @@ namespace Clowd.UI.Services
             var status = MicrophoneAuthorizationStatus();
             if (status == AVAuthorizationStatusDenied || status == AVAuthorizationStatusRestricted)
                 throw new UnauthorizedAccessException(
-                    "Microphone access is denied for Clowd (System Settings > Privacy & Security > Microphone).");
+                    "Microphone access is denied for Prisc (System Settings > Privacy & Security > Microphone).");
         }
 
         /// <summary><c>[AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio]</c>, or

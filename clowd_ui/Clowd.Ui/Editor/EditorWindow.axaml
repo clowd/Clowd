@@ -10,7 +10,7 @@
     xmlns:tray="clr-namespace:Clowd.UI.Controls.Tray"
     xmlns:util="clr-namespace:Clowd.Util"
     DragDrop.AllowDrop="True"
-    Title="Edit - Clowd"
+    Title="Edit - Prisc"
     Width="1050"
     Height="750"
     MinWidth="550"

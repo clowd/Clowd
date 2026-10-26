@@ -58,7 +58,7 @@ namespace Clowd.UI
 
         /// <summary>No restart hint: the host picks the grant up by itself.</summary>
         internal const string PermissionMessage =
-            "Could not start the global hotkey listener. Grant Accessibility permission to Clowd under " +
+            "Could not start the global hotkey listener. Grant Accessibility permission to Prisc under " +
             MacPermissions.GrantLocation + "; the hotkeys start working as soon as you do.";
 
         /// <summary>The permission check passed, yet the tap was made without key events: a grant

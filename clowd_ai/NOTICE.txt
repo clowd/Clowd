@@ -1,9 +1,9 @@
-clowd_ai — on-device AI inference (OCR, video matting, audio denoising) for Clowd
+clowd_ai — on-device AI inference (OCR, video matting, audio denoising) for Prisc
 
 This executable (clowd_ai) is licensed under the GNU General Public
 License, version 3 only (GPL-3.0-only). See the accompanying LICENSE file
-for the full license text. It is distributed alongside Clowd as a separate
-program (mere aggregation); the rest of Clowd is MIT licensed and is not
+for the full license text. It is distributed alongside Prisc as a separate
+program (mere aggregation); the rest of Prisc is MIT licensed and is not
 covered by the GPL.
 
 It embeds the following model weights:
@@ -31,4 +31,4 @@ are GPL-compatible. On Windows the DirectML execution-provider helper library
 (DirectML.dll) is distributed beside it but not embedded in it.
 
 Complete corresponding source code for clowd_ai is available at:
-https://github.com/clowd/Clowd (the clowd_ai/ directory)
+https://github.com/priscapp/Prisc (the clowd_ai/ directory)
