@@ -255,6 +255,37 @@ namespace Prisc.Shared.Tests
         }
 
         [Fact]
+        public void Export_CarriesTheBuiltInProviderUnderBothNames_AndDecodesToOne()
+        {
+            _ = typeof(MimeProvider).Assembly;
+
+            var settings = new SettingsUpload();
+            settings.DiscoverProviders();
+            ((PriscUploadProvider)settings.Providers.Single(p => p.Provider is PriscUploadProvider).Provider).ServerUrl = "https://paste.example.com";
+
+            // asking by the legacy name exports under the current key too
+            foreach (var asked in new[] { nameof(PriscUploadProvider), LegacyClowd.UploadProviderTypeName })
+            {
+                var payload = settings.ExportProviders(new[] { asked, "ImgurUploadProvider" }, "4.11.0", DateTimeOffset.UnixEpoch);
+
+                // a client from before the rename finds its own key
+                Assert.Equal(new[] { LegacyClowd.UploadProviderTypeName, "ImgurUploadProvider", nameof(PriscUploadProvider) },
+                    payload.Providers.Keys.OrderBy(k => k, StringComparer.Ordinal));
+                Assert.Equal("https://paste.example.com", payload.Providers[LegacyClowd.UploadProviderTypeName].Settings["ServerUrl"]);
+
+                // a current client sees one entry per provider
+                Assert.True(UploadSettingsTransfer.TryDecode(UploadSettingsTransfer.Encode(payload), out var decoded));
+                Assert.Equal(new[] { "ImgurUploadProvider", nameof(PriscUploadProvider) },
+                    decoded.Providers.Keys.OrderBy(k => k, StringComparer.Ordinal));
+                Assert.Equal("https://paste.example.com", decoded.Providers[nameof(PriscUploadProvider)].Settings["ServerUrl"]);
+            }
+
+            // other providers alone get no alias
+            Assert.Equal(new[] { "ImgurUploadProvider" },
+                settings.ExportProviders(new[] { "ImgurUploadProvider" }, "4.11.0", DateTimeOffset.UnixEpoch).Providers.Keys);
+        }
+
+        [Fact]
         public void LegacyExportString_ImportsIntoThePriscProvider()
         {
             _ = typeof(MimeProvider).Assembly;

@@ -247,7 +247,9 @@ namespace Prisc.Config
                 // never touched has no entry there yet.
                 var config = BuildConfig(info);
 
-                payload.Providers[typeName] = new UploadTransferEntry
+                // keyed by the provider's real type name, so a legacy name asked for still exports
+                // under the current key
+                payload.Providers[info.Provider.GetType().Name] = new UploadTransferEntry
                 {
                     Name = info.Provider.Name,
                     IsEnabled = config.IsEnabled,
@@ -255,6 +257,10 @@ namespace Prisc.Config
                     Settings = new Dictionary<string, string>(config.Settings, StringComparer.Ordinal),
                 };
             }
+
+            // strings are pasted between users, and some of them still run the app from before
+            // its rename
+            LegacyClowd.AddLegacyProviderAlias(payload.Providers);
 
             return payload;
         }

@@ -121,6 +121,24 @@ public static class LegacyClowd
         }
     }
 
+    /// <summary>Copies the built-in provider's entry under its legacy key as well, so an exported
+    /// CLWDUP string still imports into a Clowd that looks providers up by the old type name. New
+    /// clients drop the alias again on decode (<see cref="NormalizeProviderKeys{T}"/>, where the
+    /// current key wins). Null-safe; never throws.</summary>
+    public static void AddLegacyProviderAlias<T>(IDictionary<string, T>? providers)
+    {
+        try
+        {
+            if (providers != null && providers.TryGetValue(CurrentUploadProviderTypeName, out var value)
+                && !providers.ContainsKey(UploadProviderTypeName))
+                providers[UploadProviderTypeName] = value;
+        }
+        catch (Exception ex)
+        {
+            Log("could not add the legacy upload provider alias: " + ex);
+        }
+    }
+
     // ------------------------------------------------------------------------------------------
     // Telemetry
     // ------------------------------------------------------------------------------------------
