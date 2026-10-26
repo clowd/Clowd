@@ -4,9 +4,8 @@ namespace Prisc.Drawing
 {
     /// <summary>
     /// Drag cursors browsers provide but Windows does not ship among its system cursors. All
-    /// three are Mozilla's (gecko-dev <c>widget/windows/res</c>, MPL 2.0), repacked by
-    /// CursorGenerator (see <c>ConvertMozillaCursor</c> there, and the vendored sources under
-    /// <c>CursorGenerator/Mozilla</c>) into the PNG-frame .cur form <see cref="CursorResources"/>
+    /// three are drawn by tools/cursor-generator (<c>DrawGrabHand</c>, <c>DrawGrabbingHand</c>
+    /// and <c>DrawColResize</c> there) into the PNG-frame .cur form <see cref="CursorResources"/>
     /// decodes.
     /// </summary>
     public static class DragCursors

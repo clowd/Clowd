@@ -9,6 +9,6 @@
   <Project Path="ui/Prisc.VideoRender/Prisc.VideoRender.csproj" />
   <Project Path="ui/Prisc.VideoSDK/Prisc.VideoSDK.csproj" />
   <Project Path="ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj" />
-  <Project Path="ui/CursorGenerator/CursorGenerator.csproj" />
+  <Project Path="tools/cursor-generator/CursorGenerator.csproj" />
   <Project Path="tools/background-tiles/BackgroundTiles.csproj" />
 </Solution>
