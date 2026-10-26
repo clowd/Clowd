@@ -262,6 +262,19 @@ namespace Prisc.UI
                 SetState(UpdateState.Checking, "Checking for updates…");
                 var info = await Manager.CheckForUpdatesAsync();
 
+                // AllowVersionDowngrade lets someone who leaves experimental builds go back to the
+                // newest stable, but never across a package id change: an older release under
+                // another id (the app before its rename) knows nothing of this install's
+                // registrations or data folders and would strand them. Wait for a stable release
+                // under our own id instead.
+                if (info is { IsDowngrade: true }
+                    && !String.Equals(info.TargetFullRelease?.PackageId, Manager.AppId, StringComparison.OrdinalIgnoreCase))
+                {
+                    Debug.WriteLine("UpdateService: ignoring a downgrade to " + info.TargetFullRelease?.PackageId
+                                    + " " + info.TargetFullRelease?.Version + " (a different package id)");
+                    info = null;
+                }
+
                 _available = info;
                 _lastCheckUtc = DateTime.UtcNow;
                 _nextCheckUtc = _lastCheckUtc + CheckInterval;
