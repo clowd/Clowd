@@ -1,7 +1,9 @@
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using Velopack.Locators;
 
 namespace Prisc
 {
@@ -18,24 +20,68 @@ namespace Prisc
 
     public static class PathConstants
     {
-        public static string LogData => GetPriscFolder(Environment.SpecialFolder.LocalApplicationData, "logs");
-        public static string SessionData => GetPriscFolder(Environment.SpecialFolder.LocalApplicationData, "sessions");
+        public static string LogData => GetPriscFolder("logs");
+        public static string SessionData => GetPriscFolder("sessions");
 
         /// <summary>Per-user cache of generated session previews. Like every other folder here the
         /// getter has a side effect — <see cref="GetPriscFolder(string, string)"/> creates the whole
         /// tree — so it must never be read from the UI or a render thread. The preview engine
         /// resolves it exactly once, lazily, on a background worker.</summary>
-        public static string PreviewCache => GetPriscFolder(Environment.SpecialFolder.LocalApplicationData, "previews");
+        public static string PreviewCache => GetPriscFolder("previews");
 
         /// <summary>The per-user data directory the app folder lives in: LocalAppData on Windows, the
         /// XDG data dir elsewhere (see <see cref="GetDataDirectory(Environment.SpecialFolder)"/>).
         /// Unlike the folders above it creates nothing.</summary>
         public static string DataDirectory => GetDataDirectory(Environment.SpecialFolder.LocalApplicationData);
 
-        /// <summary><c>&lt;DataDirectory&gt;/Prisc</c>, the parent of <see cref="SessionData"/>,
-        /// <see cref="PreviewCache"/> and <see cref="LogData"/>. Creates nothing, so the legacy
-        /// data migration can run before anything touches the sessions folder.</summary>
-        public static string AppDataRoot => Path.Combine(DataDirectory, "Prisc");
+        /// <summary>
+        /// The parent of <see cref="SessionData"/>, <see cref="PreviewCache"/> and
+        /// <see cref="LogData"/>. Creates nothing, so the legacy data migration can run before
+        /// anything touches the sessions folder.
+        ///
+        /// On an installed Windows build this is the Velopack install root itself
+        /// (<see cref="VelopackInstallRoot"/>), as it always was: a fresh install's root is
+        /// <c>%LOCALAPPDATA%\Prisc</c>, and an install upgraded across the rename keeps its root,
+        /// and so its data, under the old name. Data must never live in a folder that is not this
+        /// install's root but that Velopack Setup would claim as its default root (Setup renames
+        /// and then deletes a non-empty target), and uninstall removes the data with the root.
+        /// Everywhere else (dev builds, macOS, Linux) it is <c>&lt;DataDirectory&gt;/Prisc</c>.
+        /// </summary>
+        public static string AppDataRoot
+        {
+            get
+            {
+                if (OperatingSystem.IsWindows() && VelopackInstallRoot is { } root)
+                    return Path.GetFullPath(root);
+
+                return Path.Combine(DataDirectory, "Prisc");
+            }
+        }
+
+        /// <summary>The Velopack install root of this app (on macOS its <c>.app</c> bundle), or null
+        /// for a dev or loose build. Never throws.</summary>
+        public static string VelopackInstallRoot
+        {
+            get
+            {
+                try
+                {
+                    if (!VelopackLocator.IsCurrentSet)
+                        return null;
+
+                    var locator = VelopackLocator.Current;
+                    if (locator == null || locator.CurrentlyInstalledVersion == null || String.IsNullOrEmpty(locator.RootAppDir))
+                        return null;
+
+                    return locator.RootAppDir;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("PathConstants: could not read the Velopack locator: " + ex.Message);
+                    return null;
+                }
+            }
+        }
 
         public static string GetFolderPath(string name, string parentDirectory)
         {
@@ -75,9 +121,6 @@ namespace Prisc
             return DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture);
         }
 
-        private static string GetPriscFolder(Environment.SpecialFolder dataDirectory, string dataName) =>
-            GetPriscFolder(GetDataDirectory(dataDirectory), dataName);
-
         /// <summary>
         /// .NET 8 changed <see cref="Environment.GetFolderPath(Environment.SpecialFolder)"/> on macOS to
         /// return Apple-convention paths (LocalApplicationData → ~/Library/Application Support). The
@@ -98,23 +141,17 @@ namespace Prisc
             return Environment.GetFolderPath(folder);
         }
 
-        private static string GetPriscFolder(string dataDirectory, string dataName)
+        private static string GetPriscFolder(string dataName)
         {
             if (String.IsNullOrWhiteSpace(dataName))
                 throw new ArgumentException($"Directory name can not be empty.");
 
-            // unlike the WPF original (which threw), create the parent data directory if missing —
-            // on macOS the unix mapping of LocalApplicationData (~/.local/share) may not exist yet.
-            if (!Directory.Exists(dataDirectory))
-                Directory.CreateDirectory(dataDirectory);
-
-            var priscPath = Path.Combine(dataDirectory, "Prisc");
+            // unlike the WPF original (which threw), create the whole tree if missing — on macOS
+            // the unix mapping of LocalApplicationData (~/.local/share) may not exist yet.
+            var priscPath = AppDataRoot;
 
             if (!Directory.Exists(priscPath))
                 Directory.CreateDirectory(priscPath);
-
-            if (String.IsNullOrEmpty(dataName))
-                return Path.GetFullPath(priscPath);
 
             var dataPath = Path.Combine(priscPath, dataName);
 

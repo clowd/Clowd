@@ -38,28 +38,7 @@ public static class LegacyClowdShellCleanup
 
     /// <summary>The Velopack install root of this app (on macOS its <c>.app</c> bundle), or null
     /// for a dev or loose build.</summary>
-    public static string OwnInstallRoot
-    {
-        get
-        {
-            try
-            {
-                if (!VelopackLocator.IsCurrentSet)
-                    return null;
-
-                var locator = VelopackLocator.Current;
-                if (locator == null || locator.CurrentlyInstalledVersion == null || String.IsNullOrEmpty(locator.RootAppDir))
-                    return null;
-
-                return locator.RootAppDir;
-            }
-            catch (Exception ex)
-            {
-                Log("could not read the Velopack locator: " + ex.Message);
-                return null;
-            }
-        }
-    }
+    public static string OwnInstallRoot => PathConstants.VelopackInstallRoot;
 
     /// <summary><see cref="LegacyClowd.HasSeparateLegacyInstall"/> for this machine: LocalAppData
     /// on Windows, <c>/Applications</c> and <c>~/Applications</c> on macOS, and
