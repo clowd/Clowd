@@ -79,19 +79,9 @@ namespace Prisc.UI.Services
         /// <summary>Locates prisc_vid2gif: the <c>PRISC_VID2GIF_PATH</c> override first, otherwise the
         /// directory prisc_recorder was found in — the two binaries ship side by side in every layout
         /// (release bundle and cargo target dir alike). Returns null when it cannot be found.</summary>
-        public static string ResolveBinaryPath()
-        {
-            var env = Environment.GetEnvironmentVariable(EnvVarName);
-            if (!String.IsNullOrWhiteSpace(env) && File.Exists(env))
-                return HelperBinary.EnsureExecutable(Path.GetFullPath(env));
-
-            var obs = ObsBinaryLocator.Resolve();
-            if (String.IsNullOrEmpty(obs))
-                return null;
-
-            var candidate = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(obs)), BinaryFileName);
-            return File.Exists(candidate) ? HelperBinary.EnsureExecutable(candidate) : null;
-        }
+        public static string ResolveBinaryPath() =>
+            HelperBinary.EnsureExecutable(HelperBinary.ResolveBesideRecorder(
+                Environment.GetEnvironmentVariable(EnvVarName), ObsBinaryLocator.Resolve, BinaryFileName));
 
         /// <summary>
         /// Spawns prisc_vid2gif and resolves once it has exited, with whichever terminal message it sent.

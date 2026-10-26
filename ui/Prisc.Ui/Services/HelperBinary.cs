@@ -10,6 +10,28 @@ namespace Prisc.UI
     public static class HelperBinary
     {
         /// <summary>
+        /// The pure path lookup behind the helpers that ship beside the recorder (prisc_share_region,
+        /// prisc_vid2gif): <paramref name="envVarValue"/> when it names an existing file, otherwise
+        /// <paramref name="fileName"/> in the directory of the recorder that
+        /// <paramref name="resolveRecorder"/> finds (asked only when the override does not apply).
+        /// The two ship side by side in every layout (the release payload and the cargo target dir
+        /// alike), so there is deliberately no second search to drift out of sync with
+        /// <see cref="ObsBinaryLocator"/>. Returns null when it cannot be found.
+        /// </summary>
+        public static string ResolveBesideRecorder(string envVarValue, Func<string> resolveRecorder, string fileName)
+        {
+            if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
+                return Path.GetFullPath(envVarValue);
+
+            var recorder = resolveRecorder?.Invoke();
+            if (String.IsNullOrEmpty(recorder))
+                return null;
+
+            var candidate = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(recorder)), fileName);
+            return File.Exists(candidate) ? candidate : null;
+        }
+
+        /// <summary>
         /// Makes sure <paramref name="path"/> can actually be executed, and returns it unchanged so
         /// it can wrap a resolver's result. No-op on Windows, which has no execute bit.
         /// <para>

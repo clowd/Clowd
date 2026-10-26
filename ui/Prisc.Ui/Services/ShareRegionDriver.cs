@@ -201,19 +201,9 @@ namespace Prisc.UI
         /// when it cannot be found; the caller reports that, because only the caller knows what the
         /// user was trying to do.
         /// </summary>
-        public static string ResolveBinary()
-        {
-            var env = Environment.GetEnvironmentVariable(EnvVarName);
-            if (!String.IsNullOrWhiteSpace(env) && File.Exists(env))
-                return HelperBinary.EnsureExecutable(Path.GetFullPath(env));
-
-            var obs = ObsBinaryLocator.Resolve();
-            if (String.IsNullOrEmpty(obs))
-                return null;
-
-            var candidate = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(obs)), BinaryFileName);
-            return File.Exists(candidate) ? HelperBinary.EnsureExecutable(candidate) : null;
-        }
+        public static string ResolveBinary() =>
+            HelperBinary.EnsureExecutable(HelperBinary.ResolveBesideRecorder(
+                Environment.GetEnvironmentVariable(EnvVarName), ObsBinaryLocator.Resolve, BinaryFileName));
 
         /// <summary>
         /// Spawns the helper and resolves when it reports <c>initialized</c> — that is, when its
