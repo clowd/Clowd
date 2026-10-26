@@ -2,12 +2,14 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Threading;
+using Avalonia.Threading;
 
 namespace Clowd.UI
 {
     /// <summary>
     /// The two macOS privacy permissions Clowd cannot work without, and the only place that talks
-    /// to TCC. Backs the Permissions group on the General settings page, the gate in front of the
+    /// to TCC. Backs the Permissions group on the System settings page, the gate in front of the
     /// capture overlay (<see cref="ScreenCapturePage"/>) and the eyedropper
     /// (<see cref="Clowd.Util.ScreenPixels"/>).
     /// </summary>
@@ -29,15 +31,30 @@ namespace Clowd.UI
     /// working, sends the user to System Settings instead — a button that silently does nothing is
     /// the worst of the three options.
     ///
-    /// Neither permission can be picked up by a running process: macOS hands the app its TCC
-    /// answer at launch, so granting takes effect on the next start. Callers say so rather than
-    /// leaving the user to wonder why the toggle they just flipped changed nothing.
+    /// Screen Recording cannot be picked up by a running process: macOS hands the app that TCC
+    /// answer at launch, so granting it takes effect on the next start, and callers say so rather
+    /// than leaving the user to wonder why the toggle they just flipped changed nothing.
+    /// Accessibility is different: <c>AXIsProcessTrusted</c> answers live, and the hotkey hooks
+    /// (<see cref="NativeHotkeyHost"/>'s and the standby capturer's) poll it while they are down
+    /// and restart once it turns true, so that grant needs no restart.
     /// </remarks>
     internal static class MacPermissions
     {
         /// <summary>Whether this platform has these permissions at all — false everywhere but macOS,
         /// where the Permissions settings group is hidden entirely.</summary>
         public static bool IsRelevant => OperatingSystem.IsMacOS();
+
+        /// <summary>The nav label of the settings page the Permissions group heads: "System", or —
+        /// MainWindow's badge — "Permission Needed" while a permission is missing.</summary>
+        public static string NavLabel(bool permissionMissing) => permissionMissing ? NavLabelMissing : NavLabelGranted;
+
+        private const string NavLabelGranted = "System";
+        private const string NavLabelMissing = "Permission Needed";
+
+        /// <summary>Where a message sends the user to grant a permission. It names the page both
+        /// ways: the message shows while the nav calls it "Permission Needed", except when only a
+        /// hook's own check says no and the nav still reads "System".</summary>
+        public const string GrantLocation = "Settings → " + NavLabelMissing + " (the " + NavLabelGranted + " page)";
 
         /// <summary>Raised after a successful <see cref="Request"/> or <see cref="OpenSettings"/> so
         /// open UI can re-read the statuses.</summary>
@@ -61,11 +78,13 @@ namespace Clowd.UI
         /// <remarks>
         /// A false return does NOT mean the user refused. macOS only ever offers each prompt once —
         /// after any first answer these calls return the stored verdict without showing anything —
-        /// and even a fresh grant usually reports false, because the process was handed its TCC
-        /// answer at launch and cannot be told otherwise until it restarts. So false means "not
-        /// usable yet", covering refused, already-answered and just-granted-pending-restart alike;
-        /// callers should follow it with <see cref="OpenSettings"/> or a restart hint rather than
-        /// treating it as a refusal.
+        /// and for Screen Recording even a fresh grant usually reports false, because the process
+        /// was handed that TCC answer at launch and cannot be told otherwise until it restarts. So
+        /// false means "not usable yet", covering refused, already-answered and (Screen Recording)
+        /// just-granted-pending-restart alike; callers should follow it with
+        /// <see cref="OpenSettings"/> (plus, for Screen Recording, a restart hint) rather than
+        /// treating it as a refusal. An Accessibility grant reads true as soon as it is made, so
+        /// callers can just check <see cref="HasAccessibility"/> again and need no restart hint.
         /// </remarks>
         public static bool Request(MacPermission permission)
         {
@@ -261,6 +280,47 @@ namespace Clowd.UI
                     return IntPtr.Zero;
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// The system Accessibility prompt, shown at most once per app run by whichever path first
+    /// finds the permission missing: the shell's own hook (<see cref="NativeHotkeyHost"/>) or the
+    /// standby capturer's hotkey status (<see cref="CaptureStandbySupervisor"/> — in warm-capture
+    /// mode the shell may own no gesture at all). Neither the crate nor the capturer prompts
+    /// (<c>AXIsProcessTrusted</c> never does), yet the prompt is what puts Clowd in the
+    /// Accessibility list, sparing the user its '+' button. Once, because the alert comes back on
+    /// every <see cref="MacPermissions.Request"/> while the permission is missing.
+    /// </summary>
+    internal sealed class AccessibilityPrompt
+    {
+        public static AccessibilityPrompt Shared { get; } = new(OperatingSystem.IsMacOS(),
+            () => MacPermissions.Request(MacPermission.Accessibility), action => Dispatcher.UIThread.Post(action));
+
+        private readonly bool _isMacOS;
+        private readonly Action _request;
+        private readonly Action<Action> _post;
+        private int _requested;
+
+        /// <param name="request">Shows the prompt (UI thread).</param>
+        /// <param name="post">Runs an action on the UI thread.</param>
+        public AccessibilityPrompt(bool isMacOS, Action request, Action<Action> post)
+        {
+            _isMacOS = isMacOS;
+            _request = request ?? throw new ArgumentNullException(nameof(request));
+            _post = post ?? throw new ArgumentNullException(nameof(post));
+        }
+
+        /// <summary>Asks for Accessibility unless this run already has. Any thread, any lock held:
+        /// the prompt itself is posted, since <see cref="MacPermissions.Request"/> raises
+        /// <see cref="MacPermissions.StateChanged"/> into UI subscribers synchronously. A no-op
+        /// off macOS.</summary>
+        public void RequestOnce()
+        {
+            if (!_isMacOS || Interlocked.Exchange(ref _requested, 1) != 0)
+                return;
+
+            _post(_request);
         }
     }
 

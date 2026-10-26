@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -42,6 +44,7 @@ namespace Clowd.UI.Pages
             var settings = SettingsRoot.Current?.Hotkeys;
             if (manager != null && settings != null)
             {
+                AddPlatformNote(panel);
                 var properties = TypeDescriptor.GetProperties(settings);
                 var first = true;
                 foreach (var section in HotkeyPageLayout.Sections)
@@ -55,6 +58,26 @@ namespace Clowd.UI.Pages
             // right/bottom clearance scrolls with it and the fields never run under the scrollbar.
             panel.Margin = new Thickness(0, 0, 16, 16);
             Content = new FadeEdgeScrollViewer { Content = panel };
+        }
+
+        private static void AddPlatformNote(SettingsRowsPanel panel)
+        {
+            var platform = OperatingSystem.IsMacOS() ? OSPlatform.OSX
+                : OperatingSystem.IsWindows() ? OSPlatform.Windows
+                : OSPlatform.Linux;
+            if (HotkeyPageLayout.PlatformNote(platform) is not { } note)
+                return;
+
+            var text = new TextBlock
+            {
+                Text = note,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 4, 16),
+            };
+            text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("SemiColorText2"));
+            SettingsRowsPanel.SetRole(text, SettingsRowsPanel.Role.Block);
+            panel.Children.Add(text);
         }
 
         private static void AddSection(SettingsRowsPanel panel, HotkeySection section, HotkeyManager manager,

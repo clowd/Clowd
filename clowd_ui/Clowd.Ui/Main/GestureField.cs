@@ -31,12 +31,17 @@ namespace Clowd.UI.Config
     /// sees keys the window never gets (PrtScr, Win combinations), and registered hotkeys stay
     /// silent while it records, so the combination being pressed does not fire its action. The
     /// hook hears every app, so the recording never outlives the user's attention on this field:
-    /// the focus leaving it or its window being deactivated cancels it, as do Esc on its own and
-    /// the Windows task-switching combinations (<see cref="HotkeyGesture.IsSystemReserved"/>).
+    /// the focus leaving it or its window being deactivated cancels it, as do Esc on its own, the
+    /// combinations the OS needs for itself — task switching, and on macOS Cmd+Q, Force Quit and
+    /// the like (<see cref="HotkeyGesture.IsSystemReserved"/>) — and the hook stopping.
     /// Modifier keys on their own only update the preview. Win+L is recorded like any other
     /// combination, but Windows always locks on it as well — the hook can never suppress it.</para>
     /// <para>Without a working hook (macOS before Accessibility is granted, Linux, the library
-    /// missing) nothing can be recorded, and the field says why in its status.</para>
+    /// missing) nothing can be recorded, and the field says why in its status; on macOS the hook
+    /// comes back by itself once the permission is granted, and the field drops the reason then
+    /// (<see cref="HotkeyManager.RecordingAvailable"/>). While another app holds macOS Secure Input
+    /// the hook hears no key at all, so a recording started then says so rather than sitting on
+    /// "Listening" (<see cref="HotkeyManager.SecureInputProbe"/>).</para>
     /// </remarks>
     public class GestureField : UserControl
     {
@@ -80,6 +85,13 @@ namespace Clowd.UI.Config
         private const string StatusListening = "Listening";
         private const string StatusError = "Error";
 
+        /// <summary>What the field shows while it records under macOS Secure Input
+        /// (<see cref="HotkeyManager.SecureInputProbe"/>), and the reason in its status tooltip.</summary>
+        internal const string SecureInputPrompt = "Secure keyboard entry is on";
+        internal const string SecureInputMessage =
+            "Another app has secure keyboard entry on (usually a password field), so no key reaches "
+            + "Clowd until it ends.";
+
         private readonly Button _button;
         private readonly Border _listenRing;
         private readonly Button _removeButton;
@@ -92,6 +104,8 @@ namespace Clowd.UI.Config
         private IDisposable _session;
         private Window _window;
         private string _recordingError;
+        private bool _secureInput; // checked as the recording starts: the hook will hear nothing
+        private HotkeyManager _manager; // subscribed to while shown
 
         /// <param name="actionName">The display name of the action the shortcut belongs to: a
         /// screen reader announces it with the gesture, since a row's several gesture buttons are
@@ -224,6 +238,9 @@ namespace Clowd.UI.Config
                 _subscribed = true;
                 if (_shortcut != null)
                     _shortcut.PropertyChanged += OnShortcutPropertyChanged;
+                _manager = HotkeyManager.Current;
+                if (_manager != null)
+                    _manager.RecordingAvailable += OnRecordingAvailable;
             }
 
             UpdateControls();
@@ -237,6 +254,9 @@ namespace Clowd.UI.Config
                 _subscribed = false;
                 if (_shortcut != null)
                     _shortcut.PropertyChanged -= OnShortcutPropertyChanged;
+                if (_manager != null)
+                    _manager.RecordingAvailable -= OnRecordingAvailable;
+                _manager = null;
             }
 
             // the window closed (or the page was switched) mid-recording: nothing will ever take
@@ -255,6 +275,18 @@ namespace Clowd.UI.Config
                 UpdateControls();
             else
                 Dispatcher.UIThread.Post(UpdateControls);
+        }
+
+        // the hook is back (macOS, Accessibility granted with this window open): a click records
+        // again, so the reason the last one could not is out of date. Only this says so — a
+        // shortcut's status turning registered may come from the standby capturer's own hook.
+        private void OnRecordingAvailable(object sender, EventArgs e)
+        {
+            if (_recordingError == null)
+                return;
+
+            _recordingError = null;
+            UpdateControls();
         }
 
         private void OnButtonClick(object sender, RoutedEventArgs e)
@@ -291,6 +323,7 @@ namespace Clowd.UI.Config
             }
 
             _recordingError = null;
+            _secureInput = manager.SecureInputProbe();
             _session = session;
             _window = window;
             IsListening = true;
@@ -364,9 +397,10 @@ namespace Clowd.UI.Config
             UpdateControls();
 
             // Esc on its own and a focus loss (null) are cancels — an aborted recording must not
-            // destroy the binding it was replacing. So are the task-switching combinations: the
-            // hook swallowed that one press, the next one switches normally, and binding one would
-            // break task switching system-wide.
+            // destroy the binding it was replacing. So are the combinations the OS needs (task
+            // switching, Cmd+Q, Force Quit): the hook swallowed that one press, the next one works
+            // normally, and binding one would swallow it system-wide. A hook that dies
+            // mid-recording ends it through OnRecordingFailed, with null.
             var canceled = gesture == null
                            || gesture.Key == HotkeyKey.None
                            || (gesture.Key == HotkeyKey.Escape && gesture.Modifiers == HotkeyModifiers.None)
@@ -401,14 +435,18 @@ namespace Clowd.UI.Config
 
             if (IsListening)
             {
-                SetStatus("listening", StatusListening, null);
+                // under Secure Input the recording would wait in silence: say why instead
+                var why = _secureInput ? SecureInputMessage : null;
+                SetStatus("listening", StatusListening, why);
                 SetRemoveVisible(false);
 
                 // the modifiers held so far, so the user can see the combination being built
                 var held = HotkeyGesture.ModifiersText(_editModifiers);
-                _button.Content = held.Length == 0 ? "Press a key combination…" : held + " …";
+                _button.Content = held.Length != 0 ? held + " …"
+                    : _secureInput ? SecureInputPrompt
+                    : "Press a key combination…";
                 AutomationProperties.SetName(_button, _actionName + ": press a key combination");
-                AutomationProperties.SetHelpText(_button, null);
+                AutomationProperties.SetHelpText(_button, why);
                 return;
             }
 

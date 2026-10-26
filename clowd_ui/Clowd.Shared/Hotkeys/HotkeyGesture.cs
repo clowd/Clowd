@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using Avalonia.Input;
 
@@ -142,23 +143,66 @@ namespace Clowd
             OperatingSystem.IsWindows() ? "Win" : OperatingSystem.IsMacOS() ? "Cmd" : "Super";
 
         /// <summary>
-        /// True for the Windows task-switching combinations — Alt+Tab, Alt+Shift+Tab, Alt+Esc and
-        /// Ctrl+Esc — which are never bound: the hook would swallow them system-wide. Recording one
-        /// is treated as a cancel. False on every other OS.
+        /// True for the combinations the OS needs for itself, which are never bound: recording one
+        /// is treated as a cancel (<c>GestureField</c>), and one already in the settings is refused
+        /// at registration (<c>HotkeyManager</c>) and left off the standby capturer's command line.
+        /// The recorder's hook swallows the key it records, so these are exactly what a user
+        /// presses to get away from a field that is listening — and a binding would then swallow
+        /// them in every app. On Windows that is task
+        /// switching (Alt+Tab, Alt+Shift+Tab, Alt+Esc, Ctrl+Esc) and Task Manager (Ctrl+Shift+Esc);
+        /// on macOS app and window switching (Cmd+Tab, Cmd+Shift+Tab, Cmd+`, Cmd+Shift+`),
+        /// Spotlight (Cmd+Space), leaving the window (Cmd+Q, Cmd+W, Cmd+H, Cmd+M), and the ways out
+        /// of a hung app (Force Quit, Cmd+Opt+Esc; Lock Screen, Ctrl+Cmd+Q). Cmd+Shift+3/4/5 stay
+        /// bindable: taking over the screenshot keys is a screenshot tool's business. False on
+        /// every other OS.
         /// </summary>
-        public static bool IsSystemReserved(HotkeyGesture gesture)
+        public static bool IsSystemReserved(HotkeyGesture gesture) => IsSystemReserved(gesture, CurrentPlatform);
+
+        /// <summary>The OS the per-platform answers (reserved gestures, default hotkeys) are given
+        /// for at run time.</summary>
+        internal static OSPlatform CurrentPlatform =>
+            OperatingSystem.IsWindows() ? OSPlatform.Windows
+            : OperatingSystem.IsMacOS() ? OSPlatform.OSX
+            : OSPlatform.Linux;
+
+        /// <summary><see cref="IsSystemReserved(HotkeyGesture)"/> as it answers on
+        /// <paramref name="platform"/>, so every OS's list can be tested on any one.</summary>
+        public static bool IsSystemReserved(HotkeyGesture gesture, OSPlatform platform)
         {
-            if (gesture == null || !OperatingSystem.IsWindows())
+            if (gesture == null)
                 return false;
 
-            return (gesture.Key, gesture.Modifiers) switch
+            const HotkeyModifiers Cmd = HotkeyModifiers.Meta;
+            var combination = (gesture.Key, gesture.Modifiers);
+
+            if (platform == OSPlatform.Windows)
             {
-                (HotkeyKey.Tab, HotkeyModifiers.Alt) => true,
-                (HotkeyKey.Tab, HotkeyModifiers.Alt | HotkeyModifiers.Shift) => true,
-                (HotkeyKey.Escape, HotkeyModifiers.Alt) => true,
-                (HotkeyKey.Escape, HotkeyModifiers.Control) => true,
-                _ => false,
-            };
+                return combination switch
+                {
+                    (HotkeyKey.Tab, HotkeyModifiers.Alt) => true,
+                    (HotkeyKey.Tab, HotkeyModifiers.Alt | HotkeyModifiers.Shift) => true,
+                    (HotkeyKey.Escape, HotkeyModifiers.Alt) => true,
+                    (HotkeyKey.Escape, HotkeyModifiers.Control) => true,
+                    (HotkeyKey.Escape, HotkeyModifiers.Control | HotkeyModifiers.Shift) => true,
+                    _ => false,
+                };
+            }
+
+            if (platform == OSPlatform.OSX)
+            {
+                return combination switch
+                {
+                    // window cycling is Cmd+`, beside left Shift on an ISO keyboard (OemBackslash)
+                    (HotkeyKey.Tab or HotkeyKey.Oem3 or HotkeyKey.OemBackslash, Cmd) => true,
+                    (HotkeyKey.Tab or HotkeyKey.Oem3 or HotkeyKey.OemBackslash, Cmd | HotkeyModifiers.Shift) => true,
+                    (HotkeyKey.Space or HotkeyKey.Q or HotkeyKey.W or HotkeyKey.H or HotkeyKey.M, Cmd) => true,
+                    (HotkeyKey.Escape, Cmd | HotkeyModifiers.Alt) => true,
+                    (HotkeyKey.Q, Cmd | HotkeyModifiers.Control) => true,
+                    _ => false,
+                };
+            }
+
+            return false;
         }
 
         public bool Equals(HotkeyGesture other) => other != null && other.Key == Key && other.Modifiers == Modifiers;

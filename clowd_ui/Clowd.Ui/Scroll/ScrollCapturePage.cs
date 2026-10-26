@@ -167,7 +167,8 @@ namespace Clowd.UI
         /// Returns whether the run may go ahead. True on every platform without an Accessibility
         /// permission; on macOS the first attempt is where the OS may still have its own one-tap
         /// prompt to offer, and every later one falls through to the dialog, since by then the
-        /// only route left is System Settings plus a restart. Mirrors
+        /// only route left is System Settings (the grant reads true live, so the next attempt
+        /// goes ahead without a restart). Mirrors
         /// <c>ScreenCaptureService.EnsureScreenRecordingPermissionAsync</c>, which gates the
         /// overlay on the other of the two permissions.
         /// </summary>
@@ -178,7 +179,7 @@ namespace Clowd.UI
 
             var openSettings = await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Warning,
                 "Clowd needs Accessibility permission to scroll the window for you.\n\n"
-                + "Enable Clowd under Privacy & Security → Accessibility, then restart Clowd.",
+                + "Enable Clowd under Privacy & Security → Accessibility, then start the scroll capture again.",
                 "Accessibility permission required", "Open System Settings", "Cancel");
 
             if (openSettings)

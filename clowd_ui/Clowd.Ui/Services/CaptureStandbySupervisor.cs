@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -30,6 +31,10 @@ namespace Clowd.UI
         private const string CaptureFinishedPrefix = "CLOWD_CAPTURE_FINISHED ";
         private const string SettingsStatusPrefix = "CLOWD_SETTINGS_STATUS ";
         private const string IpcErrorPrefix = "CLOWD_IPC_ERROR ";
+
+        /// <summary>The status <c>error_code</c> of a gesture the capturer cannot hook because
+        /// macOS has not granted Accessibility. The capturer never prompts; the shell does.</summary>
+        internal const string PermissionErrorCode = "permission";
 
         /// <summary>A process that has been running this long forgives earlier crashes:
         /// without this, three unrelated crashes weeks apart (say one per GPU driver
@@ -400,25 +405,73 @@ namespace Clowd.UI
                 Append(buffer, line);
         }
 
+        /// <summary>A parsed CLOWD_SETTINGS_STATUS: each capture action's gesture statuses, and
+        /// whether any of them is down for want of Accessibility.</summary>
+        internal readonly record struct StandbyHotkeyStatus(
+            (HotkeyId Id, ExternalGestureStatus[] Gestures)[] Actions, bool NeedsAccessibility);
+
         /// <summary>
-        /// Applies a CLOWD_SETTINGS_STATUS line: <c>"hotkeys"</c> maps each action to an array
-        /// with one <c>{"gesture","active","error"}</c> per <c>--hk-*</c> occurrence it received,
-        /// in order, the gesture echoed exactly as sent. The manager matches them back to its own
-        /// gestures by that string, so a report for a snapshot that has since been superseded
-        /// simply finds nothing to update for the gestures it did not know about.
+        /// Parses a CLOWD_SETTINGS_STATUS payload: <c>"hotkeys"</c> maps each action to an array
+        /// with one <c>{"gesture","active","error","error_code"}</c> per <c>--hk-*</c> occurrence
+        /// it received, in order, the gesture echoed exactly as sent. <c>error_code</c> is optional,
+        /// so a capturer that predates it still parses. Throws on a malformed line.
+        /// </summary>
+        internal static StandbyHotkeyStatus ParseHotkeyStatus(string json)
+        {
+            using var document = JsonDocument.Parse(json);
+            var hotkeys = document.RootElement.GetProperty("hotkeys");
+            var actions = new[]
+            {
+                Read("main", HotkeyId.CaptureRegion),
+                Read("window", HotkeyId.CaptureActive),
+                Read("monitor", HotkeyId.CaptureFullscreen),
+            };
+            return new StandbyHotkeyStatus(actions,
+                actions.Any(a => a.Gestures.Any(g => g.ErrorCode == PermissionErrorCode)));
+
+            (HotkeyId Id, ExternalGestureStatus[] Gestures) Read(string name, HotkeyId id)
+            {
+                var gestures = new List<ExternalGestureStatus>();
+                foreach (var status in hotkeys.GetProperty(name).EnumerateArray())
+                {
+                    var errorElement = status.GetProperty("error");
+                    gestures.Add(new ExternalGestureStatus(
+                        status.GetProperty("gesture").GetString(),
+                        status.GetProperty("active").GetBoolean(),
+                        errorElement.ValueKind == JsonValueKind.String ? errorElement.GetString() : "",
+                        status.TryGetProperty("error_code", out var code) && code.ValueKind == JsonValueKind.String
+                            ? code.GetString()
+                            : null));
+                }
+                return (id, gestures.ToArray());
+            }
+        }
+
+        /// <summary>Asks for Accessibility when the capturer reports a gesture down for want of it —
+        /// in warm-capture mode the shell may own no gesture at all, so its own hook never gets to
+        /// ask. The capturer runs inside Clowd.app, so the grant covers it; it retries its hook by
+        /// itself and reports again once the grant lands. A process macOS already trusts got a stale
+        /// grant: the prompt would show nothing yet spend this run's one, which the grant missing
+        /// for real (once the user removes Clowd from the list) still needs.</summary>
+        /// <param name="isTrusted">AXIsProcessTrusted; never prompts.</param>
+        internal static void PromptIfNeeded(StandbyHotkeyStatus status, AccessibilityPrompt prompt, Func<bool> isTrusted)
+        {
+            if (status.NeedsAccessibility && !isTrusted())
+                prompt.RequestOnce();
+        }
+
+        /// <summary>
+        /// Applies a CLOWD_SETTINGS_STATUS line (see <see cref="ParseHotkeyStatus"/>), which may
+        /// also arrive unasked when the capturer's hook comes up or goes down. The manager matches
+        /// statuses back to its own gestures by the echoed string, so a report for a snapshot that
+        /// has since been superseded simply finds nothing to update for the gestures it did not
+        /// know about.
         /// </summary>
         private void ApplyHotkeyStatus(string json)
         {
             try
             {
-                using var document = JsonDocument.Parse(json);
-                var hotkeys = document.RootElement.GetProperty("hotkeys");
-                var statuses = new[]
-                {
-                    Read("main", HotkeyId.CaptureRegion),
-                    Read("window", HotkeyId.CaptureActive),
-                    Read("monitor", HotkeyId.CaptureFullscreen),
-                };
+                var status = ParseHotkeyStatus(json);
                 Dispatcher.UIThread.Post(() =>
                 {
                     // a status drained from a dead process's pipe after fallback (or from a
@@ -426,26 +479,15 @@ namespace Clowd.UI
                     // of whoever owns the hotkeys now
                     if (!ReferenceEquals(Volatile.Read(ref _current), this))
                         return;
+                    // in warm mode the shell registers none of the screenshot gestures itself, so
+                    // this report is its only sign that it should ask for Accessibility
+                    PromptIfNeeded(status, AccessibilityPrompt.Shared, () => MacPermissions.HasAccessibility);
                     var manager = HotkeyManager.Current;
                     if (manager == null)
                         return;
-                    foreach (var (id, gestures) in statuses)
+                    foreach (var (id, gestures) in status.Actions)
                         manager.ApplyExternalStatus(id, gestures);
                 });
-
-                (HotkeyId Id, ExternalGestureStatus[] Gestures) Read(string name, HotkeyId id)
-                {
-                    var gestures = new List<ExternalGestureStatus>();
-                    foreach (var status in hotkeys.GetProperty(name).EnumerateArray())
-                    {
-                        var errorElement = status.GetProperty("error");
-                        gestures.Add(new ExternalGestureStatus(
-                            status.GetProperty("gesture").GetString(),
-                            status.GetProperty("active").GetBoolean(),
-                            errorElement.ValueKind == JsonValueKind.String ? errorElement.GetString() : ""));
-                    }
-                    return (id, gestures.ToArray());
-                }
             }
             catch (Exception ex)
             {

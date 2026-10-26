@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Clowd.Config;
 
 namespace Clowd.UI
@@ -236,8 +237,25 @@ namespace Clowd.UI
         /// which is the UI thread in the app.</summary>
         public event EventHandler Changed;
 
+        /// <summary>Raised on the UI thread when a hook that was down is back
+        /// (<see cref="IGlobalTriggerHost.RecordingAvailable"/>): a view still showing why
+        /// <see cref="StartRecording"/> failed should drop it.</summary>
+        public event EventHandler RecordingAvailable;
+
+        /// <summary>Whether some app holds macOS Secure Event Input (a focused password field),
+        /// which hides every key from the hook, so a recording started now hears nothing until it
+        /// ends. Read-only, never prompts; false off macOS. Replaced by tests.</summary>
+        internal Func<bool> SecureInputProbe { get; set; } = SecureInput.IsEnabled;
+
+        /// <summary>Whether macOS lists Clowd as trusted for Accessibility (AXIsProcessTrusted),
+        /// which tells a stale grant from a missing one; false off macOS. Never prompts. Replaced
+        /// by tests.</summary>
+        internal Func<bool> AccessibilityTrustedProbe { get; set; } =
+            () => OperatingSystem.IsMacOS() && MacPermissions.HasAccessibility;
+
         private readonly IGlobalTriggerHost _host;
         private readonly SettingsHotkey _settings;
+        private readonly Func<HotkeyGesture, bool> _isReserved;
         private readonly List<HotkeyEntry> _entries;
         private readonly Dictionary<HotkeyId, Action> _actions = new();
         private readonly HashSet<HotkeyId> _switchedOff = new();
@@ -245,9 +263,22 @@ namespace Clowd.UI
         private bool _disposed;
 
         public HotkeyManager(IGlobalTriggerHost host, SettingsHotkey settings)
+            : this(host, settings, HotkeyGesture.IsSystemReserved)
+        {
+        }
+
+        /// <summary>The manager as it runs on <paramref name="platform"/>, so each OS's reserved
+        /// combinations can be tested on any one.</summary>
+        internal HotkeyManager(IGlobalTriggerHost host, SettingsHotkey settings, OSPlatform platform)
+            : this(host, settings, g => HotkeyGesture.IsSystemReserved(g, platform))
+        {
+        }
+
+        private HotkeyManager(IGlobalTriggerHost host, SettingsHotkey settings, Func<HotkeyGesture, bool> isReserved)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _isReserved = isReserved;
             _entries = new List<HotkeyEntry>
             {
                 Entry(HotkeyId.FileUpload, nameof(SettingsHotkey.FileUploadShortcut), s => s.FileUploadShortcut, (s, g) => s.FileUploadShortcut = g),
@@ -273,9 +304,13 @@ namespace Clowd.UI
                 entry.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
             }
 
+            _host.RecordingAvailable += OnHostRecordingAvailable;
+
             HotkeyEntry Entry(HotkeyId id, string prop, Func<SettingsHotkey, GestureList> get, Action<SettingsHotkey, GestureList> set) =>
                 new HotkeyEntry(this, id, prop, get, set);
         }
+
+        private void OnHostRecordingAvailable(object sender, EventArgs e) => RecordingAvailable?.Invoke(this, EventArgs.Empty);
 
         /// <summary>Wires the action invoked when the hotkey fires, then (re)registers it. A null
         /// action leaves the gestures to another owner (the standby capturer, for the screenshot
@@ -366,7 +401,11 @@ namespace Clowd.UI
         /// screenshot hotkeys), keyed by the gesture as that process received it —
         /// <see cref="HotkeyGesture.ToSerializedString"/>. A gesture with no report keeps the
         /// status it has: the report may predate the settings snapshot that added it, and the
-        /// snapshot's own report follows. Ignored while this manager owns the action itself.
+        /// snapshot's own report follows. Ignored while this manager owns the action itself. A
+        /// missing Accessibility grant (keyed off <see cref="ExternalGestureStatus.ErrorCode"/>)
+        /// shows <see cref="NativeHotkeyHost.PermissionMessage"/>, or
+        /// <see cref="NativeHotkeyHost.StaleGrantMessage"/> while macOS lists Clowd as trusted (the
+        /// shell's own host chooses the same way); any other error, the text as sent.
         /// </summary>
         public void ApplyExternalStatus(HotkeyId id, IReadOnlyList<ExternalGestureStatus> statuses)
         {
@@ -382,13 +421,25 @@ namespace Clowd.UI
             var used = new bool[statuses.Count];
             foreach (var shortcut in entry.Shortcuts)
             {
+                // never sent to the capturer (CaptureArguments.BuildStandby), and refused here
+                if (_isReserved(shortcut.Gesture))
+                    continue;
+
                 var token = shortcut.Gesture.ToSerializedString();
                 for (int i = 0; i < statuses.Count; i++)
                 {
                     if (used[i] || statuses[i].Gesture != token)
                         continue;
                     used[i] = true;
-                    shortcut.SetStatus(statuses[i].IsRegistered, statuses[i].Error);
+                    // the capturer's hook shares the shell's Accessibility grant: show the text the
+                    // shell's own host would, which says how to fix it and that the hotkeys then
+                    // recover. A trusted process got a stale grant, which re-adding fixes, not granting.
+                    var error = statuses[i].ErrorCode != CaptureStandbySupervisor.PermissionErrorCode
+                        ? statuses[i].Error
+                        : AccessibilityTrustedProbe()
+                            ? NativeHotkeyHost.StaleGrantMessage
+                            : NativeHotkeyHost.PermissionMessage;
+                    shortcut.SetStatus(statuses[i].IsRegistered, error);
                     break;
                 }
             }
@@ -439,24 +490,39 @@ namespace Clowd.UI
             if (_disposed)
                 return;
 
+            // a combination the OS needs for itself (Cmd+Q, Alt+Tab) is never bound, whoever owns
+            // the action — not even one saved before the recorder refused it: it would be
+            // swallowed in every app. It stays in the list, so the row shows it and can remove it.
+            var bindable = new List<HotkeyShortcut>();
+            foreach (var shortcut in entry.Shortcuts)
+            {
+                if (_isReserved(shortcut.Gesture))
+                    shortcut.SetStatus(false, ReservedMessage);
+                else
+                    bindable.Add(shortcut);
+            }
+
             if (!_actions.TryGetValue(entry.Id, out var action) || action == null)
             {
                 // nobody here owns the action: no status until whoever does reports one
-                foreach (var shortcut in entry.Shortcuts)
+                foreach (var shortcut in bindable)
                     shortcut.SetStatus(false, "");
                 return;
             }
 
             if (_switchedOff.Contains(entry.Id))
             {
-                foreach (var shortcut in entry.Shortcuts)
+                foreach (var shortcut in bindable)
                     shortcut.SetStatus(false, "This feature is turned off in settings.");
                 return;
             }
 
-            foreach (var shortcut in entry.Shortcuts)
+            foreach (var shortcut in bindable)
                 shortcut.AttachRegistration(_host.RegisterTrigger(shortcut.Gesture, action));
         }
+
+        private const string ReservedMessage =
+            "This combination is reserved by the system, so it cannot be a global hotkey.";
 
         public void Dispose()
         {
@@ -464,6 +530,7 @@ namespace Clowd.UI
                 return;
 
             _disposed = true;
+            _host.RecordingAvailable -= OnHostRecordingAvailable;
 
             foreach (var shortcut in _entries.SelectMany(e => e.Shortcuts))
             {
@@ -539,5 +606,7 @@ namespace Clowd.UI
     /// <see cref="HotkeyManager.ApplyExternalStatus"/>).</summary>
     /// <param name="Gesture">The gesture exactly as that process received it, in
     /// <see cref="HotkeyGesture.ToSerializedString"/> form.</param>
-    public readonly record struct ExternalGestureStatus(string Gesture, bool IsRegistered, string Error);
+    /// <param name="ErrorCode">The stable code behind <paramref name="Error"/> (CAPTURE_PROTOCOL.md
+    /// §1.2), to branch on instead of the text; null when registered or not reported.</param>
+    public readonly record struct ExternalGestureStatus(string Gesture, bool IsRegistered, string Error, string ErrorCode = null);
 }

@@ -84,6 +84,7 @@ objc2-foundation = "0.3"
 objc2-metal = "0.3"
 objc2-quartz-core = "0.3"
 block2 = "0.6"
+dispatch2 = "0.3"
 # build-time shader precompilation (clowd_capture/build.rs): WGSL to HLSL on
 # Windows, WGSL to MSL source on macOS. Build time only; never in a binary.
 naga = "30.0"

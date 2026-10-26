@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -40,12 +41,19 @@ namespace Clowd.Config
 
         /// <summary>
         /// Parses the settings file into a new <see cref="SettingsRoot"/>. Missing file, sections
-        /// or values fall back to the compiled-in defaults. Throws only when the file exists but
+        /// or values fall back to the compiled-in defaults, and defaults an older file was written
+        /// with are brought forward where they no longer work (see
+        /// <see cref="SettingsHotkey.MigrateDefaults"/>; nothing is written). Throws only when the file exists but
         /// cannot be parsed (malformed JSON / unconvertible value) — callers may then offer a reset.
         /// </summary>
         public static SettingsRoot Load() => Load(FilePath);
 
-        public static SettingsRoot Load(string path)
+        public static SettingsRoot Load(string path) => Load(path, HotkeyGesture.CurrentPlatform);
+
+        /// <summary><see cref="Load(string)"/> as it runs on <paramref name="platform"/>, whose
+        /// default changes are carried into an older file (<see cref="SettingsHotkey.MigrateDefaults"/>),
+        /// so each OS's can be tested on any one.</summary>
+        public static SettingsRoot Load(string path, OSPlatform platform)
         {
             return WithSharingVioRetry(() =>
             {
@@ -54,6 +62,16 @@ namespace Clowd.Config
                              .Build();
 
                 var settings = config.Get<SettingsRoot>() ?? new SettingsRoot();
+
+                // read from the file itself: the bound object always reports this build's version.
+                // A file with no Hotkeys section got this OS's defaults from the binder already.
+                var hotkeys = config.GetSection(nameof(SettingsRoot.Hotkeys));
+                if (hotkeys.Exists())
+                {
+                    var writtenWith = hotkeys.GetValue(nameof(SettingsHotkey.DefaultsVersion), 0);
+                    settings.Hotkeys.MigrateDefaults(writtenWith, platform);
+                }
+
                 Debug.WriteLine("Settings were loaded from " + path);
                 return settings;
             });

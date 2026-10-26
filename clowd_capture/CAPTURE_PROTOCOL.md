@@ -68,13 +68,16 @@ The shell pre-creates the session directory and passes it via
 Standby mode intentionally reverses creation ownership. With
 `--standby`, the shell supplies `--session-root` plus any number of
 `--hk-main`, `--hk-window`, and `--hk-monitor` occurrences — each flag is
-repeatable, one occurrence per gesture in the action's list order, and zero
+repeatable, one occurrence per gesture in the action's list order (less any
+combination the OS reserves for itself, which the shell never binds), and zero
 occurrences means that action has no hotkey (hotkeys take effect when the
 first settings snapshot arrives — see below). The capturer prints
 `CLOWD_STANDBY_READY` and waits event-driven without initializing capture/GPU
-resources (the main loop is fully blocked, and so is the hook thread between
-key events), then creates a unique child directory and
-prints `CLOWD_SESSION <absolute-path>` when a hotkey fires, followed by one
+resources (the main loop is fully blocked, and so is the Windows hook thread
+between key events; on macOS the hook thread and a permission watcher wake
+about once a second for tap-health and Accessibility checks, and a hook that
+is down is retried every 2 s while a gesture needs it — see below), then
+creates a unique child directory and prints `CLOWD_SESSION <absolute-path>` when a hotkey fires, followed by one
 ordinary capture cycle. stdout carries ONLY protocol lines — the log goes to
 stderr (and the session's `capture.log`), because a log record spliced into
 the protocol stream could corrupt a line the shell must not miss. Both pipes
@@ -99,11 +102,29 @@ reports success and then never fires. Gestures travel in the settings form:
 `Snapshot` are accepted. The shell translates nothing — the key names are
 clowd_hotkeys' key table, which the shell's `HotkeyKey` is generated from —
 and a key with no code on this OS surfaces as an explicit per-hotkey error.
-A hook that cannot start is fatal (exit) only when the failure is specific
-to this process (`HookFailed`); `Unsupported` (Linux) and `PermissionDenied`
-(macOS Accessibility) would fail the same way in the shell, so the process
-stays up for tray captures and reports the error on every gesture. A hook
-that dies later exits with code 1. Standby is not the only capture path: the
+A hook that cannot start, or dies later, is fatal only on Windows, where the
+failure (`HookFailed`, the hook's message loop failing, or a silently
+removed hook that could not be re-installed) is specific to
+this process: it exits with code 1 — a death noticed under an open overlay
+waits until that capture has finished — so the shell's crash accounting
+restarts it or falls back. Everywhere else the process stays up for tray
+captures and reports the error on every gesture. On macOS the ways the tap
+fails — `PermissionDenied`, a NULL tap (`HookFailed`), a running tap ended by
+a revoked grant, repeated timeouts or invalidation (`Stopped`) — come down to
+the Accessibility grant, which the shell's own hook shares, or are transient,
+so the capturer retries the hook every 2 s while the last snapshot holds a
+gesture it would register — not before the first snapshot, nor with no
+gestures or only refused ones (a settings snapshot also retries it, once 2 s
+have passed since the last try) — logs a start failure once per change of
+reason rather than per try and a death as an error only the first time per
+run (a revoked grant never), and announces each change (the
+hook coming up, going down, failing differently, or dying and coming straight
+back with its gestures registered again) with an unsolicited
+`CLOWD_SETTINGS_STATUS`; granting
+Accessibility later makes the hotkeys work without restarting anything. The
+capturer never prompts for the permission — the shell does, keyed off
+`error_code` (below). `Unsupported` (Linux) is reported and never retried.
+Standby is not the only capture path: the
 shell only runs it while its "keep capturer warm" setting is in effect, and
 it falls back to its own clowd_hotkeys registrations plus classic one-shot
 spawns for the rest of its process lifetime when standby proves unusable —
@@ -114,7 +135,8 @@ While waiting, stdin is also a newline-delimited JSON control channel. A
 `{"type":"settings","args":[...]}` message replaces the complete standby CLI
 snapshot (including hotkeys) after parsing it through `CliArgs`; every
 snapshot is answered with `CLOWD_SETTINGS_STATUS <json>` (statuses cannot
-arrive out of order: one pipe, one sequential reader). Its `hotkeys` object
+arrive out of order: one pipe, one sequential reader), and one may also arrive
+unasked when the hook comes up or goes down. Its `hotkeys` object
 maps each of `main`, `window`, and `monitor` to an array with one entry per
 gesture received for that action, in the order received; `gesture` echoes
 the received string verbatim, which is what the shell matches back to
@@ -122,11 +144,26 @@ the received string verbatim, which is what the shell matches back to
 
 ```json
 {"hotkeys":{
-  "main":[{"gesture":"PrintScreen","active":true,"error":null},
-          {"gesture":"Control+Shift+1","active":true,"error":null}],
-  "window":[],
-  "monitor":[{"gesture":"Control+PrintScreen","active":true,"error":null}]}}
+  "main":[{"gesture":"PrintScreen","active":true,"error":null,"error_code":null},
+          {"gesture":"Control+Shift+1","active":true,"error":null,"error_code":null}],
+  "window":[{"gesture":"Shift+Control+1","active":false,
+             "error":"duplicate gesture","error_code":"duplicate"}],
+  "monitor":[{"gesture":"Control+PrintScreen","active":true,"error":null,"error_code":null}]}}
 ```
+
+`error` is display text (clowd_hotkeys' error text, echoed verbatim) and may
+change; `error_code` is its stable, machine-readable twin, and the one to
+branch on. Both are null exactly when `active` is true. Codes: `permission`
+(macOS Accessibility not granted, or a stale grant: listed and trusted, but
+the tap gets no key events — the shell tells the two apart with
+`AXIsProcessTrusted`, prompting and showing its grant instructions in place
+of `error` only for a missing grant, and its re-add instructions for a stale
+one),
+`unsupported` (no hook on this OS), `hook_failed` (the OS refused the hook),
+`hook_stopped` (the hook died and is not back yet), `invalid_gesture` (does
+not parse), `no_key`, `modifier_key` (a bare modifier), `unsupported_key` (no
+code on this OS), `duplicate`. A code the shell does not know means nothing
+special: it shows the text.
 
 Hook-based hotkeys cannot conflict with other applications, so a gesture is
 active exactly when it parses, names a key usable on this OS (not `None`, not

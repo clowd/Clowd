@@ -117,9 +117,10 @@ namespace Clowd.UI.Pages
         /// <remarks>
         /// The group renders live state rather than a setting: the user leaves for System Settings,
         /// flips a switch and comes back, so the statuses are re-read on every window activation as
-        /// well as on <see cref="MacPermissions.StateChanged"/>. Both permissions only take effect
+        /// well as on <see cref="MacPermissions.StateChanged"/>. Screen Recording only takes effect
         /// for a process at launch, which is why a granted-but-not-yet-restarted state still tells
-        /// the user to restart.
+        /// the user to restart; Accessibility is read live and the hotkeys pick it up by themselves
+        /// (<see cref="NativeHotkeyHost"/>), so it asks for no restart.
         /// </remarks>
         private void InitializePermissions()
         {
@@ -201,9 +202,10 @@ namespace Clowd.UI.Pages
         /// <remarks>
         /// A permission reading as missing again hands the state back to this method, so the rows are
         /// on screen whenever they matter even if the user had closed them earlier. That is also the
-        /// state a fresh grant lands in: macOS only hands out its TCC answer at launch, so the just
-        /// granted permission still reads as missing here until Clowd restarts, and the group keeps
-        /// showing the restart hint rather than folding itself away under the user's cursor.
+        /// state a fresh Screen Recording grant lands in: macOS only hands out that TCC answer at
+        /// launch, so the just granted permission still reads as missing here until Clowd restarts,
+        /// and the group keeps showing the restart hint rather than folding itself away under the
+        /// user's cursor.
         /// </remarks>
         private void RenderPermissionsCollapse()
         {
@@ -246,10 +248,13 @@ namespace Clowd.UI.Pages
             // control that vanishes on success leaves no way back in. It always goes straight to the
             // pane rather than trying the OS prompt first — macOS only offers each prompt once ever,
             // so a button that sometimes prompts and sometimes doesn't is unpredictable, and the
-            // first-run prompt is already covered where it belongs, on the first capture attempt.
+            // first-run prompts are already covered where they belong: Screen Recording on the
+            // first capture attempt, Accessibility when a hotkey hook first finds it missing
+            // (AccessibilityPrompt).
             button.Content = "Open System Settings";
 
-            caption.Text = granted
+            // only Screen Recording waits for a restart: the hotkeys pick Accessibility up live
+            caption.Text = granted || permission != MacPermission.ScreenRecording
                 ? what
                 : what + " Clowd has to be restarted after you grant it.";
         }

@@ -108,8 +108,9 @@ macro_rules! keys {
 // Windows maps by VK like Avalonia's Win32 backend (layout-dependent; LeftShift/LeftCtrl/LeftAlt
 // also take the generic VK_SHIFT/VK_CONTROL/VK_MENU that injected events can carry; numpad keys
 // with NumLock off arrive as navigation VKs). macOS maps by CGKeyCode positionally (ANSI names)
-// like Avalonia.Native, keypad Enter included as Return. NX is NSSystemDefined subtype 8
-// `data1 >> 16`.
+// like Avalonia.Native, keypad Enter included as Return, and ISO keyboards' codes go through
+// `mac_positional` first. JIS keys follow Avalonia.Native too: Eisu is HanjaMode, Kana
+// HangulMode, Yen OemPipe, Ro OemBackslash, keypad comma AbntC2; keypad = shares OemPlus. NX is NSSystemDefined subtype 8 `data1 >> 16`.
 keys! {
     // Name                        =  value, [aliases], win[VK...], mac[CGKeyCode...], nx[NX_KEYTYPE...];
     None                           =      0, [], win[], mac[], nx[];
@@ -124,7 +125,7 @@ keys! {
     HangulMode                     =      9, ["KanaMode"], win[0x15], mac[0x68], nx[];
     JunjaMode                      =     10, [], win[0x17], mac[], nx[];
     FinalMode                      =     11, [], win[0x18], mac[], nx[];
-    HanjaMode                      =     12, ["KanjiMode"], win[0x19], mac[], nx[];
+    HanjaMode                      =     12, ["KanjiMode"], win[0x19], mac[0x66], nx[];
     Escape                         =     13, [], win[0x1B], mac[0x35], nx[];
     ImeConvert                     =     14, [], win[0x1C], mac[], nx[];
     ImeNonConvert                  =     15, [], win[0x1D], mac[], nx[];
@@ -253,20 +254,20 @@ keys! {
     LaunchApplication1             =    138, [], win[0xB6], mac[], nx[];
     LaunchApplication2             =    139, [], win[0xB7], mac[], nx[];
     OemSemicolon                   =    140, ["Oem1"], win[0xBA], mac[0x29], nx[];
-    OemPlus                        =    141, [], win[0xBB], mac[0x18], nx[];
+    OemPlus                        =    141, [], win[0xBB], mac[0x18, 0x51], nx[];
     OemComma                       =    142, [], win[0xBC], mac[0x2B], nx[];
     OemMinus                       =    143, [], win[0xBD], mac[0x1B], nx[];
     OemPeriod                      =    144, [], win[0xBE], mac[0x2F], nx[];
     OemQuestion                    =    145, ["Oem2"], win[0xBF], mac[0x2C], nx[];
     Oem3                           =    146, ["OemTilde"], win[0xC0], mac[0x32], nx[];
     AbntC1                         =    147, [], win[0xC1], mac[], nx[];
-    AbntC2                         =    148, [], win[0xC2], mac[], nx[];
+    AbntC2                         =    148, [], win[0xC2], mac[0x5F], nx[];
     Oem4                           =    149, ["OemOpenBrackets"], win[0xDB], mac[0x21], nx[];
-    OemPipe                        =    150, ["Oem5"], win[0xDC], mac[0x2A], nx[];
+    OemPipe                        =    150, ["Oem5"], win[0xDC], mac[0x2A, 0x5D], nx[];
     OemCloseBrackets               =    151, ["Oem6"], win[0xDD], mac[0x1E], nx[];
     OemQuotes                      =    152, ["Oem7"], win[0xDE], mac[0x27], nx[];
     Oem8                           =    153, [], win[0xDF], mac[], nx[];
-    OemBackslash                   =    154, ["Oem102"], win[0xE2], mac[0x0A], nx[];
+    OemBackslash                   =    154, ["Oem102"], win[0xE2], mac[0x0A, 0x5E], nx[];
     ImeProcessed                   =    155, [], win[0xE5], mac[], nx[];
     System                         =    156, [], win[], mac[], nx[];
     OemAttn                        =    157, ["DbeAlphanumeric"], win[0xF0], mac[], nx[];
@@ -306,6 +307,19 @@ keys! {
     MediaSubtitle                  = 100025, [], win[], mac[], nx[];
     MediaTvGuide                   = 100026, [], win[], mac[], nx[];
     MediaPreviousChannel           = 100027, [], win[], mac[], nx[];
+}
+
+/// The position-true CGKeyCode for a code from a keyboard that is `iso`. ISO keyboards report the
+/// key left of 1 as kVK_ISO_Section (0x0A) and the key beside left Shift as kVK_ANSI_Grave (0x32),
+/// the other way round from where those names sit; swapping them back (as Chromium and WebKit do)
+/// keeps a gesture on the same physical key across ANSI and ISO keyboards.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn mac_positional(code: u16, iso: bool) -> u16 {
+    match (iso, code) {
+        (true, 0x0A) => 0x32,
+        (true, 0x32) => 0x0A,
+        _ => code,
+    }
 }
 
 impl Key {
@@ -429,7 +443,7 @@ mod tests {
                 .iter()
                 .filter(|k| k.to_mac().is_some())
                 .count(),
-            113
+            115
         );
     }
 
@@ -502,6 +516,37 @@ mod tests {
         assert_eq!(Key::from_nx(20), Some(Key::MediaPreviousTrack));
         assert_eq!(Key::from_vk(0xE8), None);
         assert_eq!(Key::from_mac(0x3F), None);
+    }
+
+    /// The JIS-only keys, and keypad `=`, map as Avalonia.Native 12.1.2 maps them (its table in
+    /// libAvaloniaNative.dylib), which is also what Windows calls the Yen and Ro keys.
+    #[test]
+    fn jis_keys_map_like_avalonia_native() {
+        assert_eq!(Key::from_mac(0x66), Some(Key::HanjaMode)); // kVK_JIS_Eisu
+        assert_eq!(Key::from_mac(0x68), Some(Key::HangulMode)); // kVK_JIS_Kana
+        assert_eq!(Key::from_mac(0x5D), Some(Key::OemPipe)); // kVK_JIS_Yen
+        assert_eq!(Key::from_mac(0x5E), Some(Key::OemBackslash)); // kVK_JIS_Underscore (Ro)
+        assert_eq!(Key::from_mac(0x5F), Some(Key::AbntC2)); // kVK_JIS_KeypadComma
+        assert_eq!(Key::from_mac(0x51), Some(Key::OemPlus)); // kVK_ANSI_KeypadEquals
+
+        // Keys that only JIS has register by their JIS code; shared names keep the ANSI one.
+        assert_eq!(Key::HanjaMode.to_mac(), Some(0x66));
+        assert_eq!(Key::AbntC2.to_mac(), Some(0x5F));
+        assert_eq!(Key::OemPipe.to_mac(), Some(0x2A));
+        assert_eq!(Key::OemBackslash.to_mac(), Some(0x0A));
+        assert_eq!(Key::OemPlus.to_mac(), Some(0x18));
+    }
+
+    #[test]
+    fn iso_keyboards_swap_section_and_grave_back() {
+        // ISO: the key left of 1 reports 0x0A and the key beside left Shift reports 0x32.
+        assert_eq!(Key::from_mac(mac_positional(0x0A, true)), Some(Key::Oem3));
+        assert_eq!(Key::from_mac(mac_positional(0x32, true)), Some(Key::OemBackslash));
+        assert_eq!(mac_positional(0x0A, false), 0x0A);
+        assert_eq!(mac_positional(0x32, false), 0x32);
+        for code in (0..0x80).filter(|code| ![0x0A, 0x32].contains(code)) {
+            assert_eq!(mac_positional(code, true), code);
+        }
     }
 
     #[test]

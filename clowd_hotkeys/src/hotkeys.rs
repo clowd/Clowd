@@ -22,6 +22,10 @@ impl HotkeyId {
     }
 }
 
+/// The `Event::Stopped` reason when the Accessibility permission was revoked under a running tap
+/// (macOS), so a consumer can tell the user's choice from a fault without matching its own copy.
+pub const REVOKED_REASON: &str = "the Accessibility permission was revoked";
+
 /// What the hook reports, in order, on `Events`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
@@ -34,7 +38,9 @@ pub enum Event {
     Recorded { session: u32, gesture: Gesture },
     /// Observe stream (only while `set_observe(true)`): every key edge, nothing swallowed by observe itself.
     Key(KeyEvent),
-    /// The hook died unexpectedly (macOS tap invalidated, Windows message loop error). Last event; the queue then closes.
+    /// The hook died unexpectedly (macOS: Accessibility revoked or the tap invalidated, noticed within about a second,
+    /// or the tap's 6th timeout within 10 s; Windows: message loop error, or a silently removed hook that could not
+    /// be re-installed). Last event; the queue then closes.
     Stopped(String),
 }
 
@@ -65,6 +71,9 @@ pub(crate) struct Shared {
     pub observing: AtomicBool,
     /// Writers lock, build a new `Arc`, swap, unlock. The hook locks only to clone the `Arc`.
     pub table: Mutex<Arc<[(Gesture, HotkeyId)]>>,
+    /// Whether `table` holds a media key (one with an NX keytype). Written with it, under its lock;
+    /// lets the macOS hook skip decoding system-defined events without locking.
+    pub media: AtomicBool,
     /// Starts at 1.
     pub next_id: AtomicU32,
     /// False once the hook thread ended.
@@ -79,6 +88,7 @@ impl Shared {
             next_session: AtomicU32::new(1),
             observing: AtomicBool::new(false),
             table: Mutex::new(Arc::from([])),
+            media: AtomicBool::new(false),
             next_id: AtomicU32::new(1),
             alive: AtomicBool::new(true),
         }
@@ -102,6 +112,7 @@ impl Shared {
             .copied()
             .chain(std::iter::once((gesture, id)))
             .collect();
+        self.media_changed(&table);
         Ok(id)
     }
 
@@ -118,7 +129,15 @@ impl Shared {
             .copied()
             .filter(|(_, registered)| *registered != id)
             .collect();
+        self.media_changed(&table);
         true
+    }
+
+    fn media_changed(&self, table: &[(Gesture, HotkeyId)]) {
+        let media = table
+            .iter()
+            .any(|(gesture, _)| gesture.key.to_nx().is_some());
+        self.media.store(media, Ordering::Release);
     }
 
     pub fn start_recording(&self) -> u32 {

@@ -38,7 +38,9 @@ windows = { workspace = true, features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true
-objc2-core-foundation = { workspace = true, features = ["CFMachPort", "CFRunLoop", "CFString", "block2"] }
-objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventTypes", "CGEventSource", "CGRemoteOperation"] }
+objc2-core-foundation = { workspace = true, features = ["CFDate", "CFMachPort", "CFRunLoop", "CFString", "block2"] }
+objc2-core-graphics = { workspace = true, features = ["CGError", "CGEvent", "CGEventTypes", "CGEventSource", "CGRemoteOperation", "libc"] }
 objc2-app-kit = { workspace = true, features = ["NSEvent", "objc2-core-graphics"] }
 block2.workspace = true
+# The main queue, where media keys are decoded (AppKit off the main thread has crashed).
+dispatch2.workspace = true

@@ -20,11 +20,24 @@
 //!   `Control+Alt+X` also swallows AltGr+X — and `Alt+E` never eats AltGr+E.
 //! - Windows: a hook Windows removed silently (callback timeouts, e.g. a debugger pause) is
 //!   re-installed after a few keystrokes it missed, which moves it to the front of the hook chain.
-//!   The watchdog needs the process's keyboard raw input, so it is off where someone else already
-//!   took that (winit's event loop in `clowd_capture`).
+//!   The watchdog needs the process's keyboard raw input, so it is off in a process that keeps
+//!   that for itself (a winit event loop takes it; `clowd_capture` hands it back when it builds
+//!   its loop, so the watchdog runs there).
 //! - macOS: needs the Accessibility permission (`start` fails with `PermissionDenied`, never
-//!   prompts). Secure Input (password fields) hides all keys from the tap, and media-key
-//!   swallowing must be verified live on current macOS.
+//!   prompts; losing it later ends the hook with `Event::Stopped` within about a second, as does a
+//!   tap that times out a 6th time within 10 s). Secure Input (password fields, in any app) hides
+//!   all keys from the tap. A MacBook's top row sends its printed functions (brightness, Mission
+//!   Control, media) unless Fn is held or "Use F1, F2, etc. keys as standard function keys" is on,
+//!   so an F-key gesture fires only then. Media keys reach the tap only from a keyboard: AirPods,
+//!   the Touch Bar and Control Center go through MediaRemote and are never seen; media-key
+//!   swallowing must be verified live on current macOS. Media keys are decoded on the main thread
+//!   (AppKit), so a host using media-key gestures or recording must service its main run loop or
+//!   main dispatch queue (Avalonia and winit do); a media key the main thread does not get to
+//!   within 50 ms passes undecoded, its up included if its down was swallowed (once no media
+//!   gesture or recording remains, such a press is forgotten at the next undecoded event). Keys are
+//!   named by position: on an ISO keyboard too, the key left of 1 is `Oem3` and the one beside left
+//!   Shift `OemBackslash`. As in Avalonia.Native, two keys share a name: on JIS, Yen and the key
+//!   left of Return are both `OemPipe`; keypad `=` is `OemPlus`, like the main `=`.
 //! - Linux: no backend yet; `start` fails with `Unsupported`.
 
 // Used by the backends only.
@@ -56,6 +69,6 @@ pub use std::sync::mpsc::RecvTimeoutError;
 
 pub use error::Error;
 pub use gesture::{Gesture, ParseGestureError};
-pub use hotkeys::{Event, Events, HotkeyId, Hotkeys, KeyEvent};
+pub use hotkeys::{Event, Events, HotkeyId, Hotkeys, KeyEvent, REVOKED_REASON};
 pub use key::Key;
 pub use modifiers::Modifiers;

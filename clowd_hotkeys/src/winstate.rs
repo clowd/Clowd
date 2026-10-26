@@ -68,7 +68,7 @@ pub(crate) struct WinState {
     /// Code and time of the last non-modifier down while that key is still held, for repeat
     /// detection. One slot is enough: Windows only auto-repeats the most recently pressed key.
     last_down: Option<(u16, u32)>,
-    /// A mask key was injected for the current Win/Alt hold.
+    /// A mask key was injected since the most recent Win/Alt down.
     mask_sent: bool,
     /// Shift side bits a fake shift-up released while the real key stays held. GetAsyncKeyState then
     /// reads them up, so the reconcile must not take them for lost key-ups.
@@ -119,12 +119,19 @@ impl WinState {
 
         // The phantom AltGr LCtrl (scan 0x21D) is an ordinary LeftCtrl: AltGr = Ctrl+Alt.
         if let Some(bit) = side_bit(ev.vk) {
+            if down {
+                // The clear-only reconcile, so the modifiers reported for this edge (and the
+                // recording preview) drop a lost key-up now rather than at the next key. It runs
+                // before the repeat check: a key pressed again after its up was lost (Win+L, then
+                // Win) reads as up in the async state, while a real auto-repeat reads as held.
+                self.set_mods(self.mods & (async_mods() | self.fake_up));
+            }
             // Windows auto-repeats held modifiers.
             let repeat = down && self.mods & bit != 0;
-            if down && !repeat {
-                // The clear-only reconcile, so the modifiers reported for this edge (and the
-                // recording preview) drop a lost key-up now rather than at the next key.
-                self.set_mods(self.mods & (async_mods() | self.fake_up));
+            // Start and the menu bar arm on each fresh Win/Alt down, so an earlier mask covers none
+            // that come later; repeats do not re-arm them.
+            if down && !repeat && bit & (LWIN | RWIN | LALT | RALT) != 0 {
+                self.mask_sent = false;
             }
             self.set_mods(if down { self.mods | bit } else { self.mods & !bit });
             core.modifier(ev.vk, key, down, repeat, collapse(self.mods));
@@ -284,6 +291,40 @@ mod tests {
     }
 
     #[test]
+    fn win_down_after_an_alt_mask_masks_again() {
+        let mut rig = Rig::new();
+        rig.register(Key::X, Modifiers::ALT);
+        rig.register(Key::Y, Modifiers::ALT | Modifiers::META);
+        assert_eq!(rig.down(0xA4, 0x38, 0), PASS);
+        assert_eq!(rig.down(0x58, 0x2D, LALT), SWALLOW_INJECT);
+        assert_eq!(rig.up(0x58, 0x2D), SWALLOW);
+        // The Alt mask went out before Win went down, so it cannot stop Win-up opening Start.
+        assert_eq!(rig.send(0x5B, 0x5B, LLKHF_EXTENDED, 1, LALT), PASS);
+        assert_eq!(rig.down(0x59, 0x15, LALT | LWIN), SWALLOW_INJECT);
+        assert_eq!(rig.up(0x59, 0x15), SWALLOW);
+        // Neither another combo nor an auto-repeat of a held Win or Alt needs a second mask.
+        assert_eq!(rig.down(0x59, 0x15, LALT | LWIN), SWALLOW);
+        assert_eq!(rig.up(0x59, 0x15), SWALLOW);
+        // The async state reads a held key as down while it auto-repeats.
+        assert_eq!(rig.send(0x5B, 0x5B, LLKHF_EXTENDED, 30, LALT | LWIN), PASS);
+        assert_eq!(rig.send(0xA4, 0x38, 0, 30, LALT | LWIN), PASS);
+        assert_eq!(rig.down(0x59, 0x15, LALT | LWIN), SWALLOW);
+    }
+
+    #[test]
+    fn alt_down_after_a_win_mask_masks_again() {
+        let mut rig = Rig::new();
+        rig.register(Key::X, Modifiers::META);
+        rig.register(Key::Y, Modifiers::ALT | Modifiers::META);
+        assert_eq!(rig.down(0x5B, 0x5B, 0), PASS);
+        assert_eq!(rig.down(0x58, 0x2D, LWIN), SWALLOW_INJECT);
+        assert_eq!(rig.up(0x58, 0x2D), SWALLOW);
+        // Likewise the Win mask cannot stop Alt-up focusing the menu bar.
+        assert_eq!(rig.send(0xA4, 0x38, 0, 1, LWIN), PASS);
+        assert_eq!(rig.down(0x59, 0x15, LWIN | LALT), SWALLOW_INJECT);
+    }
+
+    #[test]
     fn lost_win_up_is_reconciled_and_masking_rearms() {
         let mut rig = Rig::new();
         rig.register(Key::X, Modifiers::META);
@@ -297,6 +338,31 @@ mod tests {
         assert_eq!(rig.down(0x5B, 0x5B, 0), PASS);
         assert_eq!(rig.down(0xA0, 0x2A, LWIN), PASS);
         assert_eq!(rig.down(0x58, 0x2D, LWIN | LSHIFT), SWALLOW_INJECT);
+    }
+
+    #[test]
+    fn win_pressed_again_after_a_lost_up_is_a_fresh_down() {
+        let mut rig = Rig::new();
+        rig.register(Key::X, Modifiers::META);
+        assert_eq!(rig.down(0x5B, 0x5B, 0), PASS);
+        assert_eq!(rig.down(0x58, 0x2D, LWIN), SWALLOW_INJECT);
+        assert_eq!(rig.up(0x58, 0x2D), SWALLOW);
+        drain(&rig.rx);
+        rig.shared
+            .observing
+            .store(true, Ordering::Relaxed);
+        // Win+L: the Win key-up never reaches the hook, and the first key after unlocking is Win
+        // itself. The async state shows it was up, so this down is fresh, not an auto-repeat.
+        assert_eq!(rig.down(0x5B, 0x5B, 0), PASS);
+        let win: Vec<(bool, bool)> = drain(&rig.rx)
+            .iter()
+            .filter_map(|e| match e {
+                Event::Key(k) if k.raw_code == 0x5B => Some((k.down, k.repeat)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(win, [(true, false)]);
+        assert_eq!(rig.down(0x58, 0x2D, LWIN), SWALLOW_INJECT);
     }
 
     #[test]
@@ -377,6 +443,8 @@ mod tests {
         }
     }
 
+    // macOS has no PrintScreen or Pause key, so `register` refuses them there.
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn alt_print_screen_is_one_key_whichever_scan_code_each_edge_carries() {
         // Plain PrintScreen is scan 0x37 extended; with Alt held the keyboard sends SysRq instead:
@@ -403,6 +471,8 @@ mod tests {
         assert!(!rig.core.is_suppressed(0x137));
     }
 
+    // macOS has no PrintScreen or Pause key, so `register` refuses them there.
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn control_pause_arrives_as_cancel() {
         // Documented behaviour, not a bug: with Ctrl held, Pause reaches the hook as VK_CANCEL (0x03,
@@ -612,9 +682,10 @@ mod tests {
         rig.send(0x42, 0x30, 0, 30, 0);
         rig.send(0x41, 0x1E, 0, 30, 0);
         assert_eq!(repeats(&rig), [false, true, true, false, false, true, true, false, false, false]);
+        // A held modifier reads as down in the async state while it auto-repeats.
         rig.send(0xA0, 0x2A, 0, 1, 0);
-        rig.send(0xA0, 0x2A, 0, 500, 0);
-        rig.send(0xA0, 0x2A, LLKHF_UP, 10, 0);
+        rig.send(0xA0, 0x2A, 0, 500, LSHIFT);
+        rig.send(0xA0, 0x2A, LLKHF_UP, 10, LSHIFT);
         assert_eq!(repeats(&rig), [false, true, false]);
     }
 

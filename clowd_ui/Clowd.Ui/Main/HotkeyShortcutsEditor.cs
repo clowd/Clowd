@@ -63,6 +63,8 @@ namespace Clowd.UI.Config
         private TopLevel _canceledSlotRoot;
         private bool _applying;
         private bool _subscribed;
+        private HotkeyManager _manager; // subscribed to while shown
+        private bool _addShowsRecordingError;
 
         /// <param name="entry">The action edited.</param>
         /// <param name="actionName">Its display name, for the screen-reader names of the add button
@@ -113,6 +115,9 @@ namespace Clowd.UI.Config
             {
                 _subscribed = true;
                 _entry.PropertyChanged += OnEntryPropertyChanged;
+                _manager = HotkeyManager.Current;
+                if (_manager != null)
+                    _manager.RecordingAvailable += OnRecordingAvailable;
             }
 
             Refresh();
@@ -125,6 +130,9 @@ namespace Clowd.UI.Config
             {
                 _subscribed = false;
                 _entry.PropertyChanged -= OnEntryPropertyChanged;
+                if (_manager != null)
+                    _manager.RecordingAvailable -= OnRecordingAvailable;
+                _manager = null;
             }
 
             // nothing is left to keep in place once the page is gone; the next attach refreshes
@@ -234,8 +242,27 @@ namespace Clowd.UI.Config
                 {
                     ToolTip.SetTip(_addButton, field.RecordingError);
                     ToolTip.SetIsOpen(_addButton, true);
+                    _addShowsRecordingError = true;
                 }
             }
+            else
+            {
+                ClearAddRecordingError();
+            }
+        }
+
+        // the hook is back (macOS, Accessibility granted with this window open): the add button
+        // records again, so the reason it could not is out of date
+        private void OnRecordingAvailable(object sender, EventArgs e) => ClearAddRecordingError();
+
+        private void ClearAddRecordingError()
+        {
+            if (!_addShowsRecordingError)
+                return;
+
+            _addShowsRecordingError = false;
+            ToolTip.SetIsOpen(_addButton, false);
+            ToolTip.SetTip(_addButton, null);
         }
 
         private void OnFieldRemoveRequested(object sender, EventArgs e)
@@ -301,6 +328,7 @@ namespace Clowd.UI.Config
                 // button says it instead (as when recording cannot start at all)
                 ToolTip.SetTip(_addButton, field.RecordingError);
                 ToolTip.SetIsOpen(_addButton, true);
+                _addShowsRecordingError = true;
             }
             if (leaving && !hadFocus && _subscribed && HoldCanceledSlot(field))
                 return;
