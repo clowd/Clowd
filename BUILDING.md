@@ -132,10 +132,23 @@ cargo recr                        # the same, --release
 The first build compiles libobs and takes 20–40 minutes; later builds reuse it. OBS derives its
 version from `git describe --tags`, and a submodule checkout usually has no tags, so the local
 lightweight tag above (HEAD is the 32.2.2 release commit) keeps it from falling back to a commit
-hash. `OBS_VERSION_OVERRIDE` sets the version stamped into the OBS build directly, and
+hash. On Windows, where OBS's child configures need it most, the build script adds that tag itself
+when HEAD has none. `OBS_VERSION_OVERRIDE` sets the version stamped into the OBS build directly.
+
+The build tree records a successful configure, together with the checkout and the submodule commit
+it was for, so a failed configure, a moved clone or a submodule bump configures again on the next
+build. If a libobs build still fails after you fixed the cause, delete `target/obs-<arch>` and
+`crates/obs-studio/build_x86` (plus `build_x64` on Windows ARM64) and build again.
+
 `OBS_BUILD_DIR` moves the libobs build tree (default `target/obs-<arch>` on Windows and Linux; on
-macOS it lives in the `prisc_obs_sys` build script's `OUT_DIR`), which lets several worktrees share
-one.
+macOS it lives in the `prisc_obs_sys` build script's `OUT_DIR`). Several worktrees can share one
+tree only with two caveats. The tree keeps compiling the `crates/obs-studio` sources of the
+worktree that configured it, so that worktree has to stay in place and on the same OBS commit. And
+only that configure downloads the OBS deps, so every other worktree needs its
+`crates/obs-studio/.deps` pointed at the first one's before its first build (a directory junction
+on Windows, `mklink /J crates\obs-studio\.deps <first>\crates\obs-studio\.deps`, or a symlink
+elsewhere). A shared tree that does not match the checkout is never wiped: the build stops and
+names it instead.
 
 The build scripts stage the runtime next to the binaries:
 

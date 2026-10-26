@@ -93,40 +93,50 @@ fn build_macos() {
 }
 
 fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
-    if obs_build.join("CMakeCache.txt").exists() {
+    let args: Vec<String> = [
+        "-G",
+        "Xcode",
+        &format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()),
+        // OBS builds itself with -Werror (via CMAKE_COMPILE_WARNING_AS_ERROR,
+        // which it defaults ON). Newer toolchains — e.g. the Xcode 26 clang on
+        // CI — enable warnings OBS 32.2.2 never saw (-Wimplicit-int-float-
+        // conversion), turning them into hard build failures. OBS is a vendored
+        // dependency, so opt out of warnings-as-errors for its tree.
+        "-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF",
+        &format!("-DCMAKE_OSX_ARCHITECTURES={}", mac_osx_arch()),
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0",
+        "-DENABLE_FRONTEND=OFF",
+        "-DENABLE_UI=OFF",
+        "-DENABLE_SCRIPTING=OFF",
+        "-DENABLE_BROWSER=OFF",
+        "-DENABLE_WEBSOCKET=OFF",
+        "-DENABLE_AJA=OFF",
+        "-DENABLE_NEW_MPEGTS_OUTPUT=OFF",
+        "-DENABLE_VIRTUALCAM=ON",
+        // These UUIDs are needed so the camera-extension CMakeLists.txt reaches
+        // its enable_language(Swift) call, which is required for libobs-metal.
+        "-DVIRTUALCAM_DEVICE_UUID=7626645E-4425-469E-9D8B-97E0FA59AC75",
+        "-DVIRTUALCAM_SOURCE_UUID=A8D7B8AA-65AD-4D21-9C42-66480DBFA8E1",
+        "-DVIRTUALCAM_SINK_UUID=A3F16177-7044-4DD8-B900-72E2419F7A9A",
+        "-Wno-dev",
+    ]
+    .iter()
+    .map(|a| a.to_string())
+    .collect();
+
+    // The tree lives in OUT_DIR, which is never shared.
+    let signature = configure_signature(obs_src, &args, false);
+    if configure_is_current(obs_build, &signature) {
         return;
     }
+    prepare_reconfigure(obs_src, obs_build, false, &[]);
 
     let output = Command::new("cmake")
         .arg("-S")
         .arg(obs_src)
         .arg("-B")
         .arg(obs_build)
-        .arg("-G")
-        .arg("Xcode")
-        .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
-        // OBS builds itself with -Werror (via CMAKE_COMPILE_WARNING_AS_ERROR,
-        // which it defaults ON). Newer toolchains — e.g. the Xcode 26 clang on
-        // CI — enable warnings OBS 32.2.2 never saw (-Wimplicit-int-float-
-        // conversion), turning them into hard build failures. OBS is a vendored
-        // dependency, so opt out of warnings-as-errors for its tree.
-        .arg("-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF")
-        .arg(format!("-DCMAKE_OSX_ARCHITECTURES={}", mac_osx_arch()))
-        .arg("-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0")
-        .arg("-DENABLE_FRONTEND=OFF")
-        .arg("-DENABLE_UI=OFF")
-        .arg("-DENABLE_SCRIPTING=OFF")
-        .arg("-DENABLE_BROWSER=OFF")
-        .arg("-DENABLE_WEBSOCKET=OFF")
-        .arg("-DENABLE_AJA=OFF")
-        .arg("-DENABLE_NEW_MPEGTS_OUTPUT=OFF")
-        .arg("-DENABLE_VIRTUALCAM=ON")
-        // These UUIDs are needed so the camera-extension CMakeLists.txt reaches
-        // its enable_language(Swift) call, which is required for libobs-metal.
-        .arg("-DVIRTUALCAM_DEVICE_UUID=7626645E-4425-469E-9D8B-97E0FA59AC75")
-        .arg("-DVIRTUALCAM_SOURCE_UUID=A8D7B8AA-65AD-4D21-9C42-66480DBFA8E1")
-        .arg("-DVIRTUALCAM_SINK_UUID=A3F16177-7044-4DD8-B900-72E2419F7A9A")
-        .arg("-Wno-dev")
+        .args(&args)
         .output()
         .expect("Failed to run cmake configure");
 
@@ -142,9 +152,10 @@ fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
 
     let xcodeproj = obs_build.join("obs-studio.xcodeproj");
     assert!(
-        xcodeproj.exists(),
+        output.status.success() && xcodeproj.exists(),
         "cmake configure failed — no Xcode project generated.\nstderr: {stderr}"
     );
+    write_configure_stamp(obs_build, &signature);
 }
 
 fn mac_cmake_build(obs_build: &Path, config: &str) {
@@ -198,6 +209,129 @@ fn build_is_current(marker: &Path, targets: &[&str]) -> bool {
 
 fn write_build_marker(marker: &Path, targets: &[&str]) {
     std::fs::write(marker, targets.join(" ")).expect("Failed to write build marker");
+}
+
+// A finished configure is recorded by a stamp written only after it succeeded,
+// never by the mere presence of CMakeCache.txt: a failed configure leaves a
+// cache behind too, and skipping configure on it fails every later build with
+// an opaque MSB1009 (no project file). The stamp holds what the configure was
+// for (the obs-studio checkout, its commit and the cmake arguments), so a
+// moved clone, a submodule bump or a changed argument re-runs it as well.
+const CONFIGURE_STAMP: &str = ".configure_complete";
+
+/// What a configure of `obs_src` with `args` depends on. A shared tree
+/// (`OBS_BUILD_DIR`, possibly configured from another worktree) leaves out the
+/// checkout path and the path-valued arguments, which differ per worktree.
+fn configure_signature(obs_src: &Path, args: &[String], shared: bool) -> String {
+    let mut lines = Vec::new();
+    if !shared {
+        lines.push(format!("source={}", obs_src.display()));
+    }
+    lines.push(format!("obs-studio={}", obs_submodule_head(obs_src)));
+    lines.extend(
+        args.iter()
+            .filter(|a| !(shared && a.starts_with("-DCMAKE_PROJECT_INCLUDE=")))
+            .cloned(),
+    );
+    lines.join("\n")
+}
+
+fn configure_is_current(build_dir: &Path, signature: &str) -> bool {
+    build_dir.join("CMakeCache.txt").exists()
+        && std::fs::read_to_string(build_dir.join(CONFIGURE_STAMP)).is_ok_and(|s| s == signature)
+}
+
+/// Gets a build tree whose configure is missing, failed or stale ready for a
+/// fresh one. A cache from a different source dir (a moved clone) cannot be
+/// reconfigured in place, so it is dropped; anything else re-runs in place,
+/// which cmake keeps incremental. `child_dirs` are the build trees OBS's
+/// Windows configure spawns inside the checkout; a stale one of those aborts
+/// the parent configure, so it goes too. A shared tree is never wiped here:
+/// the user chose it, and other worktrees may depend on it.
+fn prepare_reconfigure(obs_src: &Path, build_dir: &Path, shared: bool, child_dirs: &[PathBuf]) {
+    let cache = build_dir.join("CMakeCache.txt");
+    if cache.exists() {
+        if shared {
+            panic!(
+                "prisc_obs_sys: the shared libobs build tree at {} (OBS_BUILD_DIR) was configured \
+                 for another obs-studio commit or with other arguments, or its configure never \
+                 finished. Delete that directory, or point OBS_BUILD_DIR at a tree configured \
+                 for this checkout.",
+                build_dir.display()
+            );
+        }
+        if cmake_home_directory(build_dir).is_some_and(|home| !same_dir(&home, obs_src)) {
+            println!(
+                "cargo:warning=prisc_obs_sys: {} was configured for another obs-studio checkout; \
+                 configuring it again from scratch",
+                build_dir.display()
+            );
+            let _ = std::fs::remove_file(&cache);
+            let _ = std::fs::remove_dir_all(build_dir.join("CMakeFiles"));
+        } else {
+            println!(
+                "cargo:warning=prisc_obs_sys: re-running the libobs configure in {} (the last one \
+                 failed, or the obs-studio commit or the configure arguments changed)",
+                build_dir.display()
+            );
+        }
+    }
+    for child in child_dirs {
+        if cmake_home_directory(child).is_some_and(|home| !same_dir(&home, obs_src)) {
+            let _ = std::fs::remove_dir_all(child);
+        }
+    }
+    let _ = std::fs::remove_file(build_dir.join(CONFIGURE_STAMP));
+}
+
+/// Records a configure that succeeded, and drops the build marker: a
+/// (re)configure can change how existing targets build, so the target list
+/// alone no longer proves the build is current (cmake rebuilds only what the
+/// change touched).
+fn write_configure_stamp(build_dir: &Path, signature: &str) {
+    std::fs::write(build_dir.join(CONFIGURE_STAMP), signature).expect("write configure stamp");
+    let _ = std::fs::remove_file(build_dir.join(".build_complete"));
+}
+
+/// The source dir a CMake build tree was configured for.
+fn cmake_home_directory(build_dir: &Path) -> Option<PathBuf> {
+    let cache = std::fs::read_to_string(build_dir.join("CMakeCache.txt")).ok()?;
+    cache
+        .lines()
+        .find_map(|l| l.strip_prefix("CMAKE_HOME_DIRECTORY:INTERNAL="))
+        .map(|home| PathBuf::from(home.trim()))
+}
+
+/// Path equality the way CMake spells paths (forward slashes; on Windows, any
+/// case).
+fn same_dir(a: &Path, b: &Path) -> bool {
+    let norm = |p: &Path| {
+        let s = p.display().to_string().replace('\\', "/");
+        let s = s.trim_end_matches('/').to_string();
+        if cfg!(windows) { s.to_lowercase() } else { s }
+    };
+    norm(a) == norm(b)
+}
+
+/// The commit the obs-studio submodule has checked out, or "" when it is not a
+/// git checkout of its own (then the superproject's HEAD would answer, which
+/// changes with every commit). Also watches the submodule's HEAD, so checking
+/// out another OBS commit re-runs this script and the configure stamp notices.
+fn obs_submodule_head(obs_src: &Path) -> String {
+    if !obs_src.join(".git").exists() {
+        return String::new();
+    }
+    if let Some(git_dir) = git_output(obs_src, &["rev-parse", "--absolute-git-dir"]) {
+        println!("cargo:rerun-if-changed={}", Path::new(&git_dir).join("HEAD").display());
+    }
+    git_output(obs_src, &["rev-parse", "HEAD"]).unwrap_or_default()
+}
+
+fn git_output(dir: &Path, args: &[&str]) -> Option<String> {
+    let out = Command::new("git").arg("-C").arg(dir).args(args).output().ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 fn mac_emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
@@ -256,7 +390,8 @@ fn build_windows() {
     let config = "RelWithDebInfo";
 
     // The Windows branch does NOT watch the obs-studio source tree — idempotency
-    // is provided by the CMakeCache.txt / .build_complete markers instead.
+    // is provided by the configure stamp / .build_complete markers instead (the
+    // stamp watches the submodule's checked-out commit).
     println!("cargo:rerun-if-changed=wrapper.h");
     println!("cargo:rerun-if-env-changed=OBS_BUILD_DIR");
     println!("cargo:rerun-if-env-changed=CARGO_TARGET_DIR");
@@ -287,7 +422,9 @@ fn win_build_dir() -> PathBuf {
 /// `OBS_BUILD_DIR`, else `<workspace_target>/obs-<arch_suffix>` — the layout
 /// shared by the Windows and Linux branches (see [`win_build_dir`]). Keeping
 /// the OBS tree outside cargo's OUT_DIR also means it survives `cargo clean -p
-/// prisc_obs_sys` and can be shared across worktrees via `OBS_BUILD_DIR`.
+/// prisc_obs_sys`. Worktrees can share one via `OBS_BUILD_DIR` only with the
+/// caveats in BUILDING.md: the tree compiles the obs-studio sources of the
+/// worktree that configured it, and only that worktree's `.deps` gets filled.
 fn workspace_obs_build_dir(arch_suffix: &str) -> PathBuf {
     if let Ok(dir) = env::var("OBS_BUILD_DIR") {
         return PathBuf::from(dir);
@@ -380,49 +517,64 @@ fn find_cmake() -> PathBuf {
 }
 
 fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
-    if build_dir.join("CMakeCache.txt").exists() {
-        return;
-    }
-
-    // Deps auto-download into <src>/.deps at configure time (needs network on
-    // first run). Configure also creates <src>/build_x86 (the 32-bit child) —
-    // that is expected.
-    let status = Command::new(cmake)
-        .arg("-S")
-        .arg(obs_src)
-        .arg("-B")
-        .arg(build_dir)
-        .arg("-G")
-        .arg(win_cmake_generator())
-        .arg("-A")
-        .arg(win_vs_platform())
-        .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
+    let args: Vec<String> = [
+        "-G",
+        &win_cmake_generator(),
+        "-A",
+        win_vs_platform(),
+        &format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()),
         // See the macOS branch: OBS defaults to -Werror / MSVC /WX. Disable
         // warnings-as-errors so a newer MSVC toolchain than OBS 32.2.2 was
         // tested against cannot break our build on a stray warning.
-        .arg("-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF")
+        "-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF",
         // Silences VS 2026's hard deprecation error for libobs-winrt's
         // <experimental/coroutine>; see the file for details.
-        .arg(format!(
+        &format!(
             "-DCMAKE_PROJECT_INCLUDE={}",
             PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
                 .join("cmake/msvc-compat.cmake")
                 .display()
                 .to_string()
                 .replace('\\', "/")
-        ))
-        .arg("-DENABLE_FRONTEND=OFF")
-        .arg("-DENABLE_UI=OFF")
-        .arg("-DENABLE_SCRIPTING=OFF")
-        .arg("-DENABLE_BROWSER=OFF")
-        .arg("-DENABLE_WEBSOCKET=OFF")
-        .arg("-DENABLE_VST=OFF")
-        .arg("-DENABLE_AJA=OFF")
-        .arg("-DENABLE_DECKLINK=OFF")
-        .arg("-DENABLE_WEBRTC=OFF")
-        .arg("-DENABLE_VIRTUALCAM=OFF")
-        .arg("-DENABLE_NEW_MPEGTS_OUTPUT=OFF")
-        .arg("-Wno-dev")
+        ),
+        "-DENABLE_FRONTEND=OFF",
+        "-DENABLE_UI=OFF",
+        "-DENABLE_SCRIPTING=OFF",
+        "-DENABLE_BROWSER=OFF",
+        "-DENABLE_WEBSOCKET=OFF",
+        "-DENABLE_VST=OFF",
+        "-DENABLE_AJA=OFF",
+        "-DENABLE_DECKLINK=OFF",
+        "-DENABLE_WEBRTC=OFF",
+        "-DENABLE_VIRTUALCAM=OFF",
+        "-DENABLE_NEW_MPEGTS_OUTPUT=OFF",
+        "-Wno-dev",
+    ]
+    .iter()
+    .map(|a| a.to_string())
+    .collect();
+
+    let shared = env::var_os("OBS_BUILD_DIR").is_some();
+    let signature = configure_signature(obs_src, &args, shared);
+    if configure_is_current(build_dir, &signature) {
+        return;
+    }
+
+    // OBS's windows/architecture.cmake spawns child configures inside the
+    // checkout for the 32-bit helpers: <src>/build_x86 from an x64 parent,
+    // <src>/build_x64 and <src>/build_x86 from an ARM64 one.
+    let children = [obs_src.join("build_x86"), obs_src.join("build_x64")];
+    prepare_reconfigure(obs_src, build_dir, shared, &children);
+    ensure_obs_version_tag(obs_src);
+
+    // Deps auto-download into <src>/.deps at configure time (needs network on
+    // first run).
+    let status = Command::new(cmake)
+        .arg("-S")
+        .arg(obs_src)
+        .arg("-B")
+        .arg(build_dir)
+        .args(&args)
         .status()
         .expect("Failed to run cmake configure");
 
@@ -432,6 +584,26 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
         "cmake configure did not produce CMakeCache.txt at {}",
         build_dir.display()
     );
+    write_configure_stamp(build_dir, &signature);
+}
+
+/// The child configures above get no OBS_VERSION_OVERRIDE and fall back to
+/// `git describe --tags`, which fails on a tagless submodule checkout (the
+/// usual case) and with it the whole configure. Gives HEAD the same local,
+/// lightweight tag CI does, unless it already has one.
+fn ensure_obs_version_tag(obs_src: &Path) {
+    if !obs_src.join(".git").exists()
+        || git_output(obs_src, &["describe", "--tags", "--exact-match"]).is_some()
+    {
+        return;
+    }
+    let version = obs_version_override();
+    if git_output(obs_src, &["tag", "-f", &version]).is_some() {
+        println!(
+            "cargo:warning=prisc_obs_sys: tagged the obs-studio checkout `{version}` locally, \
+             because OBS reads its version from `git describe --tags`"
+        );
+    }
 }
 
 fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
