@@ -71,7 +71,19 @@ jobs:
           echo "FROM_SHA=$FROM" >> "$GITHUB_ENV"
           echo "TO_SHA=$TO" >> "$GITHUB_ENV"
 
-          COUNT=$(git rev-list --no-merges --count "$FROM..$TO")
+          # The recorder's own history (its archived standalone repo, merged in whole by 55219c8e with
+          # this commit as its tip) already shipped to users inside the downloaded recorder, so it
+          # never belongs in a release. Excluding its ancestors drops only that history: they
+          # share no commits with the app's own, so this is safe for every range.
+          IMPORTED=e1d62b21f3a9876422aa7cebbed6bc4220eaffa3
+          EXCLUDE=""
+          if git cat-file -e "$IMPORTED^{commit}" 2>/dev/null; then
+            EXCLUDE="^$IMPORTED"
+          fi
+          echo "EXCLUDE=$EXCLUDE" >> "$GITHUB_ENV"
+
+          # EXCLUDE stays unquoted so that an empty value adds no argument
+          COUNT=$(git rev-list --no-merges --count "$FROM..$TO" $EXCLUDE)
           echo "COMMIT_COUNT=$COUNT" >> "$GITHUB_ENV"
           echo "Range $FROM..$TO, $COUNT commits"
           if [ "$COUNT" -eq 0 ]; then
@@ -83,7 +95,7 @@ jobs:
           # reads the code as it shipped rather than whatever has landed since.
           cp .github/release-notes-prompt.md "$RUNNER_TEMP/prompt-instructions.md"
           git log --reverse --no-merges --date=short \
-            --format='%H %ad %s%n%w(0,4,4)%b' "$FROM..$TO" > "$RUNNER_TEMP/commits.txt"
+            --format='%H %ad %s%n%w(0,4,4)%b' "$FROM..$TO" $EXCLUDE > "$RUNNER_TEMP/commits.txt"
           git checkout --detach --force "$TO"
           cp "$RUNNER_TEMP/commits.txt" commits.txt
 
@@ -122,6 +134,11 @@ jobs:
           {
             echo "Write the release notes for commit range \`$FROM_SHA..$TO_SHA\` of this"
             echo "repository ($COMMIT_COUNT commits). Follow these instructions exactly."
+            if [ -n "$EXCLUDE" ]; then
+              echo "Ignore every commit reachable from ${EXCLUDE#^}: that is the recorder's imported"
+              echo "history, which already shipped. \`commits.txt\` is the authoritative list; when you"
+              echo "run \`git log\` over the range yourself, append \`$EXCLUDE\` so those commits stay out."
+            fi
             echo
             cat "$RUNNER_TEMP/prompt-instructions.md"
           } > prompt.txt
