@@ -45,14 +45,15 @@
     <!--
       A sparse package must declare an Application; the Velopack root launcher is a harmless
       target (it only relaunches current\Prisc.Ui.exe through Update.exe, and Prisc itself
-      never activates it). Which exe is declared here does NOT decide package identity: on
+      never activates it). vpk names that root stub after packTitle (Prisc.exe), not after the
+      main exe; SparsePackageManager.RootStubFileName must name the same file. Which exe is declared here does NOT decide package identity: on
       the Windows 11 builds measured, any process that a packaged process (Explorer's dllhost
       surrogate hosting the COM server) creates from inside the external location - the whole
       install root - gets this package's identity, breakaway attribute or not. That is why the
       shell extension launches Prisc.Ui.exe through Explorer's own shell object instead
       (crates/prisc_shell_ext/src/broker.rs, priscapp/Prisc#83).
     -->
-    <Application Id="Prisc" Executable="Prisc.Ui.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="Prisc" Executable="Prisc.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements DisplayName="Prisc Shell Extension"
                           Description="Adds an 'Upload with Prisc' command to the File Explorer context menu."
                           AppListEntry="none"

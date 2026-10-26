@@ -180,6 +180,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
 
+      # vpk names the install root's launcher stub after --packTitle (Prisc.exe), not after
+      # --mainExe; SparsePackageManager.RootStubFileName and the sparse MSIX manifest's
+      # Application Executable (crates/prisc_shell_ext/msix) must name that same file.
       - name: Pack (Windows)
         if: runner.os == 'Windows'
         run: >

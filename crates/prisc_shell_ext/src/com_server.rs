@@ -362,3 +362,48 @@ unsafe extern "system" fn DllCanUnloadNow() -> HRESULT {
     // on panic answer "still in use" — keeping the DLL loaded is always safe
     catch_unwind(|| if SERVER_LOCKS.load(Ordering::SeqCst) == 0 { S_OK } else { S_FALSE }).unwrap_or(S_FALSE)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MANIFEST: &str = include_str!("../msix/AppxManifest.template.xml");
+
+    /// Every `<attr>="<value>"` in the manifest, in order.
+    fn attribute_values<'a>(attr: &str) -> Vec<&'a str> {
+        let needle = format!(" {attr}=\"");
+        MANIFEST
+            .match_indices(&needle)
+            .map(|(i, _)| {
+                let rest = &MANIFEST[i + needle.len()..];
+                &rest[..rest.find('"').unwrap()]
+            })
+            .collect()
+    }
+
+    // makeappx runs with /nv in CI, so a CLSID the manifest and the COM server disagree on would
+    // ship as a menu entry that never appears or never runs
+    #[test]
+    fn manifest_clsids_match_the_com_server() {
+        let ids: Vec<&str> = attribute_values("Id")
+            .into_iter()
+            .chain(attribute_values("Clsid"))
+            .filter(|v| v.len() == 36)
+            .collect();
+        assert_eq!(
+            ids.len(),
+            3,
+            "expected com:Class Id plus two desktop5:Verb Clsid values, got {ids:?}"
+        );
+        for id in ids {
+            let value = u128::from_str_radix(&id.replace('-', ""), 16).unwrap();
+            assert_eq!(GUID::from_u128(value), CLSID_PRISC_EXPLORER_COMMAND, "manifest CLSID {id}");
+        }
+    }
+
+    #[test]
+    fn manifest_names_the_shipped_dll() {
+        let paths = attribute_values("Path");
+        assert_eq!(paths, ["PriscShellExt_{{EXTVERSION}}.dll"]);
+    }
+}

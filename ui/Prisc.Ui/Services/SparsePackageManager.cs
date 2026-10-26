@@ -29,7 +29,7 @@ namespace Prisc.UI
     /// updates, and a changed one arrives under a fresh filename that a lock on the old copy
     /// cannot block. Stale copies are swept opportunistically once nothing references them.
     /// </summary>
-    internal static class SparsePackageManager
+    public static class SparsePackageManager
     {
         private const string PackageName = "Prisc.ShellExtension";
         private const string MsixFileName = "PriscShellExt.msix";
@@ -40,10 +40,12 @@ namespace Prisc.UI
         private const string DllSearchPattern = "PriscShellExt*.dll";
 
         // the manifest's Application Executable, resolved against ExternalLocation (the install
-        // root): Velopack's root stub for the main exe. Velopack runs the --veloapp-updated hook
-        // before it extracts the new root stub, so on a root upgraded from the old name the stub
-        // does not exist yet during that hook; registration then waits for the next startup.
-        private const string RootStubFileName = "Prisc.Ui.exe";
+        // root): Velopack's root launcher stub. vpk names that stub after --packTitle (falling back
+        // to --packId), NOT after --mainExe, so it is Prisc.exe; keep this, the manifest's
+        // Executable and release.yml's --packTitle in step. Velopack runs the --veloapp-updated
+        // hook before it extracts the new root stub, so on a root upgraded from the old name the
+        // stub does not exist yet during that hook; registration then waits for the next startup.
+        public const string RootStubFileName = "Prisc.exe";
 
         // Velopack fast-callback hooks are killed after 15s, but the interactive paths (settings
         // checkbox, startup sync) can afford to wait out a slow deployment service.
