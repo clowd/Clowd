@@ -1,0 +1,14 @@
+[package]
+name = "vid2gif"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+anyhow = { workspace = true }
+ffmpeg-sys = { workspace = true }
+
+[build-dependencies]
+# Linux: stages the shared FFmpeg bundle (and, for obs-express, libobs + plugins)
+# next to the binary with $ORIGIN RUNPATHs.
+obs-build-support = { workspace = true }

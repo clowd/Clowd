@@ -1,0 +1,311 @@
+//! Shared platform layer (SHARE_REGION_PLAN §4.3): monitor enumeration, obs
+//! paths, display-capture settings and region math, extracted from obs-express
+//! so every binary in the workspace (obs-express, clowd_share_region) uses the
+//! same primitives. All platform modules (Windows, macOS, Linux) expose
+//! identical public signatures (DESIGN §2.2) and are re-exported at the crate
+//! root; shared, platform-neutral types and the pure monitor-matching logic
+//! live here.
+//!
+//! Everything recorder-specific (cursor sprites, mouse sampling, audio/webcam
+//! helpers) deliberately stays behind in obs-express.
+
+use std::path::PathBuf;
+
+pub mod region;
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use self::windows::*;
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use self::macos::*;
+
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use self::linux::*;
+
+/// How the display-capture source decides *what* it records, from the
+/// platform's `display_capture_mode()`.
+///
+/// Every capture API obs-express drove before the Linux port takes a monitor
+/// the caller chose (`display_capture_settings` + the region planner). A
+/// Wayland session has no such API: compositors do not let a client name an
+/// output to capture, so libobs' `pipewire-screen-capture-source` asks
+/// xdg-desktop-portal, which shows its own picker (monitor or window) and
+/// hands back a PipeWire stream of whatever the user chose. That inverts the
+/// recorder's flow — the canvas size is known only after the user answers —
+/// hence a runtime mode rather than a compile-time per-OS branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayCaptureMode {
+    /// The caller picks monitors and places one capture source per monitor
+    /// (Windows, macOS, Linux X11).
+    Monitors,
+    /// A system dialog picks the target (Linux Wayland). There are no
+    /// monitors to enumerate or regions to plan: exactly one source is
+    /// created, from `cursor_update_settings` alone (the cursor flag is the
+    /// only setting such a source takes), and its size is unknown (0x0) until
+    /// the user has answered the dialog.
+    Picker,
+}
+
+#[derive(Debug, Clone)]
+pub struct MonitorInfo {
+    /// Stable id: Windows device interface path (`\\?\DISPLAY#…`) / mac display
+    /// UUID / X11 RandR monitor name (`DP-1`, `HDMI-A-0`, ...).
+    pub id: String,
+    /// Windows: GDI device name (`\\.\DISPLAY1`); mac: CGDirectDisplayID as
+    /// string; X11: the RandR monitor index that xshm_input_v2's `screen`
+    /// setting takes.
+    pub alt_id: Option<String>,
+    /// Origin in the platform capture coordinate space (§1.1):
+    /// Windows = physical px, virtual desktop; macOS = CG points; X11 = root
+    /// window px.
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    /// Capture pixels per coordinate-space unit: 1.0 on Windows and X11 (coords
+    /// are already physical px); the Retina backing scale on macOS, where coords
+    /// are CG points but the capture source emits pixel-sized frames.
+    pub scale: f64,
+    pub is_primary: bool,
+}
+
+/// Which OS API backs display capture. Windows-only in effect: the macOS
+/// screen-capture source and the Linux xshm / PipeWire sources expose no
+/// equivalent knob and ignore the value.
+///
+/// The Windows mapping is win-capture's `method` property
+/// (`enum display_capture_method` in
+/// obs-studio/plugins/win-capture/duplicator-monitor-capture.c): 0 = auto,
+/// 1 = DXGI desktop duplication, 2 = Windows Graphics Capture. `Auto` lets
+/// win-capture's `choose_method()` pick, and every value force-falls back to
+/// DXGI when WGC is unsupported.
+///
+/// The choice is visible to the user beyond performance: WGC makes Windows
+/// draw a yellow capture border around the recorded display, which libobs
+/// suppresses via `GraphicsCaptureSession::IsBorderRequired(false)`
+/// (obs-studio/libobs-winrt/winrt-capture.cpp) — an API that exists only on
+/// Windows 11. On Windows 10 the border is unavoidable under WGC, so `Dxgi`
+/// is the way to get rid of it there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CaptureMethod {
+    /// Decide per machine, and the default.
+    ///
+    /// On Windows 11 and newer this resolves to [`CaptureMethod::Wgc`]: WGC is
+    /// the API Microsoft develops, it captures monitors on any adapter without
+    /// the duplicator's cross-GPU blind spot (see `region_adapter_index`), and
+    /// its yellow capture border can be suppressed there via
+    /// `GraphicsCaptureSession::IsBorderRequired(false)`, so nothing is given
+    /// up by taking it. See `resolve` / the Windows `resolve_capture_method`.
+    ///
+    /// On Windows 10 it stays `method: 0` and win-capture's own
+    /// `choose_method()` decides. That heuristic takes DXGI unless the monitor
+    /// is not on the current adapter, or the machine is a multi-GPU laptop
+    /// running on mains — in which case WGC. Note it optimises for capture
+    /// correctness and performance, not for the WGC capture border, which
+    /// cannot be suppressed on Windows 10: pin `Dxgi` if a borderless capture
+    /// matters more than the heuristic.
+    #[default]
+    Auto,
+    /// DXGI desktop duplication. Draws no capture border on any Windows
+    /// version, which is the reason to pin it on Windows 10.
+    Dxgi,
+    /// Windows Graphics Capture. Pin it where the DXGI duplicator misbehaves:
+    /// it was verified to produce black frames on a Win11 26H1 + NVIDIA
+    /// machine, back when libobs was pinned to graphics adapter 0 — see
+    /// `region_adapter_index`, which addressed the likely cause.
+    Wgc,
+}
+
+impl CaptureMethod {
+    /// The accepted spellings, in `--help` order.
+    pub const VARIANTS: [&'static str; 3] = ["auto", "dxgi", "wgc"];
+
+    /// win-capture's `method` property value.
+    pub fn as_obs_method(self) -> i64 {
+        match self {
+            CaptureMethod::Auto => 0,
+            CaptureMethod::Dxgi => 1,
+            CaptureMethod::Wgc => 2,
+        }
+    }
+
+    /// [`CaptureMethod::Auto`] resolved against the running OS, given whether
+    /// it is Windows 11 or newer. Split out from the platform probe so it can
+    /// be tested on any host; the Windows module supplies the real flag.
+    ///
+    /// Every non-`Auto` value passes through: an explicit `--capture-method`
+    /// is the user overriding this, so it is never second-guessed.
+    pub fn resolve(self, windows_11_or_newer: bool) -> Self {
+        match self {
+            CaptureMethod::Auto if windows_11_or_newer => CaptureMethod::Wgc,
+            other => other,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CaptureMethod::Auto => "auto",
+            CaptureMethod::Dxgi => "dxgi",
+            CaptureMethod::Wgc => "wgc",
+        }
+    }
+}
+
+impl std::str::FromStr for CaptureMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(CaptureMethod::Auto),
+            "dxgi" => Ok(CaptureMethod::Dxgi),
+            "wgc" => Ok(CaptureMethod::Wgc),
+            _ => Err(format!(
+                "unknown capture method '{s}' (expected {})",
+                CaptureMethod::VARIANTS.join(", ")
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for CaptureMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Paths handed to `obs_add_module_path` / `obs_add_data_path`. `module_bin` /
+/// `module_data` are passed to libobs verbatim (they may contain the
+/// `%module%` template token).
+pub struct ObsPaths {
+    pub module_bin: String,
+    pub module_data: String,
+    pub libobs_data: Option<PathBuf>,
+}
+
+/// Pure monitor matching: exact `id`, then `alt_id`, then 0-based index.
+/// Platform `find_monitor` implementations delegate here.
+pub(crate) fn match_monitor(id: &str, monitors: &[MonitorInfo]) -> Option<MonitorInfo> {
+    if let Some(m) = monitors.iter().find(|m| m.id == id) {
+        return Some(m.clone());
+    }
+    if let Some(m) = monitors.iter().find(|m| m.alt_id.as_deref() == Some(id)) {
+        return Some(m.clone());
+    }
+    if let Ok(index) = id.parse::<usize>() {
+        return monitors.get(index).cloned();
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn synthetic() -> Vec<MonitorInfo> {
+        vec![
+            MonitorInfo {
+                id: r"\\?\DISPLAY#DELA1E2#5&fef00e1&0&UID4353#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}".to_string(),
+                alt_id: Some(r"\\.\DISPLAY1".to_string()),
+                x: 0,
+                y: 0,
+                width: 2560,
+                height: 1440,
+                scale: 1.0,
+                is_primary: true,
+            },
+            MonitorInfo {
+                id: r"\\?\DISPLAY#GSM5B08#5&fef00e1&0&UID4357#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}".to_string(),
+                alt_id: Some(r"\\.\DISPLAY2".to_string()),
+                x: -1920,
+                y: 200,
+                width: 1920,
+                height: 1080,
+                scale: 1.0,
+                is_primary: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn matches_device_interface_path() {
+        let mons = synthetic();
+        let m = match_monitor(&mons[1].id.clone(), &mons).unwrap();
+        assert_eq!(m.alt_id.as_deref(), Some(r"\\.\DISPLAY2"));
+    }
+
+    #[test]
+    fn matches_alt_id() {
+        let mons = synthetic();
+        let m = match_monitor(r"\\.\DISPLAY1", &mons).unwrap();
+        assert!(m.is_primary);
+    }
+
+    #[test]
+    fn matches_zero_based_index() {
+        let mons = synthetic();
+        let m = match_monitor("1", &mons).unwrap();
+        assert_eq!(m.x, -1920);
+        assert!(match_monitor("2", &mons).is_none());
+    }
+
+    #[test]
+    fn id_takes_priority_over_index() {
+        // A monitor whose id happens to be a digit must match by id, not index.
+        let mons = vec![
+            MonitorInfo {
+                id: "1".to_string(),
+                alt_id: None,
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                scale: 1.0,
+                is_primary: true,
+            },
+            MonitorInfo {
+                id: "0".to_string(),
+                alt_id: None,
+                x: 100,
+                y: 0,
+                width: 100,
+                height: 100,
+                scale: 1.0,
+                is_primary: false,
+            },
+        ];
+        assert_eq!(match_monitor("1", &mons).unwrap().x, 0);
+    }
+
+    #[test]
+    fn capture_method_round_trips_and_maps_to_obs_values() {
+        for name in CaptureMethod::VARIANTS {
+            let m: CaptureMethod = name.parse().unwrap();
+            assert_eq!(m.as_str(), name);
+        }
+        assert_eq!(CaptureMethod::default(), CaptureMethod::Auto);
+        assert_eq!(CaptureMethod::Auto.as_obs_method(), 0);
+        assert_eq!(CaptureMethod::Dxgi.as_obs_method(), 1);
+        assert_eq!(CaptureMethod::Wgc.as_obs_method(), 2);
+        // auto resolves to WGC on Windows 11+, and stays auto below it.
+        assert_eq!(CaptureMethod::Auto.resolve(true), CaptureMethod::Wgc);
+        assert_eq!(CaptureMethod::Auto.resolve(false), CaptureMethod::Auto);
+        // An explicit pin is never second-guessed on either OS.
+        for pinned in [CaptureMethod::Dxgi, CaptureMethod::Wgc] {
+            assert_eq!(pinned.resolve(true), pinned);
+            assert_eq!(pinned.resolve(false), pinned);
+        }
+        assert_eq!("WGC".parse::<CaptureMethod>().unwrap(), CaptureMethod::Wgc);
+        assert!("ddapi".parse::<CaptureMethod>().is_err());
+    }
+
+    #[test]
+    fn no_match() {
+        assert!(match_monitor("nope", &synthetic()).is_none());
+    }
+}

@@ -1,0 +1,179 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/obs-sys",
+    "crates/obs",
+    "crates/obs-platform",
+    "crates/obs-express",
+    "crates/clowd-share-region",
+    "crates/ffmpeg-sys",
+    "crates/vid2gif",
+    "crates/build-support",
+]
+
+[workspace.dependencies]
+# Internal crates. Path deps declared once here; members inherit via
+# `{ workspace = true }`. Paths are relative to the workspace root.
+obs-sys = { path = "crates/obs-sys" }
+obs = { path = "crates/obs" }
+obs-platform = { path = "crates/obs-platform" }
+ffmpeg-sys = { path = "crates/ffmpeg-sys" }
+# Build-dependency only: the Linux FFmpeg pin and staging helpers shared by the
+# build scripts (crates/build-support).
+obs-build-support = { path = "crates/build-support" }
+
+# External crates. Versions (and shared feature sets) live here only; members
+# declare `{ workspace = true }`.
+anyhow = "1"
+# base64 + png: the input-capture sidecar's `cursor_image` rows carry sprite
+# planes as base64-encoded PNG (crates/obs-express/src/cursor_sprite.rs).
+base64 = "0.23"
+# 0.72+ required: bindgen 0.71 + libclang 22 intermittently emitted opaque
+# 1-byte structs (vec2/vec3/vec4/obs_transform_info/obs_audio_data/
+# obs_source_frame) whose layout asserts then fail with E0080. See the
+# assert_no_opaque_regressions guard in crates/obs-sys/build.rs.
+bindgen = "0.72"
+clap = { version = "4", features = ["derive"] }
+ctrlc = { version = "3", features = ["termination"] }
+libc = "0.2"
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The `windows` crate on Windows and objc2 on macOS (SHARE_REGION_PLAN §5.2),
+# matching the main Clowd workspace conventions. Sole Win32 binding now that
+# the windows-sys interop was migrated.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    # Antialiased rounded shapes and text for the share-region prompt's own
+    # painting (ui/win32.rs): plain GDI has neither.
+    "Win32_Graphics_GdiPlus",
+    # DwmSetWindowAttribute: dark window chrome, the Win11 Mica backdrop and the
+    # caption/border colours that stand in for it elsewhere.
+    "Win32_Graphics_Dwm",
+    # CreateDXGIFactory1 + IDXGIAdapter1::EnumOutputs: mapping a monitor to the
+    # graphics adapter that drives it, so obs_video_info.adapter can be set to
+    # the GPU that owns the captured region (obs-platform region_adapter_index).
+    "Win32_Graphics_Dxgi",
+    # DXGI_OUTPUT_DESC (and the DXGI_MODE_DESC it embeds) sit behind the
+    # _Common gate in the generated bindings.
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    # WM_MOUSELEAVE: the prompt's own hover tracking for its OK button.
+    "Win32_UI_Controls",
+    # GetModuleHandleW: the HINSTANCE for RegisterClassW/CreateWindowExW.
+    "Win32_System_LibraryLoader",
+    # ExitProcess / GetCurrentThreadId (obs-platform exit_process, input hooks).
+    "Win32_System_Threading",
+    # RtlGetVersion + OSVERSIONINFOW: the real OS build number, used to resolve
+    # --capture-method auto to WGC on Windows 11+ (obs-platform
+    # resolve_capture_method). GetVersionExW/VerifyVersionInfoW report a
+    # manifest-shimmed version instead, so ntdll's is the only usable one.
+    "Wdk_System_SystemServices",
+    "Win32_System_SystemInformation",
+    # SetConsoleCtrlHandler (recorder.rs CTRL_CLOSE grace handling).
+    "Win32_System_Console",
+    # CoInitializeEx / CoCreateInstance + IMMDeviceEnumerator/IAudioEndpointVolume:
+    # --speaker-volume-compensation endpoint-volume query (replaces the
+    # hand-rolled COM vtables that windows-sys required).
+    "Win32_System_Com",
+    # IMMDevice::Activate's PROPVARIANT activation-params argument lives behind
+    # these two gates in the generated bindings (we always pass None).
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+] }
+objc2 = "0.6"
+# CoreFoundation / CoreGraphics via the generated objc2 framework crates,
+# replacing hand-rolled extern "C" declarations (interop cleanup). Feature
+# lists name the headers actually used; extend additively as needed.
+objc2-core-foundation = { version = "0.3", features = [
+    "CFCGTypes",
+    "CFString",
+    "CFUUID",
+    # Window capture (platform/macos.rs): CGWindowListCopyWindowInfo hands back
+    # a CFArray of CFDictionary window descriptions whose values are CFNumbers.
+    "CFArray",
+    "CFDictionary",
+    "CFNumber",
+    # Input hook (input_hook.rs): the event tap's CFMachPort + run-loop plumbing;
+    # CFDate gates CFRunLoopRunInMode (CFTimeInterval lives in CFDate.h).
+    "CFMachPort",
+    "CFRunLoop",
+    "CFDate",
+] }
+objc2-core-graphics = { version = "0.3", features = [
+    "CGDirectDisplay",
+    "CGDisplayConfiguration",
+    "CGError",
+    "CGEvent",
+    "CGEventSource",
+    "CGEventTypes",
+    # CGCursorIsVisible (cursor sampling): deprecated since 10.9 but still the
+    # only public answer; the binding also needs `libc` (boolean_t return).
+    "CGRemoteOperation",
+    # CGWindowListCopyWindowInfo + the kCGWindow* description keys: the
+    # --window-capture enumerator (platform/macos.rs).
+    "CGWindow",
+    "libc",
+] }
+objc2-app-kit = { version = "0.3", features = [
+    "NSApplication",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSWindow",
+    "NSView",
+    "NSScreen",
+    "NSEvent",
+    "NSColor",
+    "NSBezierPath",
+    "NSGraphics",
+    "NSGraphicsContext",
+    "NSCursor",
+    "NSTrackingArea",
+    "NSImage",
+    # The pre-share prompt's controls (ui/appkit.rs): a label and an OK button
+    # in the mirror window before it becomes the share surface.
+    "NSControl",
+    "NSButton",
+    "NSTextField",
+    "NSButtonCell",
+    # The prompt's type ramp: a bold heading over a smaller supporting line
+    # (NSFont), the latter wrapping inside the text column (NSLineBreakMode,
+    # which the bindings gate on NSParagraphStyle).
+    "NSFont",
+    "NSParagraphStyle",
+    # Cursor sprite capture (platform/macos.rs): representation ladder + the
+    # PNG encode via representationUsingType:properties:.
+    "NSImageRep",
+    "NSBitmapImageRep",
+    # Methods taking CGFloat / NSRect / NSPoint (window init, bezier paths,
+    # colorWithSRGBRed:...) are cfg-gated on this in the generated bindings.
+    "objc2-core-foundation",
+] }
+objc2-foundation = { version = "0.3", features = [
+    "NSString",
+    "NSGeometry",
+    "NSNotification",
+    "NSObject",
+    "NSThread",
+    # NSScreen.screens iteration (ui/appkit.rs work_areas()).
+    "NSArray",
+    "NSEnumerator",
+    # The command poller (ui/appkit.rs): NSTimer + NSTimeInterval (declared in
+    # NSDate.h). NSRunLoop (and NSObjCRuntime, which declares NSRunLoopMode)
+    # come with it because the timer is added to NSRunLoopCommonModes by hand —
+    # the `scheduledTimer...` convenience constructor installs into the default
+    # mode only, where event tracking would stall the poll.
+    "NSTimer",
+    "NSDate",
+    "NSRunLoop",
+    "NSObjCRuntime",
+    # Cursor hashing / sprite encode (platform/macos.rs): TIFF / PNG NSData
+    # bytes, plus the empty properties NSDictionary the encode call takes.
+    "NSData",
+    "NSDictionary",
+] }

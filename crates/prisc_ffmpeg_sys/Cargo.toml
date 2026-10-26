@@ -1,0 +1,21 @@
+[package]
+name = "ffmpeg-sys"
+version = "0.1.0"
+edition = "2021"
+# Exports the resolved obs-deps bundle to dependents as DEP_FFMPEG_DEPS_ROOT /
+# _LIB / _BIN. The `links` key also makes cargo run this crate's build script
+# BEFORE any dependent's, which vid2gif relies on: without that ordering its
+# script can run before the OBS build has downloaded the bundle at all.
+links = "ffmpeg"
+
+[lib]
+# The bindgen output carries FFmpeg's C header comments; rustdoc would try to
+# run their embedded C examples as doctests.
+doctest = false
+
+[dependencies]
+libc = { workspace = true }
+
+[build-dependencies]
+obs-build-support = { workspace = true }
+bindgen = { workspace = true }

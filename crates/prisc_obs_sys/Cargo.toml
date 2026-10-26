@@ -1,0 +1,9 @@
+[package]
+name = "obs-sys"
+version = "0.1.0"
+edition = "2021"
+links = "obs"
+
+[build-dependencies]
+obs-build-support = { workspace = true }
+bindgen = { workspace = true }

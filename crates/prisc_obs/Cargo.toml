@@ -1,0 +1,10 @@
+[package]
+name = "obs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+obs-sys = { workspace = true }
+
+[build-dependencies]
+obs-build-support = { workspace = true }

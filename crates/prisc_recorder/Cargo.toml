@@ -1,0 +1,38 @@
+[package]
+name = "obs-express"
+version = "0.11.0"
+edition = "2021"
+
+[dependencies]
+obs = { workspace = true }
+obs-sys = { workspace = true }
+obs-platform = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+base64 = { workspace = true }
+libc = { workspace = true }
+png = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+# POSIX signal handling only; on Windows a native SetConsoleCtrlHandler is
+# registered instead (ctrlc's HandlerRoutine returns immediately, which forfeits
+# the CTRL_CLOSE grace period — see recorder.rs).
+ctrlc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { workspace = true }
+objc2-app-kit = { workspace = true }
+objc2-core-foundation = { workspace = true }
+objc2-core-graphics = { workspace = true }
+# NSDictionary/NSData: the cursor sprite PNG encode (platform/macos.rs).
+objc2-foundation = { workspace = true }
+
+[build-dependencies]
+# Linux: stages the shared FFmpeg bundle (and, for obs-express, libobs + plugins)
+# next to the binary with $ORIGIN RUNPATHs.
+obs-build-support = { workspace = true }

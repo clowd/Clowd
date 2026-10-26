@@ -1,0 +1,8 @@
+/target
+.DS_Store
+*.dylib
+obs-studio/.deps/
+
+# win-capture compat-updater writes a win-capture/ config dir into whatever
+# CWD obs-express runs from (obs_startup gets a NULL module config path)
+win-capture/
