@@ -4,7 +4,11 @@
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - A stable [Rust toolchain](https://rustup.rs)
-- For video recording only: the native toolchain in [Recording stack (libobs)](#recording-stack-libobs) below
+- For video recording, the video editor, `Prisc.VideoRender` and the FFmpeg-gated tests: the native
+  toolchain in [Recording stack (libobs)](#recording-stack-libobs) below (`cargo rec` stages FFmpeg
+  8.1 beside `prisc_recorder`). Without it, set `PRISC_FFMPEG_PATH` to a directory holding the FFmpeg
+  8.1 shared libraries, or `PRISC_RECORDER_PATH` to the `prisc_recorder` of an unpacked CI
+  `recorder-<rid>` artifact; see [The video editor's FFmpeg](#the-video-editors-ffmpeg).
 
 ## Build
 
