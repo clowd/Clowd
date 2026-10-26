@@ -20,7 +20,7 @@ namespace Clowd.UI.Controls.Tray
     /// every one of these is baked into the native window before it is first shown.</summary>
     public sealed record FloatingTrayOptions
     {
-        public string Title { get; init; } = "Clowd";
+        public string Title { get; init; } = "Prisc";
 
         /// <summary>False builds a strip with no <see cref="TrayGrip"/>: not draggable, not rotatable,
         /// default cursor everywhere. Mutually exclusive with <see cref="FixedTraySize"/> (the constructor

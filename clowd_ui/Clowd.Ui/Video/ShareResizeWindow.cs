@@ -126,7 +126,7 @@ namespace Clowd.UI
             // make the very first drag step appear to snap the region for no reason the user did.
             Region = ShareRegionGeometry.Clamp(region);
 
-            Title = "Clowd Region Resize";
+            Title = "Prisc Region Resize";
 
             // This window sits ON the mirrored region — the wash and the handles are inside it by
             // design — so unlike the border it cannot stay out of the meeting by geometry. The page

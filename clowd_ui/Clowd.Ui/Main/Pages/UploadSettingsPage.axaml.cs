@@ -76,7 +76,7 @@ namespace Clowd.UI.Pages
                 // default (NSRequiredContext); its on/off switch is system-managed, so there is
                 // nothing for a checkbox here to do — just say where the entry lives.
                 ContextMenuCheck.IsVisible = false;
-                ContextMenuCaption.Text = "'Upload with Clowd' appears under Services when you right-click files in Finder. "
+                ContextMenuCaption.Text = "'Upload with Prisc' appears under Services when you right-click files in Finder. "
                     + "Turn it off in System Settings → Keyboard → Keyboard Shortcuts → Services.";
                 ContextMenuSettingsButton.IsVisible = true;
                 return;
@@ -146,11 +146,11 @@ namespace Clowd.UI.Pages
         private Control BuildTransferBar()
         {
             var import = new Button { Content = "Import" };
-            ToolTip.SetTip(import, "Read provider settings from a Clowd settings string on the clipboard");
+            ToolTip.SetTip(import, "Read provider settings from a Prisc settings string on the clipboard");
             import.Click += ImportClicked;
 
             var export = new Button { Content = "Export" };
-            ToolTip.SetTip(export, "Copy provider settings to the clipboard as a Clowd settings string");
+            ToolTip.SetTip(export, "Copy provider settings to the clipboard as a Prisc settings string");
             export.Click += ExportClicked;
 
             return new StackPanel
@@ -261,7 +261,7 @@ namespace Clowd.UI.Pages
                         Name = info?.Provider.Name ?? kvp.Value.Name ?? kvp.Key,
                         Description = info != null
                             ? info.Provider.Description
-                            : "Not supported by this version of Clowd.",
+                            : "Not supported by this version of Prisc.",
                         Icon = icon,
                         IsAvailable = info != null,
                         IsCheckedByDefault = true,
@@ -275,7 +275,7 @@ namespace Clowd.UI.Pages
             {
                 Toast.Show(
                     window,
-                    "The clipboard holds Clowd provider settings, but none of those providers exist in this version.",
+                    "The clipboard holds Prisc provider settings, but none of those providers exist in this version.",
                     NotificationType.Warning);
                 return;
             }

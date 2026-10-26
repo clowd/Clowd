@@ -22,7 +22,7 @@
             ProcessorArchitecture="{{ARCH}}" />
 
   <Properties>
-    <DisplayName>Clowd Shell Extension</DisplayName>
+    <DisplayName>Prisc Shell Extension</DisplayName>
     <PublisherDisplayName>Caelan Sayler</PublisherDisplayName>
     <Logo>Assets\Square150x150Logo.png</Logo>
     <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
@@ -53,8 +53,8 @@
       (clowd_shell_ext/src/broker.rs, clowd/Clowd#83).
     -->
     <Application Id="Clowd" Executable="Clowd.Ui.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="Clowd Shell Extension"
-                          Description="Adds an 'Upload with Clowd' command to the File Explorer context menu."
+      <uap:VisualElements DisplayName="Prisc Shell Extension"
+                          Description="Adds an 'Upload with Prisc' command to the File Explorer context menu."
                           AppListEntry="none"
                           BackgroundColor="transparent"
                           Square150x150Logo="Assets\Square150x150Logo.png"
@@ -62,7 +62,7 @@
       <Extensions>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
-            <com:SurrogateServer DisplayName="Clowd Shell Extension">
+            <com:SurrogateServer DisplayName="Prisc Shell Extension">
               <com:Class Id="45849D5C-078C-4209-A377-DCF731E5124C" Path="ClowdShellExt_{{EXTVERSION}}.dll" ThreadingModel="STA" />
             </com:SurrogateServer>
           </com:ComServer>

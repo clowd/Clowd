@@ -1,4 +1,4 @@
-# Building Clowd
+# Building Prisc
 
 ## Prerequisites
 
@@ -8,7 +8,7 @@
 ## Build
 
 ```cmd
-git clone https://github.com/clowd/Clowd.git
+git clone https://github.com/priscapp/Prisc.git
 cargo build -p clowd_capture
 dotnet build clowd_ui/Clowd.Ui/Clowd.Ui.csproj
 ```

@@ -160,11 +160,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
             {
                 btnOK.IsVisible = false;
                 btnCancel.Content = "_Close";
-                Title = "Clowd - Color Viewer";
+                Title = "Prisc - Color Viewer";
             }
             else
             {
-                Title = "Clowd - Color Picker";
+                Title = "Prisc - Color Picker";
             }
 
             // WPF used RoutedUICommands whose CanExecute was !IsDialogMode.

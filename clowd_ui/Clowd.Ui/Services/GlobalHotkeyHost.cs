@@ -149,8 +149,8 @@ namespace Clowd.UI
             Debug.WriteLine("[GlobalHotkeyHost] failed to start SharpHook: " + ex);
 
             string message = OperatingSystem.IsMacOS()
-                ? "Could not start the global hotkey listener. Grant Accessibility permission to Clowd under " +
-                  "Settings → General → Permissions, then restart Clowd."
+                ? "Could not start the global hotkey listener. Grant Accessibility permission to Prisc under " +
+                  "Settings → General → Permissions, then restart Prisc."
                 : "Could not start the global hotkey listener: " + ex.Message;
 
             SimpleGlobalHook hook;

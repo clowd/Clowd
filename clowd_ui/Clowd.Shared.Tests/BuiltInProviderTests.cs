@@ -31,7 +31,7 @@ namespace Clowd.Shared.Tests
             Assert.IsAssignableFrom<IBuiltInProvider>(provider);
             Assert.Equal(SupportedUploadType.Text, provider.SupportedUpload);
             Assert.Equal("https://clwd.app", provider.ServerUrl);
-            Assert.Equal("Clowd", provider.Name);
+            Assert.Equal("Prisc", provider.Name);
             Assert.NotNull(provider.Icon);
 
             // no delete endpoint on the server, so previous uploads are never deletable
@@ -42,11 +42,11 @@ namespace Clowd.Shared.Tests
         public void ClowdProvider_Name_ShowsHostWhenSelfHosted()
         {
             var provider = new ClowdUploadProvider { ServerUrl = "https://paste.example.com" };
-            Assert.Equal("Clowd (paste.example.com)", provider.Name);
+            Assert.Equal("Prisc (paste.example.com)", provider.Name);
 
             // a trailing slash is still the default server
             provider.ServerUrl = "https://clwd.app/";
-            Assert.Equal("Clowd", provider.Name);
+            Assert.Equal("Prisc", provider.Name);
         }
 
         [Fact]

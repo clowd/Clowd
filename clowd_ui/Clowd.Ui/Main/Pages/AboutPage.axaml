@@ -49,11 +49,18 @@
 
     <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="8">
-            <Viewbox Width="60" HorizontalAlignment="Left">
-                <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
+            <!-- The logo (emblem + "prisc" wordmark, as in the main window's sidebar) at the
+                 emblem's old 60px size; the wordmark stands in for the old "Clowd" title. -->
+            <Viewbox Height="60" HorizontalAlignment="Left" AutomationProperties.Name="Prisc">
+                <Grid Width="51.47" Height="16">
+                    <Path Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
+                    <Path HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Data="{StaticResource PathLogoWordmark}" Stroke="{DynamicResource ClowdWordmarkBrush}"
+                          StrokeThickness="1.6627" StrokeLineCap="Round" StrokeJoin="Round" />
+                </Grid>
             </Viewbox>
 
-            <TextBlock Classes="Title" Text="Clowd" />
             <TextBlock Classes="Base" Text="{Binding ClowdVersion}" />
 
             <!-- Moved here from the System page. DataContext is SettingsGeneral (set in the
@@ -88,7 +95,7 @@
 
                     <StackPanel Classes="Setting">
                         <CheckBox x:Name="AutoApplyCheck" IsChecked="{Binding AutoApplyUpdates}">
-                            <TextBlock Text="Automatically restart Clowd to apply updates in the background"
+                            <TextBlock Text="Automatically restart Prisc to apply updates in the background"
                                        TextWrapping="Wrap" />
                         </CheckBox>
                         <TextBlock Classes="Caption"
@@ -106,16 +113,16 @@
             </HeaderedContentControl>
 
             <TextBlock Classes="Body"
-                       Text="Ever wanted a screen capture tool that has everything you need and doesn't need endless tweaking? That is what Clowd strives to be." />
+                       Text="Ever wanted a screen capture tool that has everything you need and doesn't need endless tweaking? That is what Prisc strives to be." />
             <TextBlock Classes="Body"
                        Text="It covers everything from quick, pixel-perfect selection and one-click screen recording to editing images and uploading them to share." />
             <TextBlock Classes="Body"
                        Text="Open this window any time from the tray icon." />
 
-            <HyperlinkButton Padding="0" Content="Read more online" NavigateUri="https://github.com/clowd/Clowd" />
+            <HyperlinkButton Padding="0" Content="Read more online" NavigateUri="https://github.com/priscapp/Prisc" />
 
             <TextBlock Classes="Body"
-                       Text="Clowd is made possible in part by these open source projects." />
+                       Text="Prisc is made possible in part by these open source projects." />
 
             <!-- One section per component (UI / capture engine); rows are generated from
                  Assets/credits.json — regenerate with tools/gen-credits.sh. -->

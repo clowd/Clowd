@@ -76,7 +76,7 @@ namespace Clowd.UI
         // has an answer that good: a per-session window title would change the string the user hunts
         // for in their meeting app's picker, and the cursor belongs in the picture of a shared region
         // essentially always.
-        private const string MirrorWindowTitle = "Clowd Shared Region";
+        private const string MirrorWindowTitle = "Prisc Shared Region";
         private const bool MirrorCaptureCursor = true;
 
         /// <summary>The mirror's canvas frame rate for THIS session, read once at spawn (see the
@@ -309,7 +309,7 @@ namespace Clowd.UI
             // 'Clowd Recording Frame' for VideoCapturePage: window-list / Alt-Tab / screen-picker
             // enumeration must not show a recording frame while this session is only sharing.
             // Presentational only — nothing keys on either string.
-            _border = new BorderWindow(_region) { Title = "Clowd Shared Region Frame" };
+            _border = new BorderWindow(_region) { Title = "Prisc Shared Region Frame" };
             // Deliberately NO SetOverlayText anywhere in this page. The border's frame is inflated
             // strictly outside the region, but its overlay text renders INSIDE it — i.e. straight
             // into the pixels being mirrored to everyone in the meeting. The toolbar's drag-handle

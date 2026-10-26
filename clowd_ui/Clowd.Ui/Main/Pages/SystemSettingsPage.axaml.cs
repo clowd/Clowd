@@ -184,10 +184,10 @@ namespace Clowd.UI.Pages
         {
             RenderPermission(MacPermission.ScreenRecording, ScreenRecordingStatus, ScreenRecordingButton,
                              ScreenRecordingCaption,
-                             "Lets Clowd capture screenshots, record video and pick colors from the screen.");
+                             "Lets Prisc capture screenshots, record video and pick colors from the screen.");
 
             RenderPermission(MacPermission.Accessibility, AccessibilityStatus, AccessibilityButton, AccessibilityCaption,
-                             "Lets Clowd's hotkeys work while other apps are in the foreground.");
+                             "Lets Prisc's hotkeys work while other apps are in the foreground.");
 
             RenderPermissionsCollapse();
         }
@@ -251,7 +251,7 @@ namespace Clowd.UI.Pages
 
             caption.Text = granted
                 ? what
-                : what + " Clowd has to be restarted after you grant it.";
+                : what + " Prisc has to be restarted after you grant it.";
         }
 
         private void OnScreenRecordingClick(object sender, RoutedEventArgs e) =>
@@ -270,7 +270,7 @@ namespace Clowd.UI.Pages
             if (!AutoStartManager.IsSupported)
             {
                 AutoStartCheck.IsEnabled = false;
-                AutoStartStatusText.Text = "Starting Clowd at login is not supported on this platform.";
+                AutoStartStatusText.Text = "Starting Prisc at login is not supported on this platform.";
                 AutoStartStatusText.IsVisible = true;
                 return;
             }

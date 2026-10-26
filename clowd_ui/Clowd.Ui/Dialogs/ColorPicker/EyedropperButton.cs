@@ -52,7 +52,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         private const string GestureTip = "Click and drag to a point on your screen";
 
         private const string PermissionTip =
-            "Clowd needs Screen Recording permission to pick a color from the screen. "
+            "Prisc needs Screen Recording permission to pick a color from the screen. "
             + "Grant it under Settings → General → Permissions.";
 
         public EyedropperButton()

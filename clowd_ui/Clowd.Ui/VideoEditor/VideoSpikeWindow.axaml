@@ -3,7 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="using:Clowd.UI"
     x:Class="Clowd.UI.VideoEditor.VideoSpikeWindow"
-    Title="Clowd Video Spike"
+    Title="Prisc Video Spike"
     Width="1280" Height="800">
 
     <Grid RowDefinitions="*,Auto">

@@ -57,7 +57,7 @@ use anyhow::bail;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(about = "Runs Clowd's on-device AI models (OCR, video matting, audio denoising) as a child process")]
+#[command(about = "Runs Prisc's on-device AI models (OCR, video matting, audio denoising) as a child process")]
 struct CliArgs {
     /// Optional log-file mirror. Terminal logging always goes to stderr,
     /// which the spawner pumps into its diagnostics; this puts the same

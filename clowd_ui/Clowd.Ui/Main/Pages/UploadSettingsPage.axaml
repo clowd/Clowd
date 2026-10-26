@@ -122,7 +122,7 @@
                              DataContext. -->
                         <StackPanel Classes="Setting">
                             <CheckBox x:Name="ContextMenuCheck">
-                                <TextBlock Text="Add 'Upload with Clowd' to the Explorer context menu" TextWrapping="Wrap" />
+                                <TextBlock Text="Add 'Upload with Prisc' to the Explorer context menu" TextWrapping="Wrap" />
                             </CheckBox>
                             <TextBlock x:Name="ContextMenuCaption" Classes="Caption" />
                             <Button x:Name="ContextMenuSettingsButton" IsVisible="False" Content="Open System Settings"

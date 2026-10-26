@@ -92,7 +92,7 @@ namespace Clowd.UI.VideoEditor
                 var info = await _player.OpenAsync(_file,
                     new VideoOpenOptions { MaxPresentHeight = 1080, EnableHardwareDecode = !swOnly });
                 WebcamBorder.IsVisible = info.VideoStreams.Count > 1;
-                Title = $"Clowd Video Spike — {Path.GetFileName(_file)}";
+                Title = $"Prisc Video Spike — {Path.GetFileName(_file)}";
                 Console.WriteLine($"[spike] opened {Path.GetFileName(_file)}: " +
                                   $"{info.VideoStreams.Count} video stream(s), audio={info.HasAudio}, dur={info.Duration:mm\\:ss\\.ff}");
                 foreach (var vs in info.VideoStreams)

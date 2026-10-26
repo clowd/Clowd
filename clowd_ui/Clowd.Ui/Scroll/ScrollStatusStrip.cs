@@ -61,7 +61,7 @@ namespace Clowd.UI
         public ScrollStatusStrip()
             : base(new FloatingTrayOptions
             {
-                Title = "Clowd Scrolling Capture",
+                Title = "Prisc Scrolling Capture",
                 HasGrip = false,
                 FixedTraySize = TraySize,
             })

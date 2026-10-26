@@ -104,16 +104,16 @@ impl WindowEntry {
 pub fn preflight() -> anyhow::Result<()> {
     if !ScreenCaptureAccess.preflight() {
         bail!(
-            "Clowd needs Screen Recording permission to photograph the page while it scrolls. Enable Clowd under Privacy & \
-             Security → Screen & System Audio Recording, then restart Clowd."
+            "Prisc needs Screen Recording permission to photograph the page while it scrolls. Enable Prisc under Privacy & \
+             Security → Screen & System Audio Recording, then restart Prisc."
         );
     }
     // Without Accessibility the window server drops every event we post and
     // the run would end as a single screenshot with no reason attached.
     if !unsafe { AXIsProcessTrusted() } {
         bail!(
-            "Clowd needs Accessibility permission to scroll the window for you. Enable Clowd under Privacy & Security → \
-             Accessibility, then restart Clowd."
+            "Prisc needs Accessibility permission to scroll the window for you. Enable Prisc under Privacy & Security → \
+             Accessibility, then restart Prisc."
         );
     }
     Ok(())

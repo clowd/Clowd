@@ -51,7 +51,7 @@ namespace Clowd.UI
     /// </summary>
     public sealed class UpdateService
     {
-        private const string RepoUrl = "https://github.com/clowd/Clowd";
+        private const string RepoUrl = "https://github.com/priscapp/Prisc";
         private const string PrereleaseSuffix = "-pre";
 
         /// <summary>How long to wait before retrying after a failed check — the configured interval
@@ -145,7 +145,7 @@ namespace Clowd.UI
             }
 
             if (UpdatePendingRestart != null)
-                SetState(UpdateState.ReadyToRestart, "An update has been downloaded and will be applied when Clowd restarts.");
+                SetState(UpdateState.ReadyToRestart, "An update has been downloaded and will be applied when Prisc restarts.");
             else if (SettingsRoot.Current?.General?.AutoDownloadUpdates != true)
                 SetState(UpdateState.Idle, "Automatic update checks are turned off.");
 
@@ -267,7 +267,7 @@ namespace Clowd.UI
                 _nextCheckUtc = _lastCheckUtc + CheckInterval;
 
                 if (info == null)
-                    SetState(UpdateState.UpToDate, "Clowd is up to date.");
+                    SetState(UpdateState.UpToDate, "Prisc is up to date.");
                 else
                     SetState(UpdateState.UpdateAvailable, $"Version {info.TargetFullRelease.Version} is available.");
 
@@ -286,7 +286,7 @@ namespace Clowd.UI
                 _nextCheckUtc = _lastCheckUtc + (RetryInterval < CheckInterval ? RetryInterval : CheckInterval);
                 SetState(UpdateState.Failed, userInitiated
                     ? "Update check failed: " + ex.Message
-                    : "The last update check failed. Clowd will try again shortly.");
+                    : "The last update check failed. Prisc will try again shortly.");
                 return null;
             }
             finally
@@ -316,7 +316,7 @@ namespace Clowd.UI
                 SetState(UpdateState.Downloading, $"Downloading version {info.TargetFullRelease.Version}…");
                 await Manager.DownloadUpdatesAsync(info, p => SetProgress(p));
                 _staged = info.TargetFullRelease;
-                SetState(UpdateState.ReadyToRestart, "Update downloaded. Restart Clowd to finish installing.");
+                SetState(UpdateState.ReadyToRestart, "Update downloaded. Restart Prisc to finish installing.");
                 return true;
             }
             catch (Exception ex)
@@ -343,7 +343,7 @@ namespace Clowd.UI
             }
 
             SetState(UpdateState.ReadyToRestart,
-                "An update is ready — Clowd will restart to apply it once it is idle (waiting: " + reason + ").");
+                "An update is ready — Prisc will restart to apply it once it is idle (waiting: " + reason + ").");
         }
 
         /// <summary>

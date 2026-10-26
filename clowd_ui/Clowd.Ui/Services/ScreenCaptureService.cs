@@ -415,9 +415,9 @@ namespace Clowd.UI
         private static async Task PromptForScreenRecordingPermissionAsync()
         {
             var openSettings = await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Warning,
-                "Clowd needs Screen Recording permission to capture your screen.\n\n"
-                + "Enable Clowd under Privacy & Security → Screen & System Audio Recording, then "
-                + "restart Clowd.",
+                "Prisc needs Screen Recording permission to capture your screen.\n\n"
+                + "Enable Prisc under Privacy & Security → Screen & System Audio Recording, then "
+                + "restart Prisc.",
                 "Screen Recording permission required", "Open System Settings", "Cancel");
 
             if (openSettings)

@@ -8,7 +8,7 @@
     xmlns:tl="clr-namespace:Clowd.UI.VideoEditor.Timeline"
     xmlns:ve="clr-namespace:Clowd.UI.VideoEditor"
     DragDrop.AllowDrop="True"
-    Title="Edit Video - Clowd"
+    Title="Edit Video - Prisc"
     Width="1100"
     Height="720"
     MinWidth="640"

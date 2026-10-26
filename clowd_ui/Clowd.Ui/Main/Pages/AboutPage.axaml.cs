@@ -123,7 +123,7 @@ namespace Clowd.UI.Pages
             PrereleaseSection.IsEnabled = update.IsSupported;
             PrereleaseHelpText.Text = update.IsSupported
                 ? "Experimental builds get new features first but may have more bugs."
-                : "Experimental builds are only available in an installed copy of Clowd.";
+                : "Experimental builds are only available in an installed copy of Prisc.";
         }
 
         private async void OnUpdateButtonClick(object sender, RoutedEventArgs e)

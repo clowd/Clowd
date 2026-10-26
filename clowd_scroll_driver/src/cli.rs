@@ -16,7 +16,7 @@ use clap::Parser;
 use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 #[derive(Debug, Parser)]
-#[command(version, about = "Clowd scrolling capture driver")]
+#[command(version, about = "Prisc scrolling capture driver")]
 pub struct CliArgs {
     /// Directory to write the finished session into — the same directory
     /// the overlay left its `action.txt` marker in. `session.json` is
