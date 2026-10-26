@@ -1,0 +1,21 @@
+// Project settings for Zed. rust-analyzer would otherwise check and run build scripts with
+// `--workspace`, which builds the recorder stack too: a 20-40 min libobs CMake build that holds the
+// target/debug lock (or an error on a checkout without the obs-studio submodule). Without
+// `--workspace`, cargo at the virtual workspace root covers only the default-members (the app
+// crates). When working on the recorder crates, drop these overrides; see "Editors" in BUILDING.md.
+{
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "check": {
+          "workspace": false,
+        },
+        "cargo": {
+          "buildScripts": {
+            "overrideCommand": ["cargo", "check", "--quiet", "--message-format=json", "--all-targets", "--keep-going"],
+          },
+        },
+      },
+    },
+  },
+}

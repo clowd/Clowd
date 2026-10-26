@@ -17,6 +17,32 @@ pub mod linux;
 
 use std::path::{Path, PathBuf};
 
+/// Panics with the fix when the `crates/obs-studio` submodule is not checked
+/// out, recursively: OBS's CMakeLists also insist that the (disabled)
+/// `obs-browser` / `obs-websocket` plugin submodule dirs exist. Without this a
+/// fresh checkout gets only an opaque CMake error, and only the recorder stack
+/// needs the submodule at all. Registers the files with `rerun-if-changed`, so
+/// the check runs again once the submodule is checked out.
+pub fn require_obs_submodule(obs_src: &Path, crate_name: &str) {
+    let required = [
+        obs_src.join("CMakeLists.txt"),
+        obs_src.join("plugins").join("obs-browser").join("CMakeLists.txt"),
+        obs_src.join("plugins").join("obs-websocket").join("CMakeLists.txt"),
+    ];
+    for file in &required {
+        println!("cargo:rerun-if-changed={}", file.display());
+    }
+    if let Some(missing) = required.iter().find(|f| !f.is_file()) {
+        panic!(
+            "{crate_name}: the crates/obs-studio submodule is not checked out ({} is missing). \
+             Run `git submodule update --init --recursive`. Only the recorder stack (`cargo rec`) \
+             needs it; a plain `cargo build` / `cargo test` does not build it. If your editor \
+             triggered this build, see \"Editors\" in BUILDING.md.",
+            missing.display()
+        );
+    }
+}
+
 /// The prebuilt obs-deps version (`YYYY-MM-DD`) the pinned obs-studio checkout
 /// downloads, read from its `CMakePresets.json`. Registers that file with
 /// `rerun-if-changed`, so an OBS bump re-runs every caller (rpaths, staging,

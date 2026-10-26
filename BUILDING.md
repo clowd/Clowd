@@ -18,6 +18,28 @@ A plain `cargo build` / `cargo test` covers the app crates (the workspace's `def
 stays fast. The recorder stack builds libobs with CMake and only builds when asked (`cargo rec`, see
 below).
 
+### Editors
+
+rust-analyzer checks and runs build scripts with `--workspace` by default, which includes the
+recorder stack: on a checkout without the `crates/obs-studio` submodule every check fails in the
+`prisc_obs_sys` build script, and with it the editor starts the 20–40 minute libobs build in the
+background and holds the `target/debug` lock while it runs. `.zed/settings.json` turns that off for
+Zed. In VS Code, set the same two options in the workspace settings:
+
+```json
+{
+  "rust-analyzer.check.workspace": false,
+  "rust-analyzer.cargo.buildScripts.overrideCommand": [
+    "cargo", "check", "--quiet", "--message-format=json", "--all-targets", "--keep-going"
+  ]
+}
+```
+
+Without `--workspace`, cargo at the workspace root covers only the app crates, so rust-analyzer has
+no build-script output (the libobs bindings) for the recorder crates. When working on those, remove
+both options (or add `"rust-analyzer.cargo.targetDir": true`, which gives the editor its own
+target dir so it never blocks your own builds).
+
 ### The video editor's FFmpeg
 
 The editor, the playback engine and `Prisc.VideoRender` all load FFmpeg 8.1 natively (avcodec 62 /

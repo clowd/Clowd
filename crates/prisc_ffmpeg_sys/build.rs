@@ -19,7 +19,13 @@ fn main() {
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let deps_dir = repo_root.join("crates").join("obs-studio").join(".deps");
+    let obs_src = repo_root.join("crates").join("obs-studio");
+    let deps_dir = obs_src.join(".deps");
+    if target_os != "linux" {
+        // Windows and macOS take FFmpeg from the obs-deps bundle the OBS
+        // configure downloads; Linux fetches its own pin and needs no OBS.
+        prisc_build_support::require_obs_submodule(&obs_src, "prisc_ffmpeg_sys");
+    }
     let deps = if target_os == "linux" {
         let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
         prisc_build_support::linux::ensure_ffmpeg(&deps_dir, &arch).root

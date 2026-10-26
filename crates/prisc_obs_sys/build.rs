@@ -7,6 +7,14 @@ fn main() {
     // build script itself is compiled for the host, so `#[cfg(target_os)]`
     // would be wrong when cross-compiling.
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+
+    // Fail with the fix, not with a CMake error, when the submodule is missing:
+    // an editor checking the whole workspace gets here on a checkout that only
+    // ever built the app crates.
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+    prisc_build_support::require_obs_submodule(&repo_root.join("crates").join("obs-studio"), "prisc_obs_sys");
+
     match target_os.as_str() {
         "macos" => build_macos(),
         "windows" => build_windows(),
