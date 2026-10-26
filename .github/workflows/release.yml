@@ -256,6 +256,7 @@ jobs:
           --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
           --icon ui/Prisc.Ui/Assets/prisc-default.icns
           --plist "$RUNNER_TEMP/Info.plist"
+          --signEntitlements ui/Prisc.Ui/Assets/Prisc.entitlements
           --signAppIdentity "$APP_IDENTITY" --signInstallIdentity "$INSTALL_IDENTITY"
           --notaryProfile velopack-profile --keychain "$KEYCHAIN_PATH"
         shell: bash

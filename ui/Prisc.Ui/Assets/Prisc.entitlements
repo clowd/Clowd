@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for the macOS release (release.yml "Pack (macOS)" passes this to
+  vpk with signEntitlements). The first five are vpk's own defaults (vendor/Velopack.entitlements),
+  which .NET needs; the two device keys let the microphone and the webcam reach TCC at all: without
+  them the hardened runtime denies both without ever prompting, and recordings come out silent or
+  without the camera. vpk signs deep, so the recorder and its helpers in Contents/MacOS/recorder/
+  get the same set.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<key>com.apple.security.device.camera</key>
+	<true/>
+</dict>
+</plist>
