@@ -69,7 +69,7 @@ fn build_macos() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let obs_src = repo_root.join("obs-studio");
+    let obs_src = repo_root.join("crates").join("obs-studio");
     let obs_build = out_dir.join("obs-build");
 
     println!("cargo:rerun-if-changed=wrapper.h");
@@ -251,7 +251,7 @@ fn mac_find_obs_deps_lib(obs_src: &Path) -> Option<PathBuf> {
 fn build_windows() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let obs_src = repo_root.join("obs-studio");
+    let obs_src = repo_root.join("crates").join("obs-studio");
     let build_dir = win_build_dir();
     let config = "RelWithDebInfo";
 
@@ -683,7 +683,7 @@ fn build_linux() {
     let arch_suffix = linux_arch_suffix();
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let obs_src = repo_root.join("obs-studio");
+    let obs_src = repo_root.join("crates").join("obs-studio");
     let deps_dir = obs_src.join(".deps");
     let build_dir = workspace_obs_build_dir(arch_suffix);
     let config = "RelWithDebInfo";

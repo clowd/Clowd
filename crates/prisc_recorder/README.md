@@ -2,7 +2,7 @@
 
 A minimal, headless screen recorder backed by [libobs](https://github.com/obsproject/obs-studio) (the OBS Studio core). It records a screen region or a whole monitor straight to an MP4, driven entirely by command-line flags (plus an optional JSON settings file) and a small line-oriented stdin/stdout protocol — no GUI, no OBS install required.
 
-Prisc spawns it for every screen recording and ships it, with the OBS runtime it needs, in the app's `recorder/` folder. It began as a Rust rewrite of the C++ obs-express (github.com/clowd/obs-express). libobs 32.2.2 is built from source from the pinned `obs-studio` submodule at the repository root; see [BUILDING.md](../../BUILDING.md) for the toolchain and `cargo rec`.
+Prisc spawns it for every screen recording and ships it, with the OBS runtime it needs, in the app's `recorder/` folder. It began as a Rust rewrite of the C++ obs-express (github.com/clowd/obs-express). libobs 32.2.2 is built from source from the pinned `crates/obs-studio` submodule; see [BUILDING.md](../../BUILDING.md) for the toolchain and `cargo rec`.
 
 ## Features
 

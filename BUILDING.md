@@ -89,7 +89,7 @@ PRISC_HOTKEYS_REGEN=1 cargo test -p prisc_hotkeys csharp_mirror
 
 Screen recording runs in a separate process, `prisc_recorder`, a Rust front end over libobs. It and
 its helpers are GPL-2.0 (see `crates/prisc_recorder/LICENSE`) and only ever run as separate
-processes of the MIT app. libobs is compiled from the `obs-studio` submodule (pinned to **32.2.2**),
+processes of the MIT app. libobs is compiled from the `crates/obs-studio` submodule (pinned to **32.2.2**),
 so this part needs a full native toolchain:
 
 - the submodule, recursively: `git submodule update --init --recursive` (or clone with
@@ -116,7 +116,7 @@ so this part needs a full native toolchain:
   Dockerfile is the list. Its output then needs that distribution's glibc or newer. Do **not**
   install the system FFmpeg development packages (`libav*-dev`). The build downloads a pinned FFmpeg
   8.1 shared build (BtbN FFmpeg-Builds, SHA-256 verified), builds pinned x264 and Mbed TLS from
-  source, and fetches a pinned SIMDe, all into `obs-studio/.deps`, so the first build needs access
+  source, and fetches a pinned SIMDe, all into `crates/obs-studio/.deps`, so the first build needs access
   to github.com. libobs, every plugin and `prisc_vid2gif` share that one FFmpeg.
   `prisc_share_region` is not built on Linux (there is no Linux UI), so Linux builds name
   `-p prisc_recorder -p prisc_vid2gif` rather than using `cargo rec`.
@@ -124,7 +124,7 @@ so this part needs a full native toolchain:
 Then, from the repository root:
 
 ```sh
-git -C obs-studio tag -f 32.2.2   # once per clone, see below
+git -C crates/obs-studio tag -f 32.2.2   # once per clone, see below
 cargo rec                         # = cargo build -p prisc_recorder -p prisc_share_region -p prisc_vid2gif
 cargo recr                        # the same, --release
 ```

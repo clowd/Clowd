@@ -37,7 +37,7 @@ fn build_macos() {
     let obs_build = PathBuf::from(&build_dir);
     let repo_root = Path::new(&out_dir)
         .ancestors()
-        .find(|p| p.join("obs-studio").exists())
+        .find(|p| p.join("crates").join("obs-studio").exists())
         .expect("Could not find repo root")
         .to_path_buf();
     let deps_lib = find_obs_deps_lib(&repo_root);
@@ -265,7 +265,7 @@ fn run_checked(cmd: &str, args: &[&str], benign: &[&str]) -> bool {
 }
 
 fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    prisc_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
+    prisc_build_support::obs_deps_bundles(&repo_root.join("crates").join("obs-studio"))
         .into_iter()
         .map(|dir| dir.join("lib"))
         .find(|lib| lib.exists())

@@ -3,7 +3,7 @@
 # with the current checkout bind-mounted at the same path, so paths printed by
 # the build match the host's. The cargo registry/git caches are mounted from
 # the host's ~/.cargo, so CI's actions/cache of those dirs applies. Build
-# outputs (target/, obs-studio/.deps) land in the checkout as usual.
+# outputs (target/, crates/obs-studio/.deps) land in the checkout as usual.
 #
 #   docker build -t prisc-recorder-linux tools/linux-build
 #   tools/linux-build/run-in-image.sh cargo build --release -p prisc_recorder -p prisc_vid2gif

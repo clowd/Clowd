@@ -71,7 +71,7 @@ jobs:
       - name: Record OBS submodule SHA
         id: obs
         run: |
-          $sha = git -C obs-studio rev-parse HEAD
+          $sha = git -C crates/obs-studio rev-parse HEAD
           "sha=$sha" >> $env:GITHUB_OUTPUT
           Write-Host "OBS submodule SHA: $sha"
 
@@ -83,7 +83,7 @@ jobs:
       # that ignore that cache var and re-run `git describe`. HEAD is exactly the
       # 32.2.2 release commit, so a lightweight tag makes it resolve everywhere.
       - name: Tag OBS submodule for versioning
-        run: git -C obs-studio tag -f 32.2.2
+        run: git -C crates/obs-studio tag -f 32.2.2
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -120,7 +120,7 @@ jobs:
         with:
           path: |
             target/obs-${{ matrix.arch }}
-            obs-studio/.deps
+            crates/obs-studio/.deps
           key: ${{ runner.os }}-${{ matrix.arch }}-obs-${{ steps.obs.outputs.sha }}-${{ hashFiles('crates/prisc_obs_sys/build.rs', 'crates/prisc_obs_sys/cmake/**', 'crates/prisc_build_support/src/**') }}
 
       - name: Build (release)
@@ -250,7 +250,7 @@ jobs:
       - name: Record OBS submodule SHA
         id: obs
         run: |
-          sha=$(git -C obs-studio rev-parse HEAD)
+          sha=$(git -C crates/obs-studio rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "OBS submodule SHA: $sha"
 
@@ -258,7 +258,7 @@ jobs:
       # HEAD (the 32.2.2 release commit) so OBS's `git describe --tags` version
       # discovery resolves to a valid MAJOR.MINOR.PATCH.
       - name: Tag OBS submodule for versioning
-        run: git -C obs-studio tag -f 32.2.2
+        run: git -C crates/obs-studio tag -f 32.2.2
 
       - name: Select full Xcode
         run: |
@@ -305,7 +305,7 @@ jobs:
         with:
           path: |
             ${{ matrix.outdir }}/build/prisc_obs_sys-*/out
-            obs-studio/.deps
+            crates/obs-studio/.deps
           key: ${{ runner.os }}-${{ matrix.arch }}-obs-${{ steps.obs.outputs.sha }}-${{ hashFiles('crates/prisc_obs_sys/build.rs', 'crates/prisc_obs_sys/cmake/**', 'crates/prisc_build_support/src/**') }}
 
       - name: Build (release)
@@ -356,7 +356,7 @@ jobs:
           cp -a "$obs_build/libobs-opengl/$config/"*.dylib "$dist/Frameworks/" 2>/dev/null || true
 
           # 3. Prebuilt dependency dylibs (FFmpeg, x264, ...). Taken from the
-          #    profile dir, NOT from obs-studio/.deps: build.rs stages them
+          #    profile dir, NOT from crates/obs-studio/.deps: build.rs stages them
           #    there (stage_macos_dylibs) with an @loader_path rpath and a
           #    fresh ad-hoc signature, so they are self-resolving for any
           #    consumer that dlopens them, and the dev tree and this bundle
@@ -491,7 +491,7 @@ jobs:
   # only on the build machine's release. prisc_obs_sys downloads the pinned
   # BtbN FFmpeg bundle (SHA-256 verified) and builds pinned x264 and Mbed TLS
   # from source (both static, private inside their plugins) into
-  # obs-studio/.deps, then libobs + the Linux plugins into target/obs-<arch>.
+  # crates/obs-studio/.deps, then libobs + the Linux plugins into target/obs-<arch>.
   # Everything else (X11/xcb, Wayland, EGL/GL, PipeWire, PulseAudio, v4l2,
   # glib, ...) is linked from the image's -devel packages, whose SONAMEs are
   # stable across distros.
@@ -538,7 +538,7 @@ jobs:
       - name: Record OBS submodule SHA
         id: obs
         run: |
-          sha=$(git -C obs-studio rev-parse HEAD)
+          sha=$(git -C crates/obs-studio rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "OBS submodule SHA: $sha"
 
@@ -546,7 +546,7 @@ jobs:
       # HEAD (the 32.2.2 release commit) so OBS's `git describe --tags` version
       # discovery resolves to a valid MAJOR.MINOR.PATCH.
       - name: Tag OBS submodule for versioning
-        run: git -C obs-studio tag -f 32.2.2
+        run: git -C crates/obs-studio tag -f 32.2.2
 
       # The image is rebuilt from the Dockerfile every run, with its layers
       # cached in the GitHub Actions cache, so a Dockerfile edit takes effect
@@ -582,7 +582,7 @@ jobs:
           '
           echo "Target arch: ${{ matrix.arch }}"
 
-      # The native deps under obs-studio/.deps are keyed by their pins, not by
+      # The native deps under crates/obs-studio/.deps are keyed by their pins, not by
       # a file hash: a pin bump extracts/builds into a new, versioned dir that
       # OBS must then be reconfigured and relinked against, so every pin
       # belongs in the OBS cache key. Read from the one place each is pinned.
@@ -627,7 +627,7 @@ jobs:
         with:
           path: |
             target/obs-${{ matrix.arch }}
-            obs-studio/.deps
+            crates/obs-studio/.deps
           key: ${{ runner.os }}-${{ matrix.arch }}-manylinux-obs-${{ steps.obs.outputs.sha }}-${{ hashFiles('crates/prisc_obs_sys/build.rs', 'crates/prisc_obs_sys/cmake/**', 'crates/prisc_build_support/src/**') }}-${{ steps.pins.outputs.key }}
 
       # prisc_share_region is not built on Linux at all (no Linux UI; see its
@@ -671,7 +671,7 @@ jobs:
         run: |
           # shellcheck disable=SC2016 # expanded inside the image, not here
           tools/linux-build/run-in-image.sh '
-            ffbin=(obs-studio/.deps/ffmpeg-*/bin)
+            ffbin=(crates/obs-studio/.deps/ffmpeg-*/bin)
             tools/linux-build/verify-bundle.sh "dist/recorder-linux-${{ matrix.arch }}" "${ffbin[0]}/ffprobe" /tmp/verify
           '
 
@@ -694,7 +694,7 @@ jobs:
             # released: the ffprobe from the pinned FFmpeg archive runs against
             # the FFmpeg libraries in the bundle, so test runners need no FFmpeg.
             mkdir -p dist/test-tools
-            cp obs-studio/.deps/ffmpeg-*/bin/ffprobe dist/test-tools/
+            cp crates/obs-studio/.deps/ffmpeg-*/bin/ffprobe dist/test-tools/
           '
 
       - name: Upload artifact

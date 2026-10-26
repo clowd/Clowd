@@ -39,7 +39,7 @@ fn build_macos() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let repo_root = Path::new(&out_dir)
         .ancestors()
-        .find(|p| p.join("obs-studio").exists())
+        .find(|p| p.join("crates").join("obs-studio").exists())
         .expect("Could not find repo root")
         .to_path_buf();
     if let Some(deps_lib) = find_obs_deps_lib(&repo_root) {
@@ -50,7 +50,7 @@ fn build_macos() {
 /// The prebuilt obs-deps `lib` dir (FFmpeg et al.) — same probe as
 /// prisc_recorder's build script.
 fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    prisc_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
+    prisc_build_support::obs_deps_bundles(&repo_root.join("crates").join("obs-studio"))
         .into_iter()
         .map(|dir| dir.join("lib"))
         .find(|lib| lib.exists())
