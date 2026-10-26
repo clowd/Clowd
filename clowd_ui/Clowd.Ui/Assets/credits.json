@@ -150,6 +150,12 @@
           "url": "https://github.com/clap-rs/clap"
         },
         {
+          "name": "clowd_hotkeys",
+          "version": "1.0.0",
+          "license": "MIT",
+          "url": "https://github.com/clowd/Clowd"
+        },
+        {
           "name": "clowd_rust_core",
           "version": "1.0.0",
           "license": "MIT",
@@ -253,6 +259,12 @@
         },
         {
           "name": "objc2-app-kit",
+          "version": "0.3.2",
+          "license": "Zlib OR Apache-2.0 OR MIT",
+          "url": "https://github.com/madsmtm/objc2"
+        },
+        {
+          "name": "objc2-core-foundation",
           "version": "0.3.2",
           "license": "Zlib OR Apache-2.0 OR MIT",
           "url": "https://github.com/madsmtm/objc2"
