@@ -48,20 +48,24 @@ pub struct FfmpegAsset {
     pub dir_name: &'static str,
 }
 
-/// BtbN FFmpeg-Builds, release `autobuild-2026-10-08-13-05`, FFmpeg n8.1.3,
+/// BtbN FFmpeg-Builds, release `autobuild-2026-09-30-13-08`, FFmpeg n8.1.3,
 /// GPL, shared libraries.
+///
+/// Pin a month-end autobuild only: BtbN deletes the daily releases after
+/// about two weeks (the 2026-10-08 pin 404'd that way) but keeps the last
+/// build of each month.
 pub const FFMPEG_LINUX_X64: FfmpegAsset = FfmpegAsset {
-    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-08-13-05/ffmpeg-n8.1.3-14-g330caae0c1-linux64-gpl-shared-8.1.tar.xz",
-    sha256: "8d90b5b09ce1cf97dca692bb81a1f72c01b8d3c17b0c5187a0c99ecfad4d45a4",
-    dir_name: "ffmpeg-n8.1.3-14-g330caae0c1-linux64-gpl-shared-8.1",
+    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-shared-8.1.tar.xz",
+    sha256: "76649c19a7a4615b367251ba4a8adc643f65831278a00e7a0c38398f7f06484b",
+    dir_name: "ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-shared-8.1",
 };
 
 /// The same BtbN release and FFmpeg revision as [`FFMPEG_LINUX_X64`], built
 /// for aarch64, so both Linux arches ship the same FFmpeg source.
 pub const FFMPEG_LINUX_ARM64: FfmpegAsset = FfmpegAsset {
-    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-08-13-05/ffmpeg-n8.1.3-14-g330caae0c1-linuxarm64-gpl-shared-8.1.tar.xz",
-    sha256: "9257ca509d687e0128a0e21d3ea204b3c0be22f21c8f10915a6097bf7d836745",
-    dir_name: "ffmpeg-n8.1.3-14-g330caae0c1-linuxarm64-gpl-shared-8.1",
+    url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-linuxarm64-gpl-shared-8.1.tar.xz",
+    sha256: "d5b52fcb4f8d86d997bb75f6c4b383ca0be3f4cd9efd94ab3b4f27b22984f91c",
+    dir_name: "ffmpeg-n8.1.3-9-g29e619e767-linuxarm64-gpl-shared-8.1",
 };
 
 /// The asset for a Rust target arch (`CARGO_CFG_TARGET_ARCH`).
