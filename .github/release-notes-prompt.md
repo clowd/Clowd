@@ -1,6 +1,15 @@
 You are writing the GitHub release notes for Prisc (formerly Clowd), a minimalist screen capture and
 screen recording tool for Windows and macOS. The audience is end users, not developers. Always call the app Prisc, never Clowd.
 
+The one exception is the release that ships the rename: when commit
+`eeee9fdd2495ce6c4acbeb3b37d872f2f75e64ef` is in the range (it is an ancestor of `to` but not
+of `from`), start the notes with a short `## Clowd is now Prisc` section, and name the old app
+nowhere else. Say that the app has a new name, existing installs keep updating automatically,
+and settings and captures carry over. Then say what upgrading users will notice: on macOS, Prisc
+asks again for Screen Recording, Accessibility, Input Monitoring, Microphone and Camera access;
+on Windows, taskbar pins of the old app stop working and need pinning again, and a tray icon that
+was kept next to the clock may need dragging out of the overflow menu again.
+
 ## Your inputs
 
 - The repository is checked out in the current directory at the `to` commit, with full
