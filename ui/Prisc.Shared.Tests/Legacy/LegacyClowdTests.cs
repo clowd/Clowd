@@ -26,6 +26,10 @@ namespace Prisc.Shared.Tests
         {
             try
             {
+                // some tests leave read-only files behind on purpose
+                foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+                    File.SetAttributes(file, FileAttributes.Normal);
+
                 Directory.Delete(_root, recursive: true);
             }
             catch { }
@@ -584,9 +588,86 @@ namespace Prisc.Shared.Tests
             CreateLegacySession("A");
             Migrate();
 
+            Assert.False(File.Exists(Path.Combine(NewRoot, LegacyClowd.RewritePendingFileName)));
+
             var snapshot = SnapshotTree(DataDirectory);
             Migrate();
             Assert.Equal(snapshot, SnapshotTree(DataDirectory));
+        }
+
+        private string PendingMarker => Path.Combine(NewRoot, LegacyClowd.RewritePendingFileName);
+
+        private string ReadPath(string session) =>
+            JsonNode.Parse(File.ReadAllText(Path.Combine(NewSessions, session, "session.json")))["Path"].GetValue<string>();
+
+        [Fact]
+        public void Sessions_AReadOnlySessionFile_IsStillRewritten()
+        {
+            // e.g. a session folder restored from a backup or an archive
+            CreateLegacySession("A");
+            var legacyFile = Path.Combine(LegacySessions, "A", "session.json");
+            File.SetAttributes(legacyFile, File.GetAttributes(legacyFile) | FileAttributes.ReadOnly);
+
+            Migrate();
+
+            Assert.Equal(Path.Combine(NewSessions, "A", "capture.png"), ReadPath("A"));
+            Assert.False(File.Exists(PendingMarker));
+            Assert.False(Directory.Exists(LegacySessions));
+        }
+
+        [Fact]
+        public void Sessions_MovedButNotRewritten_AreRewrittenOnTheNextRun()
+        {
+            // the process died after moving A, before the rewrite pass: the marker is left behind
+            // and the legacy sessions folder is already gone
+            WriteFile(Path.Combine(NewSessions, "A", "session.json"),
+                Json(new { Name = "A", Path = Path.Combine(LegacySessions, "A", "capture.png") }));
+            WriteFile(PendingMarker, "");
+
+            Migrate();
+
+            Assert.Equal(Path.Combine(NewSessions, "A", "capture.png"), ReadPath("A"));
+            Assert.False(File.Exists(PendingMarker));
+        }
+
+        [Fact]
+        public void Sessions_WithoutAMarker_AnEmptyLegacyFolderDoesNotRescan()
+        {
+            // no marker = nothing outstanding; a stray reference is left as it is
+            var stray = Json(new { Name = "A", Path = Path.Combine(LegacySessions, "A", "capture.png") });
+            WriteFile(Path.Combine(NewSessions, "A", "session.json"), stray);
+
+            Migrate();
+
+            Assert.Equal(stray, File.ReadAllText(Path.Combine(NewSessions, "A", "session.json")));
+        }
+
+        [Fact]
+        public void Sessions_ARewriteThatFails_IsRetriedOnALaterRun()
+        {
+            // a file held open without write or delete sharing (an indexer, an AV scan) refuses
+            // both the atomic replace and the in-place fallback; only Windows enforces that
+            Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows enforces file sharing modes.");
+
+            // B moved on an earlier start and still points at A, which moves now
+            var bFile = Path.Combine(NewSessions, "B", "session.json");
+            WriteFile(bFile, Json(new { Name = "B", Path = Path.Combine(LegacySessions, "A", "capture.png") }));
+            CreateLegacySession("A");
+
+            using (new FileStream(bFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                Migrate();
+            }
+
+            Assert.Equal(Path.Combine(NewSessions, "A", "capture.png"), ReadPath("A"));
+            Assert.Equal(Path.Combine(LegacySessions, "A", "capture.png"), ReadPath("B"));
+            Assert.True(File.Exists(PendingMarker));
+            Assert.False(Directory.Exists(LegacySessions));
+
+            Migrate();
+
+            Assert.Equal(Path.Combine(NewSessions, "A", "capture.png"), ReadPath("B"));
+            Assert.False(File.Exists(PendingMarker));
         }
 
         [Fact]

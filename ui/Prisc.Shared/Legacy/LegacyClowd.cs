@@ -72,6 +72,10 @@ public static class LegacyClowd
     private const string SessionsFolderName = "sessions";
     private const string PreviewsFolderName = "previews";
 
+    /// <summary>Marker in the new data root while a session path rewrite is outstanding; see
+    /// <see cref="MigrateDataFolder(string, string, bool, Func{bool})"/>.</summary>
+    public const string RewritePendingFileName = ".legacy-sessions-rewrite-pending";
+
     private static readonly JsonDocumentOptions _readOptions = new()
     {
         CommentHandling = JsonCommentHandling.Skip,
@@ -359,13 +363,20 @@ public static class LegacyClowd
     /// <summary>
     /// Moves the legacy sessions into <c>&lt;newRoot&gt;/sessions</c>. Does nothing when
     /// <paramref name="separateLegacyInstall"/> is set, when the legacy sessions folder is missing
-    /// or empty, or when <paramref name="isLegacyProcessRunning"/> (asked last, only when there is
-    /// something to move) reports a running Clowd. Each session folder (and loose file) moves with
-    /// a same-volume rename; one whose target exists, or that is locked, is left for a later start.
-    /// Then every <c>*.json</c> under the new sessions folder that still names the legacy sessions
-    /// folder has that prefix rewritten (this also fixes references between sessions), the legacy
-    /// sessions folder is removed if empty, and the legacy previews cache is deleted. The legacy
-    /// root and its <c>logs</c> are never touched. Idempotent; never throws.
+    /// or empty (unless a path rewrite is still pending, see below), or when
+    /// <paramref name="isLegacyProcessRunning"/> (asked last, only when there is something to move)
+    /// reports a running Clowd. Each session folder (and loose file) moves with a same-volume
+    /// rename; one whose target exists, or that is locked, is left for a later start. Then every
+    /// <c>*.json</c> under the new sessions folder that still names the legacy sessions folder has
+    /// that prefix rewritten (this also fixes references between sessions), the legacy sessions
+    /// folder is removed if empty, and the legacy previews cache is deleted. The legacy root and
+    /// its <c>logs</c> are never touched. Idempotent; never throws.
+    ///
+    /// A marker (<see cref="RewritePendingFileName"/> in <paramref name="newRoot"/>, outside the
+    /// sessions folder) is written before the first move and removed only once a rewrite pass
+    /// finished with no failures. A rewrite that failed (a file held open by another process) or
+    /// never ran (the process died between moving and rewriting) is therefore retried on every
+    /// later start, even after the legacy sessions folder is gone.
     /// </summary>
     public static void MigrateDataFolder(string dataDirectory, string newRoot, bool separateLegacyInstall, Func<bool> isLegacyProcessRunning)
     {
@@ -386,8 +397,21 @@ public static class LegacyClowd
                 return;
 
             var legacySessions = Path.Combine(legacyRoot, SessionsFolderName);
+            var newSessions = Path.Combine(fullNewRoot, SessionsFolderName);
+            var pending = Path.Combine(fullNewRoot, RewritePendingFileName);
+
             if (!Directory.Exists(legacySessions) || !Directory.EnumerateFileSystemEntries(legacySessions).Any())
+            {
+                // nothing left to move, but an earlier run's rewrite may not have finished. This
+                // touches only the new folder, so it needs no running-Clowd check.
+                if (File.Exists(pending) && Directory.Exists(newSessions) && RewriteSessionPaths(newSessions, legacySessions, newSessions) == 0)
+                {
+                    TryDeleteFile(pending);
+                    Log("finished the pending session path rewrite in " + newSessions);
+                }
+
                 return;
+            }
 
             if (isLegacyProcessRunning != null && isLegacyProcessRunning())
             {
@@ -395,8 +419,20 @@ public static class LegacyClowd
                 return;
             }
 
-            var newSessions = Path.Combine(fullNewRoot, SessionsFolderName);
             Directory.CreateDirectory(newSessions);
+
+            // before the first move, so a run that dies between moving and rewriting is finished
+            // by the next start
+            var markerWritten = false;
+            try
+            {
+                File.WriteAllText(pending, "");
+                markerWritten = true;
+            }
+            catch (Exception ex)
+            {
+                Log("could not write " + pending + ": " + ex.Message);
+            }
 
             var moved = 0;
 
@@ -442,11 +478,17 @@ public static class LegacyClowd
 
             // one pass over the new sessions folder: the sessions moved just now, plus any moved
             // by an earlier run that still point at a session which only moved in this one.
-            RewriteSessionPaths(newSessions, legacySessions, newSessions);
+            var failures = RewriteSessionPaths(newSessions, legacySessions, newSessions);
+            if (failures == 0)
+                TryDeleteFile(pending);
+            else
+                Log(failures + " session file(s) still name " + legacySessions + "; the rewrite is retried next start");
 
             try
             {
-                if (!Directory.EnumerateFileSystemEntries(legacySessions).Any())
+                // an empty legacy folder normally ends the migration for good, so it may only go
+                // once nothing is left to rewrite, or while the marker carries the retry.
+                if ((failures == 0 || markerWritten) && !Directory.EnumerateFileSystemEntries(legacySessions).Any())
                     Directory.Delete(legacySessions);
             }
             catch (Exception ex)
@@ -479,8 +521,9 @@ public static class LegacyClowd
 
     /// <summary>Rewrites, in every <c>*.json</c> under <paramref name="scanRoot"/> (recursively;
     /// <c>*.jsonl</c> and unparsable files are skipped), each string value that is
-    /// <paramref name="legacySessions"/> or starts with it plus a separator.</summary>
-    private static void RewriteSessionPaths(string scanRoot, string legacySessions, string newSessions)
+    /// <paramref name="legacySessions"/> or starts with it plus a separator. Returns the number of
+    /// files that needed a rewrite and did not get one (a failed listing counts as one).</summary>
+    private static int RewriteSessionPaths(string scanRoot, string legacySessions, string newSessions)
     {
         IEnumerable<string> files;
         try
@@ -492,14 +535,22 @@ public static class LegacyClowd
         catch (Exception ex)
         {
             Log("could not list " + scanRoot + ": " + ex.Message);
-            return;
+            return 1;
         }
 
+        var failures = 0;
         foreach (var file in files)
-            RewriteJsonFile(file, legacySessions, newSessions);
+        {
+            if (!RewriteJsonFile(file, legacySessions, newSessions))
+                failures++;
+        }
+
+        return failures;
     }
 
-    private static void RewriteJsonFile(string file, string legacySessions, string newSessions)
+    /// <summary>False only when the file needed a rewrite (or could not be read to tell) and did
+    /// not get one; an unchanged or unparsable file counts as done.</summary>
+    private static bool RewriteJsonFile(string file, string legacySessions, string newSessions)
     {
         try
         {
@@ -508,7 +559,7 @@ public static class LegacyClowd
             // every path this could rewrite spells the legacy folder name out literally (JSON
             // never escapes ASCII letters), so most files are never parsed at all.
             if (text.IndexOf(FolderName, StringComparison.OrdinalIgnoreCase) < 0)
-                return;
+                return true;
 
             JsonNode? root;
             try
@@ -517,7 +568,7 @@ public static class LegacyClowd
             }
             catch (Exception)
             {
-                return;
+                return true;
             }
 
             string? Map(string value) => RewritePathPrefix(value, legacySessions, newSessions);
@@ -536,7 +587,7 @@ public static class LegacyClowd
             }
 
             if (!changed || root == null)
-                return;
+                return true;
 
             var json = root.ToJsonString(new JsonSerializerOptions
             {
@@ -544,20 +595,35 @@ public static class LegacyClowd
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             });
 
+            // a read-only file (restored from a backup or an archive) refuses the replace below,
+            // and would refuse the app's own saves too, so the flag is cleared for good.
+            var attributes = File.GetAttributes(file);
+            if ((attributes & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+
             var tempPath = file + "." + Path.GetRandomFileName() + ".tmp";
             File.WriteAllText(tempPath, json);
             try
             {
                 File.Move(tempPath, file, overwrite: true);
             }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // the atomic replace is denied while another process (an indexer, an AV scan)
+                // holds the file open without delete sharing; writing in place may still work.
+                File.WriteAllText(file, json);
+            }
             finally
             {
                 TryDeleteFile(tempPath);
             }
+
+            return true;
         }
         catch (Exception ex)
         {
             Log("could not rewrite paths in " + file + ": " + ex.Message);
+            return false;
         }
     }
 
