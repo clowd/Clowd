@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
-using Sheet = Clowd.VideoSDK.Composition.BackgroundTileSheet;
+using Sheet = Prisc.VideoSDK.Composition.BackgroundTileSheet;
 
-namespace Clowd.Tools.BackgroundTiles
+namespace Prisc.Tools.BackgroundTiles
 {
     /// <summary>
     /// Generates the pre-rendered loop sheets the video editor's background STYLE tiles play
@@ -53,7 +53,7 @@ namespace Clowd.Tools.BackgroundTiles
         private const int LossyQuality = 92;
 
         /// <summary>Where the sheets are written, relative to the repo root.</summary>
-        private const string DefaultOutput = "clowd_ui/Clowd.Ui/Assets/BackgroundTiles";
+        private const string DefaultOutput = "ui/Prisc.Ui/Assets/BackgroundTiles";
 
         private static int Main(string[] args)
         {
@@ -436,15 +436,15 @@ namespace Clowd.Tools.BackgroundTiles
 
         // ------------------------------------------------------------------------------ paths
 
-        /// <summary>The repo root, found by walking up from the running assembly until Clowd.slnx
+        /// <summary>The repo root, found by walking up from the running assembly until Prisc.slnx
         /// turns up, so the tool can be run from anywhere.</summary>
         private static string RepoRoot()
         {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir != null && !File.Exists(Path.Combine(dir.FullName, "Clowd.slnx")))
+            while (dir != null && !File.Exists(Path.Combine(dir.FullName, "Prisc.slnx")))
                 dir = dir.Parent;
             if (dir == null)
-                throw new InvalidOperationException("could not find Clowd.slnx above " + AppContext.BaseDirectory);
+                throw new InvalidOperationException("could not find Prisc.slnx above " + AppContext.BaseDirectory);
             return dir.FullName;
         }
     }

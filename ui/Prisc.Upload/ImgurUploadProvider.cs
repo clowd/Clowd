@@ -6,7 +6,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     public class ImgurUploadProvider : UploadProviderBase
     {

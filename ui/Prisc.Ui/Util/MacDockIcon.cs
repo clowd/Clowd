@@ -6,10 +6,10 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Reactive;
 using Avalonia.Threading;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     /// <summary>
-    /// Clowd is a tray-resident app: on macOS the dock icon should only exist while a real
+    /// Prisc is a tray-resident app: on macOS the dock icon should only exist while a real
     /// window is open (the 1Password model). Avalonia only reads ShowInDock once at startup,
     /// so the NSApplication activation policy is flipped at runtime instead — Regular while
     /// any visible ShowInTaskbar window exists, Accessory (tray/menu-bar only) otherwise.

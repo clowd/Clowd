@@ -2,14 +2,14 @@
 //!
 //! Windows' foreground lock lets only the process that currently owns the
 //! foreground window call `SetForegroundWindow` — and lets that process
-//! hand the right on, once, with `AllowSetForegroundWindow`. Clowd.Ui uses
+//! hand the right on, once, with `AllowSetForegroundWindow`. Prisc.Ui uses
 //! that to pass its rights to us when the hotkey fires
 //! (`ScreenCaptureService`), which is what lets the overlay take focus the
 //! instant it appears.
 //!
 //! This is the return leg. When a cycle ends, the overlay is the foreground
 //! window and the shell is about to act on what the user chose — open an
-//! editor, or spawn `clowd_scroll_driver` and grant *it* foreground rights
+//! editor, or spawn `prisc_scroll_driver` and grant *it* foreground rights
 //! in turn. The shell cannot grant what it no longer holds, so without this
 //! the chain breaks the moment our window goes away: the scrolling capture
 //! then cannot raise the window the user selected, and refuses to run

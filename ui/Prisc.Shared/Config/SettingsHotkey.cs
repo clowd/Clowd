@@ -3,16 +3,16 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Persisted hotkey gestures — pure data. OS registration, live status and the
     /// pause-while-editing behavior are owned entirely by the UI layer (HotkeyManager in
-    /// Clowd.Ui); this class never references any hotkey backend.
+    /// Prisc.Ui); this class never references any hotkey backend.
     /// <para>Each action holds an ordered <see cref="GestureList"/>, possibly empty; see that type
     /// for why it is not a plain collection. The properties never return null — assigning null
     /// clears the action. The Hotkeys page groups and orders the rows itself (HotkeyPageLayout in
-    /// Clowd.Ui); it takes each row's name from [DisplayName] and its visibility from [VisibleWhen].</para>
+    /// Prisc.Ui); it takes each row's name from [DisplayName] and its visibility from [VisibleWhen].</para>
     /// </summary>
     public class SettingsHotkey : SimpleNotifyObject
     {

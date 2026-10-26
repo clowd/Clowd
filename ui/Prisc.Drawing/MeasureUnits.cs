@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     /// <summary>
     /// A real-world unit for measure labels: <see cref="PixelsPerUnit"/> canvas pixels make one

@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace Clowd.PlatformUtil
+namespace Prisc.PlatformUtil
 {
     public record ScreenPoint
     {

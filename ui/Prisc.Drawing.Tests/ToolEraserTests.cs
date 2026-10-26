@@ -5,11 +5,11 @@ using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Tools;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Tools;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Drives the eraser with synthetic pointer states, the way DrawingCanvas would: a click
@@ -21,7 +21,7 @@ namespace Clowd.Drawing.Tests
     {
         static ToolEraserTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         // the eraser keys off its own marquee rather than the capture, so a null pointer is fine
@@ -275,7 +275,7 @@ namespace Clowd.Drawing.Tests
         [AvaloniaFact]
         public void SelectingTheEraser_WritesNoEraserKeyIntoTheEditorSettings()
         {
-            var tools = Clowd.Config.SettingsRoot.Current.Editor.Tools;
+            var tools = Prisc.Config.SettingsRoot.Current.Editor.Tools;
             tools.Remove(ToolType.Eraser);
 
             var canvas = new DrawingCanvas { Tool = ToolType.Eraser };

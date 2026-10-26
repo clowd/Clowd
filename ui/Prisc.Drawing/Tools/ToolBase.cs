@@ -2,7 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Input;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     internal enum SnapMode
     {

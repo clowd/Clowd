@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // Real-decode round trip for the render-side audio source: Mp4Writer encodes a sine fixture,
     // SequentialAudioSource decodes it back at the output rate and the sequential pull contract
@@ -44,7 +44,7 @@ namespace Clowd.VideoSDK.Tests
         /// audio stream 1 — Mp4Writer adds them in that order).</summary>
         private string EncodeSineFixture()
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-seqaudio-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-seqaudio-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using var writer = new Mp4Writer(path, new Mp4WriterOptions

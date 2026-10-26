@@ -9,12 +9,12 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
-using Clowd.Drawing;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.Drawing;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The custom-drawn heart of the timeline: rows, items (filmstrips, waveforms, text/image

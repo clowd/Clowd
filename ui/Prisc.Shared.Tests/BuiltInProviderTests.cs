@@ -1,9 +1,9 @@
 using System.Linq;
-using Clowd.Config;
-using Clowd.Upload;
+using Prisc.Config;
+using Prisc.Upload;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     /// <summary>Covers the <see cref="IBuiltInProvider"/> seeding semantics in
     /// <see cref="SettingsUpload.DiscoverProviders"/>: sorts first, on by default, claims its
@@ -12,7 +12,7 @@ namespace Clowd.Shared.Tests
     {
         private static SettingsUpload Discover()
         {
-            // force the Clowd.Upload assembly into the AppDomain, mirroring App startup
+            // force the Prisc.Upload assembly into the AppDomain, mirroring App startup
             _ = typeof(MimeProvider).Assembly;
 
             var settings = new SettingsUpload();
@@ -24,9 +24,9 @@ namespace Clowd.Shared.Tests
             => settings.Providers.Single(p => p.Provider is T);
 
         [Fact]
-        public void ClowdProvider_IsBuiltInTextProvider()
+        public void PriscProvider_IsBuiltInTextProvider()
         {
-            var provider = new ClowdUploadProvider();
+            var provider = new PriscUploadProvider();
 
             Assert.IsAssignableFrom<IBuiltInProvider>(provider);
             Assert.Equal(SupportedUploadType.Text, provider.SupportedUpload);
@@ -39,9 +39,9 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void ClowdProvider_Name_ShowsHostWhenSelfHosted()
+        public void PriscProvider_Name_ShowsHostWhenSelfHosted()
         {
-            var provider = new ClowdUploadProvider { ServerUrl = "https://paste.example.com" };
+            var provider = new PriscUploadProvider { ServerUrl = "https://paste.example.com" };
             Assert.Equal("Prisc (paste.example.com)", provider.Name);
 
             // a trailing slash is still the default server
@@ -55,7 +55,7 @@ namespace Clowd.Shared.Tests
             var settings = Discover();
 
             var first = settings.Providers.First();
-            Assert.IsType<ClowdUploadProvider>(first.Provider);
+            Assert.IsType<PriscUploadProvider>(first.Provider);
 
             // ...even though other providers sort before it ordinally
             Assert.Contains(settings.Providers.Skip(1), p => p.Provider is S3UploadProvider);
@@ -79,10 +79,10 @@ namespace Clowd.Shared.Tests
 
             // the claim happens after the subscription is attached, so it persists — making the
             // seed one-shot rather than something that re-applies on every startup
-            var config = settings.ProviderConfig[nameof(ClowdUploadProvider)];
+            var config = settings.ProviderConfig[nameof(PriscUploadProvider)];
             Assert.True(config.IsEnabled);
             Assert.True(config.DefaultFor.HasFlag(SupportedUploadType.Text));
-            Assert.Equal("https://clwd.app", config.Settings[nameof(ClowdUploadProvider.ServerUrl)]);
+            Assert.Equal("https://clwd.app", config.Settings[nameof(PriscUploadProvider.ServerUrl)]);
         }
 
         [Fact]
@@ -99,12 +99,12 @@ namespace Clowd.Shared.Tests
 
             settings.DiscoverProviders();
 
-            var clowd = Info<ClowdUploadProvider>(settings);
+            var prisc = Info<PriscUploadProvider>(settings);
             var hastebin = Info<HastebinUploadProvider>(settings);
 
             // still enabled (its own key is missing) but the user's default stands
-            Assert.True(clowd.IsEnabled);
-            Assert.False(clowd.DefaultFor.HasFlag(SupportedUploadType.Text));
+            Assert.True(prisc.IsEnabled);
+            Assert.False(prisc.DefaultFor.HasFlag(SupportedUploadType.Text));
             Assert.Same(hastebin, settings.GetDefaultProvider(SupportedUploadType.Text));
         }
 
@@ -114,23 +114,23 @@ namespace Clowd.Shared.Tests
             _ = typeof(MimeProvider).Assembly;
 
             var settings = new SettingsUpload();
-            settings.ProviderConfig[nameof(ClowdUploadProvider)] = new UploadProviderConfig
+            settings.ProviderConfig[nameof(PriscUploadProvider)] = new UploadProviderConfig
             {
                 IsEnabled = false,
                 DefaultFor = SupportedUploadType.None,
-                Settings = { [nameof(ClowdUploadProvider.ServerUrl)] = "https://paste.example.com" },
+                Settings = { [nameof(PriscUploadProvider.ServerUrl)] = "https://paste.example.com" },
             };
 
             settings.DiscoverProviders();
 
-            var clowd = Info<ClowdUploadProvider>(settings);
-            Assert.False(clowd.IsEnabled);
-            Assert.False(clowd.DefaultFor.HasFlag(SupportedUploadType.Text));
+            var prisc = Info<PriscUploadProvider>(settings);
+            Assert.False(prisc.IsEnabled);
+            Assert.False(prisc.DefaultFor.HasFlag(SupportedUploadType.Text));
             Assert.Null(settings.GetDefaultProvider(SupportedUploadType.Text));
-            Assert.Equal("https://paste.example.com", ((ClowdUploadProvider)clowd.Provider).ServerUrl);
+            Assert.Equal("https://paste.example.com", ((PriscUploadProvider)prisc.Provider).ServerUrl);
 
             // sorting is by type, not by state — a disabled built-in still leads the list
-            Assert.Same(clowd, settings.Providers.First());
+            Assert.Same(prisc, settings.Providers.First());
         }
     }
 }

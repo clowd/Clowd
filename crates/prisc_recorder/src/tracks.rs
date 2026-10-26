@@ -1,6 +1,6 @@
 //! Output track layout (RECORDER CORE R2).
 //!
-//! Single-track mode (the default, `ffmpeg_muxer`) is what obs-express always
+//! Single-track mode (the default, `ffmpeg_muxer`) is what prisc_recorder always
 //! did: one video track, and every audio source mixed down into one audio
 //! track.
 //!
@@ -26,11 +26,11 @@ pub const MAX_AUDIO_TRACKS: usize = 6;
 // devices past the new limit would silently share a track instead of failing
 // validation. Both limits are checked — a mask needs a mixer AND an encoder
 // slot.
-const _: () = assert!(MAX_AUDIO_TRACKS <= obs_sys::MAX_AUDIO_MIXES as usize);
-const _: () = assert!(MAX_AUDIO_TRACKS <= obs_sys::MAX_OUTPUT_AUDIO_ENCODERS as usize);
+const _: () = assert!(MAX_AUDIO_TRACKS <= prisc_obs_sys::MAX_AUDIO_MIXES as usize);
+const _: () = assert!(MAX_AUDIO_TRACKS <= prisc_obs_sys::MAX_OUTPUT_AUDIO_ENCODERS as usize);
 // The webcam occupies video track 1 (`webcam::create` / `Recorder::new`), so
 // a screen + webcam recording needs two video encoder slots.
-const _: () = assert!(obs_sys::MAX_OUTPUT_VIDEO_ENCODERS >= 2);
+const _: () = assert!(prisc_obs_sys::MAX_OUTPUT_VIDEO_ENCODERS >= 2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioKind {
@@ -70,7 +70,7 @@ pub struct AudioTrack {
 ///
 /// Always returns at least one track: a libobs A/V output cannot start
 /// without an audio encoder on track 0, so a recording with no audio device
-/// still carries one (silent) `Mixed` track — exactly what obs-express
+/// still carries one (silent) `Mixed` track — exactly what prisc_recorder
 /// produced before multi-track existed.
 ///
 /// Sources beyond [`MAX_AUDIO_TRACKS`] are not silently dropped here; callers

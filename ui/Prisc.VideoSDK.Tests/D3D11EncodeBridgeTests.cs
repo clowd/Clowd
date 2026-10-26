@@ -4,15 +4,15 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using FFmpeg.AutoGen.Abstractions;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The zero-copy encode path's Direct3D 11 half: the ring's shared textures and fences opened
     // on a D3D11 device, the video-processor BGRA->NV12 conversion, the pooled encoder textures
@@ -383,7 +383,7 @@ namespace Clowd.VideoSDK.Tests
         // ------------------------------------------------------------------ with an encoder
 
         private static string TempMp4() =>
-            Path.Combine(Path.GetTempPath(), $"clowd-bridge-test-{Guid.NewGuid():N}.mp4");
+            Path.Combine(Path.GetTempPath(), $"prisc-bridge-test-{Guid.NewGuid():N}.mp4");
 
         /// <summary>The centre pixel (BGRA) of frame <paramref name="frame"/> of a rendered file.</summary>
         private static byte[] CenterPixel(string path, int w, int h, int fps, int frame)

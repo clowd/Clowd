@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// The keys <see cref="KeystrokeFeed"/> believes are held, and which of them a new press shows

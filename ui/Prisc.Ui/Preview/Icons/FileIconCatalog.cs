@@ -3,7 +3,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Clowd.UI.Preview.Icons
+namespace Prisc.UI.Preview.Icons
 {
     /// <summary>
     /// Colour scheme for the generated lettered file page (see FileIconRenderer, architecture
@@ -58,7 +58,7 @@ namespace Clowd.UI.Preview.Icons
         /// <summary>Directory the shipped SVGs live in, as an avares URI prefix. Callers append
         /// "&lt;slug&gt;.svg"; slugs only ever come out of this class's own tables, never off disk,
         /// which is what keeps the composed URI well-formed.</summary>
-        public const string AssetUriPrefix = "avares://Clowd.Ui/Assets/FileIcons/";
+        public const string AssetUriPrefix = "avares://Prisc.Ui/Assets/FileIcons/";
 
         // Extension -> shipped asset slug. Keys are already normalized (lowercase, no dot).
         private static readonly FrozenDictionary<string, string> _extensionToSlug =
@@ -161,7 +161,7 @@ namespace Clowd.UI.Preview.Icons
                 ["3gp"] = "video-file", ["3g2"] = "video-file", ["vob"] = "video-file",
                 ["asf"] = "video-file", ["divx"] = "video-file", ["mxf"] = "video-file",
                 // .ts and .mts are deliberately absent: both are also TypeScript, which is far more
-                // likely to turn up in a Clowd upload than an MPEG transport stream or AVCHD, and
+                // likely to turn up in a Prisc upload than an MPEG transport stream or AVCHD, and
                 // they are mapped to the Code File page above. A key here as well would be a
                 // duplicate in this initializer and would throw before the app drew anything.
                 ["m2ts"] = "video-file",

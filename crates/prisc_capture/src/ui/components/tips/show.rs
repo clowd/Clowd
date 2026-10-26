@@ -241,7 +241,7 @@ mod tests {
     use crate::interaction::InteractionState;
     use crate::settings::TipsMode;
     use crate::ui::shared::monitor_index_at;
-    use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
+    use prisc_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
     fn screen() -> Rect {
         Rect::from_min_size(Pos2::ZERO, vec2(1920.0, 1080.0))

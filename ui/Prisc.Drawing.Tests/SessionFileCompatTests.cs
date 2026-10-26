@@ -5,10 +5,10 @@ using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Pins backward compatibility with graphics.json files written by the PRE-REBUILD build
@@ -25,7 +25,7 @@ namespace Clowd.Drawing.Tests
     {
         static SessionFileCompatTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private const string OldBuildGraphicsJson = """

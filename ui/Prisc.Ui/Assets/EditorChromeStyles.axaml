@@ -1,6 +1,6 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:controls="clr-namespace:Clowd.UI.Controls">
+        xmlns:controls="clr-namespace:Prisc.UI.Controls">
 
     <!--  The modern chrome's tool bar buttons, shared by the image and video editors so an icon
           reads the same size in both. Each editor includes this at the top of its root grid's
@@ -19,7 +19,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="8" />
         <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Foreground" Value="{DynamicResource ClowdEditorIconBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PriscEditorIconBrush}" />
     </Style>
     <Style Selector="Grid.modern controls|DockAndWrapPanel.chromeBar controls|ToolButton.wide">
         <Setter Property="Padding" Value="7" />

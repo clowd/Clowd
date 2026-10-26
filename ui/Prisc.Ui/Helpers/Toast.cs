@@ -7,7 +7,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Notifications;
 using Avalonia.Input.Platform;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>Lightweight toast notifications backed by Avalonia's WindowNotificationManager,
     /// with one manager cached per host window (the Semi theme styles the NotificationCard). All

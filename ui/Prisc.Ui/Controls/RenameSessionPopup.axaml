@@ -1,5 +1,5 @@
 ﻿<UserControl
-    x:Class="Clowd.UI.Controls.RenameSessionPopup"
+    x:Class="Prisc.UI.Controls.RenameSessionPopup"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 

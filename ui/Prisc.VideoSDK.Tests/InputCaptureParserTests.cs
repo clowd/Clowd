@@ -2,10 +2,10 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The input-capture JSONL parser: header/frame/event/cursor_image rows into sorted arrays

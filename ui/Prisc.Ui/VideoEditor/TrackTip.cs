@@ -1,8 +1,8 @@
 using System;
 using Avalonia;
-using Clowd.UI.Controls;
+using Prisc.UI.Controls;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// The rich tip behind each add-track button on the video editor's tool strip: a

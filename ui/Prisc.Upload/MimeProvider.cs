@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using YamlDotNet.Serialization;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     public class MimeProvider : IMimeProvider
     {

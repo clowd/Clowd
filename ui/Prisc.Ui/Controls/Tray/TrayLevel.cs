@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// The one piece of arithmetic between a level feed and a level pill's width: peak dBFS onto the

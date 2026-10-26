@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Benchmarks
+namespace Prisc.Drawing.Benchmarks
 {
     public static class Program
     {
@@ -28,7 +28,7 @@ namespace Clowd.Drawing.Benchmarks
                                                    .Select(x => x.ToUpperInvariant()).ToHashSet();
 
             // The harness source is identical across builds; detect which product it linked against.
-            bool isNew = typeof(GraphicBase).Assembly.GetType("Clowd.Drawing.Rendering.SceneRenderer") != null;
+            bool isNew = typeof(GraphicBase).Assembly.GetType("Prisc.Drawing.Rendering.SceneRenderer") != null;
             string build = isNew ? "new" : "old";
             bool saveGoldens = !isNew; // goldens are captured from the baseline (old) build in WP0
 
@@ -36,7 +36,7 @@ namespace Clowd.Drawing.Benchmarks
             string goldensDir = Path.Combine(benchDir, "baselines", "goldens");
             if (!Path.IsPathRooted(outPath)) outPath = Path.Combine(benchDir, outPath);
 
-            Console.WriteLine($"Clowd.Drawing.Benchmarks  build={build}  out={outPath}");
+            Console.WriteLine($"Prisc.Drawing.Benchmarks  build={build}  out={outPath}");
             Console.WriteLine($"goldens={goldensDir}  saveGoldens={saveGoldens}");
 
             var all = new (string Id, Func<BenchSession, List<ScenarioResult>> Run)[]
@@ -100,7 +100,7 @@ namespace Clowd.Drawing.Benchmarks
                 var d = new DirectoryInfo(start);
                 while (d != null)
                 {
-                    if (File.Exists(Path.Combine(d.FullName, "Clowd.Drawing.Benchmarks.csproj")))
+                    if (File.Exists(Path.Combine(d.FullName, "Prisc.Drawing.Benchmarks.csproj")))
                         return d.FullName;
                     d = d.Parent;
                 }

@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Clowd.UI.VideoEditor;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The inspector's shape-picker tiles (<see cref="ShapeKindTile"/>, which
@@ -166,7 +166,7 @@ namespace Clowd.VideoSDK.Tests
             }
 
             canvas.Flush();
-            var path = Path.Combine(Path.GetTempPath(), "clowd-shape-picker-tiles.png");
+            var path = Path.Combine(Path.GetTempPath(), "prisc-shape-picker-tiles.png");
             using (var data = SKImage.FromBitmap(sheet).Encode(SKEncodedImageFormat.Png, 100))
                 File.WriteAllBytes(path, data.ToArray());
             TestContext.Current.TestOutputHelper?.WriteLine($"picker tiles: {path}");

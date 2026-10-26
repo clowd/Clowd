@@ -1,11 +1,11 @@
 using System;
 using System.Linq;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="EditorSession"/>'s voice take surface: where a take's row comes from (a new

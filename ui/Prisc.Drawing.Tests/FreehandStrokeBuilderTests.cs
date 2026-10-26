@@ -7,13 +7,13 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Media.Immutable;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Ink;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Ink;
+using Prisc.Drawing.Rendering;
 using Xunit;
-using Sample = Clowd.Drawing.Graphics.GraphicBrush.Sample;
+using Sample = Prisc.Drawing.Graphics.GraphicBrush.Sample;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The incremental outline is the batch outline: fed one sample at a time, or in uneven

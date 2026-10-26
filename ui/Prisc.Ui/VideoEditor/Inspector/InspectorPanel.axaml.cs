@@ -5,13 +5,13 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing;
-using Clowd.UI.Dialogs;
-using Clowd.UI.Helpers;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK.Model;
+using Prisc.Drawing;
+using Prisc.UI.Dialogs;
+using Prisc.UI.Helpers;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor.Inspector
+namespace Prisc.UI.VideoEditor.Inspector
 {
     /// <summary>
     /// The editor's right-hand property sidebar: the sections of
@@ -29,7 +29,7 @@ namespace Clowd.UI.VideoEditor.Inspector
     public partial class InspectorPanel : UserControl
     {
         /// <summary>Which chrome the panel wears — set by the host from its chrome styles, exactly
-        /// as <see cref="Clowd.UI.Controls.ThemedSpinner.IsModern"/> is. Everything it changes
+        /// as <see cref="Prisc.UI.Controls.ThemedSpinner.IsModern"/> is. Everything it changes
         /// lives in InspectorPanel.axaml, including the IsModern it passes on to the spinners and
         /// drop-downs; nothing here reads it.</summary>
         public static readonly StyledProperty<bool> IsModernProperty =

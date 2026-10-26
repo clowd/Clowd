@@ -16,7 +16,7 @@
 //! wheel — an untrusted process's posted events are dropped by the window
 //! server without a word, which would present as a one-frame capture with
 //! nothing to explain it. [`preflight`] is what turns that into a sentence
-//! the user can act on. TCC records both against `Clowd.app` rather than this
+//! the user can act on. TCC records both against `Prisc.app` rather than this
 //! executable (the shell documents the chain in `MacPermissions`), so the
 //! grant the app already asks for covers the driver.
 
@@ -36,7 +36,7 @@ use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopEl
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 
 use super::{WheelDir, RAISE_POLL, RAISE_TIMEOUT};
-use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Lines of scrolling per notch, and *line* units rather than pixel ones.
 ///
@@ -99,7 +99,7 @@ impl WindowEntry {
 /// Neither permission can be picked up by this run once it has started, so
 /// there is nothing to retry and no prompt worth showing from a background
 /// helper: the honest move is to say which permission is missing and stop.
-/// Screen Recording takes a Clowd restart; an Accessibility grant reads true
+/// Screen Recording takes a Prisc restart; an Accessibility grant reads true
 /// live, so the next run picks it up. The message travels to the user as the `fatal_error`
 /// event's text, so it is written for them and not for a log.
 pub fn preflight() -> anyhow::Result<()> {

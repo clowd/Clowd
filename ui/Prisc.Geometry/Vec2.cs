@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace Clowd.Geometry2D
+namespace Prisc.Geometry2D
 {
     /// <summary>
     /// A 2D point or vector (the operations are component-wise, so one type serves both).

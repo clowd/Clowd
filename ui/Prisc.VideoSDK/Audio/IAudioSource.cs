@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// Delivers decoded source audio to <see cref="AudioMixer"/> — the audio half of the

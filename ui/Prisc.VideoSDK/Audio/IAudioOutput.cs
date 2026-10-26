@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// Pull callback the output device drains audio through, called on the device's render

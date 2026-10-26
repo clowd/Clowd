@@ -4,7 +4,7 @@ using System.Diagnostics;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 
-namespace Clowd.UI.Preview
+namespace Prisc.UI.Preview
 {
     /// <summary>
     /// The hot cache of decoded previews, keyed by <see cref="PreviewKey"/> (session directory +

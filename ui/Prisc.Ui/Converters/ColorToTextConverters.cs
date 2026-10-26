@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
-using Clowd.Util;
+using Prisc.Util;
 
-namespace Clowd.UI.Converters
+namespace Prisc.UI.Converters
 {
     internal class ColorToHexConverter : IValueConverter
     {

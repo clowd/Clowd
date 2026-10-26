@@ -2,7 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// Gives its child a width it would like to have rather than one it insists on: the child is

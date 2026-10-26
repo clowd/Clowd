@@ -2,10 +2,10 @@ using System;
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>How the shared region is obscured for the people watching it. <see cref="None"/> is
-    /// the plain mirror; the other three are the privacy modes clowd_share_region can composite over
+    /// the plain mirror; the other three are the privacy modes prisc_share_region can composite over
     /// the captured frame before it reaches the meeting app.</summary>
     public enum ShareObscureMode
     {
@@ -41,7 +41,7 @@ namespace Clowd.UI
 
     /// <summary>
     /// A rectangle in CAPTURE SPACE — bit-for-bit the same space as <c>ScreenRect</c> and
-    /// obs-express's <c>--region</c>: physical pixels on the Windows virtual desktop (so
+    /// the recorder's <c>--region</c>: physical pixels on the Windows virtual desktop (so
     /// <see cref="X"/>/<see cref="Y"/> may be negative on a left-of-primary monitor), CG points on
     /// macOS. Deliberately its own type rather than <c>ScreenRect</c> so this protocol file stays
     /// free of every other dependency and remains unit-testable on its own.
@@ -84,7 +84,7 @@ namespace Clowd.UI
     }
 
     /// <summary>
-    /// The clowd_share_region wire protocol, and nothing else: no <c>Process</c>, no
+    /// The prisc_share_region wire protocol, and nothing else: no <c>Process</c>, no
     /// <c>Dispatcher</c>, no threads, no timers. Fed one stdout line at a time by whoever owns the
     /// process, it turns those lines into state and events.
     /// <para>
@@ -164,7 +164,7 @@ namespace Clowd.UI
         /// telling us it gave up, not us being told our command worked.</summary>
         public event Action<ShareObscureMode, int, bool> ObscureChanged;
 
-        /// <summary>A 1 Hz progress line. fps ONLY — unlike obs-express there is no
+        /// <summary>A 1 Hz progress line. fps ONLY — unlike prisc_recorder there is no
         /// <c>timeMs</c>, no <c>dropped</c>, no <c>droppedPerc</c> on this protocol.</summary>
         public event Action<double> StatusReceived;
 
@@ -282,7 +282,7 @@ namespace Clowd.UI
                         break;
 
                     default:
-                        // an unknown type is a newer helper talking to an older Clowd; log it and
+                        // an unknown type is a newer helper talking to an older Prisc; log it and
                         // carry on rather than treating the session as broken.
                         RaiseChatter(trimmed);
                         break;
@@ -317,7 +317,7 @@ namespace Clowd.UI
         /// <para>
         /// If it already settled, that value stands. In particular an exit after
         /// <see cref="ShareHandshake.Started"/> is NORMAL: this protocol has no terminal message at
-        /// the end of a share — the helper just exits 0 and the pipe closes. obs-express's rule that
+        /// the end of a share — the helper just exits 0 and the pipe closes. The recorder's rule that
         /// an exit without a terminal message is fatal must not be copied here.
         /// </para>
         /// </summary>

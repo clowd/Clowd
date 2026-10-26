@@ -8,9 +8,9 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.Util;
+using Prisc.Util;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// Hue/saturation color wheel: hue around the circle (red at three o'clock, turning

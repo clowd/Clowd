@@ -6,7 +6,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using System.Windows.Input;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     public class ResetDefaultButton : Border
     {

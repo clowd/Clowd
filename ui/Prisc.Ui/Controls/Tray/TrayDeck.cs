@@ -5,7 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.LogicalTree;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// Two lanes on one tray: a full-size primary lane (<see cref="PrimaryExtent"/>, the button height)

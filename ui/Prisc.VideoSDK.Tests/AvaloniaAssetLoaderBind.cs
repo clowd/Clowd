@@ -3,7 +3,7 @@ using System.Linq;
 using System.Reflection;
 using Avalonia;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Binds a real <c>IAssetLoader</c> so <c>avares://</c> resolves outside a running app.

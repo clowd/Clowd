@@ -8,7 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// A tile's accelerator key, drawn small in its corner (<see cref="TrayButton.AccessKey"/>) and only

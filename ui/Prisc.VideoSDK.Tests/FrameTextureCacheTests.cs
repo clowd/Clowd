@@ -2,11 +2,11 @@ using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     public class FrameTextureCacheTests
     {

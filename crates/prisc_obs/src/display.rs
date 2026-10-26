@@ -12,7 +12,7 @@ use std::ffi::c_void;
 use crate::error::ObsError;
 
 pub struct ObsDisplay {
-    ptr: *mut obs_sys::obs_display_t,
+    ptr: *mut prisc_obs_sys::obs_display_t,
 }
 
 impl ObsDisplay {
@@ -35,32 +35,32 @@ impl ObsDisplay {
         // objc_object, the __unsafe_unretained ObjC pointer — no retain is
         // taken, hence the outlives requirement above).
         #[cfg(windows)]
-        let gs_window = obs_sys::gs_window { hwnd: window };
+        let gs_window = prisc_obs_sys::gs_window { hwnd: window };
         #[cfg(target_os = "macos")]
-        let gs_window = obs_sys::gs_window {
-            view: window.cast::<obs_sys::objc_object>(),
+        let gs_window = prisc_obs_sys::gs_window {
+            view: window.cast::<prisc_obs_sys::objc_object>(),
         };
         // Linux's gs_window is `{ id: u32, display: *mut c_void }` (an X11
         // window id plus its Display*), which a single pointer cannot express.
-        // The only caller, clowd_share_region, is not built on Linux, so
+        // The only caller, prisc_share_region, is not built on Linux, so
         // refuse instead of guessing at a window.
         #[cfg(target_os = "linux")]
-        let gs_window: obs_sys::gs_window = {
+        let gs_window: prisc_obs_sys::gs_window = {
             return Err(ObsError::NullPointer(
                 "obs_display_create (not supported on Linux)",
             ));
         };
 
-        let init = obs_sys::gs_init_data {
+        let init = prisc_obs_sys::gs_init_data {
             window: gs_window,
             cx,
             cy,
             num_backbuffers: 0,
-            format: obs_sys::gs_color_format_GS_BGRA,
-            zsformat: obs_sys::gs_zstencil_format_GS_ZS_NONE,
+            format: prisc_obs_sys::gs_color_format_GS_BGRA,
+            zsformat: prisc_obs_sys::gs_zstencil_format_GS_ZS_NONE,
             adapter: 0,
         };
-        let ptr = unsafe { obs_sys::obs_display_create(&init, 0) };
+        let ptr = unsafe { prisc_obs_sys::obs_display_create(&init, 0) };
         if ptr.is_null() {
             return Err(ObsError::NullPointer("obs_display_create"));
         }
@@ -68,17 +68,17 @@ impl ObsDisplay {
     }
 
     pub fn resize(&self, cx: u32, cy: u32) {
-        unsafe { obs_sys::obs_display_resize(self.ptr, cx, cy) };
+        unsafe { prisc_obs_sys::obs_display_resize(self.ptr, cx, cy) };
     }
 
     pub fn set_enabled(&self, enabled: bool) {
-        unsafe { obs_sys::obs_display_set_enabled(self.ptr, enabled) };
+        unsafe { prisc_obs_sys::obs_display_set_enabled(self.ptr, enabled) };
     }
 
     /// Background color as 0xRRGGBB, painted where the rendered texture does
     /// not cover the swapchain.
     pub fn set_background_color(&self, color: u32) {
-        unsafe { obs_sys::obs_display_set_background_color(self.ptr, color) };
+        unsafe { prisc_obs_sys::obs_display_set_background_color(self.ptr, color) };
     }
 
     /// Registers `cb` to be invoked each frame with `(param, cx, cy)`.
@@ -91,12 +91,12 @@ impl ObsDisplay {
         cb: unsafe extern "C" fn(*mut c_void, u32, u32),
         param: *mut c_void,
     ) {
-        unsafe { obs_sys::obs_display_add_draw_callback(self.ptr, Some(cb), param) };
+        unsafe { prisc_obs_sys::obs_display_add_draw_callback(self.ptr, Some(cb), param) };
     }
 }
 
 impl Drop for ObsDisplay {
     fn drop(&mut self) {
-        unsafe { obs_sys::obs_display_destroy(self.ptr) };
+        unsafe { prisc_obs_sys::obs_display_destroy(self.ptr) };
     }
 }

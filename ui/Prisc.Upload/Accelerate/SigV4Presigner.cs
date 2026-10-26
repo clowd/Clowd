@@ -5,7 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Clowd.Upload.Accelerate
+namespace Prisc.Upload.Accelerate
 {
     /// <summary>
     /// A minimal AWS Signature Version 4 <em>query</em> presigner (AWS4-HMAC-SHA256) that signs a

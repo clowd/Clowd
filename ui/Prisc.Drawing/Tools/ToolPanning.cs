@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     internal class ToolPanning : ToolBase
     {

@@ -9,12 +9,12 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.UI.Controls;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.UI.Controls;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The multi-track timeline, assembled in code: a pinned <see cref="TimelineRuler"/> on top

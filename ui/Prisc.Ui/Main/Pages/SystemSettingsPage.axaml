@@ -1,8 +1,8 @@
 <UserControl
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Clowd.UI.Controls"
-    x:Class="Clowd.UI.Pages.SystemSettingsPage">
+    xmlns:controls="using:Prisc.UI.Controls"
+    x:Class="Prisc.UI.Pages.SystemSettingsPage">
 
     <UserControl.Styles>
         <!-- Vertical rhythm matched to the generated settings pages (SettingsControlFactory
@@ -46,10 +46,10 @@
                  (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
                  the groupbox look is the keyed "GroupBox" theme). -->
             <!-- The WPF "Shell" group is gone: its auto-start checkbox lives under Behavior in this
-                 build, and its "Upload with Clowd" context menu entry moved to the Uploads page,
+                 build, and its "Upload with Prisc" context menu entry moved to the Uploads page,
                  which owns the feature that entry starts (see UploadSettingsPage). -->
 
-            <!-- macOS only, and deliberately first: until Screen Recording is granted Clowd cannot
+            <!-- macOS only, and deliberately first: until Screen Recording is granted Prisc cannot
                  capture anything at all, so on a fresh Mac install this is the one thing on the page
                  that matters. Collapsed entirely on Windows/Linux, where there is nothing to grant
                  (MacPermissions.IsRelevant), leaving Appearance first. Status is re-read on
@@ -60,7 +60,7 @@
                                     Theme="{StaticResource GroupBox}">
                 <!-- The header doubles as the collapse toggle once there is nothing left to grant
                      (RenderPermissionsCollapse). While a permission is missing there is no chevron
-                     and no click, so the group cannot be closed over the top of an unusable Clowd. -->
+                     and no click, so the group cannot be closed over the top of an unusable Prisc. -->
                 <HeaderedContentControl.Header>
                     <Grid x:Name="PermissionsHeader"
                           ColumnDefinitions="*,Auto"

@@ -1,8 +1,8 @@
-//! Clowd's global keyboard hook: registered hotkeys, one-shot gesture recording and the keystroke
-//! observe stream, all from one hook per process. Linked into `clowd_capture` (Rust API) and built
-//! as `clowd_hotkeys.dll` / `libclowd_hotkeys.dylib` for Clowd.Ui (C ABI, `ffi.rs`).
+//! Prisc's global keyboard hook: registered hotkeys, one-shot gesture recording and the keystroke
+//! observe stream, all from one hook per process. Linked into `prisc_capture` (Rust API) and built
+//! as `prisc_hotkeys.dll` / `libprisc_hotkeys.dylib` for Prisc.Ui (C ABI, `ffi.rs`).
 //!
-//! - [`Key`] is the only key type for global hotkeys anywhere in Clowd; the C# `HotkeyKey` is
+//! - [`Key`] is the only key type for global hotkeys anywhere in Prisc; the C# `HotkeyKey` is
 //!   generated from the same table. The only other key maps live inside this crate: `Key` to
 //!   Windows VK and `Key` to macOS CGKeyCode / NX media keytype.
 //! - A [`Gesture`]'s text form (`Control+Alt+Shift+Meta+<Key>`) is the one wire format: settings,
@@ -21,7 +21,7 @@
 //! - Windows: a hook Windows removed silently (callback timeouts, e.g. a debugger pause) is
 //!   re-installed after a few keystrokes it missed, which moves it to the front of the hook chain.
 //!   The watchdog needs the process's keyboard raw input, so it is off in a process that keeps
-//!   that for itself (a winit event loop takes it; `clowd_capture` hands it back when it builds
+//!   that for itself (a winit event loop takes it; `prisc_capture` hands it back when it builds
 //!   its loop, so the watchdog runs there).
 //! - macOS: needs the Accessibility permission (`start` fails with `PermissionDenied`, never
 //!   prompts; losing it later ends the hook with `Event::Stopped` within about a second, as does a

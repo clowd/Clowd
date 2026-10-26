@@ -1,10 +1,10 @@
 using System.Linq;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Draw on Screen's live keystroke overlay: key edges in, the editor's own runs and drawing out.

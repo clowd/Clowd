@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace Clowd
+namespace Prisc
 {
     public sealed class UploadRecord
     {

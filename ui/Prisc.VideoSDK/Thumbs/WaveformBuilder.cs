@@ -1,9 +1,9 @@
 using System;
 using System.Threading;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
 
-namespace Clowd.VideoSDK.Thumbs
+namespace Prisc.VideoSDK.Thumbs
 {
     /// <summary>
     /// An immutable view of one audio stream's waveform: mono-folded min/max peaks, one pair per

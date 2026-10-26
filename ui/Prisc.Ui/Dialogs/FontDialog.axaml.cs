@@ -3,10 +3,10 @@ using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing;
-using Clowd.UI.Helpers;
+using Prisc.Drawing;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Dialogs
+namespace Prisc.UI.Dialogs
 {
     /// <summary>
     /// Custom font picker replacing the WinForms FontDialog (decision table #49): system font

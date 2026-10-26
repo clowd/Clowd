@@ -1,9 +1,9 @@
 <UserControl
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:conv="using:Clowd.UI.Converters"
-    xmlns:controls="using:Clowd.UI.Controls"
-    x:Class="Clowd.UI.Pages.UploadSettingsPage">
+    xmlns:conv="using:Prisc.UI.Converters"
+    xmlns:controls="using:Prisc.UI.Controls"
+    x:Class="Prisc.UI.Pages.UploadSettingsPage">
 
     <UserControl.Resources>
         <conv:StreamToBitmapConverter x:Key="Stream2Bitmap" />

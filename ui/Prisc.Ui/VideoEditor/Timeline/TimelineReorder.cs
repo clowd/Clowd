@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.UI.Controls;
+using Prisc.UI.Controls;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The geometry behind dragging a track header by its grip: which rows a dragged row may land
@@ -154,7 +154,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         /// <summary>
-        /// The drop as the index <see cref="Clowd.VideoSDK.Editing.EditorSession.MoveTrackToIndex"/>
+        /// The drop as the index <see cref="Prisc.VideoSDK.Editing.EditorSession.MoveTrackToIndex"/>
         /// counts in, or null when the row would land back where it started (a click, or a drag
         /// that came home — anywhere over the dragged unit itself).
         ///

@@ -1,10 +1,10 @@
 [package]
-name = "clowd_capture"
+name = "prisc_capture"
 version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-clowd_rust_core.workspace = true
+prisc_rust_core.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 image = { workspace = true, features = ["png", "jpeg"] }
@@ -15,7 +15,7 @@ simplelog.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 winit.workspace = true
-clowd_hotkeys.workspace = true
+prisc_hotkeys.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
 fontdb.workspace = true
 skrifa.workspace = true
@@ -27,7 +27,7 @@ rfd.workspace = true
 xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
 sentry.workspace = true
 
-# Deliberately no OCR engine: recognition runs in the clowd_ai binary (`clowd_ai ocr`) so
+# Deliberately no OCR engine: recognition runs in the prisc_ai binary (`prisc_ai ocr`) so
 # an abort or segfault inside ONNX Runtime cannot take a capture down, and its tens of MB
 # of embedded models stay out of the overlay's start-up path.
 

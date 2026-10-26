@@ -7,7 +7,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// A Button whose string Content declares an accelerator with a leading underscore (WPF

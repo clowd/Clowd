@@ -1,7 +1,7 @@
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The demuxer's read-ahead rule. There is one read thread feeding every stream, so when it

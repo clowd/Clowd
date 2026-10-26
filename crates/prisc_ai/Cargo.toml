@@ -1,23 +1,24 @@
 [package]
-name = "clowd_ai"
+name = "prisc_ai"
 version = "1.0.0"
 edition = "2021"
-# The ONLY GPL crate in an otherwise MIT repository, and deliberately so: the
+# The only GPL-3.0 crate in the repository (the app's own crates are MIT, the
+# recorder crates GPL-2.0-or-later), and deliberately so: the
 # embedded RobustVideoMatting weights (assets/models/, see the README there)
 # are released under GPL-3.0, so the binary that embeds them is GPL-3.0 too.
-# That license must not reach the rest of Clowd, which is the second reason —
+# That license must not reach the rest of Prisc, which is the second reason —
 # after fault isolation — that AI inference is its own process: the GPL ends
 # at this process boundary (mere aggregation; the app talks to it over pipes),
-# exactly like the GPL'd obs-express recording process the app already ships.
+# exactly like the GPL'd prisc_recorder process (crates/prisc_recorder).
 license = "GPL-3.0-only"
 
-# Every on-device AI model Clowd runs, as its own process, one subcommand per
+# Every on-device AI model Prisc runs, as its own process, one subcommand per
 # job kind:
 # - `ocr`: PaddleOCR text recognition for the capture overlay. The overlay
-#   (`clowd_capture`) spawns it per OCR press with the selected pixels on
+#   (`prisc_capture`) spawns it per OCR press with the selected pixels on
 #   stdin and reads the answer from the `--out` file (contract in
-#   `clowd_rust_core::ocr`).
-# - `matte` / `denoise`: Clowd.VideoSDK's sidecar generators (AiClient.cs)
+#   `prisc_rust_core::ocr`).
+# - `matte` / `denoise`: Prisc.VideoSDK's sidecar generators (AiClient.cs)
 #   spawn it per job and stream raw frames/samples down stdin; it streams
 #   matte frames / denoised samples back up stdout.
 #
@@ -37,7 +38,7 @@ license = "GPL-3.0-only"
 # the overlay reports OCR as unavailable.
 
 [dependencies]
-clowd_rust_core.workspace = true
+prisc_rust_core.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 log.workspace = true

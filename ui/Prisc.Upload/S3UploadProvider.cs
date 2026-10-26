@@ -9,10 +9,10 @@ using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
-using Clowd.Config;
-using Clowd.Upload.Accelerate;
+using Prisc.Config;
+using Prisc.Upload.Accelerate;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     /// <summary>
     /// Uploads to Amazon S3 or any S3-compatible service (MinIO, Cloudflare R2, Backblaze B2,

@@ -1,12 +1,12 @@
 //! Session payload writer — used when the capturer is launched by the
-//! Clowd UI shell with `--session-dir <path>`.
+//! Prisc UI shell with `--session-dir <path>`.
 //!
-//! Mirrors `DxScreenCapture::SaveSession` (clowd_capture_dx/DxScreenCapture.cpp:1980):
+//! Mirrors `DxScreenCapture::SaveSession` in the retired C++ capturer (DxScreenCapture.cpp:1980):
 //! writes `desktop.png` (full virtual-desktop bitmap, no cursor),
 //! `cursor.png` (desktop crop at the cursor rect with the cursor
 //! composited), `cropped.png` (preview of the selection) and
 //! `session.json` into the session directory. The JSON schema is shared
-//! with `Clowd.Ui` (`SessionInfo`, MIGRATION.md §2.11) and documented in
+//! with `Prisc.Ui` (`SessionInfo`) and documented in
 //! CAPTURE_PROTOCOL.md at the repo root.
 //!
 //! Actions the shell must perform are signaled through an `action.txt`
@@ -16,8 +16,8 @@
 
 use std::path::{Path, PathBuf};
 
-use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
-use clowd_rust_core::session::{absolute_path, created_utc_now, save_png, SessionJson};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
+use prisc_rust_core::session::{absolute_path, created_utc_now, save_png, SessionJson};
 
 use crate::capture_output::ActionResult;
 use crate::image_extract::{
@@ -26,7 +26,7 @@ use crate::image_extract::{
 use crate::system::{virtual_desktop_bounds, CapturedDesktop, CursorImage, MonitorInfo, WindowPeekImage};
 
 /// Name of the sidecar file the shell reads to route the finished
-/// capture. Matches `CaptureSessionDispatcher` in Clowd.Ui.
+/// capture. Matches `CaptureSessionDispatcher` in Prisc.Ui.
 const ACTION_FILE: &str = "action.txt";
 
 /// Sidecar carrying the payload of an `ocr-upload` action: the recognized
@@ -88,11 +88,11 @@ pub fn write_color_action(session_dir: &Path, r: u8, g: u8, b: u8) -> ActionResu
 /// Write a VIDEO action payload: `cropped.png` (the recording's poster
 /// frame) plus an `action.txt` = `video X,Y,W,H [R]` marker written LAST
 /// so its appearance is the completion signal. No `desktop.png` and no
-/// `session.json` — the session is created by Clowd.Ui when recording
+/// `session.json` — the session is created by Prisc.Ui when recording
 /// finishes (DESIGN §3.2).
 ///
 /// Unlike the screenshot path this **never composites peeked windows**:
-/// obs-express records the real screen (obstructions included), so a
+/// prisc_recorder records the real screen (obstructions included), so a
 /// peek-composited poster would show content the video does not. Nor is
 /// anything rounded: the recorder captures the raw region, and `R` is
 /// metadata the video editor turns into a rounded-rect mask on the
@@ -100,8 +100,8 @@ pub fn write_color_action(session_dir: &Path, r: u8, g: u8, b: u8) -> ActionResu
 ///
 /// The rect in `action.txt` is emitted in the platform capture
 /// coordinate space (DESIGN §1.1): physical pixels (virtual-desktop,
-/// NOT origin-shifted) on Windows, CG points on macOS — so Clowd.Ui
-/// passes it through verbatim to obs-express `--region`. `R` rides in
+/// NOT origin-shifted) on Windows, CG points on macOS — so Prisc.Ui
+/// passes it through verbatim to prisc_recorder `--region`. `R` rides in
 /// that same space, and is omitted entirely for a square selection.
 pub fn write_video_action(
     session_dir: &Path,
@@ -136,7 +136,7 @@ fn write_video_action_inner(
 
     // Selection clamped to the desktop bitmap, then grown to the contract
     // minimum of 2×2 — this is the region the poster contains and the rect
-    // obs-express records (obs-express rejects W,H < 2 with exit 2, §1.1).
+    // prisc_recorder records (prisc_recorder rejects W,H < 2 with exit 2, §1.1).
     let selection = selection
         .intersection(&buffer.bounds)
         .ok_or_else(|| anyhow!("selection {:?} does not intersect desktop bounds {:?}", selection, buffer.bounds))?;
@@ -220,7 +220,7 @@ fn video_action_rect(selection: ScreenRect, _monitors: &[MonitorInfo]) -> (i32, 
 /// macOS: convert the physical-pixel selection to CG points via the
 /// monitor under its top-left corner (ScreenUnit is physical px on both
 /// platforms — emitting raw ScreenUnit on a Retina display would hand
-/// obs-express a 2× rect). Untested; compile-guarded (DESIGN §3.2).
+/// prisc_recorder a 2× rect). Untested; compile-guarded (DESIGN §3.2).
 #[cfg(target_os = "macos")]
 fn video_action_rect(selection: ScreenRect, monitors: &[MonitorInfo]) -> (i32, i32, i32, i32) {
     let origin = ScreenPoint::new(selection.min_x(), selection.min_y());
@@ -354,7 +354,7 @@ fn scroll_action_point(point: ScreenPoint, _monitors: &[MonitorInfo]) -> (i32, i
 /// on, matching [`video_action_rect`]'s conversion. CG points are what the
 /// driver's `CGWarpMouseCursorPosition`, `kCGWindowBounds` and
 /// `CGWindowListCreateImage` all take, so the marker hands it numbers it can
-/// use unchanged (`clowd_scroll_driver`'s `input`/`frame` modules).
+/// use unchanged (`prisc_scroll_driver`'s `input`/`frame` modules).
 #[cfg(target_os = "macos")]
 fn scroll_action_point(point: ScreenPoint, monitors: &[MonitorInfo]) -> (i32, i32) {
     match monitor_for_selection(ScreenRect::from_xy_size(point.x, point.y, 1, 1), monitors) {
@@ -367,7 +367,7 @@ fn scroll_action_point(point: ScreenPoint, monitors: &[MonitorInfo]) -> (i32, i3
 }
 
 /// Write a SHARE action payload: an `action.txt` = `share X,Y,W,H` marker
-/// and nothing else. `clowd_share_region` mirrors live pixels off the
+/// and nothing else. `prisc_share_region` mirrors live pixels off the
 /// screen for as long as the share lasts, so there is nothing for the
 /// overlay to photograph: no `cropped.png` (a poster would only ever show
 /// the instant the user let go of the mouse) and no `session.json` (a
@@ -375,19 +375,19 @@ fn scroll_action_point(point: ScreenPoint, monitors: &[MonitorInfo]) -> (i32, i3
 /// both the payload and the completion signal — the shape
 /// [`write_scroll_action`] already uses.
 ///
-/// The shell reads the rect and hands it to `clowd_share_region --region
+/// The shell reads the rect and hands it to `prisc_share_region --region
 /// X,Y,W,H`, which mirrors that rectangle into a borderless window a
 /// meeting app can pick out of its share picker. The helper normalises
 /// what it is given (each side forced to at least 64 px and made even) and
 /// reports back the region it actually applied, so the numbers here are a
 /// request rather than a contract — unlike the VIDEO marker, which
-/// obs-express takes literally.
+/// prisc_recorder takes literally.
 ///
 /// The rect is emitted in the platform capture coordinate space (DESIGN
 /// §1.1), through the very same mapping the `video` marker's leading rect
 /// uses: physical virtual-desktop pixels (origin possibly negative) on
 /// Windows, CG points on macOS. That is deliberate — `--region` on
-/// `clowd_share_region` and `--region` on obs-express are the same space,
+/// `prisc_share_region` and `--region` on prisc_recorder are the same space,
 /// so a rect that records correctly also shares correctly.
 pub fn write_share_action(session_dir: &Path, selection: ScreenRect, monitors: &[MonitorInfo]) -> ActionResult {
     match write_share_action_inner(session_dir, selection, monitors) {
@@ -813,7 +813,7 @@ mod tests {
             adapter_id: None,
             low_vram_adapter: false,
             #[cfg(target_os = "macos")]
-            logical_origin: clowd_rust_core::geometry::LogicalPoint::new(x as f64, y as f64),
+            logical_origin: prisc_rust_core::geometry::LogicalPoint::new(x as f64, y as f64),
         }
     }
 
@@ -921,7 +921,7 @@ mod tests {
 
     fn temp_session_dir() -> PathBuf {
         std::env::temp_dir().join(format!(
-            "clowd_scroll_action_{}_{}",
+            "prisc_scroll_action_{}_{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -988,7 +988,7 @@ mod tests {
     }
 
     /// A monitor left of / above the primary makes the origin negative, and
-    /// `clowd_share_region` takes negative x/y happily (`allow_hyphen_values`).
+    /// `prisc_share_region` takes negative x/y happily (`allow_hyphen_values`).
     /// The desktop clamp must not mistake negative for off-screen.
     #[test]
     fn share_action_line_negative_virtual_desktop() {

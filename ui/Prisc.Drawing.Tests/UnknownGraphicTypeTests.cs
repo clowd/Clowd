@@ -3,10 +3,10 @@ using System.Text.Json;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Sessions saved by builds with graphic types that no longer exist (e.g. raster v1's

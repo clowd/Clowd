@@ -1,7 +1,7 @@
 ﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="using:System"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- The transport button (design spec §4). Everything the four states look like is expressed here as
          `^[State=…]` styles over token veils, so the C# side owns exactly one fact (Waiting is not

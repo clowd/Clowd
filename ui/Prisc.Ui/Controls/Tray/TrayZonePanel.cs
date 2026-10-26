@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>Which group of a <see cref="TrayZonePanel"/> a child belongs to.</summary>
     public enum TrayZone

@@ -1,15 +1,15 @@
 using System;
 using System.IO;
 using System.Runtime.Versioning;
-using Clowd.UI;
+using Prisc.UI;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Restoring the execute bit on the helper binaries we ship and spawn. The case that motivated
-    /// it is real and current: the macOS obs-express zip carries mode 644 on <c>obs-express</c>,
-    /// <c>vid2gif</c> and <c>obs-ffmpeg-mux</c>, so unpacking it gives you three executables that
+    /// it is real and current: the macOS recorder zip carries mode 644 on <c>prisc_recorder</c>,
+    /// <c>prisc_vid2gif</c> and <c>obs-ffmpeg-mux</c>, so unpacking it gives you three executables that
     /// cannot be executed.
     /// </summary>
     /// <remarks>The file-mode APIs these use are Unix-only, and <c>Assert.SkipWhen</c> is a call the
@@ -20,7 +20,7 @@ namespace Clowd.VideoSDK.Tests
     {
         private static string WriteTempFile(UnixFileMode mode)
         {
-            var path = Path.Combine(Path.GetTempPath(), $"clowd-helper-{Guid.NewGuid():N}");
+            var path = Path.Combine(Path.GetTempPath(), $"prisc-helper-{Guid.NewGuid():N}");
             File.WriteAllText(path, "#!/bin/sh\nexit 0\n");
             File.SetUnixFileMode(path, mode);
             return path;
@@ -31,7 +31,7 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipWhen(OperatingSystem.IsWindows(), "no execute bit on Windows");
 
-            // 644, exactly as the obs-express zip unpacks.
+            // 644, exactly as the recorder zip unpacks.
             var path = WriteTempFile(UnixFileMode.UserRead | UnixFileMode.UserWrite |
                                      UnixFileMode.GroupRead | UnixFileMode.OtherRead);
             try
@@ -108,7 +108,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Null(HelperBinary.EnsureExecutable(null));
             Assert.Equal("", HelperBinary.EnsureExecutable(""));
 
-            var missing = Path.Combine(Path.GetTempPath(), $"clowd-missing-{Guid.NewGuid():N}");
+            var missing = Path.Combine(Path.GetTempPath(), $"prisc-missing-{Guid.NewGuid():N}");
             Assert.Equal(missing, HelperBinary.EnsureExecutable(missing));
         }
     }

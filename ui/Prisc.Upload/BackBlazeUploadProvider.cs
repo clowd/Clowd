@@ -4,14 +4,14 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     /// <summary>
     /// Uploads to Backblaze B2 through its S3-compatible API by delegating to a
     /// privately-configured <see cref="S3UploadProvider"/>, so B2 shares the S3 implementation
     /// including accelerated uploads. The native B2 API is no longer used; uploads made by the
     /// retired native provider stored a B2 fileId (always "4_...") and can no longer be deleted
-    /// from within Clowd.
+    /// from within Prisc.
     /// </summary>
     public class BackBlazeUploadProvider : UploadProviderBase, IAccelerateProvider
     {

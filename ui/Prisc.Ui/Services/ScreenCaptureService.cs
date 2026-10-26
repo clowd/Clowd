@@ -9,31 +9,31 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Locates the external Rust capture binaries (see CAPTURE_PROTOCOL.md): the capture overlay
-    /// <c>clowd_capture</c> and, beside it, the scrolling-capture driver
-    /// <c>clowd_scroll_driver</c>.
-    /// Probe order: the <c>CLOWD_CAPTURE_PATH</c> environment variable, then alongside the Clowd.Ui
+    /// <c>prisc_capture</c> and, beside it, the scrolling-capture driver
+    /// <c>prisc_scroll_driver</c>.
+    /// Probe order: the <c>PRISC_CAPTURE_PATH</c> environment variable, then alongside the Prisc.Ui
     /// executable (release layout), then walking up from the app base directory to a cargo workspace
     /// root and taking the more recently built of <c>target/debug</c> and <c>target/release</c>
     /// (debug-time layout).
     /// </summary>
     public static class CaptureBinaryLocator
     {
-        public const string EnvVarName = "CLOWD_CAPTURE_PATH";
+        public const string EnvVarName = "PRISC_CAPTURE_PATH";
 
-        public static string BinaryFileName => Executable("clowd_capture");
+        public static string BinaryFileName => Executable("prisc_capture");
 
         /// <summary>The scrolling-capture driver (CAPTURE_PROTOCOL.md §2) — a separate process
         /// from the overlay, spawned once the user has picked the region and the scroll point.
         /// Windows-only: the overlay's SCROLL button is compiled out elsewhere.</summary>
-        public static string ScrollDriverFileName => Executable("clowd_scroll_driver");
+        public static string ScrollDriverFileName => Executable("prisc_scroll_driver");
 
         private static string Executable(string stem) =>
             OperatingSystem.IsWindows() ? stem + ".exe" : stem;
@@ -43,9 +43,9 @@ namespace Clowd.UI
 
         /// <summary>
         /// Locates the scrolling-capture driver, which ships in the same directory as the overlay
-        /// in every layout — next to Clowd.Ui when installed, and in the same <c>target/</c>
+        /// in every layout — next to Prisc.Ui when installed, and in the same <c>target/</c>
         /// profile directory when built locally. Deriving it from the overlay's resolved path
-        /// rather than probing again means the <c>CLOWD_CAPTURE_PATH</c> override keeps pointing
+        /// rather than probing again means the <c>PRISC_CAPTURE_PATH</c> override keeps pointing
         /// both binaries at the same build. Returns null when either is missing.
         /// </summary>
         public static string ResolveScrollDriver() => ResolveScrollDriver(Resolve());
@@ -69,7 +69,7 @@ namespace Clowd.UI
             if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
                 return Path.GetFullPath(envVarValue);
 
-            // (b) next to the Clowd.Ui executable (release layout copies the binary alongside)
+            // (b) next to the Prisc.Ui executable (release layout copies the binary alongside)
             var local = Path.Combine(baseDirectory, BinaryFileName);
             if (File.Exists(local))
                 return Path.GetFullPath(local);
@@ -110,7 +110,7 @@ namespace Clowd.UI
 
         /// <summary>Last-write time of <paramref name="path"/> in UTC, or null when it is absent or
         /// cannot be stat'd. Doubles as the existence check so that a `cargo build`/`cargo clean`
-        /// running while Clowd is open — the normal state of affairs during development — makes a
+        /// running while Prisc is open — the normal state of affairs during development — makes a
         /// candidate merely unselectable rather than throwing out of binary resolution entirely.
         /// UTC throughout: comparing a local-time stamp against a UTC one picks the wrong profile
         /// for most of the world, and by exactly an hour twice a year for the rest.</summary>
@@ -161,7 +161,7 @@ namespace Clowd.UI
             Volatile.Read(ref _captureActive) != 0 || CaptureStandbySupervisor.IsOverlayOpen;
 
         /// <summary>The capturer's exit code for "macOS has not granted Screen Recording" — see
-        /// <c>NO_SCREEN_PERMISSION</c> in clowd_rust_core/src/exit.rs. Reported instead of
+        /// <c>NO_SCREEN_PERMISSION</c> in crates/prisc_rust_core/src/exit.rs. Reported instead of
         /// crashing, so a revoked permission gets the permission dialog rather than a stack trace.
         /// </summary>
         internal const int ExitCodeNoScreenPermission = 3;
@@ -210,7 +210,7 @@ namespace Clowd.UI
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
                         $"The screen capture binary ({CaptureBinaryLocator.BinaryFileName}) could not be found. " +
-                        $"Run 'cargo build' in the clowd-rust repository, or set the {CaptureBinaryLocator.EnvVarName} " +
+                        $"Run 'cargo build' in the Prisc repository, or set the {CaptureBinaryLocator.EnvVarName} " +
                         "environment variable to its location.",
                         "Screen capture unavailable");
                     return;
@@ -373,7 +373,7 @@ namespace Clowd.UI
         }
 
         /// <summary>Completes a session announced by the standby capturer's
-        /// CLOWD_CAPTURE_FINISHED line. Runs on the UI thread via the supervisor.</summary>
+        /// PRISC_CAPTURE_FINISHED line. Runs on the UI thread via the supervisor.</summary>
         internal static async Task ProcessStandbySessionAsync(string sessionDir)
         {
             try
@@ -475,7 +475,7 @@ namespace Clowd.UI
     }
 
     /// <summary>
-    /// Maps Clowd.Ui state onto the capturer's clap CLI (CAPTURE_PROTOCOL.md / `clowd_capture
+    /// Maps Prisc.Ui state onto the capturer's clap CLI (CAPTURE_PROTOCOL.md / `prisc_capture
     /// --help`). Flags are only emitted when they differ from the capturer's own defaults, so the
     /// command line stays minimal. Factored out of the page so it is testable without a process.
     /// </summary>
@@ -491,7 +491,7 @@ namespace Clowd.UI
 
             // the accent follows the OS (or the user's pick). It goes over as picked: the capturer
             // makes the same contrast correction for the white text drawn on it that
-            // SettingsGeneral.GetEffectiveAccentColor does (issue #48; clowd_capture/src/accent.rs),
+            // SettingsGeneral.GetEffectiveAccentColor does (issue #48; crates/prisc_capture/src/accent.rs),
             // and derives its hint comet from the original (AccentColors.CometColors). It lives on
             // General rather than Capture because the recording toolbar and border wear it too.
             var accent = general.GetPickedAccentColor();
@@ -563,7 +563,7 @@ namespace Clowd.UI
             if (!root.Recording.IsEnabled)
                 args.Add("--no-video");
 
-            // OCR runs in the clowd_ai binary, which only exists where ONNX Runtime has a
+            // OCR runs in the prisc_ai binary, which only exists where ONNX Runtime has a
             // build: not on Intel Macs (the same gate as SelectedItemViewModel.AiEffectsSupported),
             // so the overlay must not offer a button whose spawn can only ever fail.
             bool ocrAvailable = !OperatingSystem.IsMacOS()
@@ -628,7 +628,7 @@ namespace Clowd.UI
             // none at all for an action with no gestures. The capturer reports a status per
             // occurrence, echoing this exact string (CaptureStandbySupervisor.ApplyHotkeyStatus).
             // Gestures travel in the settings form, which the capturer parses with the same
-            // clowd_hotkeys grammar: nothing is translated on the way. One the OS reserves for
+            // prisc_hotkeys grammar: nothing is translated on the way. One the OS reserves for
             // itself is left out, as HotkeyManager refuses it, and gets no status back.
             var hotkeys = root.Hotkeys;
             AddHotkeys("--hk-main", hotkeys.CaptureRegionShortcut);
@@ -855,7 +855,7 @@ namespace Clowd.UI
                     var source = Path.Combine(sessionDir, "cropped.png");
                     if (File.Exists(source))
                     {
-                        imagePath = Path.Combine(Path.GetTempPath(), "clowd-search-" + Guid.NewGuid().ToString("N") + ".png");
+                        imagePath = Path.Combine(Path.GetTempPath(), "prisc-search-" + Guid.NewGuid().ToString("N") + ".png");
                         File.Move(source, imagePath);
                     }
                 }
@@ -969,7 +969,7 @@ namespace Clowd.UI
                     return null;
             }
 
-            // obs-express requires W,H >= 2 (--region validation, exit 2 — DESIGN §1.1): reject
+            // prisc_recorder requires W,H >= 2 (--region validation, exit 2 — DESIGN §1.1): reject
             // degenerate rects here so an out-of-contract selection is discarded like any other
             // unparseable action instead of surfacing as a process-exit error dialog. The overlay
             // also clamps at the source; this is defense-in-depth.

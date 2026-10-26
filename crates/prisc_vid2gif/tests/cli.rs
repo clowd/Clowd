@@ -1,4 +1,4 @@
-//! End-to-end CLI tests. vid2gif links the bundled FFmpeg libraries directly,
+//! End-to-end CLI tests. prisc_vid2gif links the bundled FFmpeg libraries directly,
 //! so these tests are fully self-contained: container inputs come from small
 //! committed fixtures (tests/fixtures/), raw inputs are generated on the fly
 //! as Y4M, and outputs are validated by parsing the GIF byte stream — no
@@ -56,12 +56,12 @@ fn write_y4m(path: &Path, w: usize, h: usize, fps: u32, seconds: u32) {
     }
 }
 
-/// Runs vid2gif and returns (success, parsed stdout protocol messages).
+/// Runs prisc_vid2gif and returns (success, parsed stdout protocol messages).
 fn run_vid2gif(args: &[&std::ffi::OsStr]) -> (bool, Vec<Msg>) {
-    let out = Command::new(env!("CARGO_BIN_EXE_vid2gif"))
+    let out = Command::new(env!("CARGO_BIN_EXE_prisc_vid2gif"))
         .args(args)
         .output()
-        .expect("spawn vid2gif");
+        .expect("spawn prisc_vid2gif");
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     (out.status.success(), parse_protocol(&stdout))
 }
@@ -209,7 +209,7 @@ fn converts_mp4_with_valid_protocol_and_output() {
     std::fs::copy(fixture("clip.mp4"), &clip).unwrap();
 
     let (ok, msgs) = run_vid2gif(&[clip.as_os_str(), "--quality".as_ref(), "fair".as_ref()]);
-    assert!(ok, "vid2gif failed: {msgs:?}");
+    assert!(ok, "prisc_vid2gif failed: {msgs:?}");
     let (path, bytes) = expect_success(&msgs);
 
     // Default output path: input with .gif extension.
@@ -243,7 +243,7 @@ fn mkv_input_explicit_output_with_spaces_best_quality() {
         "--quality".as_ref(),
         "best".as_ref(),
     ]);
-    assert!(ok, "vid2gif failed: {msgs:?}");
+    assert!(ok, "prisc_vid2gif failed: {msgs:?}");
     let (path, bytes) = expect_success(&msgs);
     assert_eq!(path, out);
     assert_eq!(bytes, std::fs::metadata(&out).unwrap().len());
@@ -268,7 +268,7 @@ fn max_width_and_height_clamp_most_restrictive() {
         let mut args: Vec<&std::ffi::OsStr> = vec![clip.as_os_str(), out_path.as_os_str()];
         args.extend(extra.iter().map(|s| -> &std::ffi::OsStr { s.as_ref() }));
         let (ok, msgs) = run_vid2gif(&args);
-        assert!(ok, "vid2gif failed: {msgs:?}");
+        assert!(ok, "prisc_vid2gif failed: {msgs:?}");
         let (path, _) = expect_success(&msgs);
         gif_dims(&std::fs::read(path).unwrap())
     };
@@ -300,7 +300,7 @@ fn fps_override_changes_frame_count() {
         "--fps".as_ref(),
         "5".as_ref(),
     ]);
-    assert!(ok, "vid2gif failed: {msgs:?}");
+    assert!(ok, "prisc_vid2gif failed: {msgs:?}");
     expect_success(&msgs);
     let frames = gif_frame_count(&std::fs::read(&out).unwrap());
     assert!(
@@ -357,12 +357,12 @@ fn quit_mid_conversion_cancels_promptly_and_cleans_up() {
     // Long enough that the conversion cannot finish before `quit` lands.
     write_y4m(&clip, 320, 240, 15, 90);
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_vid2gif"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_prisc_vid2gif"))
         .arg(&clip)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .expect("spawn vid2gif");
+        .expect("spawn prisc_vid2gif");
     let mut stdin = child.stdin.take().unwrap();
     let stdout = BufReader::new(child.stdout.take().unwrap());
 
@@ -388,7 +388,7 @@ fn quit_mid_conversion_cancels_promptly_and_cleans_up() {
         .expect("never saw mid-conversion progress")
         .elapsed();
 
-    let status = child.wait().expect("wait for vid2gif");
+    let status = child.wait().expect("wait for prisc_vid2gif");
     assert!(status.success(), "cancellation must exit 0");
     let msgs = parse_protocol(&lines.join("\n"));
     assert!(

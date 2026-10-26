@@ -3,19 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The cursor and keys rows' previews, end to end below the pixels: the SDK's per-frame
     /// pointer speed and click pairing (<see cref="InputActivity"/>), the timeline adapter's
     /// re-bucketing into source-tick requests, the zoom-dependent folding of clicks and
     /// keystroke runs into marks, and the timeline→source mapping through the hard-synced screen
-    /// item. Pure math, no Avalonia runtime — Clowd.Ui exposes its internals to this project.
+    /// item. Pure math, no Avalonia runtime — Prisc.Ui exposes its internals to this project.
     /// </summary>
     public class InputActivityTests
     {
@@ -170,7 +170,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Key_runs_are_the_overlays_own_segmentation_as_spans()
         {
-            var path = Path.Combine(Path.GetTempPath(), $"clowd-activity-{Guid.NewGuid():N}.jsonl");
+            var path = Path.Combine(Path.GetTempPath(), $"prisc-activity-{Guid.NewGuid():N}.jsonl");
             try
             {
                 File.WriteAllLines(path, new[]

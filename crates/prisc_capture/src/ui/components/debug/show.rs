@@ -44,7 +44,7 @@ const FALLBACK_BUDGET_MS: f32 = 16.67;
 /// tick; the host's floor is what keeps that at frame rate rather than as
 /// fast as the app thread can run.
 pub fn show(ctx: &egui::Context, d: &DebugInputs) {
-    egui::Area::new(egui::Id::new("clowd-debug-monitor"))
+    egui::Area::new(egui::Id::new("prisc-debug-monitor"))
         .order(egui::Order::Middle)
         .interactable(false)
         .fade_in(false)
@@ -52,7 +52,7 @@ pub fn show(ctx: &egui::Context, d: &DebugInputs) {
         .show(ctx, |ui| body(ui, &d.monitor.lines, Some(&d.monitor)));
 
     if let Some(p) = &d.primary {
-        egui::Area::new(egui::Id::new("clowd-debug-primary"))
+        egui::Area::new(egui::Id::new("prisc-debug-primary"))
             .order(egui::Order::Middle)
             .interactable(false)
             .fade_in(false)
@@ -129,7 +129,7 @@ fn plot(ui: &mut egui::Ui, g: &MonitorPanelInputs, width: f32) {
     // Reserved before the plot so the background lands under the series;
     // the rect is only known once the plot has allocated its space.
     let bg = ui.painter().add(Shape::Noop);
-    let resp = Plot::new("clowd-frame-times")
+    let resp = Plot::new("prisc-frame-times")
         .width(width)
         .height(tokens::DEBUG_GRAPH_H)
         .min_size(vec2(1.0, 1.0))
@@ -264,7 +264,7 @@ mod tests {
         assert!(ctx.interactive_rects_last_pass().is_empty());
 
         let monitor = ctx
-            .memory(|m| m.area_rect(egui::Id::new("clowd-debug-monitor")))
+            .memory(|m| m.area_rect(egui::Id::new("prisc-debug-monitor")))
             .expect("the monitor panel has an area rect after a run");
         assert!((monitor.left() - tokens::DEBUG_MARGIN).abs() < 0.01, "{monitor:?}");
         assert!((monitor.top() - tokens::DEBUG_MARGIN).abs() < 0.01, "{monitor:?}");
@@ -273,7 +273,7 @@ mod tests {
         // size it recorded last pass, so the right edge can sit a fraction
         // of a point off the exact margin.
         let primary = ctx
-            .memory(|m| m.area_rect(egui::Id::new("clowd-debug-primary")))
+            .memory(|m| m.area_rect(egui::Id::new("prisc-debug-primary")))
             .expect("the primary panel has an area rect after a run");
         assert!(
             (primary.right() - (screen.right() - tokens::DEBUG_MARGIN)).abs() < 0.5,

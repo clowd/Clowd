@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Clowd.UI.VideoEditor;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.UI.VideoEditor;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>
     /// The one recipe for "the project this session directory opens as" — the saved

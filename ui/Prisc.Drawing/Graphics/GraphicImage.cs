@@ -7,9 +7,9 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     [GraphicDesc("Image", Skills = Skill.Angle | Skill.Crop | Skill.Cursor | Skill.Radius)]
     public class GraphicImage : GraphicRectangle

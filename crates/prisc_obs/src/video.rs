@@ -20,9 +20,9 @@ pub struct VideoInfo {
 }
 
 impl VideoInfo {
-    pub fn to_raw(&self) -> obs_sys::obs_video_info {
+    pub fn to_raw(&self) -> prisc_obs_sys::obs_video_info {
         // Every field is set explicitly — no zeroed remainder.
-        obs_sys::obs_video_info {
+        prisc_obs_sys::obs_video_info {
             graphics_module: self.graphics_module.as_ptr(),
             fps_num: self.fps_num,
             fps_den: self.fps_den,
@@ -30,12 +30,12 @@ impl VideoInfo {
             base_height: self.base_height,
             output_width: self.output_width,
             output_height: self.output_height,
-            output_format: obs_sys::video_format_VIDEO_FORMAT_NV12,
+            output_format: prisc_obs_sys::video_format_VIDEO_FORMAT_NV12,
             adapter: self.adapter,
             gpu_conversion: true,
-            colorspace: obs_sys::video_colorspace_VIDEO_CS_709,
-            range: obs_sys::video_range_type_VIDEO_RANGE_PARTIAL,
-            scale_type: obs_sys::obs_scale_type_OBS_SCALE_BICUBIC,
+            colorspace: prisc_obs_sys::video_colorspace_VIDEO_CS_709,
+            range: prisc_obs_sys::video_range_type_VIDEO_RANGE_PARTIAL,
+            scale_type: prisc_obs_sys::obs_scale_type_OBS_SCALE_BICUBIC,
         }
     }
 }

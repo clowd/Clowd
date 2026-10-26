@@ -5,10 +5,10 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.PlatformUtil;
+using Prisc.Config;
+using Prisc.PlatformUtil;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>The obscure state the helper last acknowledged. <paramref name="Unsolicited"/> means
     /// the helper sent the ack with no command of ours outstanding, and
@@ -24,7 +24,7 @@ namespace Clowd.UI
     public sealed record ShareSessionEnded(ShareHandshake Handshake, int ExitCode);
 
     /// <summary>
-    /// Hosts one clowd_share_region process and drives it: CLI arguments in, plain-text commands on
+    /// Hosts one prisc_share_region process and drives it: CLI arguments in, plain-text commands on
     /// stdin, line-delimited JSON on stdout (handed straight to <see cref="ShareRegionProtocol"/>),
     /// free-form libobs chatter on stderr. Lifecycle:
     /// <see cref="InitializeAsync"/> (spawns; resolves when the helper's "share this window" prompt
@@ -46,7 +46,7 @@ namespace Clowd.UI
     /// <para>
     /// Two differences from <see cref="ObsCapturer"/>, both of which will bite anyone porting code
     /// between them. (1) There is NO terminal message at the end of a share: once mirroring has
-    /// started the helper simply exits 0 and the pipe closes, so obs-express's rule that "an exit
+    /// started the helper simply exits 0 and the pipe closes, so the recorder's rule that "an exit
     /// without a terminal message is fatal" is wrong here and must not be copied. (2) The handshake
     /// has no timeout — the user may sit in their meeting app's window picker for as long as they
     /// like — so <see cref="WaitForDecisionAsync"/> waits forever by design, and only the process
@@ -54,7 +54,7 @@ namespace Clowd.UI
     /// </para>
     ///
     /// <para>
-    /// stdin EOF is the helper's own orphan-safety kill switch: if Clowd.Ui dies, the pipe closes,
+    /// stdin EOF is the helper's own orphan-safety kill switch: if Prisc.Ui dies, the pipe closes,
     /// the helper reads EOF and quits, and no stray mirror window is left on the user's desktop. No
     /// watchdog is needed.
     /// </para>
@@ -80,11 +80,11 @@ namespace Clowd.UI
         private const int MaxLogChars = 256 * 1024;
 
         /// <summary>Overrides the located binary, for developers running a helper built somewhere
-        /// else. Mirrors <c>CLOWD_OBS_EXPRESS_PATH</c> / <c>CLOWD_VID2GIF_PATH</c>.</summary>
-        public const string EnvVarName = "CLOWD_SHARE_REGION_PATH";
+        /// else. Mirrors <c>PRISC_RECORDER_PATH</c> / <c>PRISC_VID2GIF_PATH</c>.</summary>
+        public const string EnvVarName = "PRISC_SHARE_REGION_PATH";
 
         public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "clowd_share_region.exe" : "clowd_share_region";
+            OperatingSystem.IsWindows() ? "prisc_share_region.exe" : "prisc_share_region";
 
         private readonly ShareRegionProtocol _protocol = new();
         private readonly HelperProcessLog _log = new(MaxLogLines, MaxLogChars);
@@ -194,8 +194,8 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Locates clowd_share_region: the <see cref="EnvVarName"/> override first, otherwise the
-        /// directory obs-express was found in — the two ship side by side in every layout (the
+        /// Locates prisc_share_region: the <see cref="EnvVarName"/> override first, otherwise the
+        /// directory prisc_recorder was found in — the two ship side by side in every layout (the
         /// release payload and the cargo target dir alike), so there is deliberately no second
         /// search of its own to drift out of sync with <see cref="ObsBinaryLocator"/>. Returns null
         /// when it cannot be found; the caller reports that, because only the caller knows what the
@@ -221,7 +221,7 @@ namespace Clowd.UI
         /// app at it. Does NOT wait for the user to answer; that is
         /// <see cref="WaitForDecisionAsync"/>.
         /// <para>
-        /// Call this while Clowd.Ui is the foreground application. The helper's prompt window has to
+        /// Call this while Prisc.Ui is the foreground application. The helper's prompt window has to
         /// take the foreground to be findable, and a process spawned by a background app is refused
         /// it — the window then only blinks in the taskbar and the user never sees what they are
         /// supposed to pick.
@@ -288,7 +288,7 @@ namespace Clowd.UI
         {
             var args = new List<string>
             {
-                // capture space, verbatim: the same string obs-express takes for --region. Invariant
+                // capture space, verbatim: the same string prisc_recorder takes for --region. Invariant
                 // formatting because a locale digit separator would fail the Rust parser.
                 "--region", FormattableString.Invariant($"{region.X},{region.Y},{region.Width},{region.Height}"),
                 "--fps", FormattableString.Invariant($"{Math.Max(1, fps)}"),
@@ -325,7 +325,7 @@ namespace Clowd.UI
         /// <see cref="ShareHandshake.Started"/>, <see cref="ShareHandshake.Cancelled"/>, or
         /// <see cref="ShareHandshake.Failed"/> if the helper died before they answered.
         /// <para>
-        /// NEVER TIMES OUT. Finding Clowd's mirror window in a meeting app's share picker can take a
+        /// NEVER TIMES OUT. Finding Prisc's mirror window in a meeting app's share picker can take a
         /// user minutes — walking through a Teams or Zoom dialog, hunting the right thumbnail — and
         /// a timeout here would kill a session the user was in the middle of setting up. The only
         /// thing that resolves this early is the process itself going away.

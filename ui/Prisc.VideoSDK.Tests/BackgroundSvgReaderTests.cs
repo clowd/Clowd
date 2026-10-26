@@ -1,11 +1,11 @@
 using System;
 using System.Linq;
 using System.Xml.Linq;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The reader's rules that the shipped files exercise only in passing, each on a small

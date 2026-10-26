@@ -6,11 +6,11 @@ using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// Hidden harness that renders the color dialog to a PNG without putting it in front of anyone:
-    /// <c>clowd --color-dialog-snapshot out.png [--theme light|dark] [--tab simple|image|palette|oklch]
+    /// <c>prisc --color-dialog-snapshot out.png [--theme light|dark] [--tab simple|image|palette|oklch]
     /// [--initial #RRGGBB] [--viewer] [--scale 2]</c>. The window opens off-screen and never
     /// activates; its content is drawn through a RenderTargetBitmap and the process exits.
     /// </summary>
@@ -18,7 +18,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
     /// A RenderTargetBitmap sees no system backdrop, so the bars' Mica is stood in for by the
     /// theme's opaque window color for the duration of the render — which is also what the window
     /// shows wherever the compositor refuses Mica. Like the other harnesses, App.Startup calls this
-    /// before the single-instance mutex, so a snapshot never forwards to a resident Clowd.
+    /// before the single-instance mutex, so a snapshot never forwards to a resident Prisc.
     /// <para>
     /// Trust <c>--scale 1</c> for anything drawn with a blurred BoxShadow: at other scales
     /// RenderTargetBitmap has been seen to drop a blurred shadow somewhere else on the canvas (a

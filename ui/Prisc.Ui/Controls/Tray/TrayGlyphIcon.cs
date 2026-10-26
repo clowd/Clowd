@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// Draws a <see cref="TrayGlyph"/> by scaling its 24-unit CANVAS to the control's bounds — not its

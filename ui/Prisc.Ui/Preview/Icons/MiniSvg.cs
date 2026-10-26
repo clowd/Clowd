@@ -6,7 +6,7 @@ using System.Xml;
 using System.Xml.Linq;
 using SkiaSharp;
 
-namespace Clowd.UI.Preview.Icons
+namespace Prisc.UI.Preview.Icons
 {
     /// <summary>
     /// Thrown for any construct outside the icons8-fluent subset <see cref="MiniSvgDocument"/> understands.
@@ -47,13 +47,13 @@ namespace Clowd.UI.Preview.Icons
     /// <para>
     /// This exists instead of a NuGet SVG library because every candidate (Svg.Skia and friends) carries its
     /// own SkiaSharp reference. NuGet unifies to the highest requested version, which would drift past the
-    /// 3.119.4 pin in clowd_ui/Directory.Build.props and trip Clowd.Ui.csproj's VerifySkiaSharpMatchesAvalonia
+    /// 3.119.4 pin in ui/Directory.Build.props and trip Prisc.Ui.csproj's VerifySkiaSharpMatchesAvalonia
     /// guard — or worse, load a second native Skia beside Avalonia's. The generic lettered icon has to be
     /// typeset with Skia at runtime for arbitrary extensions anyway, so a Skia drawing path exists either way;
     /// a second renderer would only mean two visual identities for one icon family.
     /// </para>
     /// <para>
-    /// It is also not Clowd.VideoSDK's <c>CursorPackLoader</c>: that one is internal to the SDK, says in its
+    /// It is also not Prisc.VideoSDK's <c>CursorPackLoader</c>: that one is internal to the SDK, says in its
     /// own summary that it is not an SVG engine, flattens every gradient to a single weighted-average colour
     /// and drops masked paths. Those are fine trade-offs for a cursor silhouette and wrong ones for file-type
     /// art, where the gradient <i>is</i> the icon.

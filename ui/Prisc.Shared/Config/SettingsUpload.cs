@@ -4,8 +4,9 @@ using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Prisc.Legacy;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     public class UploadProviderInfo : SimpleNotifyObject
     {
@@ -153,6 +154,10 @@ namespace Clowd.Config
         /// the seeding block below).</summary>
         public void DiscoverProviders()
         {
+            // a file written before the rename keys the built-in provider by its old type name;
+            // SettingsService.Load() normally renamed it already, this covers any other source.
+            LegacyClowd.NormalizeProviderKeys(ProviderConfig);
+
             var assembliesToSearch = AppDomain.CurrentDomain.GetAssemblies();
             var type = typeof(IUploadProvider);
             var types = assembliesToSearch
@@ -214,9 +219,11 @@ namespace Clowd.Config
         }
 
         /// <summary>Looks up the runtime wrapper for a provider by its type name (the key used in
-        /// <see cref="ProviderConfig"/> and in exported strings).</summary>
+        /// <see cref="ProviderConfig"/> and in exported strings). A type name from before the
+        /// rename resolves to its current provider (<see cref="LegacyClowd.MapProviderTypeName"/>).</summary>
         public UploadProviderInfo GetProviderByTypeName(string typeName)
         {
+            typeName = LegacyClowd.MapProviderTypeName(typeName);
             return _providers.FirstOrDefault(p => String.Equals(p.Provider.GetType().Name, typeName, StringComparison.Ordinal));
         }
 
@@ -258,7 +265,7 @@ namespace Clowd.Config
         /// </summary>
         /// <remarks>
         /// Settings keys the entry omits are left alone rather than reset — an export written by an
-        /// older Clowd should not blank out a field it never knew about. Any upload type the entry
+        /// older Prisc should not blank out a field it never knew about. Any upload type the entry
         /// claims a default for is taken away from whichever provider currently holds it, because
         /// two defaults for the same type is not a state the rest of the code expects.
         /// </remarks>

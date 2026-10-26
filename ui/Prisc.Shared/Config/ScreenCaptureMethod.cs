@@ -1,10 +1,10 @@
 using System;
 using System.ComponentModel;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
-    /// Which OS API backs display capture. Mirrors the values obs-express and clowd_share_region
+    /// Which OS API backs display capture. Mirrors the values prisc_recorder and prisc_share_region
     /// both accept for <c>--capture-method</c> — one enum for both because the two binaries share
     /// the flag, its spellings and its default deliberately, so a user who pins one can pin both.
     /// <para>Windows only: neither binary has a choice to make on macOS, where ScreenCaptureKit is

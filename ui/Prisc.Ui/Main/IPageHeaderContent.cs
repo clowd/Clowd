@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// A page that puts a control of its own beside the window's page title — the Recent page's

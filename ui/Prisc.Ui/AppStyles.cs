@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Platform;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd
+namespace Prisc
 {
     public static class AppStyles
     {
@@ -40,7 +40,7 @@ namespace Clowd
         /// HUD never reaches the accent at all). The value is the OS accent (or the user's pick) put
         /// through <see cref="AccentColors.EnsureContrastWithWhite"/> — the same correction the overlay
         /// makes to the pick <see cref="CaptureArguments"/> hands it as <c>--accent-color</c>
-        /// (clowd_capture/src/accent.rs), so a Clowd window sitting beside the overlay is painted the
+        /// (crates/prisc_capture/src/accent.rs), so a Prisc window sitting beside the overlay is painted the
         /// same blue rather than a near-miss.
         ///
         /// The correction is not cosmetic. Every one of these surfaces puts white ink — glyphs and
@@ -55,25 +55,25 @@ namespace Clowd
         /// glows — where the darkened fill reads as muddy rather than as the user's color.
         /// </summary>
         public static Color CapturePickedAccentColor
-            => SettingsRoot.Current?.General?.GetPickedAccentColor() ?? AccentColors.ClowdBlue;
+            => SettingsRoot.Current?.General?.GetPickedAccentColor() ?? AccentColors.PriscBlue;
 
         public static IBrush CheckerboardBrushSmall => Util.CheckerBrushes.Light;
 
         // The .ico's multi-resolution frames are ideal for the Windows taskbar/title bar, but
         // ico decoding isn't reliable across Avalonia's non-Windows backends, so the tray and
         // window icons load a plain PNG everywhere else. (The macOS dock/bundle icon is separate:
-        // it comes from clowd-default.icns baked into the .app by vpk pack — see release.yml.)
+        // it comes from prisc-default.icns baked into the .app by vpk pack — see release.yml.)
         public static WindowIcon AppIcon
             => _appIcon ??= new WindowIcon(AssetLoader.Open(new Uri(OperatingSystem.IsWindows()
-                ? "avares://Clowd.Ui/Assets/clowd-default.ico"
-                : "avares://Clowd.Ui/Assets/clowd-default.png")));
+                ? "avares://Prisc.Ui/Assets/prisc-default.ico"
+                : "avares://Prisc.Ui/Assets/prisc-default.png")));
 
         // Tray icon. The macOS menu bar wants the white glyph (it sits on a dark/translucent bar);
         // the Windows notification area keeps the full-color icon.
         public static WindowIcon TrayIcon
             => _trayIcon ??= new WindowIcon(AssetLoader.Open(new Uri(OperatingSystem.IsWindows()
-                ? "avares://Clowd.Ui/Assets/clowd-default.ico"
-                : "avares://Clowd.Ui/Assets/clowd-white.png")));
+                ? "avares://Prisc.Ui/Assets/prisc-default.ico"
+                : "avares://Prisc.Ui/Assets/prisc-white.png")));
 
         public static string UiDateTimePattern
             => CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern + " " +

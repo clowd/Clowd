@@ -18,7 +18,7 @@ use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopEl
 use super::mac_corners::{self, CgBounds};
 use super::{HitTestResult, ObstructedWindow, WindowCaptureRef, WindowTarget};
 use crate::system::MonitorInfo;
-use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;

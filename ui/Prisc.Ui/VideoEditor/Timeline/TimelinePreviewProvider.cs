@@ -9,14 +9,14 @@ using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Thumbs;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Thumbs;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The timeline's window onto the SDK's preview-visual services: one

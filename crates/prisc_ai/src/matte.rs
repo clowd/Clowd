@@ -222,7 +222,7 @@ mod tests {
     fn read_f32(path: &std::path::Path) -> Vec<f32> {
         let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         // The one reader here whose length is not ours to guarantee — it takes
-        // whatever file CLOWD_AI_REF_DIR points at. `chunks_exact` dropped a
+        // whatever file PRISC_AI_REF_DIR points at. `chunks_exact` dropped a
         // partial trailing float silently, which would have left the parity
         // assertions comparing against a misaligned fixture and blaming the
         // model; `as_chunks` hands the tail back, so a truncated fixture fails
@@ -238,12 +238,12 @@ mod tests {
     /// Opt-in parity check against ORT-generated reference tensors: three
     /// 1080p frames through the real model must reproduce the reference
     /// alpha to well under one 8-bit step on average. Set
-    /// CLOWD_AI_REF_DIR and run with --release — debug inference is
+    /// PRISC_AI_REF_DIR and run with --release — debug inference is
     /// minutes per frame.
     #[test]
     fn env_rvm_reference_parity() {
-        let Ok(dir) = std::env::var("CLOWD_AI_REF_DIR") else {
-            eprintln!("SKIP {}: CLOWD_AI_REF_DIR not set", module_path!());
+        let Ok(dir) = std::env::var("PRISC_AI_REF_DIR") else {
+            eprintln!("SKIP {}: PRISC_AI_REF_DIR not set", module_path!());
             return;
         };
         let dir = std::path::Path::new(&dir);

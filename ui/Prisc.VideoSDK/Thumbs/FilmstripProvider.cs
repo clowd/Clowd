@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Clowd.VideoSDK.Thumbs
+namespace Prisc.VideoSDK.Thumbs
 {
     /// <summary>
     /// One filmstrip frame: the source instant it stands for and its pixels, BGRA top-down with

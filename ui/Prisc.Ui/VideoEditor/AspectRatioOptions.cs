@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>One entry of the top bar's aspect-ratio picker. <see cref="ToString"/> is the label:
     /// the dropdown lists items with the default template, exactly as the image editor's dash and

@@ -1,12 +1,12 @@
 using System;
 using System.Linq;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The inspector over the two input-overlay item kinds: which sections each lights (the cursor

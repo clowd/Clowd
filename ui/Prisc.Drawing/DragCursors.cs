@@ -1,6 +1,6 @@
 using Avalonia.Input;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     /// <summary>
     /// Drag cursors browsers provide but Windows does not ship among its system cursors. All

@@ -4,7 +4,7 @@ using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// The toggle half of a <see cref="TraySplitToggle"/> (spec §5): an ordinary <see cref="Button"/>

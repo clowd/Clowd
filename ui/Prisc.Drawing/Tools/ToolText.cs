@@ -11,9 +11,9 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     internal class ToolText : ToolBase
     {

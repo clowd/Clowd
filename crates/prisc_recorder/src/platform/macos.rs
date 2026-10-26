@@ -1,6 +1,6 @@
 //! macOS platform implementation (DESIGN §2.2) — the recorder-specific
 //! remainder: cursor/mouse sampling and audio/webcam helpers. The monitor /
-//! paths / display-capture layer moved to the shared `obs-platform` crate
+//! paths / display-capture layer moved to the shared `prisc_obs_platform` crate
 //! (SHARE_REGION_PLAN §4.3). Coordinates are CG points (§1.1 capture space).
 
 use std::ffi::c_void;
@@ -11,7 +11,7 @@ use objc2_core_graphics::{
     kCGWindowOwnerName, kCGWindowOwnerPID, CGEvent, CGEventSource, CGEventSourceStateID,
     CGMouseButton, CGWindowListCopyWindowInfo, CGWindowListOption,
 };
-use obs::data::ObsData;
+use prisc_obs::data::ObsData;
 
 use crate::cursor_sprite::SpriteEvent;
 
@@ -467,7 +467,7 @@ mod cursor_shape {
     /// `canvas_scale` — the factor the canvas (and therefore the sprite) is
     /// sized by.
     fn target_backing_scale() -> f64 {
-        obs_platform::enumerate_monitors()
+        prisc_obs_platform::enumerate_monitors()
             .iter()
             .map(|m| m.scale)
             .fold(1.0f64, f64::max)
@@ -526,7 +526,7 @@ mod cursor_shape {
 const WINDOW_LAYERS: std::ops::RangeInclusive<i64> = 0..=8;
 
 /// Minimum dimension (points) for a window to be worth reporting; the mirror
-/// of the Windows `MIN_WINDOW_SIZE`, and the same value Clowd's
+/// of the Windows `MIN_WINDOW_SIZE`, and the same value Prisc's
 /// `mac_walker.rs` uses.
 const MIN_WINDOW_SIZE: f64 = 25.0;
 
@@ -677,7 +677,7 @@ pub fn enumerate_windows() -> Vec<WindowInfo> {
                 continue;
             }
             // Fully transparent helper surfaces draw nothing. An *absent*
-            // alpha counts as opaque here, where Clowd's `mac_walker.rs` drops
+            // alpha counts as opaque here, where Prisc's `mac_walker.rs` drops
             // the window: this sidecar wants geometry for anything that might
             // be on screen, and a missing key is not evidence of invisibility.
             if dict_f64(dict, kCGWindowAlpha).unwrap_or(1.0) <= 0.0 {
@@ -722,7 +722,7 @@ pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
     // NOT obs_source_create != null: libobs creates a placeholder source for
     // unknown ids; get_display_name returns null exactly when unregistered.
     let sck_registered =
-        !unsafe { obs_sys::obs_source_get_display_name(c"sck_audio_capture".as_ptr()) }.is_null();
+        !unsafe { prisc_obs_sys::obs_source_get_display_name(c"sck_audio_capture".as_ptr()) }.is_null();
     if sck_registered {
         let settings = ObsData::new();
         settings.set_int("type", 0);

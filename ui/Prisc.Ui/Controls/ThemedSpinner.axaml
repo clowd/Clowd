@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:controls="using:Clowd.UI.Controls">
+                    xmlns:controls="using:Prisc.UI.Controls">
 
     <!-- Both spinners are in the template and one is hidden; ThemedSpinner.SyncVisibility picks.
          Building them on demand instead would mean rebinding on every chrome switch for a control

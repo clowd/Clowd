@@ -2,10 +2,10 @@ using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The arrow's third (mid) handle bows the shaft into a quadratic bezier. Pins the parts that

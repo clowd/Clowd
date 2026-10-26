@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Ink;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Ink;
 using Xunit;
-using Sample = Clowd.Drawing.Graphics.GraphicBrush.Sample;
-using StrokePoint = Clowd.Drawing.Ink.FreehandStroke.StrokePoint;
+using Sample = Prisc.Drawing.Graphics.GraphicBrush.Sample;
+using StrokePoint = Prisc.Drawing.Ink.FreehandStroke.StrokePoint;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The freehand outline algorithm is a pure function of (samples, size), so it is pinned here

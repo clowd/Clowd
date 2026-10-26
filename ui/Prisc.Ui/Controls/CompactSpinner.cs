@@ -7,7 +7,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The Compact chrome's numeric spinner (70x22), used in the editor properties bar and the

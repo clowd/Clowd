@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Prisc.Legacy;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>One provider's exported state. Deliberately loose: every field is optional and
-    /// unknown fields are ignored on read, so a string written by a newer (or older) Clowd still
+    /// unknown fields are ignored on read, so a string written by a newer (or older) Prisc still
     /// imports whatever it has in common with this build.</summary>
     public class UploadTransferEntry
     {
@@ -33,7 +34,7 @@ namespace Clowd.Config
         /// JSON shape changes in a way readers need to know about.</summary>
         public int Schema { get; set; } = 1;
 
-        /// <summary>Clowd version that produced the string. Informational only.</summary>
+        /// <summary>Prisc version that produced the string. Informational only.</summary>
         public string App { get; set; }
 
         public DateTimeOffset Exported { get; set; }
@@ -56,8 +57,8 @@ namespace Clowd.Config
     /// [19..35) tag       16 bytes (authenticates the header too, so the version cannot be edited)
     /// [35..)   ciphertext
     /// </code>
-    /// <para>The key is compiled into Clowd, so this is <b>obfuscation, not secrecy</b>: anyone
-    /// with a copy of Clowd (or a disassembler) can read an exported string. Its job is only to
+    /// <para>The key is compiled into Prisc, so this is <b>obfuscation, not secrecy</b>: anyone
+    /// with a copy of Prisc (or a disassembler) can read an exported string. Its job is only to
     /// stop credentials being legible to someone who stumbles across the text with no context —
     /// pasted into the wrong chat window, left in a clipboard manager, and so on. Treat an
     /// exported string as being as sensitive as the credentials inside it. A baked-in RSA keypair
@@ -184,6 +185,10 @@ namespace Clowd.Config
                 return false;
 
             payload.Providers ??= new Dictionary<string, UploadTransferEntry>(StringComparer.Ordinal);
+
+            // strings exported before the rename key the built-in provider by its old type name;
+            // the import UI looks entries up by the current one.
+            LegacyClowd.NormalizeProviderKeys(payload.Providers);
             return true;
         }
 

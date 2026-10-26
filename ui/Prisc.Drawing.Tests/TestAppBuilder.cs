@@ -1,10 +1,10 @@
 using Avalonia;
 using Avalonia.Headless;
-using Clowd.Drawing.Tests;
+using Prisc.Drawing.Tests;
 
 [assembly: AvaloniaTestApplication(typeof(TestAppBuilder))]
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     public class TestAppBuilder
     {
@@ -13,7 +13,7 @@ namespace Clowd.Drawing.Tests
             // DrawingCanvas reads tool settings from SettingsRoot.Current, which the app assigns at
             // startup. Assign it here, before any Avalonia test runs, so a test class that builds a
             // canvas without its own setup does not depend on another class having run first.
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
             return AppBuilder.Configure<Application>()
                              .UseSkia()
                              .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });

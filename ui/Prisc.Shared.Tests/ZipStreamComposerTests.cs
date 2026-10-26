@@ -5,14 +5,14 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.Upload;
+using Prisc.Upload;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class ZipStreamComposerTests : IDisposable
     {
-        private readonly string _root = Path.Combine(Path.GetTempPath(), "ClowdZipTests", Guid.NewGuid().ToString("N"));
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "PriscZipTests", Guid.NewGuid().ToString("N"));
 
         public ZipStreamComposerTests()
         {

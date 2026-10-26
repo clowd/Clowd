@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="using:Clowd.UI.Controls"
-             x:Class="Clowd.UI.Controls.LayersPanel">
+             xmlns:controls="using:Prisc.UI.Controls"
+             x:Class="Prisc.UI.Controls.LayersPanel">
 
     <!-- the row buttons use the shared RowIconButtonTheme (Controls/RowIconButton.axaml), which the
          timeline track headers use too — see LayersPanel.axaml.cs

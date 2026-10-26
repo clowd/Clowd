@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Locates the external <c>clowd_ai</c> AI inference binary (person mattes and audio
-    /// denoise — see <c>Clowd.VideoSDK.Ai</c>). Probe order: the <c>CLOWD_AI_PATH</c>
-    /// environment variable, then alongside the Clowd.Ui executable (release layout), then walking
+    /// Locates the external <c>prisc_ai</c> AI inference binary (person mattes and audio
+    /// denoise — see <c>Prisc.VideoSDK.Ai</c>). Probe order: the <c>PRISC_AI_PATH</c>
+    /// environment variable, then alongside the Prisc.Ui executable (release layout), then walking
     /// up from the app base directory to a cargo workspace root and probing <c>target/debug</c>
     /// followed by <c>target/release</c> (debug-time layout) — the same order
     /// <see cref="CaptureBinaryLocator"/> uses for the capture overlay. The app installs this as
@@ -15,10 +15,10 @@ namespace Clowd.UI
     /// </summary>
     public static class AiBinaryLocator
     {
-        public const string EnvVarName = "CLOWD_AI_PATH";
+        public const string EnvVarName = "PRISC_AI_PATH";
 
         public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "clowd_ai.exe" : "clowd_ai";
+            OperatingSystem.IsWindows() ? "prisc_ai.exe" : "prisc_ai";
 
         /// <summary>The binary, ready to spawn — see <see cref="HelperBinary.EnsureExecutable"/>.
         /// The overload below stays a pure path lookup.</summary>
@@ -33,7 +33,7 @@ namespace Clowd.UI
             if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
                 return Path.GetFullPath(envVarValue);
 
-            // (b) next to the Clowd.Ui executable (release layout copies the binary alongside)
+            // (b) next to the Prisc.Ui executable (release layout copies the binary alongside)
             var local = Path.Combine(baseDirectory, BinaryFileName);
             if (File.Exists(local))
                 return Path.GetFullPath(local);

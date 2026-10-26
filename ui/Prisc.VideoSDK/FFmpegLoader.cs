@@ -3,18 +3,18 @@ using System.IO;
 using FFmpeg.AutoGen.Abstractions;
 using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
 
-namespace Clowd.VideoSDK
+namespace Prisc.VideoSDK
 {
     /// <summary>
     /// One-time process-wide initialization of the dynamically-loaded FFmpeg bindings.
-    /// Resolution order for the native DLL directory: the <c>CLOWD_FFMPEG_PATH</c> environment
+    /// Resolution order for the native DLL directory: the <c>PRISC_FFMPEG_PATH</c> environment
     /// variable, then the caller-supplied resolver (the app passes the directory of the
-    /// obs-express binary — the FFmpeg DLLs ship alongside it). Clowd.VideoSDK deliberately has no
-    /// reference to Clowd.Ui, so the fallback is a delegate rather than ObsBinaryLocator itself.
+    /// prisc_recorder binary — the FFmpeg DLLs ship alongside it). Prisc.VideoSDK deliberately has no
+    /// reference to Prisc.Ui, so the fallback is a delegate rather than ObsBinaryLocator itself.
     /// </summary>
     public static class FFmpegLoader
     {
-        public const string EnvVarName = "CLOWD_FFMPEG_PATH";
+        public const string EnvVarName = "PRISC_FFMPEG_PATH";
 
         private static readonly object _sync = new object();
         private static bool _attempted;
@@ -66,7 +66,7 @@ namespace Clowd.VideoSDK
 
                     if (String.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
                     {
-                        _failureReason = $"No FFmpeg directory found (set {EnvVarName} or install obs-express).";
+                        _failureReason = $"No FFmpeg directory found (set {EnvVarName} or install the recorder).";
                         return false;
                     }
 

@@ -11,7 +11,7 @@ use crate::settings::CapturerSettings;
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedCursor, CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::telemetry::startup::StartupTimings;
-use clowd_rust_core::geometry::ScreenPointF;
+use prisc_rust_core::geometry::ScreenPointF;
 
 type WalkerLatch = Arc<Latch<Arc<WindowWalker>>>;
 type PeekImagesLatch = Arc<Latch<Vec<Arc<WindowPeekImage>>>>;

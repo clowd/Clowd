@@ -3,17 +3,17 @@ use std::path::{Path, PathBuf};
 
 // Two jobs, one per platform. Windows: compile the app icon into the exe (see
 // `build_windows`). macOS: rpaths so the produced binary (and the unit-test harness — the
-// geometry tests link libobs via obs-sys, whose references are all @rpath) can
+// geometry tests link libobs via prisc_obs_sys, whose references are all @rpath) can
 // launch. cargo does not propagate `cargo:rustc-link-arg` between packages, so
-// each executable-producing crate repeats these; see obs-express's build.rs
+// each executable-producing crate repeats these; see prisc_recorder's build.rs
 // for the canonical set.
 //
 // Deliberately NOT repeated here: the obs-ffmpeg-mux patch and the dep-dylib
-// staging (obs-express's build script owns those, and this binary neither
+// staging (prisc_recorder's build script owns those, and this binary neither
 // muxes nor is dlopen'd), and the Windows runtime copy — on Windows the DLLs
-// obs-express stages into the shared cargo profile dir sit next to this exe
+// prisc_recorder stages into the shared cargo profile dir sit next to this exe
 // too. The plugin path needs no baking either: default_obs_paths and its
-// env!("OBS_PLUGIN_DIR") live in obs-platform, which bakes it itself.
+// env!("OBS_PLUGIN_DIR") live in prisc_obs_platform, which bakes it itself.
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os == "macos" {
@@ -24,7 +24,7 @@ fn main() {
     }
 }
 
-/// Compiles `assets/clowd.ico` into the executable as icon resource 1.
+/// Compiles `assets/prisc.ico` into the executable as icon resource 1.
 ///
 /// Two things read it: the shell, which shows the lowest-numbered RT_GROUP_ICON
 /// as the file's icon in Explorer, the taskbar and Alt+Tab; and `ui/win32.rs`,
@@ -33,14 +33,14 @@ fn main() {
 /// has to FIND in a meeting app's picker, and pickers list a window by its icon
 /// and title, so the icon is functional here rather than decorative.
 ///
-/// Deliberately this crate's build script and no other: clowd_share_region is the
-/// only binary in the workspace that is a Clowd-branded user-facing window.
+/// Deliberately this crate's build script and no other: prisc_share_region is the
+/// only binary in the workspace that is a Prisc-branded user-facing window.
 /// `rustc-link-arg-bins` keeps the .res on this crate's own bin link line.
 ///
 /// Hand-rolled rather than via a build dependency: this is one invocation of
 /// the Windows SDK's `rc.exe`, which the MSVC toolchain already implies.
 fn build_windows() {
-    println!("cargo:rerun-if-changed=assets/clowd.ico");
+    println!("cargo:rerun-if-changed=assets/prisc.ico");
 
     // The GNU toolchain has no rc.exe (its equivalent is windres, with a
     // different command line). Nothing else here is msvc-specific, so rather
@@ -51,7 +51,7 @@ fn build_windows() {
     }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let icon = manifest_dir.join("assets/clowd.ico");
+    let icon = manifest_dir.join("assets/prisc.ico");
     assert!(icon.exists(), "missing app icon: {}", icon.display());
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -67,7 +67,7 @@ fn build_windows() {
     std::fs::write(&rc_path, rc_source).expect("write icon.rc");
 
     let rc_exe = find_rc_exe().expect(
-        "rc.exe not found: the Windows SDK is required to build clowd_share_region's app icon",
+        "rc.exe not found: the Windows SDK is required to build prisc_share_region's app icon",
     );
     let status = std::process::Command::new(&rc_exe)
         .arg("/nologo")
@@ -131,9 +131,9 @@ fn build_macos() {
 }
 
 /// The prebuilt obs-deps `lib` dir (FFmpeg et al.) — same probe as
-/// obs-express's build script.
+/// prisc_recorder's build script.
 fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    obs_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
+    prisc_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
         .into_iter()
         .map(|dir| dir.join("lib"))
         .find(|lib| lib.exists())

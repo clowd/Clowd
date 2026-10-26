@@ -5,7 +5,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Clowd.VideoSDK.Thumbs
+namespace Prisc.VideoSDK.Thumbs
 {
     /// <summary>
     /// The on-disk waveform cache: one <c>waveform-{sourceKey}-{streamIndex}.cwf</c> per analyzed

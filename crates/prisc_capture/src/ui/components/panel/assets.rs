@@ -46,7 +46,7 @@ impl std::fmt::Debug for Svg {
 macro_rules! svg {
     ($name:literal) => {
         Svg {
-            uri: concat!("bytes://clowd/", $name),
+            uri: concat!("bytes://prisc/", $name),
             bytes: include_bytes!(concat!("../../../../assets/icons/", $name)),
         }
     };
@@ -70,10 +70,10 @@ pub const SEARCH: Svg = svg!("search.svg");
 pub const IMAGE_SEARCH: Svg = svg!("image_search.svg");
 pub const BACK: Svg = svg!("back.svg");
 
-/// The Clowd logo drawn as the tray emblem at the head of the strip
+/// The Prisc logo drawn as the tray emblem at the head of the strip
 /// (16-unit canvas, brand blue baked in). NOT a button icon: it has no
 /// button, no hover and no click, and is drawn at its own (larger) size.
-pub const CLOWD_LOGO: Svg = svg!("clowd-logo.svg");
+pub const PRISC_LOGO: Svg = svg!("prisc-logo.svg");
 
 /// Every mark the tray can draw, button icons and the emblem alike.
 pub const ALL: &[&Svg] = &[
@@ -90,7 +90,7 @@ pub const ALL: &[&Svg] = &[
     &SEARCH,
     &IMAGE_SEARCH,
     &BACK,
-    &CLOWD_LOGO,
+    &PRISC_LOGO,
 ];
 
 /// Load every mark at the tray's icon size once per pass — a cache hit

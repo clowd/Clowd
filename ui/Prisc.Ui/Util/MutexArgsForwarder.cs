@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     public class CommandLineEventArgs : EventArgs
     {
@@ -28,7 +28,7 @@ namespace Clowd.Util
         public event EventHandler<CommandLineEventArgs> ArgsReceived;
 
         /// <summary>A second instance was launched with no arguments — the user clicked the app
-        /// icon while Clowd was already running and expects a window, not silence.</summary>
+        /// icon while Prisc was already running and expects a window, not silence.</summary>
         public event EventHandler ShowMainWindowRequested;
 
         private const int MaxMessageSize = 1024 * 1024;
@@ -64,7 +64,7 @@ namespace Clowd.Util
             bool created;
             try
             {
-                _mutex = new Mutex(false, Constants.ClowdMutex, out created);
+                _mutex = new Mutex(false, Constants.PriscMutex, out created);
             }
             catch (Exception ex)
             {
@@ -133,7 +133,7 @@ namespace Clowd.Util
         private async Task SendArgsToRemote(string[] args)
         {
             var req = new SendArgsRequestModel(Process.GetCurrentProcess().Id, args);
-            var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(req, ClowdUiJsonContext.Default.SendArgsRequestModel));
+            var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(req, PriscUiJsonContext.Default.SendArgsRequestModel));
             var prefix = new byte[4];
             BinaryPrimitives.WriteInt32LittleEndian(prefix, payload.Length);
 
@@ -150,7 +150,7 @@ namespace Clowd.Util
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                using var pipeClient = new NamedPipeClientStream(".", Constants.ClowdNamedPipe, PipeDirection.Out, PipeOptions.Asynchronous);
+                using var pipeClient = new NamedPipeClientStream(".", Constants.PriscNamedPipe, PipeDirection.Out, PipeOptions.Asynchronous);
                 await pipeClient.ConnectAsync(timeout.Token);
                 await pipeClient.WriteAsync(prefix, 0, prefix.Length, timeout.Token);
                 await pipeClient.WriteAsync(payload, 0, payload.Length, timeout.Token);
@@ -169,7 +169,7 @@ namespace Clowd.Util
             async Task AcceptConnection()
             {
                 using var server = new NamedPipeServerStream(
-                    Constants.ClowdNamedPipe, PipeDirection.In, NamedPipeServerStream.MaxAllowedServerInstances,
+                    Constants.PriscNamedPipe, PipeDirection.In, NamedPipeServerStream.MaxAllowedServerInstances,
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
                 await server.WaitForConnectionAsync(token.Token);
@@ -183,7 +183,7 @@ namespace Clowd.Util
                 var payload = new byte[length];
                 await ReadExactAsync(server, payload, token.Token);
 
-                var req = JsonSerializer.Deserialize(Encoding.UTF8.GetString(payload), ClowdUiJsonContext.Default.SendArgsRequestModel);
+                var req = JsonSerializer.Deserialize(Encoding.UTF8.GetString(payload), PriscUiJsonContext.Default.SendArgsRequestModel);
                 if (req != null)
                     ProcessArgs(req.pid, req.args, remote: true);
             }
@@ -234,7 +234,7 @@ namespace Clowd.Util
 
             try
             {
-                var stale = Path.Combine(Path.GetTempPath(), "CoreFxPipe_" + Constants.ClowdNamedPipe);
+                var stale = Path.Combine(Path.GetTempPath(), "CoreFxPipe_" + Constants.PriscNamedPipe);
                 if (File.Exists(stale))
                     File.Delete(stale);
             }

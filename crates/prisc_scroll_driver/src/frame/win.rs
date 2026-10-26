@@ -30,7 +30,7 @@ use windows::Win32::{
 };
 
 use super::Frame;
-use clowd_rust_core::geometry::ScreenRect;
+use prisc_rust_core::geometry::ScreenRect;
 
 /// Capture `rect`. Dimensions are already known to be positive — the shared
 /// wrapper in [`crate::frame`] rejects a degenerate rect before this runs.

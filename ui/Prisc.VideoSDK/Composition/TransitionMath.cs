@@ -1,7 +1,7 @@
 using System;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The evaluated effect of an item's entry/exit transitions at one instant, in

@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The asynchronous readback contract (IReadbackRing): the synchronous ring on the CPU
     // backend everywhere, the Direct3D 12 copy-queue ring when a GPU is present. Scenes are

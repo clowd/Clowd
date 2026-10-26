@@ -7,7 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>Which OKLCH channel an <see cref="OkLchChart"/> holds fixed (the other two are its axes).</summary>
     public enum OkLchChartPlane

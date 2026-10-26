@@ -1,16 +1,16 @@
 using System;
-using Clowd.UI.VideoEditor;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The preview's placement math against the new effect content: effect items are never
     /// composed, so <see cref="ItemPlacement"/> must resolve them to "no placement" (which is how
     /// the preview expresses "no gizmo") and the click hit-test must select straight through an
     /// effect row to the picture actually drawn beneath it — the window arranges the zoom focus
-    /// reticle, not the gizmo, on a zoom selection. (Clowd.Ui exposes its internals to this
+    /// reticle, not the gizmo, on a zoom selection. (Prisc.Ui exposes its internals to this
     /// project.)
     /// </summary>
     public class EffectPreviewOverlayTests

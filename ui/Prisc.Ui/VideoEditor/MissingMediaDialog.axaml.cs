@@ -7,13 +7,13 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
-using Clowd.UI.Helpers;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.UI.Helpers;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Path = System.IO.Path;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// Shown when an edit is opened whose media has moved: one row per missing (referenced) source,

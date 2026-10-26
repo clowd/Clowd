@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>
 /// Places an item's picture on the output canvas. Geometry is normalized against the canvas so a

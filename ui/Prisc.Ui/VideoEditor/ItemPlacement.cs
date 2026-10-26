@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.Geometry2D;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.Geometry2D;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
-using ModelTransform = Clowd.VideoSDK.Model.Transform;
+using ModelTransform = Prisc.VideoSDK.Model.Transform;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// Where <c>FrameComposer</c> draws one item, in canvas coordinates, plus the two numbers a

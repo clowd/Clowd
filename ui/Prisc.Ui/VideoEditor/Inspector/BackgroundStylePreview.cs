@@ -8,10 +8,10 @@ using Avalonia.Media;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Avalonia.Threading;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 
-namespace Clowd.UI.VideoEditor.Inspector
+namespace Prisc.UI.VideoEditor.Inspector
 {
     /// <summary>
     /// One background style's actual wallpaper, in one of its themes, drawn through the very

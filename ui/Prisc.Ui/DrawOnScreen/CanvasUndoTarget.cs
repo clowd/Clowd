@@ -1,7 +1,7 @@
 using System.Windows.Input;
-using Clowd.Drawing;
+using Prisc.Drawing;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// One screen's canvas as <see cref="DrawHistory"/> steps it back. The canvas keeps its own undo

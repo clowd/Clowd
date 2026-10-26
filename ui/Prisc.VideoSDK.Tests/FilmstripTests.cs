@@ -6,12 +6,12 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Thumbs;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Thumbs;
 using Xunit;
-using ThumbnailRequest = Clowd.UI.VideoEditor.Timeline.ThumbnailRequest;
+using ThumbnailRequest = Prisc.UI.VideoEditor.Timeline.ThumbnailRequest;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // Real-decode round trips for the timeline filmstrip. The fixture is one distinct solid color
     // per second, so a thumbnail's own center pixel says which second it was decoded from: every
@@ -67,7 +67,7 @@ namespace Clowd.VideoSDK.Tests
             if (_fixture != null)
                 return _fixture;
 
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-filmstrip-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-filmstrip-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using (var writer = new Mp4Writer(path, new Mp4WriterOptions
@@ -311,7 +311,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         // The quantizer is written out twice — here in the SDK and as ThumbnailRequest.QuantizeInterval
-        // in Clowd.Ui — because the SDK cannot reference the UI. The two grids MUST agree or the
+        // in Prisc.Ui — because the SDK cannot reference the UI. The two grids MUST agree or the
         // timeline asks for instants the provider never decodes; this is the only thing keeping the
         // copies honest, so it compares the real implementations rather than restating the contract.
         [Fact]

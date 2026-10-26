@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>Something with its own undo stack that <see cref="DrawHistory"/> can step back;
     /// in practice one screen's drawing canvas.</summary>

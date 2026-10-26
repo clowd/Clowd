@@ -1,9 +1,9 @@
 using System;
-using Clowd;
-using Clowd.UI.DrawOnScreen;
+using Prisc;
+using Prisc.UI.DrawOnScreen;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The keystroke overlay's held-key bookkeeping runs behind the hook on the event thread, so the

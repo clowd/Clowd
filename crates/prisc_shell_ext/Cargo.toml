@@ -1,7 +1,7 @@
 [package]
-name = "clowd_shell_ext"
-# The installed DLL is named ClowdShellExt_<this version>.dll, so bump this on any behavior change - a fresh filename is what keeps Explorer's lock on the old copy from blocking an update.
-version = "1.0.3"
+name = "prisc_shell_ext"
+# The installed DLL is named PriscShellExt_<this version>.dll, so bump this on any behavior change - a fresh filename is what keeps Explorer's lock on the old copy from blocking an update.
+version = "1.0.4"
 authors.workspace = true
 repository.workspace = true
 license.workspace = true

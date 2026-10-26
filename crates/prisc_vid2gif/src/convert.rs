@@ -12,7 +12,7 @@ use std::path::Path;
 use std::ptr;
 
 use anyhow::{anyhow, bail, Context, Result};
-use ffmpeg_sys as ff;
+use prisc_ffmpeg_sys as ff;
 
 use crate::cancel::{CancelToken, Cancelled};
 use crate::progress::PassProgress;

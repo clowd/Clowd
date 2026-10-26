@@ -1,6 +1,6 @@
 using Avalonia.Media;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The color dialog's standard swatches, a 12 x 5 grid laid out as one: every column is a hue,

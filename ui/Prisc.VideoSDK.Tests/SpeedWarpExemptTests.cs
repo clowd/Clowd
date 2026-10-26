@@ -1,13 +1,13 @@
 using System;
 using System.Linq;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
-using Clowd.VideoSDK.Render;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
+using Prisc.VideoSDK.Render;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="MediaContent.SpeedWarpExempt"/>: a clip on the output clock. The mixing half

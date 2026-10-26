@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// Small bounded queue of decoded frames between a track's decode thread and its present

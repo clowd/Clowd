@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Shared handling for the helper executables Clowd ships beside itself and spawns —
-    /// obs-express, vid2gif, clowd_ai, Clowd.VideoRender.
+    /// Shared handling for the helper executables Prisc ships beside itself and spawns —
+    /// prisc_recorder, prisc_vid2gif, prisc_ai, Prisc.VideoRender.
     /// </summary>
     public static class HelperBinary
     {
@@ -13,9 +13,9 @@ namespace Clowd.UI
         /// Makes sure <paramref name="path"/> can actually be executed, and returns it unchanged so
         /// it can wrap a resolver's result. No-op on Windows, which has no execute bit.
         /// <para>
-        /// The obs-express payload arrives as a zip, and the macOS one carries mode 644 on all
+        /// The recorder payload arrives as a zip, and the macOS one carries mode 644 on all
         /// three of its executables — the archive was built somewhere the bit was already lost, so
-        /// `obs-express`, `vid2gif` and `obs-ffmpeg-mux` unpack un-runnable and every recording and
+        /// `prisc_recorder`, `prisc_vid2gif` and `obs-ffmpeg-mux` unpack un-runnable and every recording and
         /// GIF export dies at Process.Start with "permission denied". Restoring it here rather than
         /// waiting on the packaging fix costs one stat, keeps working once the payload is fixed, and
         /// covers any other archive that loses the bit on the way to a user's disk.

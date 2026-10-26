@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     /// <summary>
     /// Exception thrown by DrawingCanvas Load and Save methods

@@ -1,9 +1,9 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>
     /// Selection Rectangle graphics object, used for group selection.

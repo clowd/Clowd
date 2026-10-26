@@ -5,19 +5,19 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using Avalonia.Threading;
-using static Clowd.UI.HotkeysAbi;
+using static Prisc.UI.HotkeysAbi;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// <see cref="IGlobalTriggerHost"/> over the native clowd_hotkeys library (WH_KEYBOARD_LL on
+    /// <see cref="IGlobalTriggerHost"/> over the native prisc_hotkeys library (WH_KEYBOARD_LL on
     /// Windows, a CGEventTap on macOS). Owned by <see cref="HotkeyManager"/>. The hook starts
     /// lazily on the first registration, observer or recording, and runs until the host is
     /// disposed on app exit — on macOS restarting by itself if it cannot start or dies.
     /// </summary>
     /// <remarks>
     /// The hook itself decides what to swallow and only queues what happened; nothing here runs on
-    /// it. A dedicated event thread (<c>clowd-hotkeys-events</c>) blocks on the queue, hands key
+    /// it. A dedicated event thread (<c>prisc-hotkeys-events</c>) blocks on the queue, hands key
     /// edges to the observers right there, and posts everything else to the UI thread — hotkey
     /// actions, recording progress and status changes.
     /// <para>Native-call discipline: registrations and recording sessions can outlive the host
@@ -37,7 +37,7 @@ namespace Clowd.UI
     /// which <c>AXIsProcessTrusted</c> reports live, so there the host polls it while the hook is
     /// down (<see cref="RetryStart"/>) and, once it reads as granted, starts a new hook and moves
     /// the registrations and observers onto it: their statuses flip back to registered without a
-    /// restart. A poll rather than window activation, because Clowd mostly lives in the tray — the
+    /// restart. A poll rather than window activation, because Prisc mostly lives in the tray — the
     /// user grants in System Settings and goes straight back to the app they were in. Windows
     /// failures, and a failed event queue anywhere, are specific to the process and stay put.
     /// A stale grant (granted as far as <c>AXIsProcessTrusted</c> says, yet the tap gets no keys)
@@ -66,8 +66,8 @@ namespace Clowd.UI
         /// still answers yes) but no longer honours. Granting again does nothing; re-adding does.
         /// The System page shows Accessibility as granted, so this must not ask for it.</summary>
         internal const string StaleGrantMessage =
-            "Could not start the global hotkey listener. macOS lists Clowd as allowed to use Accessibility, " +
-            "but the permission no longer works: remove Clowd from System Settings → Privacy & Security → " +
+            "Could not start the global hotkey listener. macOS lists Prisc as allowed to use Accessibility, " +
+            "but the permission no longer works: remove Prisc from System Settings → Privacy & Security → " +
             "Accessibility and add it again; the hotkeys start working as soon as you do.";
 
         /// <summary>The longest a stale grant waits between attempts, in retry ticks (32 s): each
@@ -154,7 +154,7 @@ namespace Clowd.UI
                     _staleGrantTicks = _staleGrantSkip = 0;
                     return;
                 }
-                // a stale grant heals only when the user re-adds Clowd: back off rather than make
+                // a stale grant heals only when the user re-adds Prisc: back off rather than make
                 // a tap every tick, but never stop, since re-adding mid-run is what heals it
                 if (_staleGrantSkip > 0)
                 {
@@ -494,14 +494,14 @@ namespace Clowd.UI
             _staleGrantTicks = _staleGrantSkip = 0;
             _pump = new Thread(() => Pump(handle, generation))
             {
-                Name = "clowd-hotkeys-events",
+                Name = "prisc-hotkeys-events",
                 IsBackground = true,
                 Priority = ThreadPriority.AboveNormal,
             };
             _pump.Start();
         }
 
-        /// <summary>Why <c>clowd_hotkeys_start</c> refused, from its code and the message it
+        /// <summary>Why <c>prisc_hotkeys_start</c> refused, from its code and the message it
         /// copied out. A missing permission (macOS only) asks for no restart: the host picks the
         /// grant up by itself.</summary>
         internal static string StartError(int result, string detail) => result switch
@@ -520,12 +520,12 @@ namespace Clowd.UI
         /// (<paramref name="restartsItself"/>, macOS) asks for no restart.</summary>
         internal static string StoppedError(string reason, bool restartsItself = false) =>
             "The global hotkey listener stopped" + (String.IsNullOrEmpty(reason) ? "." : ": " + reason.TrimEnd('.') + ".")
-            + (restartsItself ? "" : " Restart Clowd to use global hotkeys again.");
+            + (restartsItself ? "" : " Restart Prisc to use global hotkeys again.");
 
         /// <summary>What a call reports when it finds the hook dead before its Stopped arrived.</summary>
         private string StoppedMessage => StoppedError("", restartsItself: _isMacOS);
 
-        /// <summary>What a <c>clowd_hotkeys_next_event</c> result means for the event thread.</summary>
+        /// <summary>What a <c>prisc_hotkeys_next_event</c> result means for the event thread.</summary>
         internal enum NextEvent
         {
             /// <summary>An event was filled in.</summary>

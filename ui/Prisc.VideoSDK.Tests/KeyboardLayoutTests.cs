@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The keyboard overlay's layout engine: run segmentation (pause break, Enter/Esc, chords),
     // the atoms a row draws as (words, keycaps, chord pluses), the entry/linger/exit windows,
@@ -575,7 +575,7 @@ namespace Clowd.VideoSDK.Tests
 
         private static string WriteCapture(params string[] lines)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-keys-test-{Guid.NewGuid():N}.jsonl");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-keys-test-{Guid.NewGuid():N}.jsonl");
             File.WriteAllLines(path, lines);
             return path;
         }

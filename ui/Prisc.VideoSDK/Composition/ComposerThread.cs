@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The context-affine thread that owns an <see cref="ISurfaceFactory"/> (and therefore the
@@ -31,7 +31,7 @@ namespace Clowd.VideoSDK.Composition
             _log = log;
             _thread = new Thread(() => ThreadProc(preferGpu))
             {
-                Name = "Clowd.VideoSDK Composer",
+                Name = "Prisc.VideoSDK Composer",
                 IsBackground = true,
                 Priority = priority,
             };

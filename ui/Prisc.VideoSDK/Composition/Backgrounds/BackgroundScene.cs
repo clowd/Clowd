@@ -2,11 +2,11 @@ using System;
 using System.Threading;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// One (style, theme) of the background library as something that draws itself: a
-    /// wallpaper in its own viewBox space, at a loop phase. The composer and Clowd.Ui's tiles
+    /// wallpaper in its own viewBox space, at a loop phase. The composer and Prisc.Ui's tiles
     /// place it with <see cref="BackgroundRenderer.DrawScene"/>; nothing else needs to know
     /// whether it is a still or a loop.
     /// </summary>

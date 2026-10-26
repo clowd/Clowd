@@ -5,13 +5,13 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Window base class for all Clowd shell windows. Replaces the WPF SystemThemedWindow /
+    /// Window base class for all Prisc shell windows. Replaces the WPF SystemThemedWindow /
     /// CustomUiWindow style combination: app icon, default sizing, dynamic theme background
     /// and a system-backdrop transparency hint. Dark titlebar / WM hooks are not ported —
     /// Avalonia follows the system theme via SemiTheme + RequestedThemeVariant=Default.
@@ -249,7 +249,7 @@ namespace Clowd.UI
         /// wrapped).</remarks>
         private static double FirstRowHeight(Control strip)
         {
-            if (strip is Clowd.UI.Controls.DockAndWrapPanel panel
+            if (strip is Prisc.UI.Controls.DockAndWrapPanel panel
                 && !Double.IsNaN(panel.ItemHeight) && panel.ItemHeight > 0)
                 return panel.ItemHeight;
 

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// The precomputed timeline-time ↔ source-time mapping <see cref="CompositionPlayer"/> plays a

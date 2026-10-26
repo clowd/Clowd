@@ -2,10 +2,10 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor.Inspector
+namespace Prisc.UI.VideoEditor.Inspector
 {
     /// <summary>
     /// One surround tile's picture: a small rounded chip — the same size and place in every tile, so

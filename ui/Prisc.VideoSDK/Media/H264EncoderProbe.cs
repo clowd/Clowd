@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>
     /// Decides what <see cref="VideoEncoder.Auto"/> means on this machine, and opens encoder

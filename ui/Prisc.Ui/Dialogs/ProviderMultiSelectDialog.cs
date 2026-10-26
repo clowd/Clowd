@@ -7,7 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media.Imaging;
 
-namespace Clowd.UI.Dialogs
+namespace Prisc.UI.Dialogs
 {
     /// <summary>
     /// A checklist of upload providers, laid out like <see cref="ProviderSelectionDialog"/> but

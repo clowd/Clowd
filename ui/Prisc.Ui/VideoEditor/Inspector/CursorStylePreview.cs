@@ -5,10 +5,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 
-namespace Clowd.UI.VideoEditor.Inspector
+namespace Prisc.UI.VideoEditor.Inspector
 {
     /// <summary>
     /// One cursor style's actual arrow, in one of its colorways, drawn from the same

@@ -5,9 +5,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>
     /// What a top level is, as far as hiding it from screen capture goes. Each kind is hidden from
@@ -23,7 +23,7 @@ namespace Clowd.UI.Helpers
         /// "Toolbars" up.</summary>
         Toolbar,
 
-        /// <summary>Clowd's own tooltip chips and cards, and the frame around a recorded or shared
+        /// <summary>Prisc's own tooltip chips and cards, and the frame around a recorded or shared
         /// region (BorderWindow and the share-region resize overlay that stands in for it). Hidden
         /// from "Tooltips" up.</summary>
         Tooltip,
@@ -35,7 +35,7 @@ namespace Clowd.UI.Helpers
     }
 
     /// <summary>
-    /// Keeps Clowd's own windows out of screen capture according to
+    /// Keeps Prisc's own windows out of screen capture according to
     /// <see cref="SettingsGeneral.HideFromScreenCapture"/>. Installed once for the whole app: every
     /// <see cref="Window"/> and every popup (tooltips, menus, flyouts) is picked up by class handlers
     /// as it opens, so no window decides for itself whether it is hidden — it only declares what it

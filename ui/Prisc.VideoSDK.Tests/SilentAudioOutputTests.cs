@@ -1,10 +1,10 @@
 using System;
 using System.Threading;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     public class SilentAudioOutputTests
     {

@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Ink
+namespace Prisc.Drawing.Ink
 {
     /// <summary>
     /// Turns the brush's raw pointer samples into a filled outline polygon. A port of

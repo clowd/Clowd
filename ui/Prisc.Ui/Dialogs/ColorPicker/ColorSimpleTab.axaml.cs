@@ -6,10 +6,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.UI.Converters;
-using Clowd.Util;
+using Prisc.UI.Converters;
+using Prisc.Util;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The color dialog's Simple tab (brief §5): the hue/saturation wheel with the eyedropper beside

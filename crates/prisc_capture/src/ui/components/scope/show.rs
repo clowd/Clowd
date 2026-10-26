@@ -17,7 +17,7 @@ use crate::selection::Hittest;
 use crate::ui::components::scope::layout;
 use crate::ui::components::InputCtx;
 use crate::ui::shared::{aabb_intersects, UiMonitor};
-use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRectF};
+use prisc_rust_core::geometry::{RectExt, ScreenPointF, ScreenRectF};
 
 /// Dark outline behind every bright element, so the reticle reads against
 /// both light and dark desktops.
@@ -145,7 +145,7 @@ mod tests {
     use super::*;
     use crate::interaction::InteractionState;
     use crate::ui::shared::monitor_index_at;
-    use clowd_rust_core::geometry::ScreenRect;
+    use prisc_rust_core::geometry::ScreenRect;
 
     /// Two monitors at the same scale, so the reach either side of the
     /// seam is measured in the same units the cursor's monitor sets.

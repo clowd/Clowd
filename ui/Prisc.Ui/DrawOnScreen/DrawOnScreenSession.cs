@@ -12,14 +12,14 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Reactive;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.Drawing;
-using Clowd.UI.Helpers;
-using Clowd.Util;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.UI.Helpers;
+using Prisc.Util;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// A draw-on-screen session: one <see cref="DrawOnScreenWindow"/> per monitor, the
@@ -114,7 +114,7 @@ namespace Clowd.UI.DrawOnScreen
 
         /// <summary>
         /// The tray action: starts a session, or brings the live one back to the front (its windows
-        /// are topmost, but a later topmost window — another Clowd overlay, say — can have covered
+        /// are topmost, but a later topmost window — another Prisc overlay, say — can have covered
         /// them). Only the toolbar's Close discards the ink.
         /// </summary>
         public static void Toggle() => Start(frozen: false);
@@ -699,7 +699,7 @@ namespace Clowd.UI.DrawOnScreen
         }
 
         /// <summary>A settings animation as the SDK's <see cref="Transition"/>; the settings enums
-        /// mirror the SDK's by name (Clowd.Shared cannot reference it).</summary>
+        /// mirror the SDK's by name (Prisc.Shared cannot reference it).</summary>
         private static Transition RowTransition(DrawKeystrokeAnimation kind, int durationMs, DrawKeystrokeEasing easing) => new()
         {
             Kind = Enum.TryParse<TransitionKind>(kind.ToString(), out var k) ? k : TransitionKind.None,

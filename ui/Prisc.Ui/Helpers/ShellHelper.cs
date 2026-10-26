@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>Small shell helpers for OS interactions Avalonia does not expose directly.</summary>
     public static class ShellHelper

@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Avalonia.Media;
 
-namespace Clowd.Drawing.History
+namespace Prisc.Drawing.History
 {
     /// <summary>
     /// history.json encode/decode (persistent undo, MIGRATION.md §8.8). The document is

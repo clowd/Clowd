@@ -1,6 +1,6 @@
 //! The button panel shown once a selection is captured: one floating tray
 //! (the design shared with the C# recording / share-region / scrolling
-//! strips) holding the Clowd emblem, the "W × H" readout and the action
+//! strips) holding the Prisc emblem, the "W × H" readout and the action
 //! buttons in their groups (the accent group first, then the grey ones),
 //! anchored beneath or beside the selection.
 //!

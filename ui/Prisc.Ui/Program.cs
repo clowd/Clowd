@@ -4,12 +4,14 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Fonts;
 using Avalonia.Skia;
-using Clowd.Config;
-using Clowd.Drawing;
-using Clowd.UI;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.Legacy;
+using Prisc.UI;
+using Prisc.UI.Legacy;
 using Velopack;
 
-namespace Clowd
+namespace Prisc
 {
     internal static class Program
     {
@@ -44,6 +46,10 @@ namespace Clowd
         [STAThread]
         public static void Main(string[] args)
         {
+            // a telemetry opt-out set under the old variable name keeps working; set at process
+            // level before anything reads it, so child processes inherit the new name too.
+            LegacyClowd.BridgeTelemetryOptOut(SentryConfig.OptOutVariable);
+
             // First thing in the process, so a crash anywhere below is reported — including inside
             // the Velopack hooks. Disposing flushes the queue on a normal exit; the hook paths
             // terminate the process instead, which is why the panic-time flush lives in the SDK's
@@ -57,7 +63,7 @@ namespace Clowd
 
             // fast callbacks are Windows-only, which is exactly the platform where auto-start is on
             // by default (SettingsGeneral.DefaultRegisterAutoStart). Registering here means the login
-            // item exists before Clowd first runs, and is gone again after an uninstall even though
+            // item exists before Prisc first runs, and is gone again after an uninstall even though
             // the settings file lingers.
             if (OperatingSystem.IsWindows())
             {
@@ -75,6 +81,10 @@ namespace Clowd
                     // turned these off (a corrupt file falls back to the same defaults install uses).
                     .OnAfterUpdateFastCallback(_ =>
                     {
+                        // an update from the pre-rename app leaves its Run value and verbs behind
+                        LegacyClowdShellCleanup.RunRegistryCleanup();
+
+                        // also copies the pre-rename settings forward (SettingsService.Load())
                         SettingsRoot settings;
                         try { settings = SettingsService.Load(); }
                         catch { settings = new SettingsRoot(); }
@@ -86,6 +96,10 @@ namespace Clowd
                         var contextMenu = settings.ShouldRegisterExplorerContextMenu;
                         ExplorerContextMenuManager.Sync(contextMenu);
                         SparsePackageManager.Sync(contextMenu);
+
+                        // last: it spawns PowerShell, and the hook is killed after 15s, which must
+                        // never cost the registrations above. Startup retries whatever it misses.
+                        LegacyClowdShellCleanup.RunPackageCleanup();
                     })
                     // the settings file outlives an uninstall, so all registrations have to be torn
                     // down explicitly here or they linger pointing at a deleted executable.
@@ -94,13 +108,15 @@ namespace Clowd
                         AutoStartManager.TrySetEnabled(false);
                         ExplorerContextMenuManager.TrySetEnabled(false);
                         SparsePackageManager.TrySetEnabled(false);
+                        LegacyClowdShellCleanup.RunRegistryCleanup();
+                        LegacyClowdShellCleanup.RunPackageCleanup();
                     });
             }
 
             velopack.Run();
 
             // Records whether this process was accidentally started with the shell extension's
-            // package identity (clowd/Clowd#83) — the one launch-origin difference that is
+            // package identity (priscapp/Prisc#83) — the one launch-origin difference that is
             // invisible from the outside once the app is running.
             if (OperatingSystem.IsWindows())
                 SparsePackageManager.ReportProcessIdentity();
@@ -110,7 +126,7 @@ namespace Clowd
             // the editor stores fonts by plain family name; these two ship with the app, so
             // resolve their names to the embedded faces instead of whatever the OS has installed
             FontUtil.RegisterEmbeddedFamily(EditorFonts.Text, "fonts:Inter#Inter");
-            FontUtil.RegisterEmbeddedFamily(EditorFonts.Numeric, "avares://Clowd.Ui/Assets/Fonts#Cascadia Mono");
+            FontUtil.RegisterEmbeddedFamily(EditorFonts.Numeric, "avares://Prisc.Ui/Assets/Fonts#Cascadia Mono");
 
             // single-instance enforcement (MutexArgsForwarder) and argument forwarding happens
             // in App.OnFrameworkInitializationCompleted (NiceDialog needs the Avalonia platform
@@ -146,10 +162,10 @@ namespace Clowd
                          // Avalonia.Fonts.Inter package used, so "fonts:Inter#Inter" resolves as before.
                          .ConfigureFonts(fonts => fonts.AddFontCollection(new EmbeddedFontCollection(
                              new Uri("fonts:Inter", UriKind.Absolute),
-                             new Uri("avares://Clowd.Ui/Assets/Fonts/Inter", UriKind.Absolute))))
+                             new Uri("avares://Prisc.Ui/Assets/Fonts/Inter", UriKind.Absolute))))
                          // Registering only adds the family; this makes it what every control
                          // without its own FontFamily draws in, on every OS. The Rust capture
-                         // overlay bundles the same Inter release (clowd_capture/assets/fonts),
+                         // overlay bundles the same Inter release (crates/prisc_capture/assets/fonts),
                          // so its button panel reads like the C# strips.
                          .With(new FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
                          // tray-resident: launch without a dock icon; MacDockIcon flips the

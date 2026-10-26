@@ -9,7 +9,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.Upload.Accelerate
+namespace Prisc.Upload.Accelerate
 {
     /// <summary>
     /// Speaks the clwd.app "accelerated upload" wire protocol (REFACTOR.md §4): create a session,

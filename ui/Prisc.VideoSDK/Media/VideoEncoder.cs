@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>
     /// Which H.264 encoder writes a render's video stream. The output is always H.264 in an mp4
@@ -34,7 +34,7 @@ namespace Clowd.VideoSDK.Media
 
     /// <summary>
     /// The wire spellings of <see cref="VideoEncoder"/> — the <c>"encoder"</c> sibling of the job
-    /// file <see cref="Editing.ProjectFileWriter"/> writes and <c>Clowd.VideoRender</c> reads.
+    /// file <see cref="Editing.ProjectFileWriter"/> writes and <c>Prisc.VideoRender</c> reads.
     /// Lower-case, like the file's other siblings (<c>output</c>, <c>crf</c>); parsing ignores
     /// case so a hand-edited file is not rejected for a capital, but nothing else is forgiven —
     /// an unknown value is a loader error, not a silent default.

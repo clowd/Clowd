@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Rendering
+namespace Prisc.Drawing.Rendering
 {
     /// <summary>
     /// Options for one <see cref="SceneRenderer"/> pass. Screen: UiScale = CanvasUiElementScale,

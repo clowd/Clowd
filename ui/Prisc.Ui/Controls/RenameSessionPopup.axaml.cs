@@ -4,7 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The flyout that renames a session — what the Recent page lists it as and what both editors

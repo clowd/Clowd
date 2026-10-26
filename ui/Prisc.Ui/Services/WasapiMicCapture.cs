@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>
     /// The Windows <see cref="MicCapture"/>: WASAPI shared mode through NAudio's

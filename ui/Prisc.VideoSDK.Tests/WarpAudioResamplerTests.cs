@@ -1,11 +1,11 @@
 using System;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
-using Clowd.VideoSDK.Render;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
+using Prisc.VideoSDK.Render;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The render pipeline's warp-aware audio stage against a fake IAudioSource — no FFmpeg:
     // bit-exact passthrough where the warp does not bend time (identity warps AND speed-1 spans

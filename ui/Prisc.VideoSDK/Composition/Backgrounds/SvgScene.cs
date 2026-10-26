@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// A wallpaper SVG as an immutable tree that draws itself onto any canvas at any loop phase:

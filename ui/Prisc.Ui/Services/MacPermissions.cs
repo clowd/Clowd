@@ -5,13 +5,13 @@ using System.Runtime.Versioning;
 using System.Threading;
 using Avalonia.Threading;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// The two macOS privacy permissions Clowd cannot work without, and the only place that talks
+    /// The two macOS privacy permissions Prisc cannot work without, and the only place that talks
     /// to TCC. Backs the Permissions group on the System settings page, the gate in front of the
     /// capture overlay (<see cref="ScreenCapturePage"/>) and the eyedropper
-    /// (<see cref="Clowd.Util.ScreenPixels"/>).
+    /// (<see cref="Prisc.Util.ScreenPixels"/>).
     /// </summary>
     /// <remarks>
     /// Every member is safe to call on any platform: off macOS <see cref="IsRelevant"/> is false
@@ -21,8 +21,8 @@ namespace Clowd.UI
     /// Screen Recording is checked with <c>CGPreflightScreenCaptureAccess</c> and Accessibility
     /// with <c>AXIsProcessTrusted</c>. Both are per-app decisions recorded in TCC against the
     /// bundle, not the individual executable, which is what makes a check here meaningful for the
-    /// out-of-process Rust capturer: <c>clowd_capture</c> ships inside
-    /// <c>Clowd.app/Contents/MacOS</c> and is launched by us, so TCC holds Clowd.app responsible
+    /// out-of-process Rust capturer: <c>prisc_capture</c> ships inside
+    /// <c>Prisc.app/Contents/MacOS</c> and is launched by us, so TCC holds Prisc.app responsible
     /// for its captures.
     ///
     /// Requesting is one-shot by OS design. <c>CGRequestScreenCaptureAccess</c> shows the system
@@ -288,7 +288,7 @@ namespace Clowd.UI
     /// finds the permission missing: the shell's own hook (<see cref="NativeHotkeyHost"/>) or the
     /// standby capturer's hotkey status (<see cref="CaptureStandbySupervisor"/> — in warm-capture
     /// mode the shell may own no gesture at all). Neither the crate nor the capturer prompts
-    /// (<c>AXIsProcessTrusted</c> never does), yet the prompt is what puts Clowd in the
+    /// (<c>AXIsProcessTrusted</c> never does), yet the prompt is what puts Prisc in the
     /// Accessibility list, sparing the user its '+' button. Once, because the alert comes back on
     /// every <see cref="MacPermissions.Request"/> while the permission is missing.
     /// </summary>
@@ -324,7 +324,7 @@ namespace Clowd.UI
         }
     }
 
-    /// <summary>The macOS privacy permissions Clowd needs. See <see cref="MacPermissions"/>.</summary>
+    /// <summary>The macOS privacy permissions Prisc needs. See <see cref="MacPermissions"/>.</summary>
     internal enum MacPermission
     {
         /// <summary>Privacy &amp; Security → Screen &amp; System Audio Recording.</summary>

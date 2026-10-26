@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     /// <summary>The zip-or-direct routing decision for a set of dropped/shared paths.</summary>
     internal sealed class ZipDecision

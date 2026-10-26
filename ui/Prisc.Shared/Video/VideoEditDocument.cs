@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Clowd.VideoSDK
+namespace Prisc.VideoSDK
 {
     /// <summary>The outline the webcam overlay is masked to. Migrates onto the v2 model's
     /// <c>MaskShape</c>, which the compositor rasterizes itself (v1 handed the render tool a

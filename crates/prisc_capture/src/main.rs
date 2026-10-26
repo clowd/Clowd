@@ -51,7 +51,7 @@ fn main() -> anyhow::Result<()> {
     system::raise_process_priority_class();
     let mut args = settings::CliArgs::parse();
     let logger = cycle_logger::CycleLogger::install();
-    let _sentry = clowd_rust_core::telemetry::init("clowd_capture");
+    let _sentry = prisc_rust_core::telemetry::init("prisc_capture");
     system::SystemInterop::init();
     let mut event_loop = build_event_loop()?;
 
@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()> {
         prologue.sentry_ready = process_start.elapsed();
         let result = run_cycle(args, process_start, prologue, &mut event_loop);
         if let Err(err) = &result {
-            clowd_rust_core::telemetry::capture_error(err);
+            prisc_rust_core::telemetry::capture_error(err);
         }
         logger.end_session();
         return result;
@@ -85,12 +85,12 @@ fn main() -> anyhow::Result<()> {
         logger.begin_session(&session_dir);
         let result = run_cycle(args.clone(), t_start, Prologue::default(), &mut event_loop);
         if let Err(err) = result {
-            clowd_rust_core::telemetry::capture_error(&err);
+            prisc_rust_core::telemetry::capture_error(&err);
             logger.end_session();
             return Err(err);
         }
         logger.end_session();
-        standby::emit!("CLOWD_CAPTURE_FINISHED {}", session_dir.display());
+        standby::emit!("PRISC_CAPTURE_FINISHED {}", session_dir.display());
         args.session_dir = None;
         args.capture_mode = settings::CaptureMode::Region;
         args.video = false;
@@ -167,7 +167,7 @@ fn build_event_loop() -> anyhow::Result<winit::event_loop::EventLoop<()>> {
     let event_loop = winit::event_loop::EventLoop::new()?;
     // winit takes the process's keyboard and mouse raw input when the loop is built, and Windows
     // gives a process one raw-input target per device. Nothing here reads DeviceEvents, and the
-    // standby hotkey hook's watchdog (clowd_hotkeys) needs keyboard raw input to notice a hook
+    // standby hotkey hook's watchdog (prisc_hotkeys) needs keyboard raw input to notice a hook
     // Windows removed silently — so hand it back before the hook starts.
     event_loop.listen_device_events(winit::event_loop::DeviceEvents::Never);
     Ok(event_loop)

@@ -1,13 +1,13 @@
 //! Shared platform layer (SHARE_REGION_PLAN §4.3): monitor enumeration, obs
-//! paths, display-capture settings and region math, extracted from obs-express
-//! so every binary in the workspace (obs-express, clowd_share_region) uses the
+//! paths, display-capture settings and region math, extracted from prisc_recorder
+//! so every binary in the workspace (prisc_recorder, prisc_share_region) uses the
 //! same primitives. All platform modules (Windows, macOS, Linux) expose
 //! identical public signatures (DESIGN §2.2) and are re-exported at the crate
 //! root; shared, platform-neutral types and the pure monitor-matching logic
 //! live here.
 //!
 //! Everything recorder-specific (cursor sprites, mouse sampling, audio/webcam
-//! helpers) deliberately stays behind in obs-express.
+//! helpers) deliberately stays behind in prisc_recorder.
 
 use std::path::PathBuf;
 
@@ -31,7 +31,7 @@ pub use self::linux::*;
 /// How the display-capture source decides *what* it records, from the
 /// platform's `display_capture_mode()`.
 ///
-/// Every capture API obs-express drove before the Linux port takes a monitor
+/// Every capture API prisc_recorder drove before the Linux port takes a monitor
 /// the caller chose (`display_capture_settings` + the region planner). A
 /// Wayland session has no such API: compositors do not let a client name an
 /// output to capture, so libobs' `pipewire-screen-capture-source` asks

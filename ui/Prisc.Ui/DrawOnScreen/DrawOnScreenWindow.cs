@@ -8,12 +8,12 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.Config;
-using Clowd.Drawing;
-using Clowd.Localization;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.Localization;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// One screen's draw-on-screen canvas: a borderless, transparent, topmost window covering exactly
@@ -46,7 +46,7 @@ namespace Clowd.UI.DrawOnScreen
         private static readonly TimeSpan HideFade = TimeSpan.FromMilliseconds(150);
 
         // the backdrop's zoom range, and one wheel notch's step within it: the capture overlay's
-        // magnifier (clowd_capture's ZOOM_STEP and ZOOM_MAX), so both zoom alike
+        // magnifier (prisc_capture's ZOOM_STEP and ZOOM_MAX), so both zoom alike
         private const double MaxBackdropZoom = 256;
         private const double WheelZoomStep = 2;
 

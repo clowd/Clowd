@@ -2,11 +2,11 @@
 using Avalonia;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.PlatformUtil;
-using Clowd.UI.Controls.Tray;
+using Prisc.PlatformUtil;
+using Prisc.UI.Controls.Tray;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The placement cascades behind every floating tray, pinned rung by rung.

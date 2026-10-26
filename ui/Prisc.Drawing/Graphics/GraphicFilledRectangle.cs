@@ -1,9 +1,9 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     // no Stroke/DashStyle skills: this type has no stroke, only a fill (LineWidth is fixed at 0).
     [GraphicDesc("Filled Rectangle", Skills = Skill.Color | Skill.Angle | Skill.Radius)]

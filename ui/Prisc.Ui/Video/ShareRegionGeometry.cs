@@ -1,7 +1,7 @@
 using System;
-using Clowd.PlatformUtil;
+using Prisc.PlatformUtil;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The pure geometry of a share-region resize drag, in CAPTURE space (physical px in
@@ -13,7 +13,7 @@ namespace Clowd.UI
     /// </summary>
     public static class ShareRegionGeometry
     {
-        /// <summary>The helper's own floor (clowd-share-region <c>mirror.rs</c> MIN_REGION).</summary>
+        /// <summary>The helper's own floor (prisc_share_region <c>mirror.rs</c> MIN_REGION).</summary>
         public const int MinSide = 64;
 
         // Handle indices, the video editor gizmo's numbering (TransformGizmoControl): 0-3 corners

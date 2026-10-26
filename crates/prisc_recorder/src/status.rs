@@ -227,7 +227,7 @@ impl FpsWindow {
 /// ALL attached video encoders, so a two-track recording reads 2x the real
 /// frame rate. Both counters are normalized to per-track values here.
 pub fn start_status_thread(
-    output_ptr: *mut obs_sys::obs_output_t,
+    output_ptr: *mut prisc_obs_sys::obs_output_t,
     video_tracks: i64,
     clock: Arc<RecordingClock>,
     stop_flag: Arc<AtomicBool>,
@@ -235,7 +235,7 @@ pub fn start_status_thread(
     let ptr_addr = output_ptr as usize;
     let tracks = video_tracks.max(1);
     std::thread::spawn(move || {
-        let ptr = ptr_addr as *const obs_sys::obs_output_t;
+        let ptr = ptr_addr as *const prisc_obs_sys::obs_output_t;
         let mut fps_window = FpsWindow::default();
         while !stop_flag.load(Ordering::Relaxed) {
             std::thread::sleep(Duration::from_millis(1000));
@@ -246,8 +246,8 @@ pub fn start_status_thread(
                 continue;
             }
 
-            let total_raw = unsafe { obs_sys::obs_output_get_total_frames(ptr) } as i64;
-            let dropped_raw = unsafe { obs_sys::obs_output_get_frames_dropped(ptr) } as i64;
+            let total_raw = unsafe { prisc_obs_sys::obs_output_get_total_frames(ptr) } as i64;
+            let dropped_raw = unsafe { prisc_obs_sys::obs_output_get_frames_dropped(ptr) } as i64;
             let time_ms = clock.elapsed_ms();
 
             // Feed the window the raw counter and scale the resulting rate:

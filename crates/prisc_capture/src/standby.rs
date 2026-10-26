@@ -33,7 +33,7 @@ macro_rules! emit {
 }
 pub(crate) use emit;
 
-/// CLOWD_IPC_ERROR is a line protocol like everything else, but its payload is
+/// PRISC_IPC_ERROR is a line protocol like everything else, but its payload is
 /// arbitrary error text (clap help output spans many lines) — collapse it so a
 /// diagnostic can never masquerade as, or interrupt, another protocol line.
 fn emit_ipc_error(message: &str) {
@@ -41,7 +41,7 @@ fn emit_ipc_error(message: &str) {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    emit!("CLOWD_IPC_ERROR {flat}");
+    emit!("PRISC_IPC_ERROR {flat}");
 }
 
 /// `Pause` stops the hotkeys while the shell records a gesture. It is applied
@@ -76,7 +76,7 @@ impl Standby {
         // Usually the process stays up for tray captures, reports the error on
         // every gesture and, on macOS, keeps retrying the hook. A failure only
         // this process has (Windows) exits so the shell's crash accounting
-        // falls back to its own clowd_hotkeys registrations.
+        // falls back to its own prisc_hotkeys registrations.
         if let Some(err) = hotkeys.listener_error() {
             if hotkeys.should_bail() {
                 anyhow::bail!("standby hotkey hook unavailable: {err}");
@@ -147,7 +147,7 @@ impl Standby {
             self.hotkeys.drain();
             while self.input_rx.try_recv().is_ok() {}
 
-            emit!("CLOWD_STANDBY_READY");
+            emit!("PRISC_STANDBY_READY");
             let mut app = StandbyApp {
                 args,
                 hotkeys: &mut self.hotkeys,
@@ -183,7 +183,7 @@ impl Standby {
                 Ok(session) => {
                     args.session_dir = Some(session.clone());
                     args.capture_mode = selected;
-                    emit!("CLOWD_SESSION {}", session.display());
+                    emit!("PRISC_SESSION {}", session.display());
                     return Ok(true);
                 }
                 Err(err) => {
@@ -211,7 +211,7 @@ struct StandbyApp<'a> {
 
 impl StandbyApp<'_> {
     fn apply_settings(&mut self, raw_args: Vec<String>) {
-        let rejection = match CliArgs::try_parse_from(std::iter::once("clowd_capture".to_string()).chain(raw_args)) {
+        let rejection = match CliArgs::try_parse_from(std::iter::once("prisc_capture".to_string()).chain(raw_args)) {
             Ok(next) if next.standby => {
                 let statuses = self.hotkeys.apply(&next);
                 *self.args = next;
@@ -338,7 +338,7 @@ impl ApplicationHandler for StandbyApp<'_> {
 }
 
 fn report_settings_status(hotkeys: serde_json::Map<String, serde_json::Value>) {
-    emit!("CLOWD_SETTINGS_STATUS {}", serde_json::json!({ "hotkeys": hotkeys }));
+    emit!("PRISC_SETTINGS_STATUS {}", serde_json::json!({ "hotkeys": hotkeys }));
 }
 
 fn create_session_dir(root: &Path) -> anyhow::Result<PathBuf> {

@@ -1,4 +1,4 @@
-//! The driver's command line, spawned by `Clowd.Ui`
+//! The driver's command line, spawned by `Prisc.Ui`
 //! (`Scroll/ScrollDriver.cs: BuildArguments`) and documented in
 //! CAPTURE_PROTOCOL.md §2.
 //!
@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 #[derive(Debug, Parser)]
 #[command(version, about = "Prisc scrolling capture driver")]
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn flags_parse() {
         let cli = CliArgs::parse_from([
-            "clowd_scroll_driver",
+            "prisc_scroll_driver",
             "--session-dir",
             "C:/tmp/session",
             "--region",
@@ -161,7 +161,7 @@ mod tests {
         // protocol line — making scrolling capture unusable on that
         // monitor.
         let cli = CliArgs::try_parse_from([
-            "clowd_scroll_driver",
+            "prisc_scroll_driver",
             "--session-dir",
             "C:/tmp/s",
             "--region",
@@ -179,7 +179,7 @@ mod tests {
         // The shell uses the `--flag=value` single-token spelling; both
         // forms must keep parsing.
         let eq_form = CliArgs::try_parse_from([
-            "clowd_scroll_driver",
+            "prisc_scroll_driver",
             "--region=-1920,0,1920,1080",
             "--point=-960,500",
             "--hwnd=133756",
@@ -195,7 +195,7 @@ mod tests {
         // Nothing is required by the derive on purpose — see the module
         // note. `drive::DriveArgs::from_cli` is what rejects this, as a
         // protocol event.
-        let cli = CliArgs::parse_from(["clowd_scroll_driver"]);
+        let cli = CliArgs::parse_from(["prisc_scroll_driver"]);
         assert_eq!(cli.session_dir, None);
         assert_eq!(cli.region, None);
         assert_eq!(cli.point, None);

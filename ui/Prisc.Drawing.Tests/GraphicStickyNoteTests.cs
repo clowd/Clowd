@@ -11,11 +11,11 @@ using Avalonia.Data;
 using Avalonia.Styling;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Rendering;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// A sticky note lays itself out: it is a square of at least the default side, the text is drawn
@@ -146,7 +146,7 @@ namespace Clowd.Drawing.Tests
         [AvaloniaFact]
         public void InPlaceEditor_WrapsInsideTheNote_AndTracksTheFittedFont()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
             var canvas = new DrawingCanvas { Tool = ToolType.None };
             var window = new Window { Width = 1200, Height = 900, Content = canvas };
 
@@ -205,7 +205,7 @@ namespace Clowd.Drawing.Tests
         [AvaloniaFact]
         public void NewNotes_AreTiltedVerySlightly_EachDifferently()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
             var canvas = new DrawingCanvas { Tool = ToolType.None };
             var angles = Enumerable.Range(0, 40).Select(_ => new GraphicStickyNote(canvas, new Point(100, 100)).Angle).ToArray();
 
@@ -253,7 +253,7 @@ namespace Clowd.Drawing.Tests
         [AvaloniaFact]
         public void TextFromTheCanvas_TakesItsTextColorAndFill()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
             var canvas = new DrawingCanvas { Tool = ToolType.None, ObjectColor = Colors.Blue, ObjectFill = Colors.Transparent };
             var g = new GraphicText(canvas, new Point(10, 10));
             Assert.Equal(Colors.Blue, g.Foreground);

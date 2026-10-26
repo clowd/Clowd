@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// What the video editor's Render flyout offered last time, remembered so the next render is

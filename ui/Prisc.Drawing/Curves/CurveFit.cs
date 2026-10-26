@@ -16,7 +16,7 @@
 //    misrepresented as being the original software.
 // 3. This notice may not be removed or altered from any source distribution.
 
-// Modified for Clowd: vector type fixed to Avalonia.Vector / System.Double (the #if vector-type
+// Modified for Prisc: vector type fixed to Avalonia.Vector / System.Double (the #if vector-type
 // ladder from the original source has been removed).
 
 using System;
@@ -26,7 +26,7 @@ using System.Diagnostics;
 using VECTOR = Avalonia.Vector;
 using FLOAT = System.Double;
 
-namespace Clowd.Drawing.Curves
+namespace Prisc.Drawing.Curves
 {
     /// <summary>
     /// Implements a least-squares bezier curve fitting routine based on http://tog.acm.org/resources/GraphicsGems/gems/FitCurves.c with a few

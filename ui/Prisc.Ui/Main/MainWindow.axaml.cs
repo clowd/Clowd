@@ -8,13 +8,13 @@ using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI.Config;
-using Clowd.UI.Helpers;
-using Clowd.UI.Pages;
+using Prisc.Config;
+using Prisc.UI.Config;
+using Prisc.UI.Helpers;
+using Prisc.UI.Pages;
 using Ursa.Controls;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     public partial class MainWindow : SystemThemedWindow, ISettingsPage
     {
@@ -61,7 +61,7 @@ namespace Clowd.UI
                 return;
 
             var rect = new Avalonia.PixelRect(x, y, (int)w, (int)h);
-            if (!Clowd.UI.Helpers.DesktopScreens.All(this).Any(s => s.WorkingArea.Intersects(rect)))
+            if (!Prisc.UI.Helpers.DesktopScreens.All(this).Any(s => s.WorkingArea.Intersects(rect)))
                 return;
 
             WindowStartupLocation = WindowStartupLocation.Manual;
@@ -87,12 +87,12 @@ namespace Clowd.UI
 
         private void NewVideo_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Clowd.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
+            Prisc.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
         }
 
         private void NewCapture_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Clowd.App.Current.StartCapture();
+            Prisc.App.Current.StartCapture();
         }
 
         private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -129,7 +129,7 @@ namespace Clowd.UI
                 SettingsPageTab.SettingsSystem =>
                     "Choose how Prisc looks and behaves.",
                 SettingsPageTab.SettingsHotkeys =>
-                    "Global shortcuts work from anywhere, even while Clowd is in the background. An action can have more than one.",
+                    "Global shortcuts work from anywhere, even while Prisc is in the background. An action can have more than one.",
                 SettingsPageTab.SettingsCapture => GetCaptureIntroText(),
                 SettingsPageTab.SettingsRecording =>
                     "Changes apply to your next recording.",
@@ -161,7 +161,7 @@ namespace Clowd.UI
         /// "Permission Needed" while a macOS permission is missing (the Permissions group heads that
         /// page), and About turns yellow and reads "Update Available" while there is an update to
         /// download or restart into. A badged entry's label is semibold in a softer step of the icon's
-        /// color (ClowdNav*TextBrush), and its icon drops the nav's 0.8 dimming.
+        /// color (PriscNav*TextBrush), and its icon drops the nav's 0.8 dimming.
         /// Both sources are static and outlive this window, so the handlers come off in
         /// <see cref="OnClosed"/>; permissions are also re-read on activation, since they are
         /// granted over in System Settings.</summary>
@@ -189,13 +189,13 @@ namespace Clowd.UI
             var permissionMissing = MacPermissions.IsRelevant
                                     && !(MacPermissions.IsGranted(MacPermission.ScreenRecording)
                                          && MacPermissions.IsGranted(MacPermission.Accessibility));
-            SystemNavItem.Header = NavHeader(MacPermissions.NavLabel(permissionMissing), permissionMissing ? "ClowdNavDangerTextBrush" : null);
+            SystemNavItem.Header = NavHeader(MacPermissions.NavLabel(permissionMissing), permissionMissing ? "PriscNavDangerTextBrush" : null);
             SystemNavIcon.Data = (Geometry)this.FindResource(permissionMissing ? "IconNavAttention" : "IconNavGeneral");
             SetIconBrush(SystemNavIcon, ref _systemIconBrush, permissionMissing ? "SemiColorDanger" : null);
 
             var updateWaiting = UpdateService.Default.State
                 is UpdateState.UpdateAvailable or UpdateState.Downloading or UpdateState.ReadyToRestart;
-            AboutNavItem.Header = NavHeader(updateWaiting ? "Update Available" : "About", updateWaiting ? "ClowdNavWarningTextBrush" : null);
+            AboutNavItem.Header = NavHeader(updateWaiting ? "Update Available" : "About", updateWaiting ? "PriscNavWarningTextBrush" : null);
             AboutNavIcon.Data = (Geometry)this.FindResource(updateWaiting ? "IconNavUpdate" : "IconNavAbout");
             SetIconBrush(AboutNavIcon, ref _aboutIconBrush, updateWaiting ? "SemiYellow5" : null);
         }

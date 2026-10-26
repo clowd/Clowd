@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Media;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>
     /// A tapered arrow; the look lives in <see cref="ArrowShape"/>, shared with the numeric step

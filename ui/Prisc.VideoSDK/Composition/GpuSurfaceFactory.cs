@@ -1,7 +1,7 @@
 using System;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Headless GPU surface backend: a <see cref="GRContext"/> over Direct3D 12 on Windows or

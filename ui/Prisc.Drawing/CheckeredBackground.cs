@@ -5,7 +5,7 @@ using Avalonia.Media.Immutable;
 using Avalonia.Rendering;
 using Avalonia.Styling;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     /// <summary>
     /// Procedural replacement for the WPF "CheckeredLargeLightWhiteBackgroundBrush" resource

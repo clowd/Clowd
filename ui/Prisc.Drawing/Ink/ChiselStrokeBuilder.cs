@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using SkiaSharp;
-using static Clowd.Drawing.Ink.FreehandStroke;
+using static Prisc.Drawing.Ink.FreehandStroke;
 
-namespace Clowd.Drawing.Ink
+namespace Prisc.Drawing.Ink
 {
     /// <summary>
     /// The highlighter's outline: a tall rectangular tip (a chisel marker) swept along the stroke's

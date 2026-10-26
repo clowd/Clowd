@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class UploadProviderBaseTests
     {
@@ -17,7 +17,7 @@ namespace Clowd.Shared.Tests
                 ShouldDelete = true,
                 Result = new UploadResult
                 {
-                    PublicUrl = "https://example.com/clowd-test.txt",
+                    PublicUrl = "https://example.com/prisc-test.txt",
                     UploadKey = "upload-key",
                     DeleteKey = "delete-key",
                     FileName = "stored-name.txt",
@@ -26,14 +26,14 @@ namespace Clowd.Shared.Tests
 
             await provider.TestAsync(CancellationToken.None).ConfigureAwait(true);
 
-            Assert.Equal("clowd-test.txt", provider.UploadName);
-            Assert.Equal("Clowd upload test\n", Encoding.UTF8.GetString(provider.UploadedBytes));
+            Assert.Equal("prisc-test.txt", provider.UploadName);
+            Assert.Equal("Prisc upload test\n", Encoding.UTF8.GetString(provider.UploadedBytes));
             Assert.True(provider.ProgressWasProvided);
             Assert.True(provider.DeleteCalled);
             Assert.Equal("upload-key", provider.DeleteInfo.UploadKey);
             Assert.Equal("delete-key", provider.DeleteInfo.DeleteKey);
             Assert.Equal("stored-name.txt", provider.DeleteInfo.FileName);
-            Assert.Equal("https://example.com/clowd-test.txt", provider.DeleteInfo.PublicUrl);
+            Assert.Equal("https://example.com/prisc-test.txt", provider.DeleteInfo.PublicUrl);
         }
 
         [Fact]
@@ -43,7 +43,7 @@ namespace Clowd.Shared.Tests
 
             await provider.TestAsync(CancellationToken.None).ConfigureAwait(true);
 
-            Assert.Equal("clowd-test.png", provider.UploadName);
+            Assert.Equal("prisc-test.png", provider.UploadName);
             Assert.True(provider.UploadedBytes.Length > 8);
             Assert.Equal(new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }, provider.UploadedBytes[..8]);
         }

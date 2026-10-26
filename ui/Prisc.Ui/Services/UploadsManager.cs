@@ -6,9 +6,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
-using Clowd.UI.Helpers;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>A single in-flight upload. Progress and status are surfaced on the Recent page (and
     /// on an editor window) through <see cref="SessionInfo.ActiveUpload"/>. Every upload is owned by

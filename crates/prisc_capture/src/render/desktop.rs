@@ -3,7 +3,7 @@ use crate::gpu::overlay::OverlayUniforms;
 use crate::gxi;
 use crate::interaction::OcrState;
 use crate::ocr::anim;
-use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
+use prisc_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 
 /// Duration of the color to grayscale fade after the window first becomes
 /// visible — and of the OCR selection's own color→grayscale ramp, which

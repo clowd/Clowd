@@ -28,7 +28,7 @@ internal class Program
         do
         {
             di = di.Parent;
-            if (di.EnumerateFiles().Any(f => f.Name == "Clowd.slnx"))
+            if (di.EnumerateFiles().Any(f => f.Name == "Prisc.slnx"))
             {
                 found = true;
                 break;
@@ -37,11 +37,11 @@ internal class Program
 
         if (!found)
         {
-            Console.WriteLine("Cant find Clowd.slnx");
+            Console.WriteLine("Cant find Prisc.slnx");
             return;
         }
 
-        CursorFileDirectory = Path.Combine(di.FullName, "clowd_ui", "Clowd.Drawing", "Cursors");
+        CursorFileDirectory = Path.Combine(di.FullName, "ui", "Prisc.Drawing", "Cursors");
 
         if (!Directory.Exists(CursorFileDirectory))
         {
@@ -64,7 +64,7 @@ internal class Program
         CsEmbed.AppendLine("using System;");
         CsEmbed.AppendLine("using Avalonia.Input;");
         CsEmbed.AppendLine();
-        CsEmbed.AppendLine("namespace Clowd.Drawing;");
+        CsEmbed.AppendLine("namespace Prisc.Drawing;");
         CsEmbed.AppendLine();
         CsEmbed.AppendLine("public partial class CursorResources {");
 

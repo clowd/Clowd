@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace Clowd.UI.Config
+namespace Prisc.UI.Config
 {
     /// <summary>
     /// One row on the Hotkeys page. <see cref="Label"/> is the short name shown beside the
@@ -21,7 +21,7 @@ namespace Clowd.UI.Config
     /// Which hotkey actions the Hotkeys page shows, grouped and in what order. Every
     /// <see cref="HotkeyId"/> appears exactly once (a test holds it to that, so a new action cannot
     /// be left off the page). Whether a row shows is its [VisibleWhen] on
-    /// <see cref="Clowd.Config.SettingsHotkey"/>.
+    /// <see cref="Prisc.Config.SettingsHotkey"/>.
     /// </summary>
     public static class HotkeyPageLayout
     {

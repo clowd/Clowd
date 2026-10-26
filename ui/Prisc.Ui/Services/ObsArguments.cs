@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.Util;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.Util;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// The obs-express settings file (DESIGN §1.1): every tunable the recorder can change at
+    /// The prisc_recorder settings file (DESIGN §1.1): every tunable the recorder can change at
     /// runtime lives here rather than on its command line, so a settings change during WAIT is a
     /// stdin <c>configure</c> away instead of a process restart. Field names and casing are the
     /// recorder's JSON schema — every one is written on every save (a missing field means the
@@ -64,7 +64,7 @@ namespace Clowd.UI
     }
 
     /// <summary>
-    /// Maps Clowd.Ui recording state onto obs-express (DESIGN §1.1 / §4.2): the session-fixed
+    /// Maps Prisc.Ui recording state onto prisc_recorder (DESIGN §1.1 / §4.2): the session-fixed
     /// parameters go on the clap CLI, everything tunable goes into the settings file
     /// (<see cref="WriteSettingsFile"/>), which the recorder re-reads on every stdin
     /// <c>configure</c>. The region is emitted verbatim in the platform capture coordinate space
@@ -88,8 +88,8 @@ namespace Clowd.UI
         /// life of the session and the editor reads it in place.</summary>
         public const string WindowCaptureFileName = "window-capture.jsonl";
 
-        /// <summary>The color the click tracker is drawn in; obs-express's own default. Not
-        /// surfaced as a Clowd setting, but the file must carry every field.</summary>
+        /// <summary>The color the click tracker is drawn in; the recorder's own default. Not
+        /// surfaced as a Prisc setting, but the file must carry every field.</summary>
         private const string TrackerColor = "255,0,0";
 
         /// <summary>Recorder flag selecting the hybrid mp4 output (<c>mp4_output</c>), which writes
@@ -100,12 +100,12 @@ namespace Clowd.UI
 
         /// <summary>Recorder flag naming the JSONL file it should write cursor/keyboard input data
         /// into. Given together with <see cref="MultiTrackArg"/>, it also earns the mp4 a 512x512
-        /// cursor-box video track; without it the file alone would still be written, but Clowd only
+        /// cursor-box video track; without it the file alone would still be written, but Prisc only
         /// asks for input capture on recordings the editor can open.</summary>
         private const string InputCaptureArg = "--input-capture";
 
         /// <summary>Recorder flag naming the JSONL file it should write live window geometry into.
-        /// obs-express 0.9.0 and later only, and unlike the flag above it is gated on a capability
+        /// prisc_recorder 0.9.0 and later only, and unlike the flag above it is gated on a capability
         /// probe rather than passed on faith: clap rejects an unknown argument with a usage error
         /// and exit 2 during parsing, before one line of protocol is written, so guessing wrong
         /// costs the entire recording rather than the sidecar. See <see cref="ObsCapabilities"/>.</summary>
@@ -117,7 +117,7 @@ namespace Clowd.UI
 
         /// <summary>libobs carries at most six audio tracks (its mixer/encoder limit), and the
         /// recorder refuses to start when <see cref="MultiTrackArg"/> is given with more devices
-        /// than that. Clowd lists at most one speaker and one microphone, so this is a guard, not a
+        /// than that. Prisc lists at most one speaker and one microphone, so this is a guard, not a
         /// case that arises today.</summary>
         private const int MaxAudioTracks = 6;
 
@@ -195,7 +195,7 @@ namespace Clowd.UI
             if (settings == null || settings.Mode != RecordingMode.Studio)
                 return false;
 
-            // libobs' own cap. Clowd configures at most one speaker and one microphone, so this
+            // libobs' own cap. Prisc configures at most one speaker and one microphone, so this
             // never bites today; if it ever did, the recorder would refuse to start with the flag,
             // and a flattened recording beats no recording.
             return AudioDeviceCount(settings) <= MaxAudioTracks;
@@ -262,7 +262,7 @@ namespace Clowd.UI
                 WebcamDevice = UsesWebcam(settings) ? settings.WebcamDeviceId : "",
             };
 
-            File.WriteAllText(path, JsonSerializer.Serialize(model, ClowdUiJsonContext.Default.ObsSettingsJson));
+            File.WriteAllText(path, JsonSerializer.Serialize(model, PriscUiJsonContext.Default.ObsSettingsJson));
         }
 
         private static string[] DeviceList(string deviceId)

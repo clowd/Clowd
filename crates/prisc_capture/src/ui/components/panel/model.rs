@@ -1010,7 +1010,7 @@ mod tests {
         assert_eq!(members[0].1.command, Command::Upload);
     }
 
-    /// UPLOAD is a real button with the paper-plane mark; the Clowd logo
+    /// UPLOAD is a real button with the paper-plane mark; the Prisc logo
     /// is the tray emblem and must never be a button icon — the emblem is
     /// drawn at its own size, from `widgets::emblem`, with no button
     /// around it.
@@ -1022,10 +1022,10 @@ mod tests {
             .find(|d| d.command == Command::Upload)
             .expect("the capture strip has an UPLOAD button");
         assert_eq!(upload.icon.uri, assets::UPLOAD.uri);
-        assert_ne!(assets::UPLOAD.uri, assets::CLOWD_LOGO.uri);
+        assert_ne!(assets::UPLOAD.uri, assets::PRISC_LOGO.uri);
         for set in PanelButtonSet::ALL {
             for def in set.defs() {
-                assert_ne!(def.icon.uri, assets::CLOWD_LOGO.uri, "the emblem must not be a button icon");
+                assert_ne!(def.icon.uri, assets::PRISC_LOGO.uri, "the emblem must not be a button icon");
             }
         }
     }
@@ -1035,9 +1035,9 @@ mod tests {
     /// the canvas must be square (16 x 16 as authored — the rasteriser
     /// reports the SVG's own point size as `source_size`).
     #[test]
-    fn clowd_logo_parses() {
-        let image = egui_extras::image::load_svg_bytes_with_size(assets::CLOWD_LOGO.bytes, exact(ICON_PX), &Default::default())
-            .expect("clowd-logo.svg failed to rasterise");
+    fn prisc_logo_parses() {
+        let image = egui_extras::image::load_svg_bytes_with_size(assets::PRISC_LOGO.bytes, exact(ICON_PX), &Default::default())
+            .expect("prisc-logo.svg failed to rasterise");
         assert_eq!(image.size, [ICON_PX as usize; 2]);
         assert_eq!(image.source_size, egui::vec2(16.0, 16.0));
     }

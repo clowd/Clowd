@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The decisions the recording strip makes about its capture sources, with the settings, the

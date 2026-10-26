@@ -4,13 +4,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // AudioMixWorker × TimeWarp: under a warp the worker's stream domain is output time — each
     // device frame's project position comes from the warp's spans and the mixed project frames
@@ -51,7 +51,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string SineFixture(double freq, float amplitude, int seconds)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-amix-warp-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-amix-warp-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using var writer = new Mp4Writer(path, new Mp4WriterOptions

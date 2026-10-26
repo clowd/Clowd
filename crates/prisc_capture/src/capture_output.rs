@@ -9,7 +9,7 @@ use crate::image_extract::{
 };
 use crate::settings::CapturerSettings;
 use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
-use clowd_rust_core::geometry::ScreenRect;
+use prisc_rust_core::geometry::ScreenRect;
 
 /// Result of a Copy or Save action.
 pub enum ActionResult {

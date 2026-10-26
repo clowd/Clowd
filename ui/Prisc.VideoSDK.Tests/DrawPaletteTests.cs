@@ -1,8 +1,8 @@
 using System.Linq;
-using Clowd.UI.DrawOnScreen;
+using Prisc.UI.DrawOnScreen;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The draw-on-screen toolbar's tables, pinned to the approved mockup.

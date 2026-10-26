@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>
     /// BGRA → NV12 conversion (with scaling when the sizes differ) on a slice-threaded swscale

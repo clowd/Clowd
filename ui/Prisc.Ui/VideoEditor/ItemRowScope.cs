@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// Which items a <b>placement</b> edit reaches. A recording row's items are the split segments

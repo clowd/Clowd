@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// The in-process FFmpeg playback engine: one demux thread feeding up to two video decode

@@ -3,19 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Clowd.UI.VideoEditor;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.UI.VideoEditor;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using SkiaSharp;
 using Xunit;
-using ModelTransform = Clowd.VideoSDK.Model.Transform;
+using ModelTransform = Prisc.VideoSDK.Model.Transform;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// <see cref="ItemPlacement"/> is what the preview arranges the transform gizmo on (Clowd.Ui
+    /// <see cref="ItemPlacement"/> is what the preview arranges the transform gizmo on (Prisc.Ui
     /// exposes its internals to this project), so its rect has to be where <c>FrameComposer</c>
     /// actually draws the item — verified against composed pixels, not a repeat of the formula.
     /// </summary>
@@ -87,7 +87,7 @@ namespace Clowd.VideoSDK.Tests
             const int CanvasW = 800, CanvasH = 450;
             const double CamAspect = 480.0 / 640.0;
 
-            var path = Path.Combine(Path.GetTempPath(), "clowd-webcam-placement-" + Guid.NewGuid().ToString("N") + ".json");
+            var path = Path.Combine(Path.GetTempPath(), "prisc-webcam-placement-" + Guid.NewGuid().ToString("N") + ".json");
             Project project;
             try
             {
@@ -1002,7 +1002,7 @@ namespace Clowd.VideoSDK.Tests
         private static string WriteCapture()
         {
             var path = Path.Combine(Path.GetTempPath(),
-                "clowd-input-capture-" + Guid.NewGuid().ToString("N") + ".jsonl");
+                "prisc-input-capture-" + Guid.NewGuid().ToString("N") + ".jsonl");
             File.WriteAllText(path, """
                 {"type":"header","version":1,"region":[0,0,1920,1080],"fps_num":30,"fps_den":1,"platform":"windows","monitors":[{"x":0,"y":0,"w":1920,"h":1080,"scale":1.0}]}
                 {"type":"event","t":0,"kind":"kd","vk":65,"ch":"a"}

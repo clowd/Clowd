@@ -1,7 +1,7 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="using:System"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- The rotate button (spec §3): fills its cell of the grip (see below), no fill of its own, a dimmed
          glyph that comes up to full strength on hover over a 14 % white veil covering the whole cell — the

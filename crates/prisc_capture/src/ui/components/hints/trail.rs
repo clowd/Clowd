@@ -2,7 +2,7 @@
 //!
 //! Built as a mesh — a strip of seven concentric rings around the chip's
 //! outline, sampled 128 times around. It shares its look with the floating
-//! strips' entrance comet in the shell (clowd_ui/Clowd.Ui/Controls/Tray/
+//! strips' entrance comet in the shell (ui/Prisc.Ui/Controls/Tray/
 //! TrayComet.cs): a solid core line with a short faint halo rather than a
 //! gaussian haze, a tail that tapers instead of going see-through, and a head
 //! that runs hot — all in colours derived from the user's own accent pick

@@ -2,11 +2,11 @@ using System;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Rendering;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Pins the drag-end cached-bounds re-round (ToolPointer.OnMouseUp, Move mode): body-move
@@ -21,7 +21,7 @@ namespace Clowd.Drawing.Tests
     {
         static DragEndBoundsTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         [AvaloniaFact]

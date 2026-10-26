@@ -1,11 +1,11 @@
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Config;
-using Clowd.Drawing.Graphics;
+using Prisc.Config;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The style menu's canvas half: which selection counts as a style subject, copying a style

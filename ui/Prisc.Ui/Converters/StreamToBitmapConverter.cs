@@ -4,7 +4,7 @@ using System.IO;
 using Avalonia.Data.Converters;
 using Avalonia.Media.Imaging;
 
-namespace Clowd.UI.Converters
+namespace Prisc.UI.Converters
 {
     /// <summary>
     /// Decodes a Stream (e.g. IUploadProvider.Icon) into a Bitmap for an Image source.

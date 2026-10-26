@@ -1,5 +1,5 @@
 <Window
-    x:Class="Clowd.UI.VideoEditor.MissingMediaDialog"
+    x:Class="Prisc.UI.VideoEditor.MissingMediaDialog"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Missing media"

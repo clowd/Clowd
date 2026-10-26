@@ -1,10 +1,10 @@
 using System;
 using System.Linq;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The input-overlay item model: <see cref="CursorContent"/>/<see cref="KeyboardContent"/>

@@ -9,10 +9,10 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Exercises the shared decode cache behind GraphicImage: undo/redo restores snapshots into
@@ -27,7 +27,7 @@ namespace Clowd.Drawing.Tests
             // The corner-radius tests go through DrawingCanvas, which reads tool settings from
             // SettingsRoot.Current — assigned by the application at startup; give the tests a
             // defaults instance so they do not depend on another class having run first.
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static readonly MethodInfo ImgUpdateObscure =

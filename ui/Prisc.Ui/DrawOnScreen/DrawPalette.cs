@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Avalonia.Media;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// The fixed choices the draw-on-screen toolbar offers: eight colours, four sizes and the

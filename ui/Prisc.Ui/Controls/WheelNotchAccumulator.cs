@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// Turns a stream of wheel deltas into whole notches, for the controls whose response to a

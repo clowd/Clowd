@@ -1,11 +1,11 @@
 <UserControl
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:Clowd.UI"
-    xmlns:controls="using:Clowd.UI.Controls"
-    xmlns:services="using:Clowd.UI.Services"
-    xmlns:clowd="using:Clowd"
-    x:Class="Clowd.UI.RecentSessionsPage">
+    xmlns:local="using:Prisc.UI"
+    xmlns:controls="using:Prisc.UI.Controls"
+    xmlns:services="using:Prisc.UI.Services"
+    xmlns:prisc="using:Prisc"
+    x:Class="Prisc.UI.RecentSessionsPage">
 
     <UserControl.Resources>
         <local:UiDateTimeConverter x:Key="ConvUiDateTime" />
@@ -13,7 +13,7 @@
         <!-- one finished upload: link (click copies) + launch/delete, shared by the standalone list and
              session rows. The buttons sit right beside the link; the link is the row's flexible child,
              so when the row runs short the URL ellipsizes rather than the buttons being pushed out. -->
-        <DataTemplate x:Key="UploadRecordTemplate" DataType="clowd:UploadRecord">
+        <DataTemplate x:Key="UploadRecordTemplate" DataType="prisc:UploadRecord">
             <controls:ShrinkingRowPanel Spacing="6" VerticalAlignment="Center">
                 <Path Height="10"
                       VerticalAlignment="Center"
@@ -243,12 +243,12 @@
             <Setter Property="Fill" Value="{DynamicResource SemiColorText1}" />
         </Style>
         <Style Selector="Path.starGlyphOn">
-            <Setter Property="Fill" Value="{DynamicResource ClowdStarBrush}" />
+            <Setter Property="Fill" Value="{DynamicResource PriscStarBrush}" />
         </Style>
         <!-- hovering the star itself (not just the row) turns it gold, so it reads as the control
              it is rather than as a status mark that happens to sit there. -->
         <Style Selector="Button.starToggle:pointerover Path.starGlyph">
-            <Setter Property="Fill" Value="{DynamicResource ClowdStarBrush}" />
+            <Setter Property="Fill" Value="{DynamicResource PriscStarBrush}" />
         </Style>
         <Style Selector="Button.starToggle:pointerover Path.starGlyphOn">
             <Setter Property="Opacity" Value="0.65" />
@@ -575,7 +575,7 @@
                                                                      VerticalAlignment="Center"
                                                                      IsVisible="{Binding IsProject}"
                                                                      ToolTip.Tip="{Binding ProjectTooltip}">
-                                                                <Path Width="24" Height="24" Fill="{StaticResource ClowdAccentBrush}" Data="{StaticResource IconVideoProject}" />
+                                                                <Path Width="24" Height="24" Fill="{StaticResource PriscAccentBrush}" Data="{StaticResource IconVideoProject}" />
                                                             </Viewbox>
                                                             <!-- rename, then the star, last on the line: to the right of the project
                                                                  marker on the rows that carry one and immediately after the name on

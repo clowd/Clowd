@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.Config;
-using Clowd.UI.Helpers;
-using Clowd.UI.Services;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.Config;
+using Prisc.Legacy;
+using Prisc.UI.Helpers;
+using Prisc.UI.Services;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor.Inspector
+namespace Prisc.UI.VideoEditor.Inspector
 {
     /// <summary>
     /// The property inspector's view of the session's primary selection: one flat set of bindable
@@ -177,18 +178,21 @@ namespace Clowd.UI.VideoEditor.Inspector
         private const int MaxWindowLabel = 34;
 
         /// <summary>Applications whose windows are never offered. The recorder skips only its OWN
-        /// process, so Clowd's tray, its editor and its region border are all tracked like anything
+        /// process, so Prisc's tray, its editor and its region border are all tracked like anything
         /// else while a recording runs, and none of them is something a user would crop to. Matched
         /// on the owner name the two platforms report — a file name on Windows, an application
         /// display name on macOS — because a pid only identifies us for a recording made by this
         /// very run of the app.</summary>
-        /// <summary>Applications whose windows are Clowd's own recording chrome rather than
-        /// anything the person meant to record. Only the share-region helper qualifies: Clowd's
+        /// <summary>Applications whose windows are Prisc's own recording chrome rather than
+        /// anything the person meant to record. Only the share-region helper qualifies: Prisc's
         /// main window is ordinary content — recording it is exactly what this branch was built
         /// for — so it stays in the picker even when the editor runs in the process that recorded
-        /// it.</summary>
+        /// it. Recordings made before the rename name the helper by its old name, so that is
+        /// matched too.</summary>
         private static readonly string[] OwnWindowApps =
-            { "clowd_share_region", "clowd_share_region.exe" };
+            new[] { "prisc_share_region", "prisc_share_region.exe" }
+                .Concat(LegacyClowd.ShareRegionProcessNames)
+                .ToArray();
 
         /// <summary>Display names for the cursor styles the model offers. Built off
         /// <see cref="CursorContent.Styles"/> so the menu's order and membership are the model's;
@@ -1570,7 +1574,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             String.IsNullOrEmpty(text) || text.Length <= max ? text : text.Substring(0, max - 1) + "\u2026";
 
         /// <summary>The standing entry for a pick the picker does not list. A window this
-        /// recording does know — one the list filtered out as never visible or as Clowd's own
+        /// recording does know — one the list filtered out as never visible or as Prisc's own
         /// chrome — keeps an ordinary row, because the crop it drives is real and still applied;
         /// only a genuine stranger reads as missing.</summary>
         private WindowOption UnlistedOption(WindowCrop follow)
@@ -2159,7 +2163,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>Whether the AI-backed features (denoise, background matting) exist on this
         /// machine at all. False only on Intel Macs: upstream ONNX Runtime dropped macOS x86_64,
-        /// so <c>clowd_ai</c> is only built for Apple Silicon — the toggles gray out with
+        /// so <c>prisc_ai</c> is only built for Apple Silicon — the toggles gray out with
         /// <see cref="AiEffectsDisabledTip"/> instead of queueing work that can never run.</summary>
         public bool AiEffectsSupported => SupportsAiEffects;
 

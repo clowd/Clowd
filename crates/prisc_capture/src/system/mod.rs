@@ -49,8 +49,8 @@ mod mac_mouse;
 mod mac_walker;
 
 #[cfg(target_os = "macos")]
-use clowd_rust_core::geometry::{LogicalPoint, LogicalSize};
-use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
+use prisc_rust_core::geometry::{LogicalPoint, LogicalSize};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
 
 /// What the walker suggests capturing for a point: the rect, plus the
 /// corner radius (physical px, 0 = square) the OS composites that window
@@ -179,11 +179,11 @@ pub struct MonitorInfo {
 #[allow(dead_code)]
 impl MonitorInfo {
     pub fn window_to_screen(&self, pt: WindowPoint) -> ScreenPointF {
-        clowd_rust_core::geometry::window_to_screen(self.bounds, pt)
+        prisc_rust_core::geometry::window_to_screen(self.bounds, pt)
     }
 
     pub fn screen_to_window(&self, pt: ScreenPointF) -> WindowPoint {
-        clowd_rust_core::geometry::screen_to_window(self.bounds, pt)
+        prisc_rust_core::geometry::screen_to_window(self.bounds, pt)
     }
 }
 
@@ -294,11 +294,11 @@ pub struct CapturedDesktop {
 
 pub struct SystemInterop;
 
-/// Exit codes, re-exported from `clowd_rust_core::exit` so the existing
+/// Exit codes, re-exported from `prisc_rust_core::exit` so the existing
 /// `system::EXIT_*` spelling keeps working. They are defined there because
 /// the scrolling-capture driver exits with the same meanings and the shell
 /// reads both processes' codes through one table.
-pub use clowd_rust_core::exit::{CAPTURE_FAILED as EXIT_CAPTURE_FAILED, NO_SCREEN_PERMISSION as EXIT_NO_SCREEN_PERMISSION};
+pub use prisc_rust_core::exit::{CAPTURE_FAILED as EXIT_CAPTURE_FAILED, NO_SCREEN_PERMISSION as EXIT_NO_SCREEN_PERMISSION};
 
 #[cfg(windows)]
 impl SystemInterop {
@@ -359,7 +359,7 @@ impl SystemInterop {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
-                clowd_rust_core::telemetry::flush();
+                prisc_rust_core::telemetry::flush();
                 std::process::exit(EXIT_CAPTURE_FAILED);
             }
         };
@@ -480,7 +480,7 @@ impl SystemInterop {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
-                clowd_rust_core::telemetry::flush();
+                prisc_rust_core::telemetry::flush();
                 std::process::exit(EXIT_CAPTURE_FAILED);
             }
         };

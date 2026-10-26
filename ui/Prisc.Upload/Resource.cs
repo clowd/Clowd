@@ -1,11 +1,11 @@
 ﻿using System.IO;
 using System.Reflection;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     internal sealed class Resource : EmbeddedResource
     {
-        public Stream ClowdIcon => GetStream("clowd.png");
+        public Stream PriscIcon => GetStream("prisc.png");
 
         public Stream ImgurIcon => GetStream("imgur.png");
 
@@ -31,7 +31,7 @@ namespace Clowd.Upload
         // https://github.com/github/linguist/blob/master/lib/linguist/languages.yml
         public Stream LanguageDb => GetStream("languages.yml");
 
-        public Resource() : base(Assembly.GetExecutingAssembly(), "Clowd.Upload.Embed")
+        public Resource() : base(Assembly.GetExecutingAssembly(), "Prisc.Upload.Embed")
         { }
     }
 }

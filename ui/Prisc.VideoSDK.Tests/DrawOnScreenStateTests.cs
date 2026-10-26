@@ -1,7 +1,7 @@
-using Clowd.UI.DrawOnScreen;
+using Prisc.UI.DrawOnScreen;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The draw-on-screen mode rules: tool, click-through and hide interact in ways that are easy to

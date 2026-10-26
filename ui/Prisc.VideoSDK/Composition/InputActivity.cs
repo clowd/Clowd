@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>One mouse button press, from its down to the matching up (the down's own time
     /// when the capture ended before the release). Times are capture ms — the

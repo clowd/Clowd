@@ -1,12 +1,12 @@
 ﻿<local:SystemThemedWindow
-    x:Class="Clowd.UI.VideoEditor.VideoEditorWindow"
+    x:Class="Prisc.UI.VideoEditor.VideoEditorWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:Clowd.UI.Controls"
-    xmlns:insp="clr-namespace:Clowd.UI.VideoEditor.Inspector"
-    xmlns:local="clr-namespace:Clowd.UI"
-    xmlns:tl="clr-namespace:Clowd.UI.VideoEditor.Timeline"
-    xmlns:ve="clr-namespace:Clowd.UI.VideoEditor"
+    xmlns:controls="clr-namespace:Prisc.UI.Controls"
+    xmlns:insp="clr-namespace:Prisc.UI.VideoEditor.Inspector"
+    xmlns:local="clr-namespace:Prisc.UI"
+    xmlns:tl="clr-namespace:Prisc.UI.VideoEditor.Timeline"
+    xmlns:ve="clr-namespace:Prisc.UI.VideoEditor"
     DragDrop.AllowDrop="True"
     Title="Edit Video - Prisc"
     Width="1100"
@@ -273,7 +273,7 @@
             <!--  ===== Modern chrome =====  -->
 
             <!--  The tool bar buttons, shared with the image editor.  -->
-            <StyleInclude Source="avares://Clowd.Ui/Assets/EditorChromeStyles.axaml" />
+            <StyleInclude Source="avares://Prisc.Ui/Assets/EditorChromeStyles.axaml" />
 
             <!--  Render is a labeled accent button, so it takes the bar's height and radius but
                   not its square footprint. After the rule above on purpose — in Avalonia the last
@@ -354,7 +354,7 @@
                   edge.  -->
             <Style Selector="Grid.modern Border#contentSurface">
                 <Setter Property="CornerRadius" Value="12,0,0,0" />
-                <Setter Property="BoxShadow" Value="{DynamicResource ClowdEditorSurfaceShadow}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource PriscEditorSurfaceShadow}" />
             </Style>
             <Style Selector="Grid.modern Border#previewSurface">
                 <Setter Property="CornerRadius" Value="12,0,0,0" />
@@ -379,7 +379,7 @@
                 <Setter Property="IsModern" Value="True" />
             </Style>
             <Style Selector="Grid.modern Border#sidebarBorder">
-                <Setter Property="Background" Value="{DynamicResource ClowdEditorSidebarBrush}" />
+                <Setter Property="Background" Value="{DynamicResource PriscEditorSidebarBrush}" />
             </Style>
             <Style Selector="Grid.modern Border#sidebarHeader">
                 <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
@@ -478,7 +478,7 @@
                       so the state reads identically wherever it is shown. Unstarred keeps the
                       strip's white and the outline glyph (both set in SyncStarButton).  -->
                 <Style Selector="controls|ToolButton.starOn">
-                    <Setter Property="Foreground" Value="{DynamicResource ClowdStarBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource PriscStarBrush}" />
                 </Style>
             </controls:DockAndWrapPanel.Styles>
 
@@ -909,7 +909,7 @@
                 x:Name="contentSurface"
                 Grid.Column="1"
                 Grid.ColumnSpan="3"
-                Background="{DynamicResource ClowdEditorCanvasBrush}" />
+                Background="{DynamicResource PriscEditorCanvasBrush}" />
 
             <!--  Two borders, not one: ClipToBounds is what rounds the preview off at the corner,
                   and it clips the control's own drawing too — so this pair cannot be collapsed
@@ -919,10 +919,10 @@
             <Border
                 x:Name="previewSurface"
                 Grid.Column="1"
-                Background="{DynamicResource ClowdEditorCanvasBrush}">
+                Background="{DynamicResource PriscEditorCanvasBrush}">
                 <Border
                     x:Name="previewClip"
-                    Background="{DynamicResource ClowdEditorCanvasBrush}"
+                    Background="{DynamicResource PriscEditorCanvasBrush}"
                     ClipToBounds="True">
                     <Panel>
                         <!--  the same checker the image editor draws behind the artwork; the preview
@@ -1011,7 +1011,7 @@
                 Grid.Column="1"
                 Grid.ColumnSpan="3"
                 ZIndex="2"
-                BorderBrush="{DynamicResource ClowdEditorSurfaceEdgeBrush}"
+                BorderBrush="{DynamicResource PriscEditorSurfaceEdgeBrush}"
                 IsHitTestVisible="False" />
 
         </Grid>

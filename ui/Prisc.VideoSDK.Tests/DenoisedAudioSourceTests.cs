@@ -1,11 +1,11 @@
 using System;
 using System.IO;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The audio half of the AI effects: <see cref="AiSidecars"/>' naming and companion-json
@@ -40,7 +40,7 @@ namespace Clowd.VideoSDK.Tests
 
         public DenoisedAudioSourceTests()
         {
-            _cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-denoise-test-{Guid.NewGuid():N}");
+            _cacheDir = Path.Combine(Path.GetTempPath(), $"prisc-denoise-test-{Guid.NewGuid():N}");
             Directory.CreateDirectory(_cacheDir);
         }
 

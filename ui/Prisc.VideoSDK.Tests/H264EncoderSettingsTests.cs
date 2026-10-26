@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Media;
 using FFmpeg.AutoGen.Abstractions;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The crf → per-encoder mapping (<see cref="H264EncoderSettings"/>) is a pure function, so

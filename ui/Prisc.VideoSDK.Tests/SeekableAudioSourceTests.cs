@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // Real-decode round trip for the preview-side audio source. The gate everywhere here is
     // agreement with the render path: whatever SeekableAudioSource returns must be what
@@ -55,7 +55,7 @@ namespace Clowd.VideoSDK.Tests
             if (_fixture != null)
                 return _fixture;
 
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-seekaudio-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-seekaudio-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using (var writer = new Mp4Writer(path, new Mp4WriterOptions

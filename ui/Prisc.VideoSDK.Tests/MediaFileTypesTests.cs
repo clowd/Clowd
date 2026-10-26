@@ -1,10 +1,10 @@
 using System;
 using System.IO;
-using Clowd.UI.Helpers;
-using Clowd.VideoSDK.Playback;
+using Prisc.UI.Helpers;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // What the editors' pickers and file drops accept, and the one file type they disagree about.
     // A .gif answers to both IsImage and IsMedia on purpose, so the drop and picker flows lean on
@@ -13,7 +13,7 @@ namespace Clowd.VideoSDK.Tests
     // the rule is what FFmpeg reports about a file on disk.
     public class MediaFileTypesTests : IDisposable
     {
-        private readonly string _dir = Path.Combine(Path.GetTempPath(), "clowd-gif-tests-" + Guid.NewGuid().ToString("N"));
+        private readonly string _dir = Path.Combine(Path.GetTempPath(), "prisc-gif-tests-" + Guid.NewGuid().ToString("N"));
 
         public void Dispose()
         {

@@ -1,6 +1,6 @@
 ﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- The toggle half (spec §5). A Button with its own ControlTheme rather than the app's default
          look: it must be a transparent window onto the slot's fill, so the whole default template

@@ -3,18 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Clowd.UI;
-using Clowd.UI.VideoEditor;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.UI;
+using Prisc.UI.VideoEditor;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The multi-track editor's way into a recording: <see cref="VideoEditPersistence.LoadOrCreate"/>
-    /// (Clowd.Ui exposes its internals to this project) and the autosave writer the session hands
+    /// (Prisc.Ui exposes its internals to this project) and the autosave writer the session hands
     /// its bytes to. No Avalonia and no FFmpeg — the loader is JSON, the filesystem and the same
     /// keep-segment math the single-row editor used.
     ///
@@ -110,7 +110,7 @@ namespace Clowd.VideoSDK.Tests
         };
 
         private static string TempPath() =>
-            Path.Combine(Path.GetTempPath(), "clowd-projectload-" + Guid.NewGuid().ToString("N") + ".json");
+            Path.Combine(Path.GetTempPath(), "prisc-projectload-" + Guid.NewGuid().ToString("N") + ".json");
 
         private static string WriteTemp(string json)
         {
@@ -738,7 +738,7 @@ namespace Clowd.VideoSDK.Tests
         /// relink only asks whether they exist.</summary>
         private static string TempSessionDir(bool window = true)
         {
-            var dir = Path.Combine(Path.GetTempPath(), "clowd-projectload-" + Guid.NewGuid().ToString("N"));
+            var dir = Path.Combine(Path.GetTempPath(), "prisc-projectload-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
             File.WriteAllBytes(Path.Combine(dir, "video.mp4"), Array.Empty<byte>());
             File.WriteAllBytes(ObsArguments.GetInputCapturePath(dir), Array.Empty<byte>());

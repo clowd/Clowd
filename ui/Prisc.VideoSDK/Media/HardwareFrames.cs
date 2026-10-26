@@ -1,7 +1,7 @@
 using System;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>
     /// Encoder input frames that live on the GPU: the FFmpeg hardware device and frames contexts

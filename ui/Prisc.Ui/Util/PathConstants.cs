@@ -3,31 +3,39 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 
-namespace Clowd
+namespace Prisc
 {
     public static class Constants
     {
-        public const string ClowdAppName = "Clowd";
+        public const string PriscAppName = "Prisc";
         /// <summary>Kept short deliberately. On unix .NET backs named pipes with a domain socket at
         /// <c>$TMPDIR/CoreFxPipe_&lt;name&gt;</c>, and macOS caps that path at 104 chars against a
         /// ~49 char per-user TMPDIR — a GUID-length name here means the pipe can never be created.</summary>
-        public const string ClowdNamedPipe = "Clowd.02c1544e";
-        public const string ClowdMutex = "ClowdMutex:02c1544e-7d60-435a-bce8-f61496bdbabe";
+        public const string PriscNamedPipe = "Prisc.02c1544e";
+        public const string PriscMutex = "PriscMutex:02c1544e-7d60-435a-bce8-f61496bdbabe";
         public const string PublishingCompany = "Caelan Sayler";
     }
 
     public static class PathConstants
     {
-        public static string LogData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "logs");
-        public static string SessionData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "sessions");
+        public static string LogData => GetPriscFolder(Environment.SpecialFolder.LocalApplicationData, "logs");
+        public static string SessionData => GetPriscFolder(Environment.SpecialFolder.LocalApplicationData, "sessions");
 
         /// <summary>Per-user cache of generated session previews. Like every other folder here the
-        /// getter has a side effect — <see cref="GetClowdFolder(string, string)"/> creates the whole
+        /// getter has a side effect — <see cref="GetPriscFolder(string, string)"/> creates the whole
         /// tree — so it must never be read from the UI or a render thread. The preview engine
         /// resolves it exactly once, lazily, on a background worker.</summary>
-        public static string PreviewCache => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "previews");
+        public static string PreviewCache => GetPriscFolder(Environment.SpecialFolder.LocalApplicationData, "previews");
 
-        public static string SettingsData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
+        /// <summary>The per-user data directory the app folder lives in: LocalAppData on Windows, the
+        /// XDG data dir elsewhere (see <see cref="GetDataDirectory(Environment.SpecialFolder)"/>).
+        /// Unlike the folders above it creates nothing.</summary>
+        public static string DataDirectory => GetDataDirectory(Environment.SpecialFolder.LocalApplicationData);
+
+        /// <summary><c>&lt;DataDirectory&gt;/Prisc</c>, the parent of <see cref="SessionData"/>,
+        /// <see cref="PreviewCache"/> and <see cref="LogData"/>. Creates nothing, so the legacy
+        /// data migration can run before anything touches the sessions folder.</summary>
+        public static string AppDataRoot => Path.Combine(DataDirectory, "Prisc");
 
         public static string GetFolderPath(string name, string parentDirectory)
         {
@@ -46,7 +54,7 @@ namespace Clowd
 
         /// <summary>The pattern rendered for now, with a " (n)" suffix past any name already in the
         /// directory. Always the invariant culture: the overlay renders the same setting in Rust
-        /// (<c>clowd_capture/src/filename_pattern.rs</c>: Gregorian, literal separators, English
+        /// (<c>crates/prisc_capture/src/filename_pattern.rs</c>: Gregorian, literal separators, English
         /// names) and both routes must name one capture the same way, which the user's culture
         /// would break — th-TH writes the year 2569, de-DE turns "/" into ".".</summary>
         public static string GetFreePatternFileName(string directory, string pattern)
@@ -67,13 +75,13 @@ namespace Clowd
             return DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture);
         }
 
-        private static string GetClowdFolder(Environment.SpecialFolder dataDirectory, string dataName) =>
-            GetClowdFolder(GetDataDirectory(dataDirectory), dataName);
+        private static string GetPriscFolder(Environment.SpecialFolder dataDirectory, string dataName) =>
+            GetPriscFolder(GetDataDirectory(dataDirectory), dataName);
 
         /// <summary>
         /// .NET 8 changed <see cref="Environment.GetFolderPath(Environment.SpecialFolder)"/> on macOS to
         /// return Apple-convention paths (LocalApplicationData → ~/Library/Application Support). The
-        /// session directory is shared with the Rust capture side (§2.11), which writes to the XDG data
+        /// session directory is shared with the Rust capture side, which writes to the XDG data
         /// dir, so on non-Windows platforms we keep the XDG mapping ($XDG_DATA_HOME or ~/.local/share).
         /// </summary>
         private static string GetDataDirectory(Environment.SpecialFolder folder)
@@ -90,7 +98,7 @@ namespace Clowd
             return Environment.GetFolderPath(folder);
         }
 
-        private static string GetClowdFolder(string dataDirectory, string dataName)
+        private static string GetPriscFolder(string dataDirectory, string dataName)
         {
             if (String.IsNullOrWhiteSpace(dataName))
                 throw new ArgumentException($"Directory name can not be empty.");
@@ -100,15 +108,15 @@ namespace Clowd
             if (!Directory.Exists(dataDirectory))
                 Directory.CreateDirectory(dataDirectory);
 
-            var clowdPath = Path.Combine(dataDirectory, "Clowd");
+            var priscPath = Path.Combine(dataDirectory, "Prisc");
 
-            if (!Directory.Exists(clowdPath))
-                Directory.CreateDirectory(clowdPath);
+            if (!Directory.Exists(priscPath))
+                Directory.CreateDirectory(priscPath);
 
             if (String.IsNullOrEmpty(dataName))
-                return Path.GetFullPath(clowdPath);
+                return Path.GetFullPath(priscPath);
 
-            var dataPath = Path.Combine(clowdPath, dataName);
+            var dataPath = Path.Combine(priscPath, dataName);
 
             if (!Directory.Exists(dataPath))
                 Directory.CreateDirectory(dataPath);

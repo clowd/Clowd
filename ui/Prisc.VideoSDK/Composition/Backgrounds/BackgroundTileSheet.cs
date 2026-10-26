@@ -1,7 +1,7 @@
 using System;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The layout contract for the pre-rendered loop sheets the video editor's background STYLE
@@ -28,7 +28,7 @@ namespace Clowd.VideoSDK.Composition
     /// tile that reads them, and the test that holds the committed sheets to the renderer's current
     /// output), and a disagreement between any two of them shows up as art sliced at the wrong
     /// offsets rather than as a build error. The sheet PIXELS ship as an Avalonia resource in
-    /// Clowd.Ui, since they are a UI asset; only the geometry is here.
+    /// Prisc.Ui, since they are a UI asset; only the geometry is here.
     /// </para>
     /// <para>
     /// <b>Nothing in the composer or the render path reads any of this.</b> The main canvas and
@@ -87,7 +87,7 @@ namespace Clowd.VideoSDK.Composition
         /// </summary>
         public const double FramesPerArtworkSecond = 1.0;
 
-        /// <summary>The folder the sheets are embedded from, under Clowd.Ui's Assets.</summary>
+        /// <summary>The folder the sheets are embedded from, under Prisc.Ui's Assets.</summary>
         public const string AssetFolder = "BackgroundTiles";
 
         /// <summary>The sheet file name for a style id, WebP because these are smooth fields that

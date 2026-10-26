@@ -4,13 +4,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The preview's audio producer, driven directly against a bare AudioRingBuffer and an
     // NAudioSink over SilentAudioOutput (never started) — no real device anywhere; the test
@@ -50,7 +50,7 @@ namespace Clowd.VideoSDK.Tests
         /// stream 1 — Mp4Writer adds them in that order; both channels equal).</summary>
         private string SineFixture(double freq, float amplitude, int seconds)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-amix-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-amix-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using var writer = new Mp4Writer(path, new Mp4WriterOptions
@@ -478,7 +478,7 @@ namespace Clowd.VideoSDK.Tests
 
             var project = NewProject();
             var good = AddSource(project, SineFixture(440, 0.30f, 2));
-            var missing = AddSource(project, Path.Combine(Path.GetTempPath(), $"clowd-amix-missing-{Guid.NewGuid():N}.mp4"));
+            var missing = AddSource(project, Path.Combine(Path.GetTempPath(), $"prisc-amix-missing-{Guid.NewGuid():N}.mp4"));
             AddAudioItem(project, good, 0, 2 * Second);
             AddAudioItem(project, missing, 0, 2 * Second);
 

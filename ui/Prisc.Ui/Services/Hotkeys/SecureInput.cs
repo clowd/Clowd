@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>macOS Secure Event Input: while any app has it on (a focused password field, a
     /// terminal's "Secure Keyboard Entry"), the OS hides every key from event taps, ours

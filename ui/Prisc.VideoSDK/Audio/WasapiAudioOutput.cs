@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// WASAPI shared-mode output. The device is created on the first <see cref="Play"/> because

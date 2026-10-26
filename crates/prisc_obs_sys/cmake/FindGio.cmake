@@ -1,6 +1,6 @@
-# obs-express override of OBS's FindGio (obs-studio/cmake/finders/FindGio.cmake).
+# prisc_recorder override of OBS's FindGio (obs-studio/cmake/finders/FindGio.cmake).
 #
-# obs-sys passes this directory as CMAKE_MODULE_PATH on Linux; OBS appends its
+# prisc_obs_sys passes this directory as CMAKE_MODULE_PATH on Linux; OBS appends its
 # own finder directories after it, so this file wins and delegates to OBS's.
 #
 # Why: the reference build image (tools/linux-build/Dockerfile, manylinux_2_34
@@ -17,8 +17,8 @@
 # <pthread.h>) into its sources ahead of their own `#define _GNU_SOURCE`
 # hides pthread_setname_np and friends.
 
-set(_obs_express_gio_min 2.68)
-set(_obs_express_gio_requested "${Gio_FIND_VERSION}")
+set(_prisc_gio_min 2.68)
+set(_prisc_gio_requested "${Gio_FIND_VERSION}")
 # Run OBS's finder without the caller's version so its own
 # find_package_handle_standard_args does not reject 2.68..2.75.
 unset(Gio_FIND_VERSION)
@@ -27,17 +27,17 @@ unset(Gio_FIND_VERSION_MINOR)
 unset(Gio_FIND_VERSION_PATCH)
 unset(Gio_FIND_VERSION_COUNT)
 include("${CMAKE_SOURCE_DIR}/cmake/finders/FindGio.cmake")
-set(Gio_FIND_VERSION "${_obs_express_gio_requested}")
+set(Gio_FIND_VERSION "${_prisc_gio_requested}")
 
 if(Gio_FOUND)
-  if(Gio_VERSION VERSION_LESS _obs_express_gio_min)
-    message(FATAL_ERROR "GLib/Gio ${Gio_VERSION} is too old: obs-express needs >= ${_obs_express_gio_min}.")
+  if(Gio_VERSION VERSION_LESS _prisc_gio_min)
+    message(FATAL_ERROR "GLib/Gio ${Gio_VERSION} is too old: the recorder needs >= ${_prisc_gio_min}.")
   endif()
   if(Gio_VERSION VERSION_LESS 2.76 AND TARGET gio::gio)
-    get_property(_obs_express_gio_compat_set TARGET gio::gio PROPERTY OBS_EXPRESS_GIO_COMPAT)
-    if(NOT _obs_express_gio_compat_set)
-      message(STATUS "obs-express: Gio ${Gio_VERSION} < 2.76, backfilling g_clear_fd() for linux-pipewire")
-      set_property(TARGET gio::gio PROPERTY OBS_EXPRESS_GIO_COMPAT TRUE)
+    get_property(_prisc_gio_compat_set TARGET gio::gio PROPERTY PRISC_GIO_COMPAT)
+    if(NOT _prisc_gio_compat_set)
+      message(STATUS "prisc: Gio ${Gio_VERSION} < 2.76, backfilling g_clear_fd() for linux-pipewire")
+      set_property(TARGET gio::gio PROPERTY PRISC_GIO_COMPAT TRUE)
       set_property(
         TARGET gio::gio
         APPEND
@@ -46,9 +46,9 @@ if(Gio_FOUND)
             "$<$<STREQUAL:$<TARGET_PROPERTY:NAME>,linux-pipewire>:SHELL:-include ${CMAKE_CURRENT_LIST_DIR}/gio-compat.h>"
       )
     endif()
-    unset(_obs_express_gio_compat_set)
+    unset(_prisc_gio_compat_set)
   endif()
 endif()
 
-unset(_obs_express_gio_min)
-unset(_obs_express_gio_requested)
+unset(_prisc_gio_min)
+unset(_prisc_gio_requested)

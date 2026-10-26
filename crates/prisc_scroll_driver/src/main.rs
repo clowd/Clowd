@@ -1,9 +1,9 @@
 //! Scrolling capture — the second half of the feature.
 //!
-//! By the time this binary runs the overlay (`clowd_capture`) has
+//! By the time this binary runs the overlay (`prisc_capture`) has
 //! already done its part: the user picked a region, pressed SCROLL,
 //! clicked the point to scroll at, and the overlay wrote `action.txt` =
-//! `scroll X,Y,W,H PX,PY HWND` and exited. Clowd.Ui reads that marker,
+//! `scroll X,Y,W,H PX,PY HWND` and exited. Prisc.Ui reads that marker,
 //! puts its border window up around the region, and spawns *this* process
 //! to do the mechanical part — scroll the target window a step at a time,
 //! photograph the region after each step, stitch the frames into one tall
@@ -32,15 +32,15 @@
 //! - [`stitch`] — frame registration and the composite.
 //! - [`output`] — `desktop.png` / `cropped.png` / `session.json`.
 //!
-//! The protocol is documented in `clowd_capture/CAPTURE_PROTOCOL.md` §2.
+//! The protocol is documented in `crates/prisc_capture/CAPTURE_PROTOCOL.md` §2.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// Clowd ships on Windows and macOS only (the overlay's `system` module has no
+// Prisc ships on Windows and macOS only (the overlay's `system` module has no
 // third backend either), and a driver that compiled elsewhere without an
 // input or capture path would be a binary that cannot do anything.
 #[cfg(not(any(windows, target_os = "macos")))]
-compile_error!("clowd_scroll_driver supports Windows and macOS only");
+compile_error!("prisc_scroll_driver supports Windows and macOS only");
 
 mod cli;
 mod drive;
@@ -83,14 +83,14 @@ fn main() -> anyhow::Result<()> {
             std::io::LineWriter::new(file),
         ));
     }
-    clowd_rust_core::telemetry::install_logger(simplelog::CombinedLogger::new(loggers));
+    prisc_rust_core::telemetry::install_logger(simplelog::CombinedLogger::new(loggers));
 
     // held for the rest of main: dropping the guard flushes anything still queued
-    let _sentry = clowd_rust_core::telemetry::init("clowd_scroll_driver");
+    let _sentry = prisc_rust_core::telemetry::init("prisc_scroll_driver");
 
     let result = drive::run(args);
     if let Err(err) = &result {
-        clowd_rust_core::telemetry::capture_error(err);
+        prisc_rust_core::telemetry::capture_error(err);
     }
     result
 }

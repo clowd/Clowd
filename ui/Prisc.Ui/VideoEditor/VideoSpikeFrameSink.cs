@@ -5,9 +5,9 @@ using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// Triple-buffered <see cref="WriteableBitmap"/> pool behind an <see cref="Image"/>. The

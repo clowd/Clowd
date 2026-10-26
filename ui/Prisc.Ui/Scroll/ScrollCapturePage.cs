@@ -3,11 +3,11 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Supervises one scrolling capture. The overlay has already picked the region and the point
@@ -75,7 +75,7 @@ namespace Clowd.UI
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
                         $"The scrolling capture binary ({CaptureBinaryLocator.ScrollDriverFileName}) could not be found. " +
-                        $"Run 'cargo build' in the clowd-rust repository, or set the {CaptureBinaryLocator.EnvVarName} " +
+                        $"Run 'cargo build' in the Prisc repository, or set the {CaptureBinaryLocator.EnvVarName} " +
                         "environment variable to the capture binary's location — the driver ships beside it.",
                         "Scrolling capture unavailable");
                     CaptureSessionDispatcher.DeleteSessionDir(_sessionDir);
@@ -290,7 +290,7 @@ namespace Clowd.UI
         /// App-exit path. A scrolling capture has nothing partial worth keeping — the composite
         /// only exists inside the driver until it finishes — so this cancels rather than stops:
         /// the driver writes nothing and the directory goes with it. Without this the driver
-        /// would keep scrolling someone's window after Clowd is gone (stdin EOF would eventually
+        /// would keep scrolling someone's window after Prisc is gone (stdin EOF would eventually
         /// stop it, but only once our process actually dies) and leave a session nobody routes.
         /// Never shows UI; the app is exiting.
         /// </summary>

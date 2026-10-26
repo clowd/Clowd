@@ -3,19 +3,19 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <RootNamespace>Clowd</RootNamespace>
+    <RootNamespace>Prisc</RootNamespace>
     <!-- emits [assembly: NeutralResourcesLanguage("en")]: Localization\Strings.resx *is* the
          English copy, so ResourceManager must not go looking for an "en" satellite. -->
     <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Strongly-typed accessors for Localization\Strings.resx (Clowd.Localization.Strings).
+    <!-- Strongly-typed accessors for Localization\Strings.resx (Prisc.Localization.Strings).
          Only the neutral resx is registered — Strings.xx.resx files are picked up by the SDK as
          satellite assemblies and resolved at runtime through ResourceManager culture fallback. -->
     <AdditionalFiles Include="Localization\Strings.resx"
-                     Namespace="Clowd.Localization"
+                     Namespace="Prisc.Localization"
                      ClassName="Strings"
-                     ResourceName="Clowd.Localization.Strings"
+                     ResourceName="Prisc.Localization.Strings"
                      Visibility="Public" />
   </ItemGroup>
   <ItemGroup>

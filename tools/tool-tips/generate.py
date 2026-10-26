@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Generates the tool demo GIFs shown in the image editor's tool-strip flyouts.
 
-Each GIF is a faithful miniature of the Clowd image editor: a screenshot card on the dark canvas
-surround and the real Clowd cursor using the tool, with the editor's own ink, shadows and selection
+Each GIF is a faithful miniature of the Prisc image editor: a screenshot card on the dark canvas
+surround and the real Prisc cursor using the tool, with the editor's own ink, shadows and selection
 chrome. The tool's keyboard shortcut is not in the GIF: the flyout card (Controls/ToolTipCard)
 shows it as a keycap beside the header, sourced from EditorWindow's ToolRegistry. They are
-embedded as Avalonia resources from clowd_ui/Clowd.Ui/Assets/ToolTips/ and shown by
+embedded as Avalonia resources from ui/Prisc.Ui/Assets/ToolTips/ and shown by
 Controls/ToolTipCard.axaml (played through Controls/AnimatedGifImage.cs). See README.md next to
 this script for the storyboard contract, the style rules and how to add a demo for a new tool.
 
@@ -16,7 +16,7 @@ shared framework is common.py.
 Usage:
   python tools/tool-tips/generate.py [--out DIR] [--sheet PNG] [--frames DIR] [--list] [name ...]
 
-  --out DIR      output folder (default: clowd_ui/Clowd.Ui/Assets/ToolTips, relative to the repo)
+  --out DIR      output folder (default: ui/Prisc.Ui/Assets/ToolTips, relative to the repo)
   --sheet PNG    also write a review contact sheet (6 frames per GIF) to this path
   --frames DIR   also write every output frame as DIR/<name>-NN.png for review
   --list         print the discovered demos, then exit
@@ -33,7 +33,7 @@ sys.path.insert(0, HERE)
 
 import common  # noqa: E402  (tools/tool-tips must be on sys.path first)
 
-DEFAULT_OUT = os.path.join(common.REPO_ROOT, "clowd_ui", "Clowd.Ui", "Assets", "ToolTips")
+DEFAULT_OUT = os.path.join(common.REPO_ROOT, "ui", "Prisc.Ui", "Assets", "ToolTips")
 MIN_FRAMES, MAX_FRAMES = 40, 72
 WARN_KB = 220
 PAN_WARN_KB = 300   # the whole artwork moves, so pan legitimately costs more

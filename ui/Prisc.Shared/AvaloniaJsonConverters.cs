@@ -5,11 +5,11 @@ using System.Text.Json.Serialization;
 using Avalonia;
 using Avalonia.Media;
 
-namespace Clowd
+namespace Prisc
 {
     // System.Text.Json converters for external Avalonia value types, shared by the settings file
-    // (SettingsService) and the graphics serializer (Clowd.Drawing). Every type maps to a single
-    // JSON string — the per-property granularity of the undo diff in Clowd.Drawing depends on each
+    // (SettingsService) and the graphics serializer (Prisc.Drawing). Every type maps to a single
+    // JSON string — the per-property granularity of the undo diff in Prisc.Drawing depends on each
     // of these values staying a single leaf node.
 
     /// <summary>Color ↔ "#AARRGGBB".</summary>

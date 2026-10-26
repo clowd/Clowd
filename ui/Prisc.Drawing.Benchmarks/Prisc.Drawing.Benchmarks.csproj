@@ -14,6 +14,6 @@
     <PackageReference Include="Avalonia.Skia" Version="12.1.2" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
+    <ProjectReference Include="..\Prisc.Drawing\Prisc.Drawing.csproj" />
   </ItemGroup>
 </Project>

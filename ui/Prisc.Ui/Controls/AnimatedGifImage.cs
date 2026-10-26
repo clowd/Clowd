@@ -11,7 +11,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SkiaSharp;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// Plays an animated GIF from an <c>avares://</c> asset. Avalonia's own <see cref="Image"/>

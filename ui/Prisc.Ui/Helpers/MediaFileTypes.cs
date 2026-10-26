@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Avalonia.Platform.Storage;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>The file pickers the editors open — the add-image, import-media and relink flows —
     /// share these so what the editors claim to accept is stated once. Patterns only: the pickers

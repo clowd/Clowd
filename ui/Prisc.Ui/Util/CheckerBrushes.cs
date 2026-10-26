@@ -6,7 +6,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     /// <summary>
     /// Code-generated tiled checker brushes replacing the WPF DrawingBrush resources
@@ -14,7 +14,7 @@ namespace Clowd.Util
     /// (CheckeredLightGrayBackgroundBrush), Medium = 16px (CheckeredMediumGrayBackgroundBrush),
     /// Swatch = 13px (the ~13.4px mini color-popup tile, approximated per §6). Those three use the
     /// original #96969696 checker color over transparent; Canvas is the 50px #11FFFFFF checker the
-    /// image editor draws behind the artwork (Clowd.Drawing.CheckeredBackground renders the same
+    /// image editor draws behind the artwork (Prisc.Drawing.CheckeredBackground renders the same
     /// pattern procedurally, because there it also has to be pannable and hit-testable).
     /// </summary>
     public static class CheckerBrushes
@@ -23,7 +23,7 @@ namespace Clowd.Util
         private static readonly Color CanvasCheckerColor = Color.FromArgb(0x11, 0xFF, 0xFF, 0xFF);
 
         // Slightly stronger than the dark variant's alpha: the same nominal contrast reads fainter
-        // as black-on-light than as white-on-dark. Matches Clowd.Drawing.CheckeredBackground's
+        // as black-on-light than as white-on-dark. Matches Prisc.Drawing.CheckeredBackground's
         // light variant exactly — the two draw the same pattern for the two editors.
         private static readonly Color CanvasCheckerLightColor = Color.FromArgb(0x14, 0x00, 0x00, 0x00);
 
@@ -49,7 +49,7 @@ namespace Clowd.Util
         }
 
         /// <summary>The light theme's canvas backdrop: the same 50px checker tinted black, for
-        /// the light surround the editors switch to (<c>ClowdEditorCanvasBrush</c>).</summary>
+        /// the light surround the editors switch to (<c>PriscEditorCanvasBrush</c>).</summary>
         public static IBrush CanvasLight
         {
             get

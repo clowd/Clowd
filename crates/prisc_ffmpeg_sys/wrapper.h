@@ -1,7 +1,7 @@
-// Bindgen entry point for the FFmpeg APIs vid2gif uses: demux (avformat),
+// Bindgen entry point for the FFmpeg APIs prisc_vid2gif uses: demux (avformat),
 // decode/encode (avcodec), filter graphs (avfilter), and the avutil helpers
 // they hand out. Headers come from the obs-deps bundle, so the bindings
-// always match the exact runtime obs-express ships.
+// always match the exact runtime prisc_recorder ships.
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>

@@ -1,14 +1,14 @@
-//! On-device AI inference — the out-of-process half of Clowd's text
+//! On-device AI inference — the out-of-process half of Prisc's text
 //! recognition, video matting and audio denoising features.
 //!
 //! One binary, one subcommand per job kind, one process per job:
 //!
-//! * `ocr` — the capture overlay (`clowd_capture`) spawns it per OCR
-//!   press, writes a [`RequestHeader`](clowd_rust_core::ocr::RequestHeader)
+//! * `ocr` — the capture overlay (`prisc_capture`) spawns it per OCR
+//!   press, writes a [`RequestHeader`](prisc_rust_core::ocr::RequestHeader)
 //!   line and the selected region's raw BGRA down stdin, and reads the
 //!   PaddleOCR result from the `--out` file after it exits (see
-//!   `clowd_rust_core::ocr` for the wire format and [`ocr`] for the pipeline).
-//! * `matte` / `denoise` — `Clowd.VideoSDK`'s sidecar generators
+//!   `prisc_rust_core::ocr` for the wire format and [`ocr`] for the pipeline).
+//! * `matte` / `denoise` — `Prisc.VideoSDK`'s sidecar generators
 //!   (`AiClient.cs`) spawn it per job and stream the raw payload down stdin:
 //!   `matte` takes tightly packed RGB24 frames and answers each with a
 //!   RobustVideoMatting alpha (or RGBA foreground) frame; `denoise` takes f32le
@@ -18,8 +18,9 @@
 //! One job, one process, then gone — canceling a job is killing us, and a
 //! crash in native inference costs a per-job child rather than the editor or
 //! the overlay mid-capture. The process boundary is also the license boundary:
-//! the embedded RobustVideoMatting weights make this one binary GPL-3.0 in an
-//! MIT repo (see Cargo.toml).
+//! the embedded RobustVideoMatting weights make this binary GPL-3.0, kept apart
+//! from the MIT app exactly like the GPL-2.0 recorder process
+//! (crates/prisc_recorder) is (see Cargo.toml).
 //!
 //! **stdout carries only the binary payload** of `matte`/`denoise`, one output
 //! frame per input frame, flushed per frame so the C# side can stream results
@@ -164,7 +165,7 @@ fn main() -> anyhow::Result<()> {
 /// them for RVM on macOS 26, and they land in the C runtime's block buffer to
 /// be flushed at some arbitrary later point — which is to say, spliced into
 /// the middle of a matte frame. The C# reader counts bytes, so every frame
-/// after the splice is torn: it reports "clowd_ai's output ended N bytes into
+/// after the splice is torn: it reports "prisc_ai's output ended N bytes into
 /// a matte frame" and the whole analysis fails, however healthy the inference
 /// was. A log line is not worth a failed job, and there is no way to ask a
 /// native library to stop, so the pipe simply stops being reachable by fd 1.

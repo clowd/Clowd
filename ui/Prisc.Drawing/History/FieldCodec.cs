@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Avalonia;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.History
+namespace Prisc.Drawing.History
 {
     /// <summary>
     /// Per-field-type capture/compare/diff behavior for the history delta engine (final-design

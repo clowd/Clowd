@@ -3,18 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Render
+namespace Prisc.VideoSDK.Render
 {
     /// <summary>
     /// Reads the <b>version 1</b> render-args file the old Rust <c>vid-render</c> tool took as its
     /// single argument (keep-segment list in source milliseconds, an optional webcam overlay with a
     /// pixel rect and a grayscale mask PNG, an x264 crf) and turns it into a v2
-    /// <see cref="Project"/>, so <c>Clowd.VideoRender</c> is a drop-in replacement for the binary
+    /// <see cref="Project"/>, so <c>Prisc.VideoRender</c> is a drop-in replacement for the binary
     /// the UI spawns today.
     ///
     /// <para><b>The mapping</b> (work-order step 8, table in the design doc):
@@ -547,8 +547,8 @@ namespace Clowd.VideoSDK.Render
     }
 
     // -------------------------------------------------------------------------------- v1 DTOs
-    // Deliberately duplicated from Clowd.Shared's RenderArgs rather than referenced: the SDK does
-    // not depend on Clowd.Shared (and must not — Clowd.Shared is the UI's world). These mirror the
+    // Deliberately duplicated from Prisc.Shared's RenderArgs rather than referenced: the SDK does
+    // not depend on Prisc.Shared (and must not — Prisc.Shared is the UI's world). These mirror the
     // JSON keys, which are the actual contract; the C# names are free.
 
     internal sealed class LegacyArgs

@@ -14,7 +14,7 @@ use crate::settings::CapturerSettings;
 use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
 use crate::telemetry::perf::{PerfSlot, PerfSnapshot};
 use crate::ui::shared::UiSharedState;
-use clowd_rust_core::geometry::{ScreenPointF, ScreenRect};
+use prisc_rust_core::geometry::{ScreenPointF, ScreenRect};
 
 // ── WindowHandle ───────────────────────────────────────────────────
 

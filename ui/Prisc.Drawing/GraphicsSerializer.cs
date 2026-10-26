@@ -4,10 +4,10 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.History;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.History;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     /// <summary>
     /// System.Text.Json contract for graphics serialization (session persistence via the

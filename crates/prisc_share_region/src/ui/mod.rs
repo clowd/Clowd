@@ -67,16 +67,16 @@
 //! never re-enter the display capture.
 //!
 //! The border and the floating controls around the live region are drawn by the
-//! Clowd shell that spawns this process (Clowd.Ui/Video/BorderWindow and
+//! Prisc shell that spawns this process (Prisc.Ui/Video/BorderWindow and
 //! FloatingToolbarWindow), not here. This binary must therefore put *nothing*
 //! on screen once the prompt is dismissed — no frame, no handles, no buttons —
-//! or it would draw a second border on top of Clowd's.
+//! or it would draw a second border on top of Prisc's.
 //!
 //! # Coordinate space
 //!
 //! All geometry crossing this boundary is in **capture space** (top-left origin,
 //! y-down — Windows: physical px on the virtual desktop, the process having
-//! opted into per-monitor-v2 DPI awareness in `obs_platform::init_process`;
+//! opted into per-monitor-v2 DPI awareness in `prisc_obs_platform::init_process`;
 //! macOS: CG points). Platform layers convert to their native window coordinates
 //! (e.g. Cocoa's bottom-left space) internally, at the window boundary only.
 //!
@@ -94,7 +94,7 @@
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
-use obs_platform::region::Rect;
+use prisc_obs_platform::region::Rect;
 
 use crate::commands::Command;
 
@@ -223,7 +223,7 @@ pub fn post_command(cmd: Command) {
 /// the UI thread when it is woken.
 ///
 /// Drains the whole queue rather than one command per wake so that a burst
-/// (several `move`s while the user drags Clowd's border, say) is handled in one
+/// (several `move`s while the user drags Prisc's border, say) is handled in one
 /// pass, and so a lost or coalesced wake can never strand a command in the
 /// queue indefinitely — the next wake picks up everything.
 pub(crate) fn take_commands() -> Vec<Command> {

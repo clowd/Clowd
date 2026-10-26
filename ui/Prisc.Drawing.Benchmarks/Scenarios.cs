@@ -11,10 +11,10 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.VisualTree;
-using Clowd.Drawing;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Benchmarks
+namespace Prisc.Drawing.Benchmarks
 {
     /// <summary>
     /// S1..S11 implementations (benchmark-spec.md §3). Each method runs entirely on the dispatcher
@@ -541,7 +541,7 @@ namespace Clowd.Drawing.Benchmarks
             public static ShadowBaker Resolve()
             {
                 var asm = typeof(GraphicBase).Assembly;
-                var renderer = asm.GetType("Clowd.Drawing.ShadowRenderer");
+                var renderer = asm.GetType("Prisc.Drawing.ShadowRenderer");
                 var render = renderer?.GetMethod("Render", BindingFlags.Public | BindingFlags.Static);
                 if (render != null)
                 {

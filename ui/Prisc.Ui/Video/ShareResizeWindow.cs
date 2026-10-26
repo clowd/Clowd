@@ -4,11 +4,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.Drawing;
-using Clowd.PlatformUtil;
-using Clowd.UI.Helpers;
+using Prisc.Drawing;
+using Prisc.PlatformUtil;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The hit-testable overlay that owns a share-region resize gesture: the accent frame around

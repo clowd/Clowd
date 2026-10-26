@@ -10,7 +10,7 @@ using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using Avalonia.Threading;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     public abstract class FileSyncObject : INotifyPropertyChanged, IDisposable
     {

@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// A control drawing a geometry's glyph centered in its bounds. Not a <see cref="Avalonia.Controls.Shapes.Path"/>

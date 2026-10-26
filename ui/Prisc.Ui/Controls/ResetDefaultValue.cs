@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The value logic behind <see cref="ResetDefaultButton"/>, kept free of Avalonia so it can be

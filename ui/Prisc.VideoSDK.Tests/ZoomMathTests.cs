@@ -1,10 +1,10 @@
 using System;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The zoom compositing math: per-item scale-about-focus matrices with edge clamping, ramp

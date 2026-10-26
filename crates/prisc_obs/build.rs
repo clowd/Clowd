@@ -1,12 +1,12 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-// The obs crate is a plain safe wrapper: it needs no link inputs of its own
-// (obs-sys emits those). This script exists only so the crate's *test harness*
-// can launch on macOS — the harness links libobs.framework via obs-sys, whose
+// The prisc_obs crate is a plain safe wrapper: it needs no link inputs of its own
+// (prisc_obs_sys emits those). This script exists only so the crate's *test harness*
+// can launch on macOS — the harness links libobs.framework via prisc_obs_sys, whose
 // install name and FFmpeg/x264 references are all @rpath, and cargo does not
-// propagate `cargo:rustc-link-arg` from obs-sys to dependents. Same pattern as
-// obs-platform's build script. Linux needs the same for libobs.so.30 and the
+// propagate `cargo:rustc-link-arg` from prisc_obs_sys to dependents. Same pattern as
+// prisc_obs_platform's build script. Linux needs the same for libobs.so.30 and the
 // FFmpeg bundle it references.
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
@@ -35,9 +35,9 @@ fn build_macos() {
 }
 
 /// The prebuilt obs-deps `lib` dir (FFmpeg et al.) — same probe as
-/// obs-express's build script.
+/// prisc_recorder's build script.
 fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    obs_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
+    prisc_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
         .into_iter()
         .map(|dir| dir.join("lib"))
         .find(|lib| lib.exists())
@@ -45,7 +45,7 @@ fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
 
 /// Linux: absolute RUNPATHs into the OBS build tree and the FFmpeg bundle so
 /// this crate's test harness can launch (the Linux twin of `build_macos`
-/// above; see obs-sys's `linux_emit_link_directives`).
+/// above; see prisc_obs_sys's `linux_emit_link_directives`).
 fn build_linux() {
     let lib_dir = env::var("DEP_OBS_OBS_LIB_DIR").expect("DEP_OBS_OBS_LIB_DIR not set");
     let deps_lib = env::var("DEP_OBS_DEPS_LIB").expect("DEP_OBS_DEPS_LIB not set");

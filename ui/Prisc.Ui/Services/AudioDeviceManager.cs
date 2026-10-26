@@ -4,15 +4,15 @@ using System.Diagnostics;
 using System.Linq;
 using NAudio.CoreAudioApi;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
-    /// <summary>An enumerated audio endpoint. DeviceId is what obs-express consumes verbatim
+    /// <summary>An enumerated audio endpoint. DeviceId is what prisc_recorder consumes verbatim
     /// (Windows: WASAPI MMDevice endpoint id; macOS: CoreAudio device UID; or "default").</summary>
     public sealed record AudioDeviceInfo(string DeviceId, string DeviceType, string FriendlyName);
 
     /// <summary>
-    /// Cross-platform audio device enumeration (mirrors the WPF Clowd.Video.AudioDeviceManager
-    /// API). Windows uses NAudio.Wasapi (MMDevice ids match what obs-express's wasapi sources
+    /// Cross-platform audio device enumeration (mirrors the WPF Prisc.Video.AudioDeviceManager
+    /// API). Windows uses NAudio.Wasapi (MMDevice ids match what the recorder's wasapi sources
     /// expect); macOS uses a CoreAudio P/Invoke shim (device UIDs, matching the coreaudio sources).
     /// </summary>
     public static class AudioDeviceManager

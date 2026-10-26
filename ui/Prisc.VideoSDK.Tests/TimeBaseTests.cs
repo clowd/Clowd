@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Media;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // TimeBase is the only place tick math happens, so it is tested against an *independent*
     // ground truth (BigInteger, arbitrary precision) rather than against itself: a bug shared

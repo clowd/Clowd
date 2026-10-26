@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// The pitch-preserving alternative to linearly resampling a warped span

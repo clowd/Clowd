@@ -4,17 +4,17 @@ using System.Text;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
-using Clowd.VideoSDK;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// Hidden performance-spike harness for the in-process FFmpeg playback engine (U0 gate).
-    /// Launched via <c>clowd --video-spike file.mp4</c> — see App.Startup, which short-circuits
+    /// Launched via <c>prisc --video-spike file.mp4</c> — see App.Startup, which short-circuits
     /// before the single-instance mutex. Presents 1-2 video tracks + audio with a stats overlay,
     /// and prints the same stats to stdout once per second (visible when stdout is redirected;
-    /// Clowd.Ui is a WinExe).
+    /// Prisc.Ui is a WinExe).
     /// </summary>
     public partial class VideoSpikeWindow : SystemThemedWindow
     {
@@ -87,8 +87,8 @@ namespace Clowd.UI.VideoEditor
 
             try
             {
-                // CLOWD_VIDEO_SPIKE_SW=1 forces the software decode path (fallback measurement).
-                var swOnly = Environment.GetEnvironmentVariable("CLOWD_VIDEO_SPIKE_SW") == "1";
+                // PRISC_VIDEO_SPIKE_SW=1 forces the software decode path (fallback measurement).
+                var swOnly = Environment.GetEnvironmentVariable("PRISC_VIDEO_SPIKE_SW") == "1";
                 var info = await _player.OpenAsync(_file,
                     new VideoOpenOptions { MaxPresentHeight = 1080, EnableHardwareDecode = !swOnly });
                 WebcamBorder.IsVisible = info.VideoStreams.Count > 1;
@@ -111,9 +111,9 @@ namespace Clowd.UI.VideoEditor
 
             _player.Play();
 
-            // CLOWD_VIDEO_SPIKE_SEEKTEST=1: scripted transport exercise (drag-style fast seeks,
+            // PRISC_VIDEO_SPIKE_SEEKTEST=1: scripted transport exercise (drag-style fast seeks,
             // exact seek, frame steps, skip ranges) for headless verification of the seek paths.
-            if (Environment.GetEnvironmentVariable("CLOWD_VIDEO_SPIKE_SEEKTEST") == "1")
+            if (Environment.GetEnvironmentVariable("PRISC_VIDEO_SPIKE_SEEKTEST") == "1")
                 _ = RunSeekScriptAsync();
         }
 

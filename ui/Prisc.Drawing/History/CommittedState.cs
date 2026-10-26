@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.History
+namespace Prisc.Drawing.History
 {
     /// <summary>
     /// Incrementally-maintained shadow of the current history node's document state (final-design

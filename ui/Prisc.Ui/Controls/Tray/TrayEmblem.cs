@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// The app's mark at the head of every strip: the same logo geometry and brand brush the main
@@ -19,7 +19,7 @@ namespace Clowd.UI.Controls.Tray
     /// </summary>
     public sealed class TrayEmblem : Control, ITrayOrientable
     {
-        private const string GeometryKey = "PathLogoSmall16", BrushKey = "ClowdAccentBrush";
+        private const string GeometryKey = "PathLogoSmall16", BrushKey = "PriscAccentBrush";
         private const double CanvasSize = 16;
         private const double MarkSize = 32;
 

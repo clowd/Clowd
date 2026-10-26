@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using static Clowd.Drawing.Ink.FreehandStroke;
+using Prisc.Drawing.Graphics;
+using static Prisc.Drawing.Ink.FreehandStroke;
 
-namespace Clowd.Drawing.Ink
+namespace Prisc.Drawing.Ink
 {
     /// <summary>
     /// Builds a brush stroke's outline incrementally, so a long stroke costs the same per pointer

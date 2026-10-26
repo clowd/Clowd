@@ -1,7 +1,7 @@
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The peak-dBFS → 0..1 mapping the tray's level pills are drawn from. Small, but it is the seam

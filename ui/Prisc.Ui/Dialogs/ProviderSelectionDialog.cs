@@ -6,9 +6,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media.Imaging;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.UI.Dialogs
+namespace Prisc.UI.Dialogs
 {
     /// <summary>
     /// Replaces the WPF TaskDialog command-link prompt shown when an upload has no default

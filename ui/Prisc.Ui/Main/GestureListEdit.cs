@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.UI.Config
+namespace Prisc.UI.Config
 {
     /// <summary>
     /// The list arithmetic behind recording one shortcut of a hotkey action on the Hotkeys page:

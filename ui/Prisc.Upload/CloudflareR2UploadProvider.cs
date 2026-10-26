@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     /// <summary>
     /// Uploads to Cloudflare R2 through its S3-compatible API by delegating to a

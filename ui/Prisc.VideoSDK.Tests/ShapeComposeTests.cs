@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Clowd.Geometry2D;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.Geometry2D;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="ShapeContent"/> through <see cref="FrameComposer"/>: the outline drawn inside its

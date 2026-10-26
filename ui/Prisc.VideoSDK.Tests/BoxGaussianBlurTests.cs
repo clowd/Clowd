@@ -1,8 +1,8 @@
 using System;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The float blur behind every wallpaper filter: it conserves mass, its spread is the

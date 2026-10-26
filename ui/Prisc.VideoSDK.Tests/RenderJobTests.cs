@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
-using Clowd.VideoSDK.Render;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
+using Prisc.VideoSDK.Render;
 using FFmpeg.AutoGen.Abstractions;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // End-to-end render loop: Project → RenderJob (CPU backend) → probe/decode the produced mp4.
     // Real-encode tests skip when the FFmpeg natives are absent (same resolver as EncoderTests);
@@ -45,7 +45,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string TempMp4()
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-renderjob-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-renderjob-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
             return path;
         }
@@ -616,7 +616,7 @@ namespace Clowd.VideoSDK.Tests
             project.Sources.Add(new Source
             {
                 Id = sourceId,
-                Path = Path.Combine(Path.GetTempPath(), $"clowd-missing-{Guid.NewGuid():N}.mp4"),
+                Path = Path.Combine(Path.GetTempPath(), $"prisc-missing-{Guid.NewGuid():N}.mp4"),
                 Streams = { new SourceStream { Index = 0, Kind = StreamKind.Video, Width = W, Height = H, AvgFrameRateNum = Fps, AvgFrameRateDen = 1 } },
             });
             var track = AddTrack(project, TrackKind.Video);

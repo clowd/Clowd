@@ -2,12 +2,12 @@ using System;
 using System.IO;
 using System.Text;
 using System.Text.Json;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The v2 render job file (<see cref="ProjectFileWriter"/>): the project verbatim, plus the
@@ -134,7 +134,7 @@ namespace Clowd.VideoSDK.Tests
         public void Write_puts_those_very_bytes_on_disk()
         {
             var project = Sample();
-            var path = Path.Combine(Path.GetTempPath(), $"clowd-jobfile-test-{Guid.NewGuid():N}.json");
+            var path = Path.Combine(Path.GetTempPath(), $"prisc-jobfile-test-{Guid.NewGuid():N}.json");
             try
             {
                 Assert.Equal(path, ProjectFileWriter.Write(path, project, Output, 23, VideoEncoder.Software));

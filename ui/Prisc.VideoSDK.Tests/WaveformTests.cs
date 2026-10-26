@@ -4,11 +4,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Thumbs;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Thumbs;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The waveform service, end to end over a real decode: a fixture whose amplitude is known
     // exactly (a 0.25 sine) is the only way to check that the mono fold, the bucket reduction and
@@ -63,7 +63,7 @@ namespace Clowd.VideoSDK.Tests
             if (_fixture != null)
                 return _fixture;
 
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-waveform-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-waveform-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using (var writer = new Mp4Writer(path, new Mp4WriterOptions
@@ -105,7 +105,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string TempDir()
         {
-            string dir = Path.Combine(Path.GetTempPath(), $"clowd-waveform-cache-{Guid.NewGuid():N}");
+            string dir = Path.Combine(Path.GetTempPath(), $"prisc-waveform-cache-{Guid.NewGuid():N}");
             Directory.CreateDirectory(dir);
             _tempDirs.Add(dir);
             return dir;
@@ -450,7 +450,7 @@ namespace Clowd.VideoSDK.Tests
         {
             RequireFFmpeg();
             string first = SineFixture();
-            string second = Path.Combine(Path.GetTempPath(), $"clowd-waveform-test-{Guid.NewGuid():N}.mp4");
+            string second = Path.Combine(Path.GetTempPath(), $"prisc-waveform-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(second);
             File.Copy(first, second);
             string dir = TempDir();
@@ -506,7 +506,7 @@ namespace Clowd.VideoSDK.Tests
         public void A_stream_that_cannot_be_decoded_settles_as_a_flat_line()
         {
             RequireFFmpeg();
-            string missing = Path.Combine(Path.GetTempPath(), $"clowd-waveform-missing-{Guid.NewGuid():N}.mp4");
+            string missing = Path.Combine(Path.GetTempPath(), $"prisc-waveform-missing-{Guid.NewGuid():N}.mp4");
 
             using var provider = new WaveformProvider();
             var snapshot = WaitForComplete(provider, missing, cacheDir: null, timeoutMs: 10_000);

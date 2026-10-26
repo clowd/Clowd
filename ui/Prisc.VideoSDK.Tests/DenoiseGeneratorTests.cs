@@ -3,20 +3,20 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// <see cref="DenoiseGenerator"/> against the real <c>clowd_ai</c> binary: encode a sine
+    /// <see cref="DenoiseGenerator"/> against the real <c>prisc_ai</c> binary: encode a sine
     /// fixture, generate its denoise sidecar, and assert the wav + companion honor the sidecar
     /// contract (float32 48 kHz, source-matched length, valid companion). This is the one place
     /// the dual-pipe pump (<see cref="AiClient"/>) runs for real — the design exists to
     /// avoid a stdin/stdout pipe deadlock, which only a real child process can exercise. Skips
-    /// when FFmpeg, the binary (build <c>cargo build -p clowd_ai --release</c>) or an ONNX
+    /// when FFmpeg, the binary (build <c>cargo build -p prisc_ai --release</c>) or an ONNX
     /// Runtime dylib (see BUILDING.md) is absent; the degrade-gracefully paths run everywhere.
     /// Collected with <see cref="MatteGeneratorTests"/>: both configure the process-wide
     /// <see cref="AiLoader"/>, so they must never run in parallel.
@@ -33,7 +33,7 @@ namespace Clowd.VideoSDK.Tests
         /// linked into it, so any built exe runs inference as-is.</summary>
         private static string FindUsableAi()
         {
-            string exeName = OperatingSystem.IsWindows() ? "clowd_ai.exe" : "clowd_ai";
+            string exeName = OperatingSystem.IsWindows() ? "prisc_ai.exe" : "prisc_ai";
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
@@ -53,7 +53,7 @@ namespace Clowd.VideoSDK.Tests
 
         public DenoiseGeneratorTests()
         {
-            _cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-dengen-test-{Guid.NewGuid():N}");
+            _cacheDir = Path.Combine(Path.GetTempPath(), $"prisc-dengen-test-{Guid.NewGuid():N}");
             Directory.CreateDirectory(_cacheDir);
         }
 
@@ -73,7 +73,7 @@ namespace Clowd.VideoSDK.Tests
         /// fixture shape as <see cref="SequentialAudioSourceTests"/>.</summary>
         private string EncodeSineFixture(int channels = 2)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-dengen-fixture-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-dengen-fixture-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using var writer = new Mp4Writer(path, new Mp4WriterOptions
@@ -216,7 +216,7 @@ namespace Clowd.VideoSDK.Tests
                 TestFFmpeg.SkipReason);
             var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
+                "prisc_ai.exe with a resolvable ONNX Runtime not found (cargo build -p prisc_ai --release, see BUILDING.md).");
 
             AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeSineFixture());
@@ -255,7 +255,7 @@ namespace Clowd.VideoSDK.Tests
                 TestFFmpeg.SkipReason);
             var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
+                "prisc_ai.exe with a resolvable ONNX Runtime not found (cargo build -p prisc_ai --release, see BUILDING.md).");
 
             AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeSineFixture(channels: 1));
@@ -280,7 +280,7 @@ namespace Clowd.VideoSDK.Tests
                 TestFFmpeg.SkipReason);
             var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
+                "prisc_ai.exe with a resolvable ONNX Runtime not found (cargo build -p prisc_ai --release, see BUILDING.md).");
 
             AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeSineFixture());

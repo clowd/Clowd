@@ -8,12 +8,12 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI;
-using Clowd.UI.Config;
+using Prisc.Config;
+using Prisc.UI;
+using Prisc.UI.Config;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// A click on the Hotkeys page that cannot record (macOS before Accessibility is granted) says

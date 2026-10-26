@@ -4,8 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <RootNamespace>Clowd.UI</RootNamespace>
-    <ApplicationIcon>Assets\clowd-default.ico</ApplicationIcon>
+    <RootNamespace>Prisc.UI</RootNamespace>
+    <ApplicationIcon>Assets\prisc-default.ico</ApplicationIcon>
     <!-- NAudio's WASAPI MMDevice enumeration requires built-in COM (Windows-only at runtime) -->
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -29,18 +29,18 @@
     <PackageReference Include="Sentry" Version="6.8.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
-    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
-    <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
-    <ProjectReference Include="..\Clowd.VideoSDK\Clowd.VideoSDK.csproj" />
+    <ProjectReference Include="..\Prisc.Drawing\Prisc.Drawing.csproj" />
+    <ProjectReference Include="..\Prisc.Shared\Prisc.Shared.csproj" />
+    <ProjectReference Include="..\Prisc.Upload\Prisc.Upload.csproj" />
+    <ProjectReference Include="..\Prisc.VideoSDK\Prisc.VideoSDK.csproj" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <!-- The macOS icon is consumed by vpk pack (release.yml) from the repo tree, not at
          runtime, so keep it out of the embedded Avalonia resources. -->
-    <AvaloniaResource Remove="Assets\clowd-default.icns" />
+    <AvaloniaResource Remove="Assets\prisc-default.icns" />
   </ItemGroup>
-  <!-- Clowd.VideoSDK pins SkiaSharp to $(SkiaSharpVersion) (Directory.Build.props) so the
+  <!-- Prisc.VideoSDK pins SkiaSharp to $(SkiaSharpVersion) (Directory.Build.props) so the
        SDK and Avalonia share one native Skia in this process. NuGet silently unifies to the
        highest requested version, so an Avalonia upgrade that bumps SkiaSharp would otherwise
        drift past the pin unnoticed - fail the build instead and update the pin. -->
@@ -50,6 +50,6 @@
                           Condition="'%(RuntimeCopyLocalItems.NuGetPackageId)' == 'SkiaSharp'" />
     </ItemGroup>
     <Error Condition="'@(_ResolvedSkiaSharp)' != '' AND '%(_ResolvedSkiaSharp.NuGetPackageVersion)' != '$(SkiaSharpVersion)'"
-           Text="Clowd.Ui resolved SkiaSharp %(_ResolvedSkiaSharp.NuGetPackageVersion) but clowd_ui/Directory.Build.props pins SkiaSharpVersion=$(SkiaSharpVersion). Update the pin to the version Avalonia resolves." />
+           Text="Prisc.Ui resolved SkiaSharp %(_ResolvedSkiaSharp.NuGetPackageVersion) but ui/Directory.Build.props pins SkiaSharpVersion=$(SkiaSharpVersion). Update the pin to the version Avalonia resolves." />
   </Target>
 </Project>

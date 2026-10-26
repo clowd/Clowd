@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using SkiaSharp;
 
-namespace Clowd.UI.Preview.Producers
+namespace Prisc.UI.Preview.Producers
 {
     /// <summary>
     /// The two pieces of pixel plumbing every raster producer needs: how big the result should be,

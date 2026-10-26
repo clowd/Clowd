@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // TryGetFrame semantics tested in isolation on SequentialFrameCursor — the pts-selection
     // state machine SequentialFrameSource runs — against synthetic PTS sequences, no FFmpeg.

@@ -5,16 +5,16 @@ using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Ai
+namespace Prisc.VideoSDK.Ai
 {
     /// <summary>
     /// Generates the person-matte sidecar for one video stream: decode the frames, scale each to
-    /// the analysis resolution and stream it as RGB24 through <c>clowd_ai matte</c>, then
+    /// the analysis resolution and stream it as RGB24 through <c>prisc_ai matte</c>, then
     /// encode the returned gray8 mattes (alpha in luma) as
     /// <c>matte-{SourceId}-{StreamIndex}.mp4</c> (H.264 yuv420p, companion json per
     /// <see cref="AiSidecars"/>) beside the project. Every matte frame keeps its source frame's
@@ -43,7 +43,7 @@ namespace Clowd.VideoSDK.Ai
         /// Generates the sidecar for (<paramref name="source"/>, <paramref name="streamIndex"/>),
         /// replacing any existing one. Returns false without doing anything when there is nowhere
         /// to cache (<paramref name="cacheDir"/> null — the dev harness) or no
-        /// <c>clowd_ai</c> binary resolves; throws on decode or inference failure (with the
+        /// <c>prisc_ai</c> binary resolves; throws on decode or inference failure (with the
         /// process's stderr tail) and <see cref="OperationCanceledException"/> on cancellation.
         /// Progress is 0..1.
         /// </summary>
@@ -120,7 +120,7 @@ namespace Clowd.VideoSDK.Ai
                     if (!ptsQueue.TryDequeue(out long ptsTicks))
                     {
                         throw new InvalidOperationException(
-                            "clowd_ai produced more output frames than were sent."
+                            "prisc_ai produced more output frames than were sent."
                             + StderrSuffix(client));
                     }
 
@@ -163,7 +163,7 @@ namespace Clowd.VideoSDK.Ai
                 {
                     client.Kill();
                     throw new InvalidOperationException(
-                        "clowd_ai did not exit after its output ended." + StderrSuffix(client));
+                        "prisc_ai did not exit after its output ended." + StderrSuffix(client));
                 }
                 client.ThrowIfFailed();
                 if (pumpError != null)
@@ -171,7 +171,7 @@ namespace Clowd.VideoSDK.Ai
                 if (framesReceived != framesSent)
                 {
                     throw new InvalidOperationException(
-                        $"clowd_ai returned {framesReceived} matte frames for {framesSent} " +
+                        $"prisc_ai returned {framesReceived} matte frames for {framesSent} " +
                         "input frames — the streams must match 1:1." + StderrSuffix(client));
                 }
 
@@ -210,7 +210,7 @@ namespace Clowd.VideoSDK.Ai
         /// The video streams the project wants a person matte for: every
         /// (sourceId, streamIndex) referenced by a media item on a visible video track whose
         /// <see cref="Item.Effect"/> is a matte-needing kind — the video mirror of
-        /// <see cref="Clowd.VideoSDK.Audio.DenoisedAudioSource.CollectDenoisedStreams"/>, with
+        /// <see cref="Prisc.VideoSDK.Audio.DenoisedAudioSource.CollectDenoisedStreams"/>, with
         /// the same visibility rule the player's stream map applies (a hidden track's streams
         /// have no pipelines for a matte to ride).
         /// </summary>
@@ -333,7 +333,7 @@ namespace Clowd.VideoSDK.Ai
                     if (offset == 0)
                         return false;
                     throw new InvalidOperationException(
-                        $"clowd_ai's output ended mid-frame: {offset} of {gray.Length} bytes."
+                        $"prisc_ai's output ended mid-frame: {offset} of {gray.Length} bytes."
                         + StderrSuffix(client));
                 }
                 offset += read;

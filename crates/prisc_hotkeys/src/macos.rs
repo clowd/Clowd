@@ -252,7 +252,7 @@ fn spawn_with(shared: Arc<Shared>, tx: Sender<Event>, config: TapConfig) -> Resu
     let revoked = Arc::new(AtomicBool::new(false));
     let (ready_tx, ready_rx) = mpsc::channel();
     let thread = thread::Builder::new()
-        .name("clowd-hotkeys-hook".into())
+        .name("prisc-hotkeys-hook".into())
         .spawn({
             let (shared, stop_requested, revoked) = (shared.clone(), stop_requested.clone(), revoked.clone());
             move || run(shared, tx, stop_requested, revoked, ready_tx, config)
@@ -270,7 +270,7 @@ fn spawn_with(shared: Arc<Shared>, tx: Sender<Event>, config: TapConfig) -> Resu
             let hook = RunLoopRef(backend.run_loop.0.clone());
             // Dropping `backend` on failure stops the hook again.
             let watcher = thread::Builder::new()
-                .name("clowd-hotkeys-watch".into())
+                .name("prisc-hotkeys-watch".into())
                 .spawn(move || watch(config.permitted, config.tick, revoked, hook, shared, stop_rx))
                 .map_err(|e| Error::HookFailed(e.to_string()))?;
             backend.watcher = Some((stop_tx, watcher));
@@ -990,7 +990,7 @@ mod tests {
     fn media_keys_decode_on_a_queue_from_a_private_copy() {
         static QUEUED: AtomicBool = AtomicBool::new(false);
         const PLAY_DOWN: isize = 16 << 16 | 0x0A << 8;
-        let queue = DispatchQueue::new("clowd-hotkeys-test", None);
+        let queue = DispatchQueue::new("prisc-hotkeys-test", None);
         let event = media_event(PLAY_DOWN);
         assert_eq!(
             decode_on(&queue, &QUEUED, &event, aux_data1, Duration::from_secs(2)),
@@ -1007,7 +1007,7 @@ mod tests {
         use dispatch2::DispatchObject;
         static QUEUED: AtomicBool = AtomicBool::new(false);
         const PLAY_DOWN: isize = 16 << 16 | 0x0A << 8;
-        let queue = DispatchQueue::new("clowd-hotkeys-test", None);
+        let queue = DispatchQueue::new("prisc-hotkeys-test", None);
         let event = media_event(PLAY_DOWN);
         queue.suspend();
         let start = Instant::now();

@@ -26,7 +26,7 @@ use windows::Win32::{
 use windows::Win32::Foundation::HWND;
 
 use super::{WheelDir, RAISE_POLL, RAISE_TIMEOUT};
-use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// The window the driver is scrolling. A top-level `HWND` — the marker's
 /// handle when it still holds up, else whatever `WindowFromPoint` reports.

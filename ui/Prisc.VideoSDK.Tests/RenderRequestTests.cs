@@ -1,13 +1,13 @@
 using System;
 using System.IO;
-using Clowd.Config;
-using Clowd.UI.Helpers;
-using Clowd.UI.Services;
-using Clowd.UI.VideoEditor;
-using Clowd.VideoSDK.Render;
+using Prisc.Config;
+using Prisc.UI.Helpers;
+using Prisc.UI.Services;
+using Prisc.UI.VideoEditor;
+using Prisc.VideoSDK.Render;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The render UI's decisions that do not need a window: the preset table behind the Render
@@ -107,7 +107,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void A_project_without_video_renders_at_the_fallback_rate()
         {
-            var project = new Clowd.VideoSDK.Model.Project();
+            var project = new Prisc.VideoSDK.Model.Project();
 
             Assert.Equal((RenderFrameRate.NoVideoCeilingFps, 1), RenderFrameRate.Ceiling(project));
             Assert.Equal((30, 1), RenderFrameRate.Resolve(project, 30));

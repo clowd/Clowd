@@ -4,10 +4,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Platform;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 
-namespace Clowd.UI.VideoEditor.Inspector
+namespace Prisc.UI.VideoEditor.Inspector
 {
     /// <summary>
     /// The pre-rendered loop sheets the background STYLE tiles play, decoded once and kept for the
@@ -46,7 +46,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// asset-integrity test addresses the sheets the way the app does rather than by guessing
         /// at a path on disk.</summary>
         public static Uri UriOf(string styleId)
-            => new Uri($"avares://Clowd.Ui/Assets/{BackgroundTileSheet.AssetFolder}/{BackgroundTileSheet.FileNameOf(styleId)}");
+            => new Uri($"avares://Prisc.Ui/Assets/{BackgroundTileSheet.AssetFolder}/{BackgroundTileSheet.FileNameOf(styleId)}");
 
         private sealed class Entry
         {

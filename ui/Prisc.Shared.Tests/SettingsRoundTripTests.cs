@@ -4,16 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia.Media;
-using Clowd.Config;
+using Prisc.Config;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class SettingsRoundTripTests : IDisposable
     {
-        private readonly string _path = Path.Combine(Path.GetTempPath(), "ClowdSettingsTests", Guid.NewGuid() + ".json");
+        private readonly string _path = Path.Combine(Path.GetTempPath(), "PriscSettingsTests", Guid.NewGuid() + ".json");
 
-        // SettingsGeneral.DefaultRegisterAutoStart is compiled against Clowd.Shared's configuration,
+        // SettingsGeneral.DefaultRegisterAutoStart is compiled against Prisc.Shared's configuration,
         // which is the same one this test assembly is built with.
         private static bool IsDebugBuild =>
 #if DEBUG
@@ -148,7 +148,7 @@ namespace Clowd.Shared.Tests
 
             // untouched values still come back as they were
             Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), loaded.Hotkeys.CaptureActiveShortcut);
-            Assert.True(loaded.Editor.RestoreSessionsOnClowdStart);
+            Assert.True(loaded.Editor.RestoreSessionsOnPriscStart);
         }
 
         [Fact]
@@ -329,7 +329,7 @@ namespace Clowd.Shared.Tests
 
             var original = new SettingsRoot();
             original.Recording.OutputDirectory = @"C:\Users\test\Recordings";
-            original.Recording.FilenamePattern = "'clowd' yyyy-MM-dd";
+            original.Recording.FilenamePattern = "'prisc' yyyy-MM-dd";
             original.Recording.OpenWhenFinished = RecordingFinishAction.OutputFolder; // enum by name
             original.Recording.Container = VideoContainer.Mkv;
 
@@ -337,7 +337,7 @@ namespace Clowd.Shared.Tests
             loaded = SettingsService.Load(_path);
 
             Assert.Equal(@"C:\Users\test\Recordings", loaded.Recording.OutputDirectory);
-            Assert.Equal("'clowd' yyyy-MM-dd", loaded.Recording.FilenamePattern);
+            Assert.Equal("'prisc' yyyy-MM-dd", loaded.Recording.FilenamePattern);
             Assert.Equal(RecordingFinishAction.OutputFolder, loaded.Recording.OpenWhenFinished);
             Assert.Equal(VideoContainer.Mkv, loaded.Recording.Container);
         }
@@ -474,7 +474,7 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void GifOptions_DefaultToBalancedQualityAndNoSizeCap_AndRoundTrip()
         {
-            // the size caps are passed to vid2gif only when non-zero (its parser rejects 0), so the
+            // the size caps are passed to prisc_vid2gif only when non-zero (its parser rejects 0), so the
             // default must stay 0 = "no limit" rather than some large sentinel.
             var loaded = SettingsService.Load(_path);
 
@@ -494,7 +494,7 @@ namespace Clowd.Shared.Tests
             Assert.Equal(640, loaded.Recording.GifMaxWidth);
             Assert.Equal(480, loaded.Recording.GifMaxHeight);
 
-            // the lowercase member name is the --quality value vid2gif accepts
+            // the lowercase member name is the --quality value prisc_vid2gif accepts
             Assert.Equal("fair", loaded.Recording.GifQuality.ToString().ToLowerInvariant());
         }
 

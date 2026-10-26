@@ -2,9 +2,9 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
-using Clowd.Util;
+using Prisc.Util;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>The color dialog's tabs, in rail order.</summary>
     public enum ColorDialogTabKind

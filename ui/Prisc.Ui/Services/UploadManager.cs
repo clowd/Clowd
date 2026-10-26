@@ -11,13 +11,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
-using Clowd.Config;
-using Clowd.UI;
-using Clowd.UI.Dialogs;
-using Clowd.UI.Helpers;
-using Clowd.Upload;
+using Prisc.Config;
+using Prisc.Legacy;
+using Prisc.UI;
+using Prisc.UI.Dialogs;
+using Prisc.UI.Helpers;
+using Prisc.Upload;
 
-namespace Clowd
+namespace Prisc
 {
     // port of the WPF UploadManager: uploads go to the default provider for the content type,
     // falling back to a provider-selection dialog when no default is set. DotNetZip was replaced
@@ -283,7 +284,7 @@ namespace Clowd
             if (provider is UploadProviderBase { SupportsUnseekableUpload: true } streamable)
                 return await StreamingZipUpload(streamable, filePaths, session, archiveName);
 
-            var tmpFolder = Directory.CreateTempSubdirectory("clowd-zip").FullName;
+            var tmpFolder = Directory.CreateTempSubdirectory("prisc-zip").FullName;
             var zipPath = Path.Combine(tmpFolder, GetRandomName(8) + ".zip");
 
             ActiveUpload upload = null;
@@ -519,12 +520,18 @@ namespace Clowd
             return result;
         }
 
-        /// <summary>Resolves the provider an upload was made with; null if it is no longer installed.</summary>
-        private static IUploadProvider FindProvider(string providerTypeName) =>
-            String.IsNullOrEmpty(providerTypeName) ? null :
-            SettingsRoot.Current?.Uploads?.Providers
-                        .Select(p => p.Provider)
-                        .FirstOrDefault(p => p.GetType().Name == providerTypeName);
+        /// <summary>Resolves the provider an upload was made with; null if it is no longer installed.
+        /// Records made before the rename name the built-in provider by its old type name.</summary>
+        private static IUploadProvider FindProvider(string providerTypeName)
+        {
+            if (String.IsNullOrEmpty(providerTypeName))
+                return null;
+
+            providerTypeName = LegacyClowd.MapProviderTypeName(providerTypeName);
+            return SettingsRoot.Current?.Uploads?.Providers
+                               .Select(p => p.Provider)
+                               .FirstOrDefault(p => p.GetType().Name == providerTypeName);
+        }
 
         private static UploadDeleteInfo ToDeleteInfo(UploadRecord record) => new UploadDeleteInfo
         {

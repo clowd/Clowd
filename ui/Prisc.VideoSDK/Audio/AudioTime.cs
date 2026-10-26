@@ -1,7 +1,7 @@
 using System;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Media;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// Tick ↔ sample-frame conversion for the audio path, integer math only (the audio analog

@@ -1,7 +1,7 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="using:System"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- Two TrayButtons in one Seg-filled slot, the split toggle's silhouette without its bar. The
          halves paint no fill of their own (Background=Transparent onto the slot) and the outer theme

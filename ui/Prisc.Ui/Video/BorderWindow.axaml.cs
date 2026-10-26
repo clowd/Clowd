@@ -2,10 +2,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Clowd.PlatformUtil;
-using Clowd.UI.Helpers;
+using Prisc.PlatformUtil;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Click-through accent frame drawn around the region being recorded (design §4.2). A plain

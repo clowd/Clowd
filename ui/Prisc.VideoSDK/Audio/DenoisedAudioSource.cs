@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// The AI-denoise decorator over an <see cref="IAudioSource"/>: streams whose track has

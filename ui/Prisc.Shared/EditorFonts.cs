@@ -1,6 +1,6 @@
 using Avalonia.Media;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// Default font families of the drawing tools. Both faces ship embedded with the app, which

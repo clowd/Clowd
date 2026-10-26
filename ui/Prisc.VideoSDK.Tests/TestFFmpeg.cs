@@ -1,9 +1,9 @@
 using System;
 using System.IO;
-using Clowd.UI;
-using Clowd.VideoSDK;
+using Prisc.UI;
+using Prisc.VideoSDK;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Finds the FFmpeg natives for the suites that need real decoding, encoding or probing, and
@@ -24,7 +24,7 @@ namespace Clowd.VideoSDK.Tests
 
         private static string FindDirectory()
         {
-            // the dev layout the app does not know about: a sibling obs-express-rs build tree.
+            // the dev layout: the Prisc repository's own cargo target tree (built by `cargo rec`).
             int major = FFmpeg.AutoGen.Abstractions.ffmpeg.LIBAVCODEC_VERSION_MAJOR;
             string probe = OperatingSystem.IsWindows() ? $"avcodec-{major}.dll"
                 : OperatingSystem.IsMacOS() ? $"libavcodec.{major}.dylib"
@@ -33,11 +33,14 @@ namespace Clowd.VideoSDK.Tests
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
-                foreach (var cfg in new[] { "release", "debug" })
+                if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
                 {
-                    var candidate = Path.Combine(dir.FullName, "obs-express-rs", "target", cfg);
-                    if (File.Exists(Path.Combine(candidate, probe)))
-                        return candidate;
+                    foreach (var cfg in new[] { "release", "debug" })
+                    {
+                        var candidate = Path.Combine(dir.FullName, "target", cfg);
+                        if (File.Exists(Path.Combine(candidate, probe)))
+                            return candidate;
+                    }
                 }
                 dir = dir.Parent;
             }
@@ -48,6 +51,6 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>The message a skipped test explains itself with.</summary>
         public static string SkipReason =>
             $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or " +
-            $"{ObsBinaryLocator.EnvVarName}, or build obs-express-rs): {FFmpegLoader.FailureReason}";
+            $"{ObsBinaryLocator.EnvVarName}, or run `cargo rec` in the Prisc repository): {FFmpegLoader.FailureReason}";
     }
 }

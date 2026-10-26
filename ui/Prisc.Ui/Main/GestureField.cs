@@ -11,9 +11,9 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using Clowd.UI.Controls;
+using Prisc.UI.Controls;
 
-namespace Clowd.UI.Config
+namespace Prisc.UI.Config
 {
     /// <summary>
     /// One shortcut of a hotkey action: a gesture button (click it, then press the new
@@ -90,7 +90,7 @@ namespace Clowd.UI.Config
         internal const string SecureInputPrompt = "Secure keyboard entry is on";
         internal const string SecureInputMessage =
             "Another app has secure keyboard entry on (usually a password field), so no key reaches "
-            + "Clowd until it ends.";
+            + "Prisc until it ends.";
 
         private readonly Button _button;
         private readonly Border _listenRing;

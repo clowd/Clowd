@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// One filled/stroked shape of a themed cursor glyph. <see cref="PathData"/> is SVG path

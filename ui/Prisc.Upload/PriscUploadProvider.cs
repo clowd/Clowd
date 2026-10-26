@@ -5,12 +5,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     /// <summary>The built-in text host running on clwd.app (hastebin-compatible API). Marked
     /// <see cref="IBuiltInProvider"/> so it sorts first and is enabled/defaulted for Text out of
-    /// the box — see <see cref="Clowd.Config.SettingsUpload.DiscoverProviders"/>.</summary>
-    public class ClowdUploadProvider : UploadProviderBase, IBuiltInProvider
+    /// the box — see <see cref="Prisc.Config.SettingsUpload.DiscoverProviders"/>.</summary>
+    public class PriscUploadProvider : UploadProviderBase, IBuiltInProvider
     {
         public const string DefaultServerUrl = "https://clwd.app";
 
@@ -37,7 +37,7 @@ namespace Clowd.Upload
 
         public override SupportedUploadType SupportedUpload => SupportedUploadType.Text;
 
-        public override Stream Icon => new Resource().ClowdIcon;
+        public override Stream Icon => new Resource().PriscIcon;
 
         [Description("The Prisc server to store pastes on. Change this only if you are self-hosting.")]
         public string ServerUrl

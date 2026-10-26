@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// macOS audio device enumeration via CoreAudio P/Invoke — the same three property calls
     /// OBS's own mac enumerator uses (audio-device-enum.c): the system device list, each
-    /// device's UID (what obs-express's coreaudio sources take as device_id) and name, with
+    /// device's UID (what the recorder's coreaudio sources take as device_id) and name, with
     /// input/output classification from the stream configuration. Plus the handful of
     /// per-device property reads <see cref="Services.CoreAudioMicCapture"/> needs to turn a
     /// picker id back into a device it can open: nothing here opens one.
@@ -115,7 +115,7 @@ namespace Clowd.UI
             }
         }
 
-        /// <summary>The device's UID (the id the picker and obs-express use), or null.</summary>
+        /// <summary>The device's UID (the id the picker and prisc_recorder use), or null.</summary>
         internal static string GetDeviceUid(uint deviceId) => GetStringProperty(deviceId, kAudioDevicePropertyDeviceUID);
 
         /// <summary>The device's user-facing name, or null.</summary>

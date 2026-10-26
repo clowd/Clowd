@@ -1,6 +1,6 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:tray="using:Clowd.UI.Controls.Tray">
+        xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- The dark look for everything the tray opens OUTSIDE its own window: tooltips, the status blip,
          and the flyout menus a chevron can raise.

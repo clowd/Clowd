@@ -9,13 +9,16 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using Avalonia.Media;
 using Microsoft.Extensions.Configuration;
+using Prisc.Legacy;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Loads and saves <see cref="SettingsRoot"/> as JSON using the standard .NET configuration
-    /// stack. <see cref="Load()"/> is a pure parse with no side effects: it returns a fully
-    /// populated defaults instance when the file (or any section/value) is missing. Persistence
+    /// stack. <see cref="Load(string)"/> is a pure parse with no side effects: it returns a fully
+    /// populated defaults instance when the file (or any section/value) is missing.
+    /// <see cref="Load()"/> first copies the pre-rename settings file forward when this build has
+    /// none yet (<see cref="LegacyClowd.MigrateSettingsFile"/>), and otherwise does the same. Persistence
     /// is explicit — nothing in the settings object graph saves itself; UI code calls
     /// <see cref="Save(SettingsRoot)"/> after a user-visible mutation.
     /// </summary>
@@ -34,9 +37,9 @@ namespace Clowd.Config
 
         public static string FilePath =>
 #if DEBUG
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd", "Clowd.DEBUG.Settings.json");
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Prisc", "Prisc.DEBUG.Settings.json");
 #else
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd", "Clowd.Settings.json");
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Prisc", "Prisc.Settings.json");
 #endif
 
         /// <summary>
@@ -45,8 +48,15 @@ namespace Clowd.Config
         /// with are brought forward where they no longer work (see
         /// <see cref="SettingsHotkey.MigrateDefaults"/>; nothing is written). Throws only when the file exists but
         /// cannot be parsed (malformed JSON / unconvertible value) — callers may then offer a reset.
+        /// This overload reads <see cref="FilePath"/>, first copying the settings of a pre-rename install
+        /// forward when that file does not exist yet (the only write it ever makes; the Velopack
+        /// update hook relies on it too).
         /// </summary>
-        public static SettingsRoot Load() => Load(FilePath);
+        public static SettingsRoot Load()
+        {
+            LegacyClowd.MigrateSettingsFile(FilePath);
+            return Load(FilePath);
+        }
 
         public static SettingsRoot Load(string path) => Load(path, HotkeyGesture.CurrentPlatform);
 

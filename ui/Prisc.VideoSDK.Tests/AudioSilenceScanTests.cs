@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="AudioSilenceScan"/> — the editor's "does this track hold anything?" question,
@@ -43,7 +43,7 @@ namespace Clowd.VideoSDK.Tests
         /// channels; null fills digital silence.</summary>
         private string Fixture(Func<int, float> fill)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-silence-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-silence-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using var writer = new Mp4Writer(path, new Mp4WriterOptions
@@ -144,7 +144,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void An_undecodable_stream_is_kept_rather_than_called_silent()
         {
-            var missing = Path.Combine(Path.GetTempPath(), $"clowd-silence-missing-{Guid.NewGuid():N}.mp4");
+            var missing = Path.Combine(Path.GetTempPath(), $"prisc-silence-missing-{Guid.NewGuid():N}.mp4");
 
             Assert.ThrowsAny<Exception>(() => AudioSilenceScan.IsSilent(missing, AudioStream));
             Assert.Empty(AudioSilenceScan.FindSilentStreams(missing, Streams(AudioStream)));

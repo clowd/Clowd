@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// The demux read-ahead rule, kept separate from the native plumbing so it can be tested.
@@ -93,7 +93,7 @@ namespace Clowd.VideoSDK.Playback
         public void Start()
         {
             _running = true;
-            _thread = new Thread(ReadLoop) { Name = "clowd-demux", IsBackground = true };
+            _thread = new Thread(ReadLoop) { Name = "prisc-demux", IsBackground = true };
             _thread.Start();
         }
 

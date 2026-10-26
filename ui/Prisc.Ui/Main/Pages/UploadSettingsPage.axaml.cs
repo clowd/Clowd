@@ -14,16 +14,16 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
-using Clowd.Config;
-using Clowd.UI.Config;
-using Clowd.UI.Dialogs;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.UI.Config;
+using Prisc.UI.Dialogs;
+using Prisc.UI.Helpers;
 using Ursa.Controls;
 
 // Ursa ships a Toast of its own; this page means the app's toast helper.
-using Toast = Clowd.UI.Helpers.Toast;
+using Toast = Prisc.UI.Helpers.Toast;
 
-namespace Clowd.UI.Pages
+namespace Prisc.UI.Pages
 {
     public partial class UploadSettingsPage : UserControl, IPageHeaderContent
     {
@@ -49,7 +49,7 @@ namespace Clowd.UI.Pages
             InitializeContextMenu();
         }
 
-        // ---- "Upload with Clowd" shell entry ----
+        // ---- "Upload with Prisc" shell entry ----
 
         /// <summary>
         /// The Explorer/Finder context menu entry. It lives on this page rather than under System

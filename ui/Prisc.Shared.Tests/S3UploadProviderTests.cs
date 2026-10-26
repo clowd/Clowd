@@ -2,10 +2,10 @@ using System;
 using System.IO;
 using Amazon.Runtime;
 using Amazon.S3;
-using Clowd.Upload;
+using Prisc.Upload;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     /// <summary>
     /// Verifies that the S3 provider's settings translate into the right AWS SDK client

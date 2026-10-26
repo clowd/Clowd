@@ -9,7 +9,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// The graphite panel every floating strip is built on: a rounded, ringed, shadowed row (or column)

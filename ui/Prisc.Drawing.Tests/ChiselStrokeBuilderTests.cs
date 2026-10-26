@@ -5,13 +5,13 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Ink;
-using Clowd.Drawing.Tools;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Ink;
+using Prisc.Drawing.Tools;
 using Xunit;
-using Sample = Clowd.Drawing.Graphics.GraphicBrush.Sample;
+using Sample = Prisc.Drawing.Graphics.GraphicBrush.Sample;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The highlighter's outline is the tip swept along the centreline: flat-ended, its full

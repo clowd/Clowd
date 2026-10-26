@@ -1,15 +1,15 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // An animated GIF is imported as an ordinary media source — nothing in the model or the decode
     // path knows it is a GIF — so what these tests pin is that the claim is true end to end: the
@@ -22,7 +22,7 @@ namespace Clowd.VideoSDK.Tests
     {
         private const long Second = TimeBase.TicksPerSecond;
 
-        private readonly string _dir = Path.Combine(Path.GetTempPath(), "clowd-gif-import-" + Guid.NewGuid().ToString("N"));
+        private readonly string _dir = Path.Combine(Path.GetTempPath(), "prisc-gif-import-" + Guid.NewGuid().ToString("N"));
 
         public void Dispose()
         {

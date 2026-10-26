@@ -1,11 +1,11 @@
 using System;
 using System.Linq;
-using Clowd.Config;
-using Clowd.Drawing;
-using Clowd.UI.Controls;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.UI.Controls;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The style fields shared by the editor's property bar and the settings window's tool

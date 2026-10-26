@@ -1,5 +1,5 @@
 use crate::system::{CapturedCursor, CursorImage};
-use clowd_rust_core::geometry::ScreenPoint;
+use prisc_rust_core::geometry::ScreenPoint;
 
 use std::mem;
 use windows::Win32::Graphics::Gdi::{DeleteObject, GetBitmapBits, GetObjectW, BITMAP};

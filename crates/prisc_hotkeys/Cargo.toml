@@ -1,5 +1,5 @@
 [package]
-name = "clowd_hotkeys"
+name = "prisc_hotkeys"
 version = "1.0.0"
 authors.workspace = true
 repository.workspace = true
@@ -9,10 +9,10 @@ rust-version.workspace = true
 
 # Global hotkeys, gesture recording and the keystroke observe stream, through one keyboard hook
 # (WH_KEYBOARD_LL on Windows, a CGEventTap on macOS). The key table in src/key.rs is the only
-# global-hotkey key map in Clowd; the C# mirror is generated from it (src/csharp.rs).
+# global-hotkey key map in Prisc; the C# mirror is generated from it (src/csharp.rs).
 
 [lib]
-# rlib: linked statically into clowd_capture. cdylib: clowd_hotkeys.dll / libclowd_hotkeys.dylib, P/Invoked by Clowd.Ui.
+# rlib: linked statically into prisc_capture. cdylib: prisc_hotkeys.dll / libprisc_hotkeys.dylib, P/Invoked by Prisc.Ui.
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]

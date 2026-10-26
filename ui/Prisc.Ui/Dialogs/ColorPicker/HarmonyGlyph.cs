@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// A harmony preset button's face (brief §7.2.3): the preset's dots (<see cref="ColorHarmony.Glyph"/>),

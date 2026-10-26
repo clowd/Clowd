@@ -1,6 +1,6 @@
 using Avalonia;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     /// <summary>
     /// Replacements for WPF Rect.Empty/IsEmpty and Int32Rect.IsEmpty (decision table #3/#4).

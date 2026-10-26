@@ -2,9 +2,9 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The scrolling capture HUD: a two-line progress readout plus Finish and Cancel, on the generic

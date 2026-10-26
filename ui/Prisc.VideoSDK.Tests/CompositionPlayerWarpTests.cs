@@ -5,13 +5,13 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // CompositionPlayer × TimeWarp: the clock runs linearly in warped output time and Position
     // (still the project-time contract for seeking/UI) is the warp's inverse of it, so speed
@@ -45,7 +45,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string EncodeAvFixture(int seconds)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-player-warp-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-player-warp-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
             using var writer = new Mp4Writer(path, new Mp4WriterOptions
             {

@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Backend selection: tries the GPU once at startup and falls back to CPU automatically.

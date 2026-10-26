@@ -1,7 +1,7 @@
 using System;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>
     /// One NV12 video frame in encoder-ready memory: the <c>AVFrame</c> the render pipeline's

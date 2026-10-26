@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Whether sharing a region exists as a feature. Rendered by the Shared Region page as the

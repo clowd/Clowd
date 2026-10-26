@@ -1,7 +1,7 @@
 //! Linux platform implementation (DESIGN §2.2) — the recorder-specific
 //! remainder: audio/webcam helpers, plus stubs for the pointer-sampling
 //! entry points. The monitor / paths / display-capture layer lives in the
-//! shared `obs-platform` crate, which also owns the X11-vs-Wayland session
+//! shared `prisc_obs_platform` crate, which also owns the X11-vs-Wayland session
 //! decision.
 //!
 //! What is out of scope on Linux, and how it stays out:
@@ -18,7 +18,7 @@
 //!   that has no Linux counterpart here: the gain is always unity, so the flag
 //!   is accepted and has no effect.
 
-use obs::data::ObsData;
+use prisc_obs::data::ObsData;
 
 use crate::cursor_sprite::SpriteEvent;
 

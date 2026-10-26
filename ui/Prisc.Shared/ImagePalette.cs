@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Avalonia.Media;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// A picture's pixels as plain data: unpremultiplied BGRA bytes, row after row with no padding.

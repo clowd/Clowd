@@ -6,7 +6,7 @@ using System.Threading;
 using Avalonia.Platform;
 using SkiaSharp;
 
-namespace Clowd.UI.Preview.Icons
+namespace Prisc.UI.Preview.Icons
 {
     /// <summary>
     /// The typefaces the preview engine draws with — the lettering on generated file-type icons and the
@@ -37,11 +37,11 @@ namespace Clowd.UI.Preview.Icons
     {
         // Inter 4.1, embedded by this app as Thin/Light/Regular/Medium/SemiBold/Bold under
         // Assets/Fonts/Inter (written by tools/capture-fonts/build.py).
-        private const string InterAssetUri = "avares://Clowd.Ui/Assets/Fonts/Inter/Inter-SemiBold.ttf";
+        private const string InterAssetUri = "avares://Prisc.Ui/Assets/Fonts/Inter/Inter-SemiBold.ttf";
 
         // Already in this app's resources for the editor's monospace text tool. A last-ditch face that at
         // least has real metrics of its own.
-        private const string CascadiaAssetUri = "avares://Clowd.Ui/Assets/Fonts/CascadiaCode-Regular.ttf";
+        private const string CascadiaAssetUri = "avares://Prisc.Ui/Assets/Fonts/CascadiaCode-Regular.ttf";
 
         private static readonly Lazy<SKTypeface> _lettering =
             new Lazy<SKTypeface>(Load, LazyThreadSafetyMode.ExecutionAndPublication);

@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Input;
-using Clowd;
-using Clowd.UI.DrawOnScreen;
+using Prisc;
+using Prisc.UI.DrawOnScreen;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The draw-on-screen hotkey table (issue #110): every tile has a key, no two bindings collide, the

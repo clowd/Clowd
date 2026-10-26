@@ -1,14 +1,15 @@
 [package]
-name = "vid2gif"
+name = "prisc_vid2gif"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-2.0-or-later"
 
 [dependencies]
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
-ffmpeg-sys = { workspace = true }
+prisc_ffmpeg_sys = { workspace = true }
 
 [build-dependencies]
-# Linux: stages the shared FFmpeg bundle (and, for obs-express, libobs + plugins)
+# Linux: stages the shared FFmpeg bundle (and, for prisc_recorder, libobs + plugins)
 # next to the binary with $ORIGIN RUNPATHs.
-obs-build-support = { workspace = true }
+prisc_build_support = { workspace = true }

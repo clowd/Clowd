@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// Sums the project's active audio items into interleaved stereo float chunks at the output

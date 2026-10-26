@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// The preview path's <see cref="IAudioSource"/>: the repositionable twin of

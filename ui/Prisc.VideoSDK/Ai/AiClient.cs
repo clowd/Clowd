@@ -5,10 +5,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace Clowd.VideoSDK.Ai
+namespace Prisc.VideoSDK.Ai
 {
     /// <summary>
-    /// One running <c>clowd_ai</c> child process: binary payload over stdin/stdout, logging
+    /// One running <c>prisc_ai</c> child process: binary payload over stdin/stdout, logging
     /// over stderr. The pipe discipline is the whole design — the process protocol is "write raw
     /// frames to stdin, read one output frame per input frame from stdout", and an OS pipe buffer
     /// holds only ~64KB, so the caller MUST write <see cref="Input"/> and read
@@ -135,7 +135,7 @@ namespace Clowd.VideoSDK.Ai
                 _ => $"exit code {code}",
             };
             throw new InvalidOperationException(
-                $"clowd_ai failed: {reason}." + (tail.Length > 0 ? Environment.NewLine + tail : ""));
+                $"prisc_ai failed: {reason}." + (tail.Length > 0 ? Environment.NewLine + tail : ""));
         }
 
         private void PumpStderr()

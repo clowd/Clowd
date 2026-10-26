@@ -583,7 +583,7 @@ mod tests {
     fn read_f32(path: &std::path::Path) -> Vec<f32> {
         let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         // The one reader here whose length is not ours to guarantee — it takes
-        // whatever file CLOWD_AI_REF_DIR points at. `chunks_exact` dropped a
+        // whatever file PRISC_AI_REF_DIR points at. `chunks_exact` dropped a
         // partial trailing float silently, which would have left the parity
         // assertions comparing against a misaligned fixture and blaming the
         // model; `as_chunks` hands the tail back, so a truncated fixture fails
@@ -599,11 +599,11 @@ mod tests {
     /// Opt-in parity check against ORT-generated reference tensors: the
     /// metadata-parsed initial state must match the captured one, and 100
     /// frames through the real model must reproduce the reference enhanced
-    /// spectra. Set CLOWD_AI_REF_DIR.
+    /// spectra. Set PRISC_AI_REF_DIR.
     #[test]
     fn env_dpdf_reference_parity() {
-        let Ok(dir) = std::env::var("CLOWD_AI_REF_DIR") else {
-            eprintln!("SKIP {}: CLOWD_AI_REF_DIR not set", module_path!());
+        let Ok(dir) = std::env::var("PRISC_AI_REF_DIR") else {
+            eprintln!("SKIP {}: PRISC_AI_REF_DIR not set", module_path!());
             return;
         };
         let dir = std::path::Path::new(&dir);
@@ -687,8 +687,8 @@ mod tests {
     /// the latency compensation is exact, not approximate.
     #[test]
     fn env_denoise_end_to_end_latency() {
-        let Ok(dir) = std::env::var("CLOWD_AI_REF_DIR") else {
-            eprintln!("SKIP {}: CLOWD_AI_REF_DIR not set", module_path!());
+        let Ok(dir) = std::env::var("PRISC_AI_REF_DIR") else {
+            eprintln!("SKIP {}: PRISC_AI_REF_DIR not set", module_path!());
             return;
         };
         let spec_in = read_f32(&std::path::Path::new(&dir).join("dpdf_spec_in.bin"));

@@ -5,9 +5,9 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>The three sources the recording strip toggles, each with a device behind it.</summary>
     public enum CaptureSource

@@ -7,10 +7,10 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.UI.Converters;
-using Clowd.Util;
+using Prisc.UI.Converters;
+using Prisc.Util;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The "Color Wheel" window (COLOR_VIEWER_REWORK.md): a top bar with the Initial / Selected
@@ -206,7 +206,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         }
 
         /// <summary>
-        /// Picker: OK and Cancel, affirmative first on Windows (as every other Clowd dialog has it)
+        /// Picker: OK and Cancel, affirmative first on Windows (as every other Prisc dialog has it)
         /// and trailing on macOS. Viewer: Close alone. Enter is OK and Escape is Cancel or Close.
         /// </summary>
         private void BuildFooter()

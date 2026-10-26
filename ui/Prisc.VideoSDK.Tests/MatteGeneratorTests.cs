@@ -3,21 +3,21 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="MatteGenerator"/>: the model rules (which streams want a matte, the analysis
     /// resolution) run everywhere; the end-to-end generation runs against the real
-    /// <c>clowd_ai</c> binary — encode a small fixture, generate its matte sidecar, and
+    /// <c>prisc_ai</c> binary — encode a small fixture, generate its matte sidecar, and
     /// assert the mp4 + companion honor the sidecar contract (analysis-sized gray-in-luma
     /// frames on the source's PTS grid, valid companion). Skips when FFmpeg, the binary
-    /// (build <c>cargo build -p clowd_ai --release</c>) or an ONNX Runtime dylib (see
+    /// (build <c>cargo build -p prisc_ai --release</c>) or an ONNX Runtime dylib (see
     /// BUILDING.md) is absent — the same gating as <see cref="DenoiseGeneratorTests"/>.
     /// Shares that suite's collection: both configure the process-wide
     /// <see cref="AiLoader"/>, so they must never run in parallel.
@@ -34,7 +34,7 @@ namespace Clowd.VideoSDK.Tests
         /// linked into it, so any built exe runs inference as-is.</summary>
         private static string FindUsableAi()
         {
-            string exeName = OperatingSystem.IsWindows() ? "clowd_ai.exe" : "clowd_ai";
+            string exeName = OperatingSystem.IsWindows() ? "prisc_ai.exe" : "prisc_ai";
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
@@ -54,7 +54,7 @@ namespace Clowd.VideoSDK.Tests
 
         public MatteGeneratorTests()
         {
-            _cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-mattegen-test-{Guid.NewGuid():N}");
+            _cacheDir = Path.Combine(Path.GetTempPath(), $"prisc-mattegen-test-{Guid.NewGuid():N}");
             Directory.CreateDirectory(_cacheDir);
         }
 
@@ -75,7 +75,7 @@ namespace Clowd.VideoSDK.Tests
         /// not the model's segmentation.</summary>
         private string EncodeVideoFixture()
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-mattegen-fixture-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-mattegen-fixture-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using var writer = new Mp4Writer(path, new Mp4WriterOptions
@@ -203,7 +203,7 @@ namespace Clowd.VideoSDK.Tests
                 TestFFmpeg.SkipReason);
             var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
+                "prisc_ai.exe with a resolvable ONNX Runtime not found (cargo build -p prisc_ai --release, see BUILDING.md).");
 
             AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeVideoFixture());
@@ -245,7 +245,7 @@ namespace Clowd.VideoSDK.Tests
                 TestFFmpeg.SkipReason);
             var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
+                "prisc_ai.exe with a resolvable ONNX Runtime not found (cargo build -p prisc_ai --release, see BUILDING.md).");
 
             AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeVideoFixture());

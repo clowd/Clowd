@@ -1,7 +1,7 @@
 using System;
 using Avalonia.Animation.Easings;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// CSS's <c>cubic-bezier(x1, y1, x2, y2)</c>: the curve from (0,0) to (1,1) through the two control

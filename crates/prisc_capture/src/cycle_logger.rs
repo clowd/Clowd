@@ -26,7 +26,7 @@ impl CycleLogger {
             ),
             file: Mutex::new(None),
         });
-        clowd_rust_core::telemetry::install_logger(Box::new(InstalledLogger(Arc::clone(&logger))));
+        prisc_rust_core::telemetry::install_logger(Box::new(InstalledLogger(Arc::clone(&logger))));
         logger
     }
 

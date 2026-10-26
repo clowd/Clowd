@@ -1,6 +1,6 @@
-//! Drives the `clowd_ai ocr` child process: one spawn per recognition.
+//! Drives the `prisc_ai ocr` child process: one spawn per recognition.
 //!
-//! The wire format lives in `clowd_rust_core::ocr`. What lives here is the
+//! The wire format lives in `prisc_rust_core::ocr`. What lives here is the
 //! parent's half of it — finding the binary, feeding it pixels without ever
 //! blocking on a full pipe, turning BACK into a kill, and mapping however the
 //! child ended into an [`OcrError`].
@@ -15,25 +15,25 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use clowd_rust_core::ocr::{OcrError, OcrOutcome, OcrRequest, OcrResponse, RequestHeader, RESULT_FILE_NAME};
+use prisc_rust_core::ocr::{OcrError, OcrOutcome, OcrRequest, OcrResponse, RequestHeader, RESULT_FILE_NAME};
 
 /// Binary we spawn, expected beside our own executable — which is where CI
-/// puts it (`publish/`, next to `clowd_capture`) and where `cargo build`
+/// puts it (`publish/`, next to `prisc_capture`) and where `cargo build`
 /// puts it too (`target/<profile>/`), so one resolution rule covers both. It
-/// is the one AI inference binary Clowd ships (its `ocr` subcommand; the
+/// is the one AI inference binary Prisc ships (its `ocr` subcommand; the
 /// video editor spawns the same exe for matting and denoising), and it does
 /// not exist on Intel macOS, where ONNX Runtime has no binaries — there the
 /// spawn fails and OCR reports as unavailable.
 #[cfg(windows)]
-const AI_BINARY: &str = "clowd_ai.exe";
+const AI_BINARY: &str = "prisc_ai.exe";
 #[cfg(not(windows))]
-const AI_BINARY: &str = "clowd_ai";
+const AI_BINARY: &str = "prisc_ai";
 
 /// Overrides the resolved path. The C# side has the same hatch for finding
 /// the capturer (`CaptureBinaryLocator.EnvVarName`); this one exists because
 /// sibling resolution cannot work from a test binary, which cargo puts in
 /// `target/<profile>/deps/` rather than beside the recognizer.
-const BINARY_OVERRIDE_VAR: &str = "CLOWD_AI_BINARY";
+const BINARY_OVERRIDE_VAR: &str = "PRISC_AI_BINARY";
 
 /// How often the wait loop wakes to poll the cancel flag. Small enough that
 /// BACK feels immediate and that the result is picked up the moment the child
@@ -114,7 +114,7 @@ impl ResponsePaths {
                 static SEQ: AtomicU64 = AtomicU64::new(0);
                 let n = SEQ.fetch_add(1, Ordering::Relaxed);
                 Self {
-                    response: std::env::temp_dir().join(format!("clowd_ai_ocr_{}_{n}.json", std::process::id())),
+                    response: std::env::temp_dir().join(format!("prisc_ai_ocr_{}_{n}.json", std::process::id())),
                     log: None,
                 }
             }
@@ -141,7 +141,7 @@ fn spawn(paths: &ResponsePaths) -> std::io::Result<Child> {
         // stdout (its answer is the `--out` file, which doubles as the
         // session's `ocr.json`), and inheriting would let anything a native
         // runtime printed there be mistaken for output of our own — our
-        // stdout is the NDJSON host protocol Clowd.Ui line-parses. A pipe
+        // stdout is the NDJSON host protocol Prisc.Ui line-parses. A pipe
         // would work too, but one nobody drains can eventually block the
         // child — null cannot.
         .stdout(Stdio::null())
@@ -239,7 +239,7 @@ fn wait(child: &mut Child, cancel: &AtomicBool, paths: &ResponsePaths) -> Result
 ///
 /// A non-zero exit means the file is not a RESULT — but the recognizer's panic
 /// hook writes its message there on the way down precisely so this can recover
-/// it (see `clowd_ai`'s `ocr::install_panic_reporter`). Without it a panic reaches
+/// it (see `prisc_ai`'s `ocr::install_panic_reporter`). Without it a panic reaches
 /// Sentry as "exited with code 101" and nothing else; with it, the panic's file
 /// and line come too.
 fn panic_detail(paths: &ResponsePaths) -> String {
@@ -286,7 +286,7 @@ impl Drop for ChildGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clowd_rust_core::geometry::{RectExt, ScreenRect};
+    use prisc_rust_core::geometry::{RectExt, ScreenRect};
 
     /// A capture with a session directory keeps both artifacts there; one
     /// without gets a collision-proof temp path and no log.
@@ -317,7 +317,7 @@ mod tests {
     }
 
     /// Opt-in round trip through the REAL recognizer: point
-    /// `CLOWD_AI_BINARY` at a built `clowd_ai` and run. Exercises the half
+    /// `PRISC_AI_BINARY` at a built `prisc_ai` and run. Exercises the half
     /// of this module that unit tests cannot reach — header framing, the
     /// pixel upload, the wait, and parsing the response file — against the
     /// actual child rather than a stand-in.

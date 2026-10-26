@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The two-column label/editor form behind a generated settings page. Children are tagged with

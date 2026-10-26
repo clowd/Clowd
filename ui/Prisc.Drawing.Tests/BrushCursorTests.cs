@@ -1,7 +1,7 @@
-using Clowd.Drawing.Tools;
+using Prisc.Drawing.Tools;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>The brush cursor's ring: centred on the hotspot, white inside black, and
     /// clamped to a visible, Windows-safe size.</summary>

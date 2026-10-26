@@ -1,8 +1,8 @@
 <UserControl
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Clowd.UI.Controls"
-    x:Class="Clowd.UI.Pages.AboutPage">
+    xmlns:controls="using:Prisc.UI.Controls"
+    x:Class="Prisc.UI.Pages.AboutPage">
 
     <UserControl.Styles>
         <!-- Flat, full-width clickable row for a single open-source dependency. UserControl-level
@@ -50,18 +50,18 @@
     <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="8">
             <!-- The logo (emblem + "prisc" wordmark, as in the main window's sidebar) at the
-                 emblem's old 60px size; the wordmark stands in for the old "Clowd" title. -->
+                 emblem's old 60px size; the wordmark stands in for the old "Prisc" title. -->
             <Viewbox Height="60" HorizontalAlignment="Left" AutomationProperties.Name="Prisc">
                 <Grid Width="51.47" Height="16">
                     <Path Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Top"
-                          Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
+                          Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource PriscAccentBrush}" />
                     <Path HorizontalAlignment="Left" VerticalAlignment="Top"
-                          Data="{StaticResource PathLogoWordmark}" Stroke="{DynamicResource ClowdWordmarkBrush}"
+                          Data="{StaticResource PathLogoWordmark}" Stroke="{DynamicResource PriscWordmarkBrush}"
                           StrokeThickness="1.6627" StrokeLineCap="Round" StrokeJoin="Round" />
                 </Grid>
             </Viewbox>
 
-            <TextBlock Classes="Base" Text="{Binding ClowdVersion}" />
+            <TextBlock Classes="Base" Text="{Binding PriscVersion}" />
 
             <!-- Moved here from the System page. DataContext is SettingsGeneral (set in the
                  code-behind), where the update options are persisted. The version itself is the

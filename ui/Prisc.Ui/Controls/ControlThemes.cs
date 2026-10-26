@@ -2,7 +2,7 @@
 using Avalonia;
 using Avalonia.Markup.Xaml.Styling;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// Merges the Controls/*.axaml ControlTheme dictionaries into the application resources the
@@ -49,7 +49,7 @@ namespace Clowd.UI.Controls
 
         private static void Add(Application app, string name)
         {
-            var uri = new Uri($"avares://Clowd.Ui/Controls/{name}.axaml");
+            var uri = new Uri($"avares://Prisc.Ui/Controls/{name}.axaml");
             app.Resources.MergedDictionaries.Add(new ResourceInclude(uri) { Source = uri });
         }
     }

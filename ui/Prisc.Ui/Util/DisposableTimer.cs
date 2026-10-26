@@ -2,7 +2,7 @@ using System;
 using Avalonia.Threading;
 using Timer = System.Timers.Timer;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     public static class DisposableTimer
     {

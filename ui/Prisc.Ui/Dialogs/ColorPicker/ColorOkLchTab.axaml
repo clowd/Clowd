@@ -1,8 +1,8 @@
 <cp:ColorDialogTab xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                   xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
-                   xmlns:helpers="using:Clowd.UI.Helpers"
-                   x:Class="Clowd.UI.Dialogs.ColorPicker.ColorOkLchTab">
+                   xmlns:cp="using:Prisc.UI.Dialogs.ColorPicker"
+                   xmlns:helpers="using:Prisc.UI.Helpers"
+                   x:Class="Prisc.UI.Dialogs.ColorPicker.ColorOkLchTab">
 
     <cp:ColorDialogTab.Styles>
         <!--  A quadrant's channel name, left of its value field  -->

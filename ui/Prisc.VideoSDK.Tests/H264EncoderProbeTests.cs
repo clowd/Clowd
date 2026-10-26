@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Media;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Auto selection (<see cref="H264EncoderProbe"/>): the order and fallback policy over a fake

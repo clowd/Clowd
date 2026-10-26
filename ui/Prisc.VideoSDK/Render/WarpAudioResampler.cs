@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Render
+namespace Prisc.VideoSDK.Render
 {
     /// <summary>
     /// The render pipeline's warp-aware resampling stage: sits between <see cref="AudioMixer"/>

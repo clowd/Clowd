@@ -10,21 +10,21 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.UI.Controls.Tray;
-using Clowd.UI.DrawOnScreen;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.UI.Controls.Tray;
+using Prisc.UI.DrawOnScreen;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Hidden harness for the floating tray controls, launched as
-    /// <c>clowd --tray-spike generic|glyphs|recording|share|scroll|draw [--vertical] [--shadow spec|compact]
+    /// <c>prisc --tray-spike generic|glyphs|recording|share|scroll|draw [--vertical] [--shadow spec|compact]
     /// [--state name] [--cycle] [--nochevron] [--region full] [--exit-after ms]</c>
     /// — see App.Startup, which short-circuits before the single-instance mutex exactly as the
     /// <c>--video-spike</c> harness does, so a spike process never forwards its args to (or is
-    /// swallowed by) a resident Clowd.
+    /// swallowed by) a resident Prisc.
     /// <para>
     /// It exists because the tray controls are otherwise only reachable through a real recorder, a
     /// real share driver or a real scroll capture: this shows every control and every state with

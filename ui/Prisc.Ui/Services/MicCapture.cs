@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>How one sample of a capture buffer is laid out.</summary>
     internal enum MicSampleFormat

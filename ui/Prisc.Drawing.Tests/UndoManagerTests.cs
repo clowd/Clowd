@@ -2,10 +2,10 @@ using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Exercises the undo merge contract through DrawingCanvas (which owns the UndoManager):
@@ -18,7 +18,7 @@ namespace Clowd.Drawing.Tests
         {
             // DrawingCanvas reads tool settings through SettingsRoot.Current, which the
             // application assigns at startup; give the tests a defaults instance.
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static bool CanExecute(System.Windows.Input.ICommand command) => command.CanExecute(null);

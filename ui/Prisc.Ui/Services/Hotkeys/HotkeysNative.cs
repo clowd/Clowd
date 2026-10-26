@@ -2,11 +2,11 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// P/Invoke surface of the native <c>clowd_hotkeys</c> library (the crate's C ABI, see
-    /// <c>clowd_hotkeys/src/ffi.rs</c>). The return codes, event kinds and the event struct are
+    /// P/Invoke surface of the native <c>prisc_hotkeys</c> library (the crate's C ABI, see
+    /// <c>crates/prisc_hotkeys/src/ffi.rs</c>). The return codes, event kinds and the event struct are
     /// generated from the crate (<see cref="HotkeysAbi"/>, <see cref="HotkeyEventNative"/>); only
     /// these signatures are written by hand, and the crate's ABI revision — folded into
     /// <see cref="HotkeyKeys.AbiVersion"/> — guards them. Call <see cref="EnsureLoaded"/> before
@@ -14,7 +14,7 @@ namespace Clowd.UI
     /// </summary>
     internal static class HotkeysNative
     {
-        private const string Library = "clowd_hotkeys";
+        private const string Library = "prisc_hotkeys";
 
         /// <summary>This library as <see cref="INativeHotkeys"/>.</summary>
         public static INativeHotkeys Binding { get; } = new LibraryBinding();
@@ -43,7 +43,7 @@ namespace Clowd.UI
                     }
                     catch (Exception ex)
                     {
-                        s_error = "the clowd_hotkeys library could not be loaded: " + ex.Message;
+                        s_error = "the prisc_hotkeys library could not be loaded: " + ex.Message;
                     }
                 }
 
@@ -59,15 +59,15 @@ namespace Clowd.UI
 
             var path = HotkeysLibraryLocator.Resolve();
             if (path == null)
-                return "the clowd_hotkeys library was not found";
+                return "the prisc_hotkeys library was not found";
 
             s_handle = NativeLibrary.Load(path);
 
             // only our own library name: user32, CoreGraphics and the rest resolve as usual
             NativeLibrary.SetDllImportResolver(typeof(HotkeysNative).Assembly, Resolve);
 
-            if (clowd_hotkeys_abi_version() != HotkeyKeys.AbiVersion)
-                return "the clowd_hotkeys library is out of date (rebuild it: cargo build -p clowd_hotkeys)";
+            if (prisc_hotkeys_abi_version() != HotkeyKeys.AbiVersion)
+                return "the prisc_hotkeys library is out of date (rebuild it: cargo build -p prisc_hotkeys)";
 
             return null;
         }
@@ -76,56 +76,56 @@ namespace Clowd.UI
             libraryName == Library ? s_handle : IntPtr.Zero;
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern uint clowd_hotkeys_abi_version();
+        public static extern uint prisc_hotkeys_abi_version();
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int clowd_hotkeys_start(out IntPtr handle, [Out] byte[] errBuf, uint errCap);
+        public static extern int prisc_hotkeys_start(out IntPtr handle, [Out] byte[] errBuf, uint errCap);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int clowd_hotkeys_register(IntPtr handle, int key, uint modifiers, out uint id);
+        public static extern int prisc_hotkeys_register(IntPtr handle, int key, uint modifiers, out uint id);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern void clowd_hotkeys_unregister(IntPtr handle, uint id);
+        public static extern void prisc_hotkeys_unregister(IntPtr handle, uint id);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern void clowd_hotkeys_set_observe(IntPtr handle, uint observe);
+        public static extern void prisc_hotkeys_set_observe(IntPtr handle, uint observe);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int clowd_hotkeys_start_recording(IntPtr handle, out uint session);
+        public static extern int prisc_hotkeys_start_recording(IntPtr handle, out uint session);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern void clowd_hotkeys_stop_recording(IntPtr handle, uint session);
+        public static extern void prisc_hotkeys_stop_recording(IntPtr handle, uint session);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int clowd_hotkeys_next_event(IntPtr handle, out HotkeyEventNative ev, uint timeoutMs);
+        public static extern int prisc_hotkeys_next_event(IntPtr handle, out HotkeyEventNative ev, uint timeoutMs);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern uint clowd_hotkeys_stop_reason(IntPtr handle, [Out] byte[] buf, uint cap);
+        public static extern uint prisc_hotkeys_stop_reason(IntPtr handle, [Out] byte[] buf, uint cap);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern void clowd_hotkeys_stop(IntPtr handle);
+        public static extern void prisc_hotkeys_stop(IntPtr handle);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        public static extern void clowd_hotkeys_free(IntPtr handle);
+        public static extern void prisc_hotkeys_free(IntPtr handle);
 
         private sealed class LibraryBinding : INativeHotkeys
         {
             public string EnsureLoaded() => HotkeysNative.EnsureLoaded();
-            public int Start(out IntPtr handle, byte[] errBuf) => clowd_hotkeys_start(out handle, errBuf, (uint)errBuf.Length);
-            public int Register(IntPtr handle, int key, uint modifiers, out uint id) => clowd_hotkeys_register(handle, key, modifiers, out id);
-            public void Unregister(IntPtr handle, uint id) => clowd_hotkeys_unregister(handle, id);
-            public void SetObserve(IntPtr handle, bool observe) => clowd_hotkeys_set_observe(handle, observe ? 1u : 0u);
-            public int StartRecording(IntPtr handle, out uint session) => clowd_hotkeys_start_recording(handle, out session);
-            public void StopRecording(IntPtr handle, uint session) => clowd_hotkeys_stop_recording(handle, session);
-            public int NextEvent(IntPtr handle, out HotkeyEventNative ev, uint timeoutMs) => clowd_hotkeys_next_event(handle, out ev, timeoutMs);
-            public int StopReason(IntPtr handle, byte[] buf) => (int)clowd_hotkeys_stop_reason(handle, buf, (uint)buf.Length);
-            public void Stop(IntPtr handle) => clowd_hotkeys_stop(handle);
-            public void Free(IntPtr handle) => clowd_hotkeys_free(handle);
+            public int Start(out IntPtr handle, byte[] errBuf) => prisc_hotkeys_start(out handle, errBuf, (uint)errBuf.Length);
+            public int Register(IntPtr handle, int key, uint modifiers, out uint id) => prisc_hotkeys_register(handle, key, modifiers, out id);
+            public void Unregister(IntPtr handle, uint id) => prisc_hotkeys_unregister(handle, id);
+            public void SetObserve(IntPtr handle, bool observe) => prisc_hotkeys_set_observe(handle, observe ? 1u : 0u);
+            public int StartRecording(IntPtr handle, out uint session) => prisc_hotkeys_start_recording(handle, out session);
+            public void StopRecording(IntPtr handle, uint session) => prisc_hotkeys_stop_recording(handle, session);
+            public int NextEvent(IntPtr handle, out HotkeyEventNative ev, uint timeoutMs) => prisc_hotkeys_next_event(handle, out ev, timeoutMs);
+            public int StopReason(IntPtr handle, byte[] buf) => (int)prisc_hotkeys_stop_reason(handle, buf, (uint)buf.Length);
+            public void Stop(IntPtr handle) => prisc_hotkeys_stop(handle);
+            public void Free(IntPtr handle) => prisc_hotkeys_free(handle);
         }
     }
 
     /// <summary>
-    /// The clowd_hotkeys C ABI as <see cref="NativeHotkeyHost"/> calls it, one member per
+    /// The prisc_hotkeys C ABI as <see cref="NativeHotkeyHost"/> calls it, one member per
     /// function with the same contract (see <c>ffi.rs</c>): <see cref="HotkeysNative.Binding"/>
     /// in the app, a fake in the tests, so the host's lifecycle — a hook that cannot start, dies,
     /// or comes back — is testable without installing one.

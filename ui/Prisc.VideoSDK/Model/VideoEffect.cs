@@ -1,4 +1,4 @@
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>The AI-assisted effects the editor offers on an item's own pixels, in menu order.
 /// <see cref="None"/> is stored as a null <see cref="Item.Effect"/> rather than a kind — "no

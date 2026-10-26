@@ -12,11 +12,11 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.Drawing;
-using Clowd.Drawing.Graphics;
-using Clowd.UI.Helpers;
+using Prisc.Drawing;
+using Prisc.Drawing.Graphics;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// A live view over <see cref="DrawingCanvas.GraphicsList"/> (top of the z-stack first).

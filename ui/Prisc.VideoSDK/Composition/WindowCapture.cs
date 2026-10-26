@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>One window's rect at one instant, in the sidecar's canvas pixels, relative to the
     /// capture region's top-left. Deliberately NOT clipped to the region: a window straddling an
@@ -89,7 +89,7 @@ namespace Clowd.VideoSDK.Composition
         public int RegionY { get; init; }
 
         /// <summary>The base canvas the rows are measured against. Equal to the encoded video's
-        /// dimensions unless the recorder was given a max width or height, which Clowd never
+        /// dimensions unless the recorder was given a max width or height, which Prisc never
         /// passes; divide by it anyway, since the canvas is also force-rounded to an even
         /// size.</summary>
         public int RegionWidth { get; init; }
@@ -142,7 +142,7 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>Every window that ever held geometry inside the region, ordered by when it
         /// was first seen and then by id. This is the editor's pick list; the composer never needs
-        /// it. Nothing is dropped here — the recorder skips only its own process, so Clowd's own
+        /// it. Nothing is dropped here — the recorder skips only its own process, so Prisc's own
         /// windows ARE in this list, and dropping them is a fact about this application rather
         /// than about the file format. Windows that were on screen only in the geometric sense
         /// carry <see cref="WindowInfo.EverVisible"/> false rather than going missing, so a

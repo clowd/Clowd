@@ -1,5 +1,5 @@
 //! The accent colour maths, mirrored from the shell's `AccentColors`
-//! (clowd_ui/Clowd.Shared/AccentColors.cs) so that the overlay and the C#
+//! (ui/Prisc.Shared/AccentColors.cs) so that the overlay and the C#
 //! windows beside it derive the same colours from the same pick.
 //!
 //! The shell passes the accent exactly as the user chose it
@@ -15,9 +15,9 @@
 //! and the tests pin values the C# tests pin too — a drift between the two
 //! would paint a capturer beside a recording toolbar in a near-miss colour.
 
-/// The legacy "clowd blue": the shell's stored default pick, and so the
+/// The legacy "prisc blue": the shell's stored default pick, and so the
 /// default `--accent-color`.
-pub const CLOWD_BLUE: [u8; 3] = [0x3B, 0x97, 0xD2];
+pub const PRISC_BLUE: [u8; 3] = [0x3B, 0x97, 0xD2];
 
 /// WCAG AA for normal text (4.5:1), measured against the white glyphs drawn
 /// on top of the accent.
@@ -158,14 +158,14 @@ mod tests {
     /// The value the shell's own default lands on (AccentColors.Default):
     /// both sides correct the same stored pick to the same fill.
     #[test]
-    fn clowd_blue_corrects_to_the_shells_default() {
-        assert_eq!(ensure_contrast_with_white(CLOWD_BLUE), [0x2F, 0x7C, 0xAE]);
+    fn prisc_blue_corrects_to_the_shells_default() {
+        assert_eq!(ensure_contrast_with_white(PRISC_BLUE), [0x2F, 0x7C, 0xAE]);
     }
 
     #[test]
     fn contrast_correction_leaves_dark_colours_alone_and_reaches_aa_otherwise() {
         assert_eq!(ensure_contrast_with_white([0, 0, 0x80]), [0, 0, 0x80]);
-        for c in [[0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0x00], [0xF0, 0xC0, 0xF4], CLOWD_BLUE] {
+        for c in [[0xFF, 0xFF, 0xFF], [0xFF, 0xFF, 0x00], [0xF0, 0xC0, 0xF4], PRISC_BLUE] {
             let fixed = ensure_contrast_with_white(c);
             let ratio = contrast_with_white(fixed);
             assert!(
@@ -178,13 +178,13 @@ mod tests {
     /// Pinned in AccentColorTests.CometColors_MatchTheCapturer too.
     #[test]
     fn comet_colors_match_the_shell() {
-        assert_eq!(comet_colors(CLOWD_BLUE), ([0x3B, 0x97, 0xD2], [0x83, 0xB4, 0xD8]));
+        assert_eq!(comet_colors(PRISC_BLUE), ([0x3B, 0x97, 0xD2], [0x83, 0xB4, 0xD8]));
         assert_eq!(comet_colors([0x7A, 0x1F, 0xA2]), ([0xAE, 0x59, 0xDA], [0xBE, 0x8E, 0xDA]));
     }
 
     #[test]
     fn oklch_round_trips() {
-        for c in [CLOWD_BLUE, [0x12, 0x34, 0x56], [0xFF, 0x80, 0x00]] {
+        for c in [PRISC_BLUE, [0x12, 0x34, 0x56], [0xFF, 0x80, 0x00]] {
             let (l, ch, h) = to_oklch(c);
             assert_eq!(from_oklch(l, ch, h), c);
         }

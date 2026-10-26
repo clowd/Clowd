@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Avalonia.Input;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// The draw-on-screen hotkeys (issue #110), live while the session has the keyboard. Every

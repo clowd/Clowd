@@ -15,16 +15,16 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
-use obs::audio::AudioInfo;
-use obs::context::ObsContext;
-use obs::data::ObsData;
-use obs::encoder::ObsEncoder;
-use obs::output::ObsOutput;
-use obs::scene::{ObsScene, ObsSceneItem};
-use obs::signal::SignalConnection;
-use obs::source::ObsSource;
-use obs::video::VideoInfo;
-use obs::volmeter::ObsVolmeter;
+use prisc_obs::audio::AudioInfo;
+use prisc_obs::context::ObsContext;
+use prisc_obs::data::ObsData;
+use prisc_obs::encoder::ObsEncoder;
+use prisc_obs::output::ObsOutput;
+use prisc_obs::scene::{ObsScene, ObsSceneItem};
+use prisc_obs::signal::SignalConnection;
+use prisc_obs::source::ObsSource;
+use prisc_obs::video::VideoInfo;
+use prisc_obs::volmeter::ObsVolmeter;
 
 use crate::cli::{Cli, MAX_AUDIO_SOURCES};
 use crate::commands::{self, Command};
@@ -191,7 +191,7 @@ fn apply_audio_mixers(speakers: &[ObsSource], mics: &[ObsSource], multi_track: b
 fn create_audio_encoders(
     encoder_types: &[String],
     plan: &[AudioTrack],
-    audio: *mut obs_sys::audio_t,
+    audio: *mut prisc_obs_sys::audio_t,
 ) -> Result<Vec<ObsEncoder>, String> {
     let mut encoders = Vec::with_capacity(plan.len());
     for (idx, track) in plan.iter().enumerate() {
@@ -479,7 +479,7 @@ impl Recorder {
         // 6. Modules + sanity checks.
         context.add_module_path(&paths.module_bin, &paths.module_data);
         context.load_all_modules();
-        let encoder_types = obs::properties::enum_encoder_types();
+        let encoder_types = prisc_obs::properties::enum_encoder_types();
         if encoder_types.is_empty() {
             fail(format_args!("No OBS encoders registered after module load — no usable plugins were found.\n  module \
                                bin:  {}\n  module data: {}",
@@ -489,7 +489,7 @@ impl Recorder {
         // unknown ids; get_display_name returns null exactly when unregistered.
         let display_capture_c = CString::new(platform::display_capture_id()).unwrap();
         let display_name =
-            unsafe { obs_sys::obs_source_get_display_name(display_capture_c.as_ptr()) };
+            unsafe { prisc_obs_sys::obs_source_get_display_name(display_capture_c.as_ptr()) };
         if display_name.is_null() && picker {
             // linux-pipewire registers the portal source only after asking
             // xdg-desktop-portal which capture types it offers; no answer (no
@@ -518,7 +518,7 @@ impl Recorder {
         // (the "test" pseudo-device uses color_source from image-source).
         if matches!(webcam_device.as_deref(), Some(id) if id != webcam::TEST_DEVICE_ID) {
             let webcam_c = CString::new(platform::WEBCAM_SOURCE_ID).unwrap();
-            if unsafe { obs_sys::obs_source_get_display_name(webcam_c.as_ptr()) }.is_null() {
+            if unsafe { prisc_obs_sys::obs_source_get_display_name(webcam_c.as_ptr()) }.is_null() {
                 fail(format_args!(
                     "Webcam source '{}' is not registered — the camera capture plugin failed \
                      to load.\n  module bin:  {}\n  module data: {}",
@@ -574,7 +574,7 @@ impl Recorder {
         if picker {
             // Registered before the source: creating it starts the portal
             // request chain, and a refusal can be logged at any point after.
-            let portal_failure = obs::log::watch(PORTAL_FAILURE_LINES);
+            let portal_failure = prisc_obs::log::watch(PORTAL_FAILURE_LINES);
             let source = match ObsSource::create(
                 platform::display_capture_id(),
                 "display_0",
@@ -1705,7 +1705,7 @@ impl Recorder {
 /// exists.
 fn wait_for_picker(
     source: &ObsSource,
-    portal_failure: &obs::log::LogWatch,
+    portal_failure: &prisc_obs::log::LogWatch,
     cmd_rx: &mpsc::Receiver<Command>,
     early: &mut VecDeque<Command>,
 ) -> (u32, u32) {

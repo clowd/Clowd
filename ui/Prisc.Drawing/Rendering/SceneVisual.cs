@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Rendering
+namespace Prisc.Drawing.Rendering
 {
     /// <summary>
     /// Export render host for <see cref="GraphicCollection.DrawGraphicsToBitmap"/> (final-design

@@ -7,7 +7,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>One tool an editor's strip may have to put in its "more" menu. <see cref="Key"/>
     /// is whatever the host persists the tool by, handed straight back when it is picked.</summary>

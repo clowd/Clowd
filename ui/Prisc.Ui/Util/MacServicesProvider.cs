@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     /// <summary>
-    /// Receives the Finder "Upload with Clowd" service declared in Info.plist (NSServices).
+    /// Receives the Finder "Upload with Prisc" service declared in Info.plist (NSServices).
     /// macOS delivers a service invocation to the app process that declared it, via an
     /// Objective-C object registered with -[NSApplication setServicesProvider:] whose
     /// method name matches the plist's NSMessage. That class doesn't exist in a .NET app,
@@ -17,7 +17,7 @@ namespace Clowd.Util
     internal static class MacServicesProvider
     {
         // must match the Info.plist NSServices entry's NSPortName
-        private const string PortName = "Clowd";
+        private const string PortName = "Prisc";
 
         private static Action<string[]> _callback;
 
@@ -35,7 +35,7 @@ namespace Clowd.Util
 
             _callback = onFilesReceived;
 
-            var cls = objc_allocateClassPair(GetClass("NSObject"), "ClowdServicesProvider", 0);
+            var cls = objc_allocateClassPair(GetClass("NSObject"), "PriscServicesProvider", 0);
             if (cls == IntPtr.Zero)
                 return;
 
@@ -48,8 +48,8 @@ namespace Clowd.Util
             _provider = SendMessage(SendMessage(cls, GetSelector("alloc")), GetSelector("init"));
 
             // not -[NSApp setServicesProvider:]: that registers the listening port under the
-            // process name ("Clowd.Ui", the executable), but delivery looks the port up by the
-            // plist's NSPortName ("Clowd") — register under the advertised name explicitly.
+            // process name ("Prisc.Ui", the executable), but delivery looks the port up by the
+            // plist's NSPortName ("Prisc") — register under the advertised name explicitly.
             var portName = SendMessage(GetClass("NSString"), GetSelector("stringWithUTF8String:"), PortName);
             NSRegisterServicesProvider(_provider, portName);
 

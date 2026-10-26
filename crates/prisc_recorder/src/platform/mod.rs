@@ -4,7 +4,7 @@
 //!
 //! The monitor/paths/display-capture layer (`MonitorInfo`, `ObsPaths`,
 //! `enumerate_monitors`, `default_obs_paths`, ...) moved to the shared
-//! `obs-platform` crate (SHARE_REGION_PLAN §4.3) and is re-exported below so
+//! `prisc_obs_platform` crate (SHARE_REGION_PLAN §4.3) and is re-exported below so
 //! every existing `crate::platform::*` path keeps resolving; the platform
 //! modules here keep only the recorder-specific remainder (cursor/mouse
 //! sampling, audio/webcam helpers).
@@ -24,7 +24,7 @@ mod linux;
 #[cfg(target_os = "linux")]
 pub use self::linux::*;
 
-pub use obs_platform::{
+pub use prisc_obs_platform::{
     cursor_update_settings, default_obs_paths, display_capture_id, display_capture_mode,
     display_capture_settings, enumerate_monitors, exit_process, find_monitor, init_process,
     monitor_display_scale, region_adapter_index, CaptureMethod, DisplayCaptureMode, MonitorInfo,
@@ -34,7 +34,7 @@ pub use obs_platform::{
 // nowhere inside this bin crate by name — callers only consume it through
 // `default_obs_paths`'s return value — and a bin warns on unused re-exports.
 #[allow(unused_imports)]
-pub use obs_platform::ObsPaths;
+pub use prisc_obs_platform::ObsPaths;
 
 /// Live pointer state, sampled once per rendered frame by the click tracker.
 #[derive(Debug, Clone, Copy)]

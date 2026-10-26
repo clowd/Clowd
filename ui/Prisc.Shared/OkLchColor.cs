@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using Avalonia.Media;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// A color in OKLCH (Björn Ottosson's OKLab in polar form, as CSS Color 4 writes it): perceived

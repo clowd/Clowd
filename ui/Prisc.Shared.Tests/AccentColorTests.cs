@@ -1,9 +1,9 @@
 using System;
 using Avalonia.Media;
-using Clowd.Config;
+using Prisc.Config;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class AccentColorTests
     {
@@ -12,8 +12,8 @@ namespace Clowd.Shared.Tests
         {
             Assert.Equal(1.0, AccentColors.ContrastWithWhite(Colors.White), 3);
             Assert.Equal(21.0, AccentColors.ContrastWithWhite(Colors.Black), 3);
-            // the legacy clowd blue is the color issue #48 is about: readable-ish, but under AA.
-            Assert.InRange(AccentColors.ContrastWithWhite(AccentColors.ClowdBlue), 3.2, 3.25);
+            // the legacy prisc blue is the color issue #48 is about: readable-ish, but under AA.
+            Assert.InRange(AccentColors.ContrastWithWhite(AccentColors.PriscBlue), 3.2, 3.25);
         }
 
         [Fact]
@@ -25,7 +25,7 @@ namespace Clowd.Shared.Tests
 
         [Theory]
         [InlineData(0xFF, 0xFF, 0xFF)] // white
-        [InlineData(0x3B, 0x97, 0xD2)] // clowd blue
+        [InlineData(0x3B, 0x97, 0xD2)] // prisc blue
         [InlineData(0x00, 0x78, 0xD4)] // the Windows default accent
         [InlineData(0xFF, 0xFF, 0x00)] // a maximally light-but-saturated accent
         [InlineData(0xF0, 0xC0, 0xF4)] // a light purple from a Windows accent palette
@@ -51,7 +51,7 @@ namespace Clowd.Shared.Tests
         }
 
         [Theory]
-        [InlineData(0x3B, 0x97, 0xD2)] // clowd blue
+        [InlineData(0x3B, 0x97, 0xD2)] // prisc blue
         [InlineData(0x00, 0x78, 0xD4)] // the Windows default accent
         [InlineData(0x7A, 0x1F, 0xA2)] // a deep purple
         [InlineData(0xFF, 0xFF, 0x00)] // a maximally light-but-saturated accent
@@ -76,12 +76,12 @@ namespace Clowd.Shared.Tests
             Assert.True(headC < bodyC + 1e-3);
         }
 
-        /// <summary>clowd_capture/src/accent.rs pins the same values: the hint comet and the tray
+        /// <summary>crates/prisc_capture/src/accent.rs pins the same values: the hint comet and the tray
         /// comet are derived from one pick by two ports of the same maths.</summary>
         [Fact]
         public void CometColors_MatchTheCapturer()
         {
-            Assert.Equal((Color.FromRgb(0x3B, 0x97, 0xD2), Color.FromRgb(0x83, 0xB4, 0xD8)), AccentColors.CometColors(AccentColors.ClowdBlue));
+            Assert.Equal((Color.FromRgb(0x3B, 0x97, 0xD2), Color.FromRgb(0x83, 0xB4, 0xD8)), AccentColors.CometColors(AccentColors.PriscBlue));
             Assert.Equal((Color.FromRgb(0xAE, 0x59, 0xDA), Color.FromRgb(0xBE, 0x8E, 0xDA)), AccentColors.CometColors(Color.FromRgb(0x7A, 0x1F, 0xA2)));
         }
 
@@ -96,10 +96,10 @@ namespace Clowd.Shared.Tests
             Assert.Equal(color, AccentColors.FromOkLch(l, c, h));
         }
 
-        /// <summary>The capturer carries the same default in its own CLI (clowd_capture/src/settings.rs)
+        /// <summary>The capturer carries the same default in its own CLI (crates/prisc_capture/src/settings.rs)
         /// for standalone runs; if this value moves, that one has to move with it.</summary>
         [Fact]
-        public void Default_IsContrastCorrectedClowdBlue()
+        public void Default_IsContrastCorrectedPriscBlue()
         {
             Assert.Equal(Color.FromRgb(0x2F, 0x7C, 0xAE), AccentColors.Default);
         }
@@ -157,13 +157,13 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void DefaultAccent_IsClowdBlueCorrectedToTheDocumentedValue()
+        public void DefaultAccent_IsPriscBlueCorrectedToTheDocumentedValue()
         {
             // the stored default is the raw legacy blue; correcting it at use has to land exactly on
             // the value the capturer corrects its own --accent-color default to (src/accent.rs).
             var settings = new SettingsGeneral { UseSystemAccentColor = false };
 
-            Assert.Equal(AccentColors.ClowdBlue, settings.AccentColor);
+            Assert.Equal(AccentColors.PriscBlue, settings.AccentColor);
             Assert.Equal(AccentColors.Default, settings.GetEffectiveAccentColor());
         }
 

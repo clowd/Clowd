@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
-             x:Class="Clowd.UI.Dialogs.ColorPicker.PaletteBars"
+             xmlns:cp="using:Prisc.UI.Dialogs.ColorPicker"
+             x:Class="Prisc.UI.Dialogs.ColorPicker.PaletteBars"
              cp:ColorDialogTips.Side="Right"
              ClipToBounds="False">
 

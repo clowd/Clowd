@@ -2,10 +2,10 @@ using System;
 using System.IO;
 using Velopack.Locators;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     /// <summary>
-    /// The path the OS should be pointed at to launch Clowd — used by the auto-start entry and the
+    /// The path the OS should be pointed at to launch Prisc — used by the auto-start entry and the
     /// Explorer context menu verb, both of which outlive any single installed version.
     /// </summary>
     internal static class AppLaunchPath

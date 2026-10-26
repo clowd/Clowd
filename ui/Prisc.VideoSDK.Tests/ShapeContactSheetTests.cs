@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The shapes' look, for a person to judge: every <see cref="ShapeKind"/> composed through
@@ -72,7 +72,7 @@ namespace Clowd.VideoSDK.Tests
                 }, Extent: 0.45));
             }
 
-            WriteSheet("clowd-shape-contact-sheet.png", cells);
+            WriteSheet("prisc-shape-contact-sheet.png", cells);
         }
 
         [Fact]
@@ -108,13 +108,13 @@ namespace Clowd.VideoSDK.Tests
                 }));
             }
 
-            WriteSheet("clowd-shape-contact-sheet-2.png", cells);
+            WriteSheet("prisc-shape-contact-sheet-2.png", cells);
         }
 
         [Fact]
         public void The_draw_transition_on_closed_kinds()
         {
-            WriteSheet("clowd-shape-draw-closed.png", DrawCells(
+            WriteSheet("prisc-shape-draw-closed.png", DrawCells(
             [
                 ("Rectangle", ShapeKind.Rectangle, (_, _) => { }),
                 ("Rect fill", ShapeKind.Rectangle, (_, s) => s.Fill = true),
@@ -144,7 +144,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void The_draw_transition_on_line_kinds()
         {
-            WriteSheet("clowd-shape-draw-lines.png", DrawCells(
+            WriteSheet("prisc-shape-draw-lines.png", DrawCells(
             [
                 ("Arrow", ShapeKind.Arrow, (_, _) => { }),
                 ("Arrow bend", ShapeKind.Arrow, (item, s) => Bend(item, s, 0.35)),

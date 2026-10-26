@@ -9,10 +9,10 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.History;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.History;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     /// <summary>The kind of history mutation that raised <see cref="UndoManager.StateChanged"/> —
     /// the autosave throttle routes on this (immediate serialize for discrete actions, trailing

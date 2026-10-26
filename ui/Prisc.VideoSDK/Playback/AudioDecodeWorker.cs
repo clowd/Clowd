@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// Decodes the audio stream and swr_converts to interleaved float stereo at the engine rate
@@ -81,7 +81,7 @@ namespace Clowd.VideoSDK.Playback
         public void Start()
         {
             _running = true;
-            _thread = new Thread(DecodeLoop) { Name = "clowd-adec", IsBackground = true };
+            _thread = new Thread(DecodeLoop) { Name = "prisc-adec", IsBackground = true };
             _thread.Start();
         }
 

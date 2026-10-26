@@ -1,11 +1,11 @@
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Tools;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Tools;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The marquee rule the pointer and the eraser share (<see cref="ToolPointer.GraphicsInMarquee"/>):
@@ -15,7 +15,7 @@ namespace Clowd.Drawing.Tests
     {
         static MarqueeRuleTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static GraphicRectangle Rect(double x, double y, double w, double h) =>

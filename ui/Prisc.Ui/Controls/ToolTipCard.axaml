@@ -1,8 +1,8 @@
 <UserControl
-    x:Class="Clowd.UI.Controls.ToolTipCard"
+    x:Class="Prisc.UI.Controls.ToolTipCard"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:Clowd.UI.Controls">
+    xmlns:controls="clr-namespace:Prisc.UI.Controls">
 
     <!--  Dark chrome on purpose, whatever the app theme. The chrome around the tip is dark in
           both editors: the video editor's always is (the #535353 root, the #1e1e1e preview), and

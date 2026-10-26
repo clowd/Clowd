@@ -2,10 +2,10 @@ using System;
 using System.IO;
 using System.Threading;
 using Avalonia.Threading;
-using Clowd.UI.VideoEditor;
-using Clowd.Upload;
+using Prisc.UI.VideoEditor;
+using Prisc.Upload;
 
-namespace Clowd.UI.Preview
+namespace Prisc.UI.Preview
 {
     /// <summary>
     /// Decides what a session's preview should actually be made from. Two halves split by thread:

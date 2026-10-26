@@ -3,7 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.Upload.Accelerate
+namespace Prisc.Upload.Accelerate
 {
     /// <summary>
     /// Slices a (non-seekable) stream of unknown length into fixed-size chunks for the accelerated

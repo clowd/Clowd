@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using Clowd.UI.VideoEditor.Timeline;
+using Prisc.UI.VideoEditor.Timeline;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // TimelineHitTester decides what a pointer press means on the timeline surface. Pure geometry,
-    // no Avalonia runtime — Clowd.Ui exposes its internals to this project via InternalsVisibleTo.
+    // no Avalonia runtime — Prisc.Ui exposes its internals to this project via InternalsVisibleTo.
     public class TimelineHitTesterTests
     {
         private const double Tol = TimelineHitTester.HitTolerance;

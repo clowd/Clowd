@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// Turns a recording's <see cref="SessionAudioTrack"/> list into the row names the editor opens

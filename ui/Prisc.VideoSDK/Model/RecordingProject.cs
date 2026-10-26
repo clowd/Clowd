@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>The identities a recording's project is built with. Kept out of
 /// <see cref="RecordingProject.Build"/> so a host that rebuilds the project on every edit (the
@@ -115,7 +115,7 @@ public sealed class RecordingProjectSpec
 }
 
 /// <summary>
-/// The one mapping from "a Clowd recording plus a keep-segment list" onto a v2
+/// The one mapping from "a Prisc recording plus a keep-segment list" onto a v2
 /// <see cref="Project"/>: a screen video row, an optional webcam video row and one row per audio
 /// stream, over a single source file, one item per kept slice per row, all sharing one
 /// <see cref="Item.GroupId"/>.

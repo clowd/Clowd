@@ -20,7 +20,7 @@ use egui::{pos2, Color32, Id, LayerId, Order, Pos2, Rect};
 use crate::interaction::InteractionState;
 use crate::ui::egui_host::{HostInputs, PanelOutcome};
 use crate::ui::shared::UiMonitor;
-use clowd_rust_core::geometry::{RectExt, ScreenRectF};
+use prisc_rust_core::geometry::{RectExt, ScreenRectF};
 
 /// One host's mapping from virtual-desktop physical px to its own points.
 ///
@@ -129,7 +129,7 @@ pub struct OverlayInputs {
 /// covers the background layer however these calls are sequenced.
 pub fn compose(ctx: &egui::Context, inputs: &HostInputs, monitor: UiMonitor) -> PanelOutcome {
     let o = &inputs.overlays;
-    let painter = ctx.layer_painter(LayerId::new(Order::Background, Id::new("clowd-overlays")));
+    let painter = ctx.layer_painter(LayerId::new(Order::Background, Id::new("prisc-overlays")));
     // egui 0.36 calls the old `screen_rect` the viewport rect; with no
     // safe-area insets on Windows it is the whole monitor, in points.
     let screen = ctx.viewport_rect();
@@ -171,9 +171,9 @@ mod tests {
     use crate::ui::components::panel::model::{ButtonStyle, PanelButtonSet, PanelFeatures};
     use crate::ui::components::panel::{show as panel_show, theme};
     use crate::ui::egui_host::PanelInputs;
-    use clowd_rust_core::geometry::ScreenPointF;
-    use clowd_rust_core::geometry::{RectExt, ScreenRect};
     use egui::epaint::Shape;
+    use prisc_rust_core::geometry::ScreenPointF;
+    use prisc_rust_core::geometry::{RectExt, ScreenRect};
 
     fn monitor() -> UiMonitor {
         UiMonitor {

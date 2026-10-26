@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>
 /// An empty stretch of one row between two items, or between the origin and the row's first

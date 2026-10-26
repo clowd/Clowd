@@ -1,7 +1,7 @@
 using System;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// A completed frame acquired from a <see cref="PooledFrameSink"/>. The consumer owns the

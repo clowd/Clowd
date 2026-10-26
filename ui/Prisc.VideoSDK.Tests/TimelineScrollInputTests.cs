@@ -1,14 +1,14 @@
 using System;
-using Clowd.UI.VideoEditor.Timeline;
+using Prisc.UI.VideoEditor.Timeline;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // TimelineScrollInput decides what a wheel / two-finger scroll / pinch over the timeline means.
     // It takes the platform as a parameter rather than asking OperatingSystem, which is the whole
     // point of it being a separate pure function: the Windows rules are covered from a Mac (and the
     // macOS rules from a Windows CI box) instead of being asserted by hand on one machine and taken
-    // on trust on the other. Clowd.Ui exposes its internals here via InternalsVisibleTo.
+    // on trust on the other. Prisc.Ui exposes its internals here via InternalsVisibleTo.
     public class TimelineScrollInputTests
     {
         private const bool Win = false;

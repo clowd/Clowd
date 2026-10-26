@@ -1,9 +1,9 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Ink;
+using Prisc.Drawing.Ink;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>
     /// A highlighter stroke: a brush stroke whose ink is a tall, slanted chisel tip swept along the

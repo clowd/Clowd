@@ -1,6 +1,6 @@
 ﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:controls="using:Clowd.UI.Controls">
+                    xmlns:controls="using:Prisc.UI.Controls">
 
     <!-- The properties-bar checkbox: the platform CheckBox scaled into a 10x10 Viewbox (its own
          label would be the wrong size for the bar) with the caption below it. The whole control is

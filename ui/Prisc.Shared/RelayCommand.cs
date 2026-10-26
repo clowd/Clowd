@@ -3,7 +3,7 @@ using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Input;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     public delegate void RelayExecute(object parameter);
 

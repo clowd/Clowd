@@ -33,7 +33,7 @@ use crate::ui::command::Command;
 use crate::ui::components::panel;
 use crate::ui::egui_host::{EguiHosts, FontInstall, PanelOutcome, SyncArgs};
 use crate::ui::shared::{active_panel_set, cursor_image_rect, peek_covers_cursor, sample_bgra, UiMonitor, UiSharedState};
-use clowd_rust_core::geometry::{
+use prisc_rust_core::geometry::{
     to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectExt, ScreenRectRounded, WindowPoint,
 };
 
@@ -1038,10 +1038,10 @@ impl App {
                         });
                     }
                     Err(OcrError::Unavailable) => {
-                        // The recognizer could not be spawned (clowd_ai does
+                        // The recognizer could not be spawned (prisc_ai does
                         // not ship on Intel macOS), or its ONNX Runtime failed
                         // to init — either cause is already logged at error
-                        // level (ocr::client / clowd_ai).
+                        // level (ocr::client / prisc_ai).
                         log::warn!("OCR is unavailable on this machine");
                         cycle.input.ocr = OcrState::Idle;
                         cycle.input.ocr_notice = Some(OcrNotice {
@@ -1644,7 +1644,7 @@ impl App {
                 // share marker carries the selection and nothing else, so
                 // there is no desktop-buffer requirement here: what the
                 // meeting sees is mirrored live off the screen by
-                // `clowd_share_region`, long after this overlay is gone.
+                // `prisc_share_region`, long after this overlay is gone.
                 // Without a --session-dir there is no shell listening —
                 // ignore, exactly as Video does.
                 let Some(session_dir) = cycle.settings.session_dir.clone() else {
@@ -1900,7 +1900,7 @@ impl App {
                 // before the hide.
                 SystemInterop::allow_any_foreground();
                 // Deliberately NOT hide_overlay_for_action: that would hand
-                // the (single-use) foreground grant to Clowd.Ui instead of
+                // the (single-use) foreground grant to Prisc.Ui instead of
                 // the browser — see the comment on hide_overlay_for_action.
                 self.windows.hide_all();
                 // Must stay on this (winit) thread: ShellExecuteW rides the
@@ -2012,7 +2012,7 @@ impl ApplicationHandler for App {
 
             #[allow(unused_mut)]
             let mut attrs = Window::default_attributes()
-                .with_title("clowd capture")
+                .with_title("prisc capture")
                 .with_decorations(false)
                 .with_resizable(false)
                 .with_visible(false)
@@ -2171,7 +2171,7 @@ impl ApplicationHandler for App {
                     // ever existed inside the debug panel.
                     info!("{}", self.startup.report());
 
-                    // No OCR pre-warm here, by decision: the clowd_ai child
+                    // No OCR pre-warm here, by decision: the prisc_ai child
                     // (84 MB executable + embedded models) and the system-font
                     // scan load lazily at the first OCR press instead
                     // (`Command::Ocr` above). A cold pre-warm at show competed

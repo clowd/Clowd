@@ -1,9 +1,9 @@
 using System;
 using Avalonia;
 using Avalonia.Input;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     /// <summary>
     /// The brush: press to start a stroke, every pointer sample goes into it as it arrives, and

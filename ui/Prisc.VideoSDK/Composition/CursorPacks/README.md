@@ -1,6 +1,6 @@
 # Cursor pack artwork
 
-The SVG sources of the cursor packs the video editor offers, embedded into `Clowd.VideoSDK` and read
+The SVG sources of the cursor packs the video editor offers, embedded into `Prisc.VideoSDK` and read
 by `CursorPackLoader`. Nothing here is hand-authored: each file is its pack's own, and re-syncing a
 pack means re-copying it.
 

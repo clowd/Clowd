@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     /// <summary>
     /// File extensions that browsers and mail scanners commonly block or warn on when downloaded

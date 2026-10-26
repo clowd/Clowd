@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Media;
 using FFmpeg.AutoGen.Abstractions;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The bookkeeping under the zero-copy encode path's texture pool (EncoderTexturePool):
     // textures are opaque handles from a fake allocator here, so the rent / grow / return /

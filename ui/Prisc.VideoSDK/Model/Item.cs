@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>
 /// One clip on the timeline: a half-open span
@@ -38,13 +38,13 @@ public sealed class Item
     /// bare item. Read by the picture draws and the themed cursor glyph only. Deliberately not
     /// called an effect: an effect is applied to the item's own pixels (<see cref="Effect"/>),
     /// which is a different thing on a different side of the silhouette — see
-    /// <see cref="Clowd.VideoSDK.Model.Surround"/>.</summary>
+    /// <see cref="Prisc.VideoSDK.Model.Surround"/>.</summary>
     public Surround Surround { get; set; }
 
     /// <summary>What is applied to the item's OWN pixels (blur / background blur / background
     /// removal), or null for an untouched item — the slot the <see cref="Surround"/> remarks
     /// reserved. Read by the picture draws only; see
-    /// <see cref="Clowd.VideoSDK.Model.VideoEffect"/>.</summary>
+    /// <see cref="Prisc.VideoSDK.Model.VideoEffect"/>.</summary>
     public VideoEffect Effect { get; set; }
 
     /// <summary>Transition played over the first part of the item, or null for a hard start.</summary>

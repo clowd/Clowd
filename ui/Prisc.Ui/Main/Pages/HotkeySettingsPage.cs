@@ -7,11 +7,11 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.Config;
-using Clowd.UI.Config;
-using Clowd.UI.Controls;
+using Prisc.Config;
+using Prisc.UI.Config;
+using Prisc.UI.Controls;
 
-namespace Clowd.UI.Pages
+namespace Prisc.UI.Pages
 {
     /// <summary>
     /// The Hotkeys settings page: the actions in titled sections (<see cref="HotkeyPageLayout"/>),

@@ -4,13 +4,13 @@ using Avalonia.Data.Core;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Markup.Xaml.MarkupExtensions.CompiledBindings;
 
-namespace Clowd.Localization
+namespace Prisc.Localization
 {
     /// <summary>
     /// <c>{loc:T Nav_About}</c> — a one-way binding to <c>Loc.Current["Nav_About"]</c> that re-reads
     /// itself when the language changes.
     /// <para>
-    /// Usage: <c>xmlns:loc="using:Clowd.Localization"</c>, then
+    /// Usage: <c>xmlns:loc="using:Prisc.Localization"</c>, then
     /// <c>&lt;TextBlock Text="{loc:T Nav_About}" /&gt;</c>.
     /// </para>
     /// <para>

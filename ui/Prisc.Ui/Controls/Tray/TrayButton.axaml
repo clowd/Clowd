@@ -1,13 +1,13 @@
 ﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:clowd="using:Clowd"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:prisc="using:Prisc"
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- The accent is a user setting, so it cannot be a static token: the tray window writes the
          effective capture accent into its own resources under this key and every tray theme reads it
          with a DynamicResource. This default exists so a TrayButton hosted anywhere else (a spike
          harness, a designer surface) still renders its active state instead of nothing. -->
-    <SolidColorBrush x:Key="TrayAccentBrush" Color="{x:Static clowd:AccentColors.Default}" />
+    <SolidColorBrush x:Key="TrayAccentBrush" Color="{x:Static prisc:AccentColors.Default}" />
 
     <!-- Spec §2. Four layers, bottom to top: the fill, a per-look resting veil, the glyph, the hover
          veil. Every state below is a layer's opacity or a layer's brush — nothing here is ever written

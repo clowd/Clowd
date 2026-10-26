@@ -6,11 +6,11 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Clowd.VideoSDK;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>Wire form of the <b>version 1</b> <c>videoedit.json</c> — the flat trim/cut/webcam
     /// DTO the editor wrote before the composition model existed. Still read (and migrated), never

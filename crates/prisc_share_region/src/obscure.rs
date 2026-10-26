@@ -1,6 +1,6 @@
 //! The obscure modes and the `obs_display` draw callback that implements them.
 //!
-//! Clowd asks the mirror to hide what it is showing without tearing the share
+//! Prisc asks the mirror to hide what it is showing without tearing the share
 //! down — the meeting app must keep seeing the same window, receiving frames,
 //! the whole time. So obscuring happens at the very last moment, in the
 //! display's draw callback: instead of blitting the composited canvas straight
@@ -28,7 +28,7 @@
 //!
 //! Nothing here is ever freed. The effect and the two texrenders are created
 //! once, on the first non-`None` frame, and live until the process exits — and
-//! the process only ever exits through `obs_platform::exit_process`, which
+//! the process only ever exits through `prisc_obs_platform::exit_process`, which
 //! deliberately does not shut libobs down (its teardown is a known crash
 //! source). Destroying GPU objects at exit would therefore be strictly more
 //! dangerous than leaking them.
@@ -54,7 +54,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 /// What the mirror is currently showing.
 ///
 /// The `u32` payload of [`Mode::Blur`] and [`Mode::Pixelate`] is the strength
-/// on a 1..=100 scale — the scale Clowd's slider speaks, deliberately not a
+/// on a 1..=100 scale — the scale Prisc's slider speaks, deliberately not a
 /// pixel radius, so the mapping from "how hidden" to "how expensive" stays an
 /// implementation detail of this file (see [`divisor`] and [`iterations`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,11 +72,11 @@ pub enum Mode {
     Hide,
 }
 
-/// The lowest strength Clowd may send. Zero would mean "blur by nothing",
+/// The lowest strength Prisc may send. Zero would mean "blur by nothing",
 /// which is indistinguishable from [`Mode::None`] but still pays for the
 /// texrenders, so the protocol simply excludes it.
 pub const MIN_STRENGTH: u32 = 1;
-/// The highest strength Clowd may send.
+/// The highest strength Prisc may send.
 pub const MAX_STRENGTH: u32 = 100;
 
 // Mode discriminants as stored in `MODE`. Kept as plain integers rather than
@@ -152,7 +152,7 @@ pub fn name(mode: Mode) -> &'static str {
 }
 
 /// The strength of a mode, as it appears in the `obscure` status line. Modes
-/// that have no strength report 0 rather than omitting the field, so Clowd can
+/// that have no strength report 0 rather than omitting the field, so Prisc can
 /// deserialise every ack into the same shape.
 pub fn strength(mode: Mode) -> u32 {
     match mode {
@@ -172,7 +172,7 @@ pub fn frames() -> u64 {
 // ---------------------------------------------------------------------------
 
 /// The shader, embedded rather than loaded from disk: this binary ships as a
-/// single file next to Clowd with no data directory of its own, and libobs'
+/// single file next to Prisc with no data directory of its own, and libobs'
 /// own effect search path is not somewhere we can install into.
 const EFFECT_SOURCE: &str = include_str!("obscure.effect");
 
@@ -182,26 +182,26 @@ const EFFECT_SOURCE: &str = include_str!("obscure.effect");
 /// is a linear scan over the effect's parameter list, and the blur path would
 /// otherwise repeat it up to nine times per frame.
 struct Gfx {
-    effect: *mut obs_sys::gs_effect_t,
+    effect: *mut prisc_obs_sys::gs_effect_t,
     /// The `image` uniform: the texture each blit samples.
-    p_image: *mut obs_sys::gs_eparam_t,
+    p_image: *mut prisc_obs_sys::gs_eparam_t,
     /// The `dir` uniform: one gaussian step in UV units, direction included.
-    p_dir: *mut obs_sys::gs_eparam_t,
+    p_dir: *mut prisc_obs_sys::gs_eparam_t,
     /// The `iconScale` uniform: uv -> icon space, for the hide card.
-    p_icon_scale: *mut obs_sys::gs_eparam_t,
+    p_icon_scale: *mut prisc_obs_sys::gs_eparam_t,
     /// The `px` uniform: one output pixel in icon space, for antialiasing.
-    p_px: *mut obs_sys::gs_eparam_t,
+    p_px: *mut prisc_obs_sys::gs_eparam_t,
     /// The `multiplier` uniform: the scale applied to the final, swapchain-
     /// bound draw so an scRGB surface gets SDR white rather than 80 nits. 1.0
     /// everywhere else, including every intermediate pass. See
     /// [`present_multiplier`].
-    p_multiplier: *mut obs_sys::gs_eparam_t,
+    p_multiplier: *mut prisc_obs_sys::gs_eparam_t,
     /// Ping-pong render targets. The downsample lands in `a`; each blur
     /// iteration goes a -> b horizontally then b -> a vertically, so the
     /// finished image is always back in `a`. Two are needed because a target
     /// can never also be the texture being sampled.
-    a: *mut obs_sys::gs_texrender_t,
-    b: *mut obs_sys::gs_texrender_t,
+    a: *mut prisc_obs_sys::gs_texrender_t,
+    b: *mut prisc_obs_sys::gs_texrender_t,
 }
 
 /// One-time initialisation outcome for [`Gfx`].
@@ -298,7 +298,7 @@ pub unsafe extern "C" fn draw(_param: *mut c_void, cx: u32, cy: u32) {
         // The fast path, and the one that runs 99% of the time: no texrender,
         // no effect, no allocation, nothing lazily built. Keeping it textually
         // ahead of every other consideration in this function is the point.
-        unsafe { obs_sys::obs_render_main_texture() };
+        unsafe { prisc_obs_sys::obs_render_main_texture() };
         return;
     }
 
@@ -336,7 +336,7 @@ pub unsafe extern "C" fn draw(_param: *mut c_void, cx: u32, cy: u32) {
         _ => {
             set_mode(Mode::None);
             crate::status::emit_obscure(Mode::None);
-            unsafe { obs_sys::obs_render_main_texture() };
+            unsafe { prisc_obs_sys::obs_render_main_texture() };
             return;
         }
     };
@@ -347,7 +347,7 @@ pub unsafe extern "C" fn draw(_param: *mut c_void, cx: u32, cy: u32) {
         Mode::Pixelate(s) => unsafe { draw_filtered(gfx, cx, cy, s, false) },
         // Unreachable (checked above), but written as a real arm rather than
         // an `unreachable!()`: a panic here would abort the process.
-        Mode::None => unsafe { obs_sys::obs_render_main_texture() },
+        Mode::None => unsafe { prisc_obs_sys::obs_render_main_texture() },
     }
 }
 
@@ -381,7 +381,7 @@ unsafe fn build_gfx() -> Option<Gfx> {
     // invented one for an in-memory effect.
     let mut error: *mut std::os::raw::c_char = std::ptr::null_mut();
     let effect = unsafe {
-        obs_sys::gs_effect_create(source.as_ptr(), c"obscure.effect".as_ptr(), &mut error)
+        prisc_obs_sys::gs_effect_create(source.as_ptr(), c"obscure.effect".as_ptr(), &mut error)
     };
     if effect.is_null() {
         let detail = if error.is_null() {
@@ -406,14 +406,14 @@ unsafe fn build_gfx() -> Option<Gfx> {
     // `gs_effect_set_*` tolerates a null param, and a technique that does not
     // reference a uniform legitimately has none. Cache whatever exists.
     let param =
-        |name: &CStr| unsafe { obs_sys::gs_effect_get_param_by_name(effect, name.as_ptr()) };
+        |name: &CStr| unsafe { prisc_obs_sys::gs_effect_get_param_by_name(effect, name.as_ptr()) };
 
     // GS_ZS_NONE: there is no depth in a 2D blit chain, and skipping the
     // depth/stencil surface halves the memory each target costs.
     let make_target = || unsafe {
-        obs_sys::gs_texrender_create(
-            obs_sys::gs_color_format_GS_RGBA,
-            obs_sys::gs_zstencil_format_GS_ZS_NONE,
+        prisc_obs_sys::gs_texrender_create(
+            prisc_obs_sys::gs_color_format_GS_RGBA,
+            prisc_obs_sys::gs_zstencil_format_GS_ZS_NONE,
         )
     };
     let a = make_target();
@@ -469,8 +469,8 @@ unsafe fn build_gfx() -> Option<Gfx> {
 /// # Safety
 /// Graphics thread: reads the current render target's colour space.
 unsafe fn present_multiplier() -> f32 {
-    if unsafe { obs_sys::gs_get_color_space() } == obs_sys::gs_color_space_GS_CS_709_SCRGB {
-        unsafe { obs_sys::obs_get_video_sdr_white_level() / 80.0 }
+    if unsafe { prisc_obs_sys::gs_get_color_space() } == prisc_obs_sys::gs_color_space_GS_CS_709_SCRGB {
+        unsafe { prisc_obs_sys::obs_get_video_sdr_white_level() / 80.0 }
     } else {
         1.0
     }
@@ -482,19 +482,19 @@ unsafe fn present_multiplier() -> f32 {
 /// # Safety
 /// Graphics thread, display render target bound and ortho'd to `cx` by `cy`.
 unsafe fn draw_filtered(gfx: &Gfx, cx: u32, cy: u32, strength: u32, blur: bool) {
-    let src = unsafe { obs_sys::obs_get_main_texture() };
+    let src = unsafe { prisc_obs_sys::obs_get_main_texture() };
     if src.is_null() {
         // Returns null until the first composite has happened, which is
         // routine for the first frame or two after a `reset_video`. Show the
         // live path (which no-ops identically in that state) and try again
         // next frame rather than presenting an uninitialised target.
-        unsafe { obs_sys::obs_render_main_texture() };
+        unsafe { prisc_obs_sys::obs_render_main_texture() };
         return;
     }
-    let sw = unsafe { obs_sys::gs_texture_get_width(src) };
-    let sh = unsafe { obs_sys::gs_texture_get_height(src) };
+    let sw = unsafe { prisc_obs_sys::gs_texture_get_width(src) };
+    let sh = unsafe { prisc_obs_sys::gs_texture_get_height(src) };
     if sw == 0 || sh == 0 || cx == 0 || cy == 0 {
-        unsafe { obs_sys::obs_render_main_texture() };
+        unsafe { prisc_obs_sys::obs_render_main_texture() };
         return;
     }
 
@@ -515,10 +515,10 @@ unsafe fn draw_filtered(gfx: &Gfx, cx: u32, cy: u32, strength: u32, blur: bool) 
         // libobs/graphics/texture-render.c) but says nothing about blend
         // state, so an unbalanced change here would leak into the next
         // display and into libobs' own rendering.
-        obs_sys::gs_blend_state_push();
-        obs_sys::gs_blend_function(
-            obs_sys::gs_blend_type_GS_BLEND_ONE,
-            obs_sys::gs_blend_type_GS_BLEND_ZERO,
+        prisc_obs_sys::gs_blend_state_push();
+        prisc_obs_sys::gs_blend_function(
+            prisc_obs_sys::gs_blend_type_GS_BLEND_ONE,
+            prisc_obs_sys::gs_blend_type_GS_BLEND_ZERO,
         );
 
         // sRGB handling is switched off for the INTERMEDIATE chain rather than
@@ -534,8 +534,8 @@ unsafe fn draw_filtered(gfx: &Gfx, cx: u32, cy: u32, strength: u32, blur: bool) 
         // The FINAL blit is a different matter and is handled at step 3: that
         // one writes into the display's swapchain, which is not necessarily an
         // encoded surface at all (see [`present_multiplier`]).
-        let prev_srgb = obs_sys::gs_framebuffer_srgb_enabled();
-        obs_sys::gs_enable_framebuffer_srgb(false);
+        let prev_srgb = prisc_obs_sys::gs_framebuffer_srgb_enabled();
+        prisc_obs_sys::gs_enable_framebuffer_srgb(false);
 
         // 1. Downsample the full canvas into A. Linear sampling here is what
         //    averages each DxD block down to one texel, so pixelate gets its
@@ -568,9 +568,9 @@ unsafe fn draw_filtered(gfx: &Gfx, cx: u32, cy: u32, strength: u32, blur: bool) 
         if current.is_null() {
             // A texrender refused to start (out of video memory, or a zero
             // size we failed to catch). Nothing valid to upscale.
-            obs_sys::gs_enable_framebuffer_srgb(prev_srgb);
-            obs_sys::gs_blend_state_pop();
-            obs_sys::obs_render_main_texture();
+            prisc_obs_sys::gs_enable_framebuffer_srgb(prev_srgb);
+            prisc_obs_sys::gs_blend_state_pop();
+            prisc_obs_sys::obs_render_main_texture();
             return;
         }
 
@@ -590,15 +590,15 @@ unsafe fn draw_filtered(gfx: &Gfx, cx: u32, cy: u32, strength: u32, blur: bool) 
         //    encoded output would have washed out. `multiplier` then puts SDR
         //    white where scRGB expects it. See [`present_multiplier`].
         let technique = if blur { c"DrawLinear" } else { c"DrawPoint" };
-        obs_sys::gs_enable_framebuffer_srgb(true);
-        obs_sys::gs_effect_set_texture_srgb(gfx.p_image, current);
-        obs_sys::gs_effect_set_float(gfx.p_multiplier, present_multiplier());
-        while obs_sys::gs_effect_loop(gfx.effect, technique.as_ptr()) {
-            obs_sys::gs_draw_sprite(current, 0, cx, cy);
+        prisc_obs_sys::gs_enable_framebuffer_srgb(true);
+        prisc_obs_sys::gs_effect_set_texture_srgb(gfx.p_image, current);
+        prisc_obs_sys::gs_effect_set_float(gfx.p_multiplier, present_multiplier());
+        while prisc_obs_sys::gs_effect_loop(gfx.effect, technique.as_ptr()) {
+            prisc_obs_sys::gs_draw_sprite(current, 0, cx, cy);
         }
 
-        obs_sys::gs_enable_framebuffer_srgb(prev_srgb);
-        obs_sys::gs_blend_state_pop();
+        prisc_obs_sys::gs_enable_framebuffer_srgb(prev_srgb);
+        prisc_obs_sys::gs_blend_state_pop();
     }
 }
 
@@ -614,10 +614,10 @@ unsafe fn draw_hide(gfx: &Gfx, cx: u32, cy: u32) {
     let (scale_x, scale_y, px) = icon_uniforms(cx, cy);
 
     unsafe {
-        obs_sys::gs_blend_state_push();
-        obs_sys::gs_blend_function(
-            obs_sys::gs_blend_type_GS_BLEND_ONE,
-            obs_sys::gs_blend_type_GS_BLEND_ZERO,
+        prisc_obs_sys::gs_blend_state_push();
+        prisc_obs_sys::gs_blend_function(
+            prisc_obs_sys::gs_blend_type_GS_BLEND_ONE,
+            prisc_obs_sys::gs_blend_type_GS_BLEND_ZERO,
         );
 
         // Same swapchain colour-space handling as the final blit in
@@ -629,21 +629,21 @@ unsafe fn draw_hide(gfx: &Gfx, cx: u32, cy: u32) {
         // surface, which is linear already) and the scRGB multiplier, without
         // which "white" would be 1.0 linear, i.e. 80 nits: a grey card on an
         // HDR display rather than the SDR white the icon is meant to read as.
-        let prev_srgb = obs_sys::gs_framebuffer_srgb_enabled();
-        obs_sys::gs_enable_framebuffer_srgb(true);
+        let prev_srgb = prisc_obs_sys::gs_framebuffer_srgb_enabled();
+        prisc_obs_sys::gs_enable_framebuffer_srgb(true);
 
         set_vec2(gfx.p_icon_scale, scale_x, scale_y);
-        obs_sys::gs_effect_set_float(gfx.p_px, px);
-        obs_sys::gs_effect_set_float(gfx.p_multiplier, present_multiplier());
+        prisc_obs_sys::gs_effect_set_float(gfx.p_px, px);
+        prisc_obs_sys::gs_effect_set_float(gfx.p_multiplier, present_multiplier());
         // Null texture: the technique never samples `image`, and
         // `gs_draw_sprite` only needs a texture when it has to infer the
         // sprite's size, which the explicit cx/cy supply here.
-        while obs_sys::gs_effect_loop(gfx.effect, c"Hide".as_ptr()) {
-            obs_sys::gs_draw_sprite(std::ptr::null_mut(), 0, cx, cy);
+        while prisc_obs_sys::gs_effect_loop(gfx.effect, c"Hide".as_ptr()) {
+            prisc_obs_sys::gs_draw_sprite(std::ptr::null_mut(), 0, cx, cy);
         }
 
-        obs_sys::gs_enable_framebuffer_srgb(prev_srgb);
-        obs_sys::gs_blend_state_pop();
+        prisc_obs_sys::gs_enable_framebuffer_srgb(prev_srgb);
+        prisc_obs_sys::gs_blend_state_pop();
     }
 }
 
@@ -660,34 +660,34 @@ unsafe fn draw_hide(gfx: &Gfx, cx: u32, cy: u32) {
 /// `target`'s own texture (a target can never also be a sampled source).
 unsafe fn render_into(
     gfx: &Gfx,
-    target: *mut obs_sys::gs_texrender_t,
-    src: *mut obs_sys::gs_texture_t,
+    target: *mut prisc_obs_sys::gs_texrender_t,
+    src: *mut prisc_obs_sys::gs_texture_t,
     w: u32,
     h: u32,
     technique: &CStr,
-) -> *mut obs_sys::gs_texture_t {
+) -> *mut prisc_obs_sys::gs_texture_t {
     unsafe {
         // A texrender refuses to begin twice without a reset — it latches a
         // "rendered" flag on end so that a cache-shaped caller can skip
         // redundant work. We re-render every frame, so we reset every time.
-        obs_sys::gs_texrender_reset(target);
-        if !obs_sys::gs_texrender_begin(target, w, h) {
+        prisc_obs_sys::gs_texrender_reset(target);
+        if !prisc_obs_sys::gs_texrender_begin(target, w, h) {
             return std::ptr::null_mut();
         }
-        obs_sys::gs_ortho(0.0, w as f32, 0.0, h as f32, -100.0, 100.0);
+        prisc_obs_sys::gs_ortho(0.0, w as f32, 0.0, h as f32, -100.0, 100.0);
         // No clear: the sprite below covers all w*h texels with an opaque
         // ONE/ZERO write, so whatever the target held is fully replaced.
-        obs_sys::gs_effect_set_texture(gfx.p_image, src);
+        prisc_obs_sys::gs_effect_set_texture(gfx.p_image, src);
         // Identity: `multiplier` belongs to the swapchain-bound draw alone, and
         // every intermediate target holds the picture in its own encoded space.
         // Set on every pass rather than once, because the same effect object —
         // and therefore the same uniform — is what the final blit scales.
-        obs_sys::gs_effect_set_float(gfx.p_multiplier, 1.0);
-        while obs_sys::gs_effect_loop(gfx.effect, technique.as_ptr()) {
-            obs_sys::gs_draw_sprite(src, 0, w, h);
+        prisc_obs_sys::gs_effect_set_float(gfx.p_multiplier, 1.0);
+        while prisc_obs_sys::gs_effect_loop(gfx.effect, technique.as_ptr()) {
+            prisc_obs_sys::gs_draw_sprite(src, 0, w, h);
         }
-        obs_sys::gs_texrender_end(target);
-        obs_sys::gs_texrender_get_texture(target)
+        prisc_obs_sys::gs_texrender_end(target);
+        prisc_obs_sys::gs_texrender_get_texture(target)
     }
 }
 
@@ -719,11 +719,11 @@ fn icon_uniforms(cx: u32, cy: u32) -> (f32, f32, f32) {
 ///
 /// # Safety
 /// Graphics thread. A null `param` is fine — `gs_effect_set_val` checks.
-unsafe fn set_vec2(param: *mut obs_sys::gs_eparam_t, x: f32, y: f32) {
-    let value = obs_sys::vec2 {
-        __bindgen_anon_1: obs_sys::vec2__bindgen_ty_1 { ptr: [x, y] },
+unsafe fn set_vec2(param: *mut prisc_obs_sys::gs_eparam_t, x: f32, y: f32) {
+    let value = prisc_obs_sys::vec2 {
+        __bindgen_anon_1: prisc_obs_sys::vec2__bindgen_ty_1 { ptr: [x, y] },
     };
-    unsafe { obs_sys::gs_effect_set_vec2(param, &value) };
+    unsafe { prisc_obs_sys::gs_effect_set_vec2(param, &value) };
 }
 
 #[cfg(test)]

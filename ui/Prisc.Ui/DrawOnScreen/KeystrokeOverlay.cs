@@ -6,15 +6,15 @@ using Avalonia.Platform;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.VideoSDK.Composition;
+using Prisc.Config;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// The keystroke rows over one screen's drawing: a sibling layered above the
-    /// <see cref="Clowd.Drawing.DrawingCanvas"/> in <see cref="DrawOnScreenWindow"/>, not a graphic
+    /// <see cref="Prisc.Drawing.DrawingCanvas"/> in <see cref="DrawOnScreenWindow"/>, not a graphic
     /// on it, so the keys never enter the ink's history, are untouched by hiding or clearing the
     /// ink, and never take the mouse. The drawing is the video editor's own keyboard-track
     /// pipeline (<see cref="LiveKeystrokes"/> over <c>KeystrokeRenderer</c>), handed Avalonia's

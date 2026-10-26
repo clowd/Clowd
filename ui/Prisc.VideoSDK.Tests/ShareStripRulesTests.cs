@@ -1,7 +1,7 @@
-using Clowd.UI;
+using Prisc.UI;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The share strip's enable rules, pinned combination by combination. Two owners drive the Hide

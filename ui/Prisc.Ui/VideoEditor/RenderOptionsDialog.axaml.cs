@@ -5,14 +5,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
-using Clowd.Config;
-using Clowd.UI.Helpers;
-using Clowd.UI.Services;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Render;
+using Prisc.Config;
+using Prisc.UI.Helpers;
+using Prisc.UI.Services;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Render;
 using Ursa.Controls;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>What the render dialog needs to know about the project it is about to render: the
     /// canvas the edit composes into, the fastest frame rate it can be rendered at, and how long the

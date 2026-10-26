@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>What a scroll gesture over the timeline means.</summary>
     internal enum TimelineScrollAction

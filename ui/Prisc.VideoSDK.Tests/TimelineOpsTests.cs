@@ -1,9 +1,9 @@
 using System;
 using System.Linq;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     public class TimelineOpsTests
     {

@@ -11,14 +11,16 @@ using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.Localization;
-using Clowd.UI;
-using Clowd.UI.DrawOnScreen;
-using Clowd.UI.Helpers;
-using Clowd.Util;
+using Prisc.Config;
+using Prisc.Legacy;
+using Prisc.Localization;
+using Prisc.UI;
+using Prisc.UI.DrawOnScreen;
+using Prisc.UI.Helpers;
+using Prisc.UI.Legacy;
+using Prisc.Util;
 
-namespace Clowd
+namespace Prisc
 {
     public partial class App : Application
     {
@@ -38,7 +40,7 @@ namespace Clowd
         /// shutdown/logoff, or a background update restart. Editors closing under it keep their
         /// session's <see cref="SessionInfo.OpenEditor"/> marker, so the next start reopens them
         /// (Settings ▸ Editor ▸ Restore sessions). A deliberate exit from the tray leaves it false:
-        /// the user closed Clowd, and with it the editors.
+        /// the user closed Prisc, and with it the editors.
         /// </summary>
         public static bool KeepOpenEditorsOnExit { get; private set; }
 
@@ -95,7 +97,7 @@ namespace Clowd
             // the SDK's AI generators resolve the inference binary through this delegate on every
             // run — installed before Startup so the --video-edit/--video-spike harnesses (which
             // return before the tray lifetime is set up) get it too.
-            Clowd.VideoSDK.Ai.AiLoader.Configure(AiBinaryLocator.Resolve);
+            Prisc.VideoSDK.Ai.AiLoader.Configure(AiBinaryLocator.Resolve);
 
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
@@ -106,7 +108,7 @@ namespace Clowd
                 MacDockIcon.Initialize(desktop);
 
                 // Windows: park a never-shown window so display changes reach Avalonia's screen
-                // cache while Clowd is tray-only (see ScreenCacheSentinel).
+                // cache while Prisc is tray-only (see ScreenCacheSentinel).
                 ScreenCacheSentinel.Initialize();
 
                 Startup(desktop.Args ?? Array.Empty<string>());
@@ -116,7 +118,7 @@ namespace Clowd
         }
 
         /// <summary>
-        /// Reconciles both halves of the "Upload with Clowd" shell entry — the classic Explorer
+        /// Reconciles both halves of the "Upload with Prisc" shell entry — the classic Explorer
         /// verb and the Win11 sparse package — with the settings that decide whether it should
         /// exist (<see cref="SettingsRoot.ShouldRegisterExplorerContextMenu"/>: the checkbox on the
         /// Uploads page, and uploads being on at all).
@@ -158,7 +160,7 @@ namespace Clowd
 
                 // hidden spike harness (`--video-spike file.mp4`): a bare playback window used to
                 // measure the video engine. Must run BEFORE single-instance forwarding — a spike
-                // process must never forward its args to (or be swallowed by) a resident Clowd.
+                // process must never forward its args to (or be swallowed by) a resident Prisc.
                 if (UI.VideoEditor.VideoSpikeWindow.TryHandleArgs(args))
                     return;
 
@@ -180,6 +182,13 @@ namespace Clowd
                     return;
 
                 await SetupMutex(args);
+
+                // only the primary instance gets here. Moves the pre-rename sessions over before
+                // anything (SessionManager, the preview cache, the capture standby) opens the
+                // sessions folder; a no-op once there is nothing left to move.
+                await Task.Run(() => LegacyClowd.MigrateDataFolder(PathConstants.DataDirectory, PathConstants.AppDataRoot,
+                    LegacyClowdShellCleanup.HasSeparateLegacyInstall()));
+
                 bool firstRun = await SetupSettings() || Program.IsVelopackFirstRun;
 
                 ApplyTheme();
@@ -196,6 +205,12 @@ namespace Clowd
                 // must run before anything resolves a string. An empty Language setting keeps the
                 // OS UI language, which Loc captured on first touch just now.
                 Loc.ApplyCulture(SettingsRoot.Current.General.Language);
+
+                // the pre-rename app's login item, verbs and shell extension are replaced by ours
+                // below; the package removal spawns PowerShell, so it runs in the background.
+                LegacyClowdShellCleanup.RunRegistryCleanup();
+                LegacyClowdShellCleanup.RunMacCleanup();
+                _ = Task.Run(LegacyClowdShellCleanup.RunPackageCleanup);
 
                 // the saved settings are the source of truth for the shell registrations; reconcile
                 // them with the OS once at startup, then follow whenever the user toggles a checkbox.
@@ -261,7 +276,7 @@ namespace Clowd
 
                 SetupGlobalHotkeys();
 
-                // macOS: Finder right-click → "Upload with Clowd" (NSServices) delivers the
+                // macOS: Finder right-click → "Upload with Prisc" (NSServices) delivers the
                 // selection here in-process — background handoff, same as forwarded CLI args.
                 MacServicesProvider.Initialize(files => Dispatcher.UIThread.Post(() => OnFilesReceived(files)));
 
@@ -284,15 +299,15 @@ namespace Clowd
                 // start receiving command line arguments forwarded from secondary instances
                 _processor.Ready();
 
-                if (!firstRun && SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
+                if (!firstRun && SettingsRoot.Current.Editor.RestoreSessionsOnPriscStart)
                     EditorWindow.ShowAllPreviouslyActiveSessions();
 
                 // who started the process decides whether this is the user's launch at all. An
                 // automated launch stays in the tray: the OS login item and the updater's
-                // background restart both pass --autostarted, and an Explorer "Upload with Clowd"
-                // launch already carries its own work. Anything else is the user starting Clowd,
+                // background restart both pass --autostarted, and an Explorer "Upload with Prisc"
+                // launch already carries its own work. Anything else is the user starting Prisc,
                 // and what that does is theirs to choose (SettingsGeneral.ShortcutClick) — the
-                // same choice as clicking the shortcut while Clowd is already running.
+                // same choice as clicking the shortcut while Prisc is already running.
                 var startedForCliWork = CliArgs.ExtractUploadPaths(args).Length > 0;
 
                 if (!Program.IsAutoStarted && !startedForCliWork)
@@ -331,6 +346,10 @@ namespace Clowd
         /// <summary>Returns true when this looks like the first run (no settings file existed).</summary>
         private async Task<bool> SetupSettings()
         {
+            // copy the pre-rename settings forward first, so an upgraded install is not mistaken
+            // for a first run (SettingsService.Load() would do it too, but only after this check)
+            LegacyClowd.MigrateSettingsFile(SettingsService.FilePath);
+
             bool firstRun;
             try
             {
@@ -364,7 +383,7 @@ namespace Clowd
             }
 
             // formerly a hidden side effect of settings deserialization; now an explicit startup step.
-            // DiscoverProviders scans loaded assemblies, so Clowd.Upload must be pulled in first.
+            // DiscoverProviders scans loaded assemblies, so Prisc.Upload must be pulled in first.
             _ = typeof(Upload.MimeProvider).Assembly;
             SettingsRoot.Current.Uploads.DiscoverProviders();
 
@@ -381,14 +400,14 @@ namespace Clowd
             {
                 if (await _processor.Startup(args) == false)
                 {
-                    // clowd is already running and we've forwarded our args successfully.
+                    // prisc is already running and we've forwarded our args successfully.
                     Environment.Exit(0);
                 }
             }
             catch (TimeoutException)
             {
-                // there is an unresponsive clowd process; try to kill it and re-start.
-                KillOtherClowdProcess();
+                // there is an unresponsive prisc process; try to kill it and re-start.
+                KillOtherPriscProcess();
                 if (await _processor.Startup(args) == false)
                     throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Prisc instance? Uninstaller?");
             }
@@ -631,7 +650,7 @@ namespace Clowd
         public void ShowNewVideoEditor()
         {
             if (SettingsRoot.Current.Recording.IsEnabled)
-                Clowd.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
+                Prisc.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
         }
 
         /// <summary>One <see cref="SetupTrayIcon"/> for any number of hotkey changes made in the
@@ -663,7 +682,7 @@ namespace Clowd
         }
 
         /// <summary>
-        /// Creates the <see cref="HotkeyManager"/> over the clowd_hotkeys-backed
+        /// Creates the <see cref="HotkeyManager"/> over the prisc_hotkeys-backed
         /// <see cref="NativeHotkeyHost"/> and wires the hotkey actions explicitly (mirroring the WPF
         /// App.SetupSettings wiring, adapted to what exists in this build). Gestures are read from
         /// settings; the OS keyboard hook itself starts lazily on the first registration, so no hook
@@ -727,7 +746,7 @@ namespace Clowd
 
         /// <summary>
         /// The screenshot hotkeys have exactly one owner at a time. Warm: the standby capturer
-        /// hooks them itself (its own clowd_hotkeys hook — see standby_hotkeys.rs for why they
+        /// hooks them itself (its own prisc_hotkeys hook — see standby_hotkeys.rs for why they
         /// must live in that process), and this process must stay out so two hooks never race to
         /// suppress and handle the same press. Not warm — setting off, or overridden after
         /// standby faulted — this process's hook drives the classic one-shot path. Called at startup and
@@ -834,7 +853,7 @@ namespace Clowd
 
             // and end an in-flight scrolling capture, for the opposite reason: it has no partial
             // artifact worth keeping, but its driver would otherwise carry on scrolling (and
-            // photographing) whatever window it was pointed at after Clowd is gone.
+            // photographing) whatever window it was pointed at after Prisc is gone.
             try
             {
                 if (ScrollCapturePage.ActiveInstance is { } scrolling)
@@ -848,7 +867,7 @@ namespace Clowd
 
             // …and a live region share, for a third reason again: it has nothing to save, but its
             // helper owns a window a meeting app is actively broadcasting. Left alone it would keep
-            // mirroring the user's screen into that meeting after Clowd is gone (stdin EOF does
+            // mirroring the user's screen into that meeting after Prisc is gone (stdin EOF does
             // eventually stop it, but only once this process has really died).
             try
             {
@@ -906,11 +925,11 @@ namespace Clowd
             // Closing persistence runs (§5.7), persist settings, release the single-instance
             // pipe, and let the shutdown proceed.
 
-            // the OS is ending the session, not the user closing Clowd: editors stay marked open.
+            // the OS is ending the session, not the user closing Prisc: editors stay marked open.
             KeepOpenEditorsOnExit = true;
 
             // best-effort only (cannot await here without holding up the OS): the mp4 itself is
-            // flushed by obs-express on stdin EOF regardless (§1.2); this races to also register
+            // flushed by the recorder on stdin EOF regardless (§1.2); this races to also register
             // the session so the recording shows up in Recents on the next launch.
             try
             {
@@ -963,7 +982,7 @@ namespace Clowd
             }
         }
 
-        /// <summary>The user "launched" Clowd while it was already running (Windows second
+        /// <summary>The user "launched" Prisc while it was already running (Windows second
         /// instance with no args, macOS reopen). The shortcut does whatever the user asked it to
         /// (<see cref="SettingsGeneral.ShortcutClick"/>), which is the same set of actions the
         /// tray icon offers and matches what a cold start does in App.Startup.</summary>
@@ -996,8 +1015,8 @@ namespace Clowd
                     return;
                 }
 
-                // no main window, but the user still has editors open — "launch Clowd" then means
-                // "show me the Clowd I already have", which is what the Dock does for every other
+                // no main window, but the user still has editors open — "launch Prisc" then means
+                // "show me the Prisc I already have", which is what the Dock does for every other
                 // app. Opening a main window nobody asked for on top of them is the wrong answer.
                 var open = desktop.Windows.Where(w => w.IsVisible && IsUserEditingWindow(w)).ToArray();
                 if (open.Length > 0)
@@ -1023,13 +1042,13 @@ namespace Clowd
         /// along with a capture (recording border/toolbar, scroll status) and the dialogs owned by
         /// a parent window. Only these keep an activation from opening the main window.</summary>
         private static bool IsUserEditingWindow(Window window)
-            => window is EditorWindow or Clowd.UI.VideoEditor.VideoEditorWindow;
+            => window is EditorWindow or Prisc.UI.VideoEditor.VideoEditorWindow;
 
         private async void OnFilesReceived(string[] filePaths)
         {
             Debug.WriteLine("Files received from secondary instance: " + String.Join(", ", filePaths));
 
-            // the Explorer / Finder "Upload with Clowd" entries and the command line have no way
+            // the Explorer / Finder "Upload with Prisc" entries and the command line have no way
             // of knowing uploads were switched off; a silent drop would look like a lost file.
             if (!SettingsRoot.Current.Uploads.IsEnabled)
             {
@@ -1120,7 +1139,7 @@ namespace Clowd
             };
         }
 
-        private static void KillOtherClowdProcess()
+        private static void KillOtherPriscProcess()
         {
             var current = Process.GetCurrentProcess();
             var processes = Process.GetProcessesByName(current.ProcessName).Where(p => p.Id != current.Id).ToArray();

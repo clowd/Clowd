@@ -1,6 +1,6 @@
 ﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- Spec §1 / §9. The tray's 4 px padding is spent as a 1 px highlight ring plus 3 px of inner
          padding, so the outer box is exactly 48 px tall in a row and 48 px wide in a column while the

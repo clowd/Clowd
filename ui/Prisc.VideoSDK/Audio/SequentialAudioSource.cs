@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// The render path's <see cref="IAudioSource"/>: monotonic, forward-only, no seeking — the

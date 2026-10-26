@@ -1,10 +1,10 @@
 using System;
 using Avalonia;
-using Clowd.Drawing.Curves;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Curves;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The pen path's vector helpers are pure (no Avalonia platform), so they are pinned here

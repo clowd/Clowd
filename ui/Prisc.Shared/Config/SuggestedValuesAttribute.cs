@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Marks a string settings property whose value is usually one of a known set (e.g. AWS region

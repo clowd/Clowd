@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>
 /// Outlines for the <see cref="MaskShape"/> members that no graphics toolkit draws natively, in

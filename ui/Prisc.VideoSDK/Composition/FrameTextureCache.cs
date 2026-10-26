@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Per-composer cache of the latest decoded frame per (sourceId, streamIndex), as

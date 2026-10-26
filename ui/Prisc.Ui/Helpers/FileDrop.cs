@@ -4,7 +4,7 @@ using System.IO;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>Files dragged in from Explorer/Finder. Both editors take the same kinds of file
     /// their own Add/Import pickers offer (see <c>MediaFileTypes</c>), so a drop asks the picker

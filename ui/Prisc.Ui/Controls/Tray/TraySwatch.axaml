@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- No template: the swatch paints its dot and ring itself (TraySwatch.Render). The theme's only
          job is the ring brush. Hover previews the selection ring in the accent; the selected colour

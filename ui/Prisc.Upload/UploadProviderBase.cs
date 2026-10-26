@@ -10,10 +10,10 @@ using System.Threading;
 using Amazon.Runtime;
 using System.Threading.Tasks;
 
-namespace Clowd
+namespace Prisc
 {
-    // formerly part of Clowd.Shared/Upload.cs in the WPF repo; the interfaces stayed in
-    // Clowd.Shared and the http helper base class moved here with the providers.
+    // formerly part of Prisc.Shared/Upload.cs in the WPF repo; the interfaces stayed in
+    // Prisc.Shared and the http helper base class moved here with the providers.
     public abstract class UploadProviderBase : SimpleNotifyObject, IUploadProvider
     {
         private static readonly byte[] TestPng =
@@ -30,7 +30,7 @@ namespace Clowd
         };
 
         private static readonly string _userAgent =
-            "Clowd/" + (typeof(UploadProviderBase).Assembly.GetName().Version?.ToString() ?? "1.0");
+            "Prisc/" + (typeof(UploadProviderBase).Assembly.GetName().Version?.ToString() ?? "1.0");
 
         [Browsable(false)] public abstract SupportedUploadType SupportedUpload { get; }
 
@@ -61,8 +61,8 @@ namespace Clowd
         public virtual async Task TestAsync(CancellationToken cancelToken)
         {
             bool supportsText = SupportedUpload.HasFlag(SupportedUploadType.Text);
-            byte[] payload = supportsText ? Encoding.UTF8.GetBytes("Clowd upload test\n") : TestPng;
-            string fileName = supportsText ? "clowd-test.txt" : "clowd-test.png";
+            byte[] payload = supportsText ? Encoding.UTF8.GetBytes("Prisc upload test\n") : TestPng;
+            string fileName = supportsText ? "prisc-test.txt" : "prisc-test.png";
 
             using var stream = new MemoryStream(payload, false);
             var result = await UploadAsync(stream, _ => { }, fileName, cancelToken);

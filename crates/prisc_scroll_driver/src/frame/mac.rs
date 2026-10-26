@@ -22,7 +22,7 @@ use core_graphics::geometry::{CGPoint, CGRect, CGSize};
 use core_graphics::window::{self, kCGNullWindowID, kCGWindowImageBestResolution, kCGWindowListOptionOnScreenOnly};
 
 use super::Frame;
-use clowd_rust_core::geometry::ScreenRect;
+use prisc_rust_core::geometry::ScreenRect;
 
 /// Capture `rect` (CG points). Dimensions are already known to be positive —
 /// the shared wrapper in [`crate::frame`] rejects a degenerate rect before

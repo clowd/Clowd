@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Avalonia.Media;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// A color as hue, saturation and value (brightness): the space the color dialog's harmony

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>What part of the timeline a pointer position lands on.</summary>
     internal enum TimelineHitKind

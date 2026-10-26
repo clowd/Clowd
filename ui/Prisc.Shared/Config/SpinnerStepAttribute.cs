@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// How far one press of a numeric settings row's spinner (or one wheel notch over it) moves the

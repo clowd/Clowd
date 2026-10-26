@@ -51,7 +51,7 @@ use crate::frame::{self, Frame};
 use crate::input::{self, Target};
 use crate::output;
 use crate::stitch::{AppendResult, Stitcher};
-use clowd_rust_core::geometry::{ScreenPoint, ScreenRect};
+use prisc_rust_core::geometry::{ScreenPoint, ScreenRect};
 
 /// Wheel notches in the first burst. One notch is a crawl on most apps
 /// (many frames, a slow run), while a burst big enough to clear the
@@ -1121,7 +1121,7 @@ fn spawn_stdin_reader(signals: Arc<Signals>) {
 mod tests {
     use super::*;
     use clap::Parser;
-    use clowd_rust_core::geometry::RectExt;
+    use prisc_rust_core::geometry::RectExt;
 
     #[test]
     fn events_match_the_wire_contract() {
@@ -1200,12 +1200,12 @@ mod tests {
 
     #[test]
     fn drive_args_require_the_scroll_trio() {
-        let base = ["clowd_scroll_driver"];
+        let base = ["prisc_scroll_driver"];
         let missing_all = CliArgs::parse_from(base);
         assert!(DriveArgs::from_cli(&missing_all).is_err());
 
         let full = CliArgs::parse_from([
-            "clowd_scroll_driver",
+            "prisc_scroll_driver",
             "--session-dir",
             "C:/tmp/s",
             "--region",
@@ -1224,7 +1224,7 @@ mod tests {
         // The default lives in one place — the flag is negative on both
         // sides of the boundary — so a shell that passes nothing rewinds.
         let base = [
-            "clowd_scroll_driver",
+            "prisc_scroll_driver",
             "--session-dir",
             "C:/tmp/s",
             "--region",
@@ -1254,7 +1254,7 @@ mod tests {
     #[test]
     fn drive_args_clamp_a_point_outside_the_region() {
         let outside = CliArgs::parse_from([
-            "clowd_scroll_driver",
+            "prisc_scroll_driver",
             "--session-dir",
             "C:/tmp/s",
             "--region",
@@ -1271,7 +1271,7 @@ mod tests {
         // The overlay clamps to max-1 before writing the marker; that exact
         // point must survive the driver's own clamp unchanged.
         let edge = CliArgs::parse_from([
-            "clowd_scroll_driver",
+            "prisc_scroll_driver",
             "--session-dir",
             "C:/tmp/s",
             "--region",

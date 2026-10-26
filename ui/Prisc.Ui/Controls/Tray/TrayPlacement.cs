@@ -2,9 +2,9 @@
 using Avalonia;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.PlatformUtil;
+using Prisc.PlatformUtil;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// The room a tray window needs around its tray, in logical px, one value per side: a band of
@@ -109,7 +109,7 @@ namespace Clowd.UI.Controls.Tray
                 // vertical rungs because a horizontal strip is the shape the user grabbed the handle on
                 // and the one whose labels read at a glance — and a region that is watched live is
                 // photographed continuously, so anything the cascade parks inside it is not a stray
-                // frame or two at the end of a capture but Clowd's own toolbar broadcast into someone
+                // frame or two at the end of a capture but Prisc's own toolbar broadcast into someone
                 // else's meeting for as long as it lasts. A caller whose region is watched live
                 // therefore gets this fourth outside-the-region rung before it considers the inside one.
                 orientation = Orientation.Horizontal;

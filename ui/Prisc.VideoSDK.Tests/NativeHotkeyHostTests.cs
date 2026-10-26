@@ -5,15 +5,15 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
-using Clowd.Config;
-using Clowd.UI;
+using Prisc.Config;
+using Prisc.UI;
 using Xunit;
-using static Clowd.UI.HotkeysAbi;
+using static Prisc.UI.HotkeysAbi;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// <see cref="NativeHotkeyHost"/>'s lifecycle over a fake clowd_hotkeys: a hook that cannot
+    /// <see cref="NativeHotkeyHost"/>'s lifecycle over a fake prisc_hotkeys: a hook that cannot
     /// start for want of Accessibility asks for it (once per run, and only on macOS), a hook that
     /// is down comes back once the permission is there — taking its registrations and observers
     /// along, freeing the dead handle exactly once — and a hook that dies mid-recording fails the
@@ -145,7 +145,7 @@ namespace Clowd.VideoSDK.Tests
             rig.RunUi();
             Assert.Equal(0, rig.Prompts);
 
-            // the user removed Clowd from the list as the stale-grant text says: now it is missing
+            // the user removed Prisc from the list as the stale-grant text says: now it is missing
             rig.Trusted = false;
             CaptureStandbySupervisor.PromptIfNeeded(permission, rig.Prompt, () => rig.Trusted);
             rig.RunUi();
@@ -198,7 +198,7 @@ namespace Clowd.VideoSDK.Tests
             var label = MacPermissions.NavLabel(permissionMissing);
 
             Assert.Contains(label, NativeHotkeyHost.PermissionMessage);
-            Assert.Contains(label, Clowd.UI.Dialogs.ColorPicker.EyedropperButton.PermissionTip);
+            Assert.Contains(label, Prisc.UI.Dialogs.ColorPicker.EyedropperButton.PermissionTip);
         }
 
         // ---- recovery ----
@@ -398,7 +398,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(1, rig.Native.StartCalls);
             Assert.False(rig.Host.IsRetrying);
             Assert.Contains("the message loop failed", registration.Error);
-            Assert.Contains("Restart Clowd", registration.Error);
+            Assert.Contains("Restart Prisc", registration.Error);
         }
 
         [Fact]
@@ -413,7 +413,7 @@ namespace Clowd.VideoSDK.Tests
             rig.RunUiUntil(() => !registration.IsRegistered);
 
             Assert.True(hook.Dead);
-            Assert.Contains("Restart Clowd", registration.Error);
+            Assert.Contains("Restart Prisc", registration.Error);
             Assert.False(rig.Host.IsRetrying);
             rig.Host.RetryStart();
             Assert.Equal(1, rig.Native.StartCalls);
@@ -438,7 +438,7 @@ namespace Clowd.VideoSDK.Tests
             // not "grant Accessibility": the System page shows it as granted
             Assert.Equal(NativeHotkeyHost.StaleGrantMessage, registration.Error);
             Assert.Contains("Privacy & Security → Accessibility", registration.Error);
-            Assert.Contains("remove Clowd", registration.Error);
+            Assert.Contains("remove Prisc", registration.Error);
             Assert.Contains("add it again", registration.Error);
             Assert.Equal(0, rig.Prompts);
 
@@ -449,7 +449,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.InRange(rig.Native.StartCalls - 1, 1, 5);
             Assert.Equal(NativeHotkeyHost.StaleGrantMessage, registration.Error);
 
-            // the user removes and re-adds Clowd while it runs: a later attempt picks that up
+            // the user removes and re-adds Prisc while it runs: a later attempt picks that up
             rig.Native.StartResult = CH_OK;
             for (int tick = 0; tick < 20 && !registration.IsRegistered; tick++)
                 rig.Host.RetryStart();
@@ -468,7 +468,7 @@ namespace Clowd.VideoSDK.Tests
             rig.Host.RetryStart();
             int attempts = rig.Native.StartCalls;
 
-            // ...until the grant really goes (Clowd removed from the list) and comes back
+            // ...until the grant really goes (Prisc removed from the list) and comes back
             rig.Trusted = false;
             rig.Host.RetryStart();
             rig.Trusted = true;
@@ -644,18 +644,18 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void A_start_that_throws_reports_why()
         {
-            var message = NativeHotkeyHost.StartError(new EntryPointNotFoundException("clowd_hotkeys_start"));
+            var message = NativeHotkeyHost.StartError(new EntryPointNotFoundException("prisc_hotkeys_start"));
 
-            Assert.Contains("clowd_hotkeys_start", message);
+            Assert.Contains("prisc_hotkeys_start", message);
             Assert.DoesNotContain("-98", message);
         }
 
         [Fact]
         public void The_stopped_message_says_how_to_get_hotkeys_back()
         {
-            Assert.Contains("Restart Clowd", NativeHotkeyHost.StoppedError("the event tap was invalidated"));
+            Assert.Contains("Restart Prisc", NativeHotkeyHost.StoppedError("the event tap was invalidated"));
             Assert.Contains("the event tap was invalidated", NativeHotkeyHost.StoppedError("the event tap was invalidated"));
-            Assert.Contains("Restart Clowd", NativeHotkeyHost.StoppedError(""));
+            Assert.Contains("Restart Prisc", NativeHotkeyHost.StoppedError(""));
 
             // a hook that comes back by itself (macOS) has nothing to restart
             var macOS = NativeHotkeyHost.StoppedError("the event tap was invalidated", restartsItself: true);
@@ -664,7 +664,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>
-        /// clowd_hotkeys as ffi.rs documents it: each started hook gets its own handle and queue;
+        /// prisc_hotkeys as ffi.rs documents it: each started hook gets its own handle and queue;
         /// a hook that dies queues Stopped and closes its queue, so next_event reports -1 once
         /// drained; free ends the handle, and any later call on it is recorded as misuse.
         /// </summary>

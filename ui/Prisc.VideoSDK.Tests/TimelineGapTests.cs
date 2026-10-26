@@ -1,12 +1,12 @@
 using System;
 using System.Linq;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The timeline gap operations (TimelineOps.FindGap and friends), the freeze-frame media flag
     // they introduce, and the session wrappers the timeline's gap menu calls.

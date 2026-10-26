@@ -5,7 +5,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// Horizontal gradient slider with a black/white triangle thumb that hangs below the track.

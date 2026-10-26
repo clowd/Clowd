@@ -2,9 +2,9 @@
 //! over the runtime-enumerated encoder id list so it can be unit-tested;
 //! presence == usable on Windows (the obs-*-test.exe probes gate registration).
 
-use obs::data::ObsData;
-use obs::encoder::ObsEncoder;
-use obs::error::ObsError;
+use prisc_obs::data::ObsData;
+use prisc_obs::encoder::ObsEncoder;
+use prisc_obs::error::ObsError;
 
 pub struct EncoderConfig {
     pub hw_accel: bool,
@@ -33,7 +33,7 @@ impl EncoderCaps {
     /// (`SimpleOutput::icq_available`): read the encoder type's property list
     /// rather than guessing from the CPU generation.
     pub fn probe() -> Self {
-        let qsv_icq = obs::properties::encoder_list_property(QSV_ID, "rate_control")
+        let qsv_icq = prisc_obs::properties::encoder_list_property(QSV_ID, "rate_control")
             .map(|items| items.iter().any(|i| i.value == "ICQ"))
             .unwrap_or(false);
         Self { qsv_icq }
@@ -456,7 +456,7 @@ mod tests {
         assert_eq!(vt_quality_from_crf(18), 65);
         assert_eq!(vt_quality_from_crf(51), 15);
         assert_eq!(vt_quality_from_crf(24), 53);
-        // Clowd presets must be distinguishable: High(16) > Medium(23) > Low(29)
+        // Prisc presets must be distinguishable: High(16) > Medium(23) > Low(29)
         assert!(vt_quality_from_crf(16) > vt_quality_from_crf(23));
         assert!(vt_quality_from_crf(23) > vt_quality_from_crf(29));
         // out-of-range input saturates instead of wrapping

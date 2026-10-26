@@ -1,7 +1,7 @@
 using System;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Raster (CPU) surface backend. Always available — this is the fallback when headless GPU

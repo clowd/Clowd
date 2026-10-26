@@ -1,12 +1,13 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.Legacy;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The CROP section's Manual/Window selector: when it is offered at all, what picking a window
@@ -15,7 +16,7 @@ namespace Clowd.VideoSDK.Tests
     /// Avalonia here.
     ///
     /// The picker reads a real sidecar off disk rather than a stub, because the whole feature hangs
-    /// off <see cref="Clowd.VideoSDK.Composition.WindowCapture.Get"/>'s process-wide cache: every
+    /// off <see cref="Prisc.VideoSDK.Composition.WindowCapture.Get"/>'s process-wide cache: every
     /// fixture writes a GUID-named temp file and deletes it in a finally, so no two tests can share
     /// a cache entry and a leftover file cannot make a later run pass for the wrong reason.
     /// </summary>
@@ -130,7 +131,7 @@ namespace Clowd.VideoSDK.Tests
         private static void WithWindowCapture(string[] lines, Action<Fixture> body)
         {
             var path = Path.Combine(Path.GetTempPath(),
-                "clowd-window-capture-" + Guid.NewGuid().ToString("N") + ".jsonl");
+                "prisc-window-capture-" + Guid.NewGuid().ToString("N") + ".jsonl");
             File.WriteAllText(path, String.Join("\n", lines));
             try
             {
@@ -174,7 +175,7 @@ namespace Clowd.VideoSDK.Tests
             // not offer a picker with nothing behind it — the same nothing as a recording that
             // never had one.
             var missing = Path.Combine(Path.GetTempPath(),
-                "clowd-window-capture-missing-" + Guid.NewGuid().ToString("N") + ".jsonl");
+                "prisc-window-capture-missing-" + Guid.NewGuid().ToString("N") + ".jsonl");
             Assert.False(File.Exists(missing));
 
             var fx = NewInspector(missing);
@@ -448,22 +449,25 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Clowds_recording_chrome_is_not_offered_but_its_ordinary_windows_are()
+        public void Priscs_recording_chrome_is_not_offered_but_its_ordinary_windows_are()
         {
             WithWindowCapture(new[]
             {
                 Header,
                 Info(7, "README.md", "Code.exe"),
-                // Clowd's own window is ordinary content: recording it is the point of this
+                // Prisc's own window is ordinary content: recording it is the point of this
                 // branch, and it stays offered even when the editor is the process that recorded
                 // it. Only the share-region helper's mirror window is chrome.
-                Info(8, "Clowd", "Clowd.Ui.exe", 6001),
-                Info(9, "Clowd", "Clowd.Ui.exe", Environment.ProcessId),
-                Info(10, "Region", "clowd_share_region.exe", 6002),
+                Info(8, "Prisc", "Prisc.Ui.exe", 6001),
+                Info(9, "Prisc", "Prisc.Ui.exe", Environment.ProcessId),
+                Info(10, "Region", "prisc_share_region.exe", 6002),
+                // a recording made before the rename names the helper by its old name
+                Info(11, "Region", LegacyClowd.ShareRegionProcessNames[1], 6003),
                 Row(0, 7, 100, 100, 800, 600),
                 Row(10, 8, 0, 0, 400, 300),
                 Row(20, 9, 900, 0, 400, 300),
                 Row(30, 10, 0, 700, 400, 300),
+                Row(40, 11, 900, 700, 400, 300),
             }, fx =>
             {
                 fx.Session.Select(fx.Screen.Id);

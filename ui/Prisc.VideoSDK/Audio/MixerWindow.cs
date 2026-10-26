@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// A forward-moving carry window of mixed project sample frames, shared by every consumer

@@ -4,12 +4,12 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// macOS camera enumeration via AVFoundation, the camera counterpart of
     /// <see cref="CoreAudioInterop"/> — and, like it, a deliberate reimplementation of what OBS's
-    /// own enumerator does, so the ids we hand back are the ids obs-express can open.
+    /// own enumerator does, so the ids we hand back are the ids prisc_recorder can open.
     ///
     /// mac-avcapture publishes <c>AVCaptureDevice.uniqueID</c> verbatim as the device id and
     /// <c>localizedName</c> as the label (obs-studio plugins/mac-avcapture/plugin-properties.m),

@@ -9,7 +9,7 @@ pub const MAX_AUDIO_CHANNELS: usize = 8;
 type VolmeterClosure = Box<dyn Fn(&[f32], &[f32], &[f32]) + Send>;
 
 pub struct ObsVolmeter {
-    ptr: *mut obs_sys::obs_volmeter_t,
+    ptr: *mut prisc_obs_sys::obs_volmeter_t,
     /// Raw pointer registered with libobs; only a raw pointer (no live `Box`)
     /// while the audio thread may dereference it — remove_callback
     /// reconstitutes and drops the Box after deregistration.
@@ -31,7 +31,7 @@ unsafe extern "C" fn volmeter_trampoline(
 
 impl ObsVolmeter {
     pub fn new() -> Result<Self, ObsError> {
-        let ptr = unsafe { obs_sys::obs_volmeter_create(obs_sys::obs_fader_type_OBS_FADER_LOG) };
+        let ptr = unsafe { prisc_obs_sys::obs_volmeter_create(prisc_obs_sys::obs_fader_type_OBS_FADER_LOG) };
         if ptr.is_null() {
             return Err(ObsError::NullPointer("obs_volmeter_create"));
         }
@@ -42,11 +42,11 @@ impl ObsVolmeter {
     }
 
     pub fn attach_source(&self, source: &ObsSource) -> bool {
-        unsafe { obs_sys::obs_volmeter_attach_source(self.ptr, source.as_ptr()) }
+        unsafe { prisc_obs_sys::obs_volmeter_attach_source(self.ptr, source.as_ptr()) }
     }
 
     pub fn detach_source(&self) {
-        unsafe { obs_sys::obs_volmeter_detach_source(self.ptr) }
+        unsafe { prisc_obs_sys::obs_volmeter_detach_source(self.ptr) }
     }
 
     /// Registers the callback, replacing any previous one. It is invoked on
@@ -59,7 +59,7 @@ impl ObsVolmeter {
         let boxed: Box<VolmeterClosure> = Box::new(Box::new(callback));
         let raw = Box::into_raw(boxed);
         unsafe {
-            obs_sys::obs_volmeter_add_callback(
+            prisc_obs_sys::obs_volmeter_add_callback(
                 self.ptr,
                 Some(volmeter_trampoline),
                 raw as *mut c_void,
@@ -71,7 +71,7 @@ impl ObsVolmeter {
     pub fn remove_callback(&mut self) {
         if let Some(param) = self.callback.take() {
             unsafe {
-                obs_sys::obs_volmeter_remove_callback(self.ptr, Some(volmeter_trampoline), param);
+                prisc_obs_sys::obs_volmeter_remove_callback(self.ptr, Some(volmeter_trampoline), param);
                 // Safe to reclaim and drop: remove_callback blocks until no
                 // callback is in flight.
                 drop(Box::from_raw(param as *mut VolmeterClosure));
@@ -83,6 +83,6 @@ impl ObsVolmeter {
 impl Drop for ObsVolmeter {
     fn drop(&mut self) {
         self.remove_callback();
-        unsafe { obs_sys::obs_volmeter_destroy(self.ptr) };
+        unsafe { prisc_obs_sys::obs_volmeter_destroy(self.ptr) };
     }
 }

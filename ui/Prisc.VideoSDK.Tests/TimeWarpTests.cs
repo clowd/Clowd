@@ -1,11 +1,11 @@
 using System;
 using System.Linq;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The project-time ↔ output-time warp built from speed effect items: exact pass-through on

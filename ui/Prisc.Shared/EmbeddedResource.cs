@@ -4,7 +4,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// Provides helper methods for extracting & reading embedded resources. Can be inheirited / instantiated to build strongly typed resource classes.

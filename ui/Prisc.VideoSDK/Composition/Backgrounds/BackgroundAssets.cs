@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Xml.Linq;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The embedded wallpaper files as drawable scenes, loaded on first use and kept for the
@@ -36,7 +36,7 @@ namespace Clowd.VideoSDK.Composition
     {
         /// <summary>The prefix the csproj's <c>LogicalName</c> gives every file under
         /// <c>Composition/Backgrounds/Art</c>; an asset path's <c>/</c> becomes a <c>.</c>.</summary>
-        internal const string ResourceRoot = "Clowd.VideoSDK.Composition.Backgrounds.Art.";
+        internal const string ResourceRoot = "Prisc.VideoSDK.Composition.Backgrounds.Art.";
 
         private static readonly Assembly Assembly = typeof(BackgroundAssets).Assembly;
 

@@ -17,8 +17,8 @@
 
 use std::path::{Path, PathBuf};
 
-use clowd_rust_core::geometry::{RectExt, ScreenRect};
-use clowd_rust_core::session::{absolute_path, created_utc_now, save_png, SessionJson};
+use prisc_rust_core::geometry::{RectExt, ScreenRect};
+use prisc_rust_core::session::{absolute_path, created_utc_now, save_png, SessionJson};
 
 use crate::stitch::Composite;
 

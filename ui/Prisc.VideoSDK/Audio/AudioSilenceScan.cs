@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// Answers "does this audio stream hold anything at all?" by decoding it — the file is the

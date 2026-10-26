@@ -1,7 +1,7 @@
 ﻿using System;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Resolves a window-following crop (<see cref="Transform.CropWindow"/>) into an ordinary
@@ -49,7 +49,7 @@ namespace Clowd.VideoSDK.Composition
     /// top-left, so the header's region ORIGIN is never subtracted (the cursor path does subtract
     /// its own, because input-capture rows are virtual-desktop absolute; the two sidecars differ
     /// here). Only the region's SIZE is divided out, to carry a rect from sidecar canvas pixels
-    /// into source pixels — 1:1 in every recording Clowd makes today, but divided rather than
+    /// into source pixels — 1:1 in every recording Prisc makes today, but divided rather than
     /// assumed.
     /// </summary>
     public static class WindowCropMath

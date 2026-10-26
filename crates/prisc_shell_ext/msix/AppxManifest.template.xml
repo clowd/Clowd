@@ -2,7 +2,7 @@
 <!--
   Sparse (external-content) MSIX manifest for the Windows 11 modern context menu.
   The package contains only this manifest and the two logos; the COM dll and the
-  app executable live in the Clowd install root, which is passed to
+  app executable live in the Prisc install root, which is passed to
   Add-AppxPackage as -ExternalLocation at registration time (SparsePackageManager).
   {{VERSION}} and {{ARCH}} are substituted during packaging (ci.yml).
 -->
@@ -16,7 +16,7 @@
     xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
     IgnorableNamespaces="uap uap10 rescap desktop4 desktop5 com">
 
-  <Identity Name="Clowd.ShellExtension"
+  <Identity Name="Prisc.ShellExtension"
             Publisher="CN=Tidewater Technology Ltd, O=Tidewater Technology Ltd, L=Middleton, C=GB"
             Version="{{VERSION}}"
             ProcessorArchitecture="{{ARCH}}" />
@@ -44,15 +44,15 @@
   <Applications>
     <!--
       A sparse package must declare an Application; the Velopack root launcher is a harmless
-      target (it only relaunches current\Clowd.Ui.exe through Update.exe, and Clowd itself
+      target (it only relaunches current\Prisc.Ui.exe through Update.exe, and Prisc itself
       never activates it). Which exe is declared here does NOT decide package identity: on
       the Windows 11 builds measured, any process that a packaged process (Explorer's dllhost
       surrogate hosting the COM server) creates from inside the external location - the whole
       install root - gets this package's identity, breakaway attribute or not. That is why the
-      shell extension launches Clowd.Ui.exe through Explorer's own shell object instead
-      (clowd_shell_ext/src/broker.rs, clowd/Clowd#83).
+      shell extension launches Prisc.Ui.exe through Explorer's own shell object instead
+      (crates/prisc_shell_ext/src/broker.rs, priscapp/Prisc#83).
     -->
-    <Application Id="Clowd" Executable="Clowd.Ui.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="Prisc" Executable="Prisc.Ui.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements DisplayName="Prisc Shell Extension"
                           Description="Adds an 'Upload with Prisc' command to the File Explorer context menu."
                           AppListEntry="none"
@@ -63,17 +63,17 @@
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="Prisc Shell Extension">
-              <com:Class Id="45849D5C-078C-4209-A377-DCF731E5124C" Path="ClowdShellExt_{{EXTVERSION}}.dll" ThreadingModel="STA" />
+              <com:Class Id="51C48F28-F0DF-43AB-9815-0541BE51DFD8" Path="PriscShellExt_{{EXTVERSION}}.dll" ThreadingModel="STA" />
             </com:SurrogateServer>
           </com:ComServer>
         </com:Extension>
         <desktop4:Extension Category="windows.fileExplorerContextMenus">
           <desktop4:FileExplorerContextMenus>
             <desktop5:ItemType Type="*">
-              <desktop5:Verb Id="ClowdUpload" Clsid="45849D5C-078C-4209-A377-DCF731E5124C" />
+              <desktop5:Verb Id="PriscUpload" Clsid="51C48F28-F0DF-43AB-9815-0541BE51DFD8" />
             </desktop5:ItemType>
             <desktop5:ItemType Type="Directory">
-              <desktop5:Verb Id="ClowdUpload" Clsid="45849D5C-078C-4209-A377-DCF731E5124C" />
+              <desktop5:Verb Id="PriscUpload" Clsid="51C48F28-F0DF-43AB-9815-0541BE51DFD8" />
             </desktop5:ItemType>
           </desktop4:FileExplorerContextMenus>
         </desktop4:Extension>

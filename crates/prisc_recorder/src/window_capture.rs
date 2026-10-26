@@ -395,11 +395,11 @@ unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
         if !shared.armed.load(Ordering::Acquire) {
             return;
         }
-        let output = shared.output as *mut obs_sys::obs_output_t;
-        if obs_sys::obs_output_paused(output) {
+        let output = shared.output as *mut prisc_obs_sys::obs_output_t;
+        if prisc_obs_sys::obs_output_paused(output) {
             return;
         }
-        let frame_ns = obs_sys::obs_get_video_frame_time();
+        let frame_ns = prisc_obs_sys::obs_get_video_frame_time();
         let offset = pause_offset_ns(output);
         let _ = shared.tx.send(WorkerMsg::Tick(frame_ns, offset));
     }));
@@ -413,9 +413,9 @@ unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
 /// # Safety
 /// `output` must be a live output pointer, and the caller must be past the
 /// arm gate — encoder swaps (`handle_configure`) are pre-start only.
-unsafe fn pause_offset_ns(output: *mut obs_sys::obs_output_t) -> u64 {
-    let encoder = obs_sys::obs_output_get_video_encoder(output);
-    obs_sys::obs_encoder_get_pause_offset(encoder)
+unsafe fn pause_offset_ns(output: *mut prisc_obs_sys::obs_output_t) -> u64 {
+    let encoder = prisc_obs_sys::obs_output_get_video_encoder(output);
+    prisc_obs_sys::obs_encoder_get_pause_offset(encoder)
 }
 
 /// Apply only surviving snapshots. A pre-origin snapshot must not update the
@@ -572,9 +572,9 @@ fn worker_loop(
             }
         }
         if let Some((frame_ns, pause_offset)) = latest {
-            let output = shared.output as *mut obs_sys::obs_output_t;
+            let output = shared.output as *mut prisc_obs_sys::obs_output_t;
             // A pause can arrive while a trigger waits behind a disk write.
-            if !unsafe { obs_sys::obs_output_paused(output) } {
+            if !unsafe { prisc_obs_sys::obs_output_paused(output) } {
                 pending.push_back(Snapshot {
                     frame_ns,
                     pause_offset,
@@ -643,7 +643,7 @@ impl WindowCapture {
         region: Rect,
         canvas_scale: f64,
         canvas: (u32, u32),
-        output: *mut obs_sys::obs_output_t,
+        output: *mut prisc_obs_sys::obs_output_t,
         clock: Arc<FrameClock>,
     ) -> Result<WindowCapture, String> {
         let file = std::fs::File::create(path)
@@ -667,7 +667,7 @@ impl WindowCapture {
             .map_err(|e| format!("failed to spawn the window-capture writer: {e}"))?;
 
         let param = Arc::as_ptr(&shared) as *mut c_void;
-        unsafe { obs_sys::obs_add_tick_callback(Some(tick), param) };
+        unsafe { prisc_obs_sys::obs_add_tick_callback(Some(tick), param) };
 
         Ok(WindowCapture {
             path: path.to_path_buf(),
@@ -725,7 +725,7 @@ impl WindowCapture {
         self.shared.armed.store(false, Ordering::Release);
         if self.shared.registered.swap(false, Ordering::AcqRel) {
             let param = Arc::as_ptr(&self.shared) as *mut c_void;
-            unsafe { obs_sys::obs_remove_tick_callback(Some(tick), param) };
+            unsafe { prisc_obs_sys::obs_remove_tick_callback(Some(tick), param) };
         }
         if self.shared.closed.swap(true, Ordering::AcqRel) {
             return;

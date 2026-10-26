@@ -1,12 +1,12 @@
-//! Pure logic for the shell extension: locating Clowd.Ui.exe relative to the DLL,
+//! Pure logic for the shell extension: locating Prisc.Ui.exe relative to the DLL,
 //! splitting a selection across command lines and building each one. Kept free of
 //! Win32 calls so the functions can be unit-tested on any platform.
 
 use std::path::{Path, PathBuf};
 
-pub const EXE_NAME: &str = "Clowd.Ui.exe";
+pub const EXE_NAME: &str = "Prisc.Ui.exe";
 
-/// The app's explicit CLI command for uploads (`Clowd.Ui.exe upload "path" ...`).
+/// The app's explicit CLI command for uploads (`Prisc.Ui.exe upload "path" ...`).
 /// Bare paths still work over there as a legacy fallback, but every launch from
 /// here names the command so the surface can grow more commands and options.
 pub const UPLOAD_COMMAND: &str = "upload";
@@ -16,7 +16,7 @@ pub const UPLOAD_COMMAND: &str = "upload";
 /// the hard cap rather than sitting on it.
 const COMMAND_LINE_BUDGET: usize = 32_000;
 
-/// Locate Clowd.Ui.exe relative to the shell extension DLL. The installed layout
+/// Locate Prisc.Ui.exe relative to the shell extension DLL. The installed layout
 /// places the DLL at the Velopack root with the app under `current\`; the plain
 /// sibling probe covers dev trees where everything sits in one directory.
 pub fn resolve_exe(dll_path: &Path, exists: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
@@ -129,14 +129,14 @@ mod tests {
 
     #[test]
     fn names_the_upload_command_first() {
-        let line = build_command_line(r"C:\app\Clowd.Ui.exe", &args(&[r"C:\files\a.txt"]));
-        assert_eq!(line, r#""C:\app\Clowd.Ui.exe" "upload" "C:\files\a.txt""#);
+        let line = build_command_line(r"C:\app\Prisc.Ui.exe", &args(&[r"C:\files\a.txt"]));
+        assert_eq!(line, r#""C:\app\Prisc.Ui.exe" "upload" "C:\files\a.txt""#);
     }
 
     #[test]
     fn quotes_paths_with_spaces() {
-        let line = build_command_line(r"C:\my apps\Clowd.Ui.exe", &args(&[r"C:\my files\a b.txt", r"C:\other\c.png"]));
-        assert_eq!(line, r#""C:\my apps\Clowd.Ui.exe" "upload" "C:\my files\a b.txt" "C:\other\c.png""#);
+        let line = build_command_line(r"C:\my apps\Prisc.Ui.exe", &args(&[r"C:\my files\a b.txt", r"C:\other\c.png"]));
+        assert_eq!(line, r#""C:\my apps\Prisc.Ui.exe" "upload" "C:\my files\a b.txt" "C:\other\c.png""#);
     }
 
     #[test]
@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(line, r#""exe" "upload" """#);
     }
 
-    const EXE: &str = r"C:\Program Files\Clowd\current\Clowd.Ui.exe";
+    const EXE: &str = r"C:\Program Files\Prisc\current\Prisc.Ui.exe";
 
     fn path_of_len(len: usize) -> String {
         format!(r"C:\{}", "a".repeat(len - 3))
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn resolves_installed_layout_first() {
         // installed layout: DLL at the Velopack root, exe under current\
-        let dll = Path::new("root").join("ClowdShellExt.dll");
+        let dll = Path::new("root").join("PriscShellExt.dll");
         let installed = Path::new("root")
             .join("current")
             .join(EXE_NAME);
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn falls_back_to_sibling_exe() {
-        let dll = Path::new("root").join("clowd_shell_ext.dll");
+        let dll = Path::new("root").join("prisc_shell_ext.dll");
         let sibling = Path::new("root").join(EXE_NAME);
         let resolved = resolve_exe(&dll, &|p| p == sibling);
         assert_eq!(resolved, Some(sibling));
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn prefers_installed_over_sibling() {
-        let dll = Path::new("root").join("ClowdShellExt.dll");
+        let dll = Path::new("root").join("PriscShellExt.dll");
         let installed = Path::new("root")
             .join("current")
             .join(EXE_NAME);
@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn resolves_to_none_when_exe_missing() {
-        let dll = Path::new("root").join("ClowdShellExt.dll");
+        let dll = Path::new("root").join("PriscShellExt.dll");
         assert_eq!(resolve_exe(&dll, &|_| false), None);
     }
 }

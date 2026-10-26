@@ -3,9 +3,9 @@
 //! Ctrl+C to quit. Check that the hotkey fires once with repeats flagged, its key-up is swallowed,
 //! Win+X does not open Start's power-user menu, and Play/Pause fires without starting playback.
 //!
-//! `cargo run -p clowd_hotkeys --example listen`
+//! `cargo run -p prisc_hotkeys --example listen`
 
-use clowd_hotkeys::{Events, Gesture, Hotkeys};
+use prisc_hotkeys::{Events, Gesture, Hotkeys};
 
 fn main() {
     let (hotkeys, events) = match Hotkeys::start() {

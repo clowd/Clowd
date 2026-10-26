@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Drawing.Rendering
+namespace Prisc.Drawing.Rendering
 {
     /// <summary>CPU gaussian approximation for GraphicImage's Blur obscure mode.</summary>
     internal static class BoxBlur

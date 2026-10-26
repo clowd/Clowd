@@ -1,6 +1,6 @@
 # Model weights
 
-The ONNX models `clowd_ai` embeds via `include_bytes!` and runs with ONNX Runtime. Nothing
+The ONNX models `prisc_ai` embeds via `include_bytes!` and runs with ONNX Runtime. Nothing
 here is trained or converted by us: each file is its upstream's own release artifact, byte for
 byte, and re-syncing a model means re-downloading it.
 
@@ -16,15 +16,16 @@ byte, and re-syncing a model means re-downloading it.
 
 RobustVideoMatting is the MobileNetV3 fp32 tier (15.0 MB) rather than resnet50 (~102 MB): webcam
 mattes at the ≤540p analysis resolution look indistinguishable between the two, and the weights
-ride along in every install. **Its GPL-3.0 license is why the `clowd_ai` crate is GPL-3.0
-in an otherwise MIT repository** — see the crate's `Cargo.toml` for how the process boundary
-keeps that license out of the rest of Clowd.
+ride along in every install. **Its GPL-3.0 license is why the `prisc_ai` crate is GPL-3.0
+while the app around it is MIT** (the repository's other GPL code is the separate GPL-2.0
+recorder process, `crates/prisc_recorder`) — see the crate's `Cargo.toml` for how the process boundary
+keeps that license out of the rest of Prisc.
 
 DPDFNet ("DPDFNet: Boosting DeepFilterNet2 via Dual-Path RNN", Rika/Sapir/Gus 2025) is authored
 by Ceva; the sherpa-onnx release mirrors the ONNX exports from the official
 `huggingface.co/Ceva-IP/DPDFNet` repository (`onnx/`), whose model card states Apache-2.0. The
 `dpdfnet2_48khz_hr` variant (10.6 MB) is the only 48 kHz one; the deeper `dpdfnet4`/`dpdfnet8`
-exist only at 16 kHz, and Clowd records at 48 kHz end to end. The model carries its own
+exist only at 16 kHz, and Prisc records at 48 kHz end to end. The model carries its own
 normalizer warm-start vectors in its ONNX `metadata_props` (`erb_norm_init`/`spec_norm_init`),
 which `src/denoise.rs` parses at runtime.
 
@@ -59,11 +60,11 @@ contracts in `src/matte.rs` (input/output tensor names and shapes, recurrent sta
 `src/denoise.rs` (481-bin spectra, 56436-float state, metadata norm-init keys) and `src/ocr.rs`
 (input `x`, output `fetch_name_0`, 48 px recognition height, `dictionary + 2` output classes)
 are pinned to these exact exports; a re-export with different shapes or metadata fails the
-in-crate parity, roundtrip and charset tests, so run `cargo test -p clowd_ai` (with
-`CLOWD_AI_REF_DIR` if parity reference data is available, and `CLOWD_OCR_BENCH_IMAGE` /
-`CLOWD_OCR_TEST_IMAGE` for the OCR probes) after swapping a file. A swapped OCR model also
+in-crate parity, roundtrip and charset tests, so run `cargo test -p prisc_ai` (with
+`PRISC_AI_REF_DIR` if parity reference data is available, and `PRISC_OCR_BENCH_IMAGE` /
+`PRISC_OCR_TEST_IMAGE` for the OCR probes) after swapping a file. A swapped OCR model also
 needs the recognition cost-model constants in `src/ocr.rs` re-measured.
 
 ONNX Runtime itself (MIT) is statically linked into the executable by the `ort` crate, which
 downloads pyke's prebuilt, attested runtime binaries per target at build time (see
-`clowd_ai/Cargo.toml` for the per-target execution-provider feature sets).
+`crates/prisc_ai/Cargo.toml` for the per-target execution-provider feature sets).

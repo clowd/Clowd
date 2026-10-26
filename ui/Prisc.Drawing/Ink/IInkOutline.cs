@@ -1,9 +1,9 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Ink
+namespace Prisc.Drawing.Ink
 {
     /// <summary>
     /// A freehand stroke's filled outline, kept current as samples are appended: what

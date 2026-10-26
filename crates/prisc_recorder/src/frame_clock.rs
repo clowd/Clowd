@@ -159,16 +159,16 @@ fn packet_anchor(cts: u64, pts: i64, num: i32, den: i32) -> Option<u64> {
 }
 
 unsafe extern "C" fn packet_cb(
-    _output: *mut obs_sys::obs_output_t,
-    pkt: *mut obs_sys::encoder_packet,
-    pkt_time: *mut obs_sys::encoder_packet_time,
+    _output: *mut prisc_obs_sys::obs_output_t,
+    pkt: *mut prisc_obs_sys::encoder_packet,
+    pkt_time: *mut prisc_obs_sys::encoder_packet_time,
     param: *mut c_void,
 ) {
     if pkt.is_null() || param.is_null() {
         return;
     }
     let packet = &*pkt;
-    if packet.type_ != obs_sys::obs_encoder_type_OBS_ENCODER_VIDEO || packet.track_idx != 0 {
+    if packet.type_ != prisc_obs_sys::obs_encoder_type_OBS_ENCODER_VIDEO || packet.track_idx != 0 {
         return;
     }
     let clock = &*(param as *const FrameClock);
@@ -194,11 +194,11 @@ unsafe extern "C" fn packet_cb(
     let encoder = packet.encoder;
     // Texture queries are reachable only on the active output's track-0 encoder, whose video mix exists.
     let texture = !encoder.is_null()
-        && obs_sys::obs_encoder_get_caps(encoder) & obs_sys::OBS_ENCODER_CAP_PASS_TEXTURE != 0
-        && (obs_sys::obs_encoder_video_tex_active(encoder, obs_sys::video_format_VIDEO_FORMAT_NV12)
-            || obs_sys::obs_encoder_video_tex_active(
+        && prisc_obs_sys::obs_encoder_get_caps(encoder) & prisc_obs_sys::OBS_ENCODER_CAP_PASS_TEXTURE != 0
+        && (prisc_obs_sys::obs_encoder_video_tex_active(encoder, prisc_obs_sys::video_format_VIDEO_FORMAT_NV12)
+            || prisc_obs_sys::obs_encoder_video_tex_active(
                 encoder,
-                obs_sys::video_format_VIDEO_FORMAT_P010,
+                prisc_obs_sys::video_format_VIDEO_FORMAT_P010,
             ));
     // libobs serializes packet callbacks. Publish the family before its anchor.
     clock.texture.store(texture, Ordering::Relaxed);
@@ -210,16 +210,16 @@ unsafe extern "C" fn packet_cb(
 /// Declared before the output in Recorder so unregistering cannot use a freed
 /// output. Its Arc also keeps the callback parameter alive until removal.
 pub struct FrameClockCallback {
-    output: *mut obs_sys::obs_output_t,
+    output: *mut prisc_obs_sys::obs_output_t,
     clock: Arc<FrameClock>,
 }
 
 impl FrameClockCallback {
     /// # Safety
     /// The output must remain alive until this registration is dropped.
-    pub unsafe fn register(output: *mut obs_sys::obs_output_t, clock: Arc<FrameClock>) -> Self {
+    pub unsafe fn register(output: *mut prisc_obs_sys::obs_output_t, clock: Arc<FrameClock>) -> Self {
         let param = Arc::as_ptr(&clock) as *mut c_void;
-        obs_sys::obs_output_add_packet_callback(output, Some(packet_cb), param);
+        prisc_obs_sys::obs_output_add_packet_callback(output, Some(packet_cb), param);
         Self { output, clock }
     }
 }
@@ -228,7 +228,7 @@ impl Drop for FrameClockCallback {
     fn drop(&mut self) {
         let param = Arc::as_ptr(&self.clock) as *mut c_void;
         unsafe {
-            obs_sys::obs_output_remove_packet_callback(self.output, Some(packet_cb), param);
+            prisc_obs_sys::obs_output_remove_packet_callback(self.output, Some(packet_cb), param);
         }
     }
 }

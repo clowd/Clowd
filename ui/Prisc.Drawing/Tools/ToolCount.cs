@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Linq;
 using Avalonia;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     /// <summary>
     /// Places the next numbered step badge centered on the press point; dragging before release

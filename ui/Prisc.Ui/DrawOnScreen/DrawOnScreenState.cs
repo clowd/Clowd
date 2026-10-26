@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// The draw-on-screen session's mode as pure transitions: which tool is picked, whether the

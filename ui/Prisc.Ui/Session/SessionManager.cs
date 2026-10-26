@@ -3,13 +3,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI;
-using Clowd.UI.Helpers;
-using Clowd.UI.Preview;
-using Clowd.Util;
+using Prisc.Config;
+using Prisc.UI;
+using Prisc.UI.Helpers;
+using Prisc.UI.Preview;
+using Prisc.Util;
 
-namespace Clowd
+namespace Prisc
 {
     public class SessionManager : SimpleNotifyObject, IDisposable
     {

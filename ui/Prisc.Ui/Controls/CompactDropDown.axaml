@@ -1,10 +1,10 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:controls="using:Clowd.UI.Controls">
+                    xmlns:controls="using:Prisc.UI.Controls">
 
     <!-- Rows of the dropdown popup: flat text on #454545, #66FFFFFF hover, #33FFFFFF for the
          currently-selected item (matching the interactive-surface tints used across the bar). -->
-    <ControlTheme x:Key="ClowdCompactDropDownItem" TargetType="ListBoxItem">
+    <ControlTheme x:Key="PriscCompactDropDownItem" TargetType="ListBoxItem">
         <Setter Property="Foreground" Value="White" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Padding" Value="10,3" />
@@ -88,7 +88,7 @@
                                      Background="Transparent"
                                      BorderThickness="0"
                                      Padding="0"
-                                     ItemContainerTheme="{StaticResource ClowdCompactDropDownItem}"
+                                     ItemContainerTheme="{StaticResource PriscCompactDropDownItem}"
                                      ItemsSource="{TemplateBinding ItemsSource}" />
                         </Border>
                     </Popup>

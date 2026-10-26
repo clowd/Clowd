@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The tray icon set is pure data copied out of the design spec, and a typo in it is the kind of

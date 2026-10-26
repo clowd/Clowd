@@ -17,12 +17,12 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
-using Clowd.Config;
-using Clowd.UI.Controls;
-using Clowd.UI.Converters;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.UI.Controls;
+using Prisc.UI.Converters;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Config
+namespace Prisc.UI.Config
 {
     /// <summary>
     /// Builds a reflection-driven settings page (label + editor rows) for a settings category
@@ -362,7 +362,7 @@ namespace Clowd.UI.Config
             var tcode = Type.GetTypeCode(pd.PropertyType);
 
             // audio device ids render as a dropdown of live devices; the property stays a plain
-            // string ("default" or the platform device id passed through to obs-express).
+            // string ("default" or the platform device id passed through to prisc_recorder).
             var audioSelector = GetFirstAttributeOrDefault<AudioDeviceSelectorAttribute>(pd);
             if (audioSelector != null && Is(pd, typeof(string)))
                 return AudioDeviceComboBinding(audioSelector.DeviceType, pd);
@@ -801,7 +801,7 @@ namespace Clowd.UI.Config
         Control CameraDeviceComboBinding(PropertyDescriptor pd)
         {
             const string NoneId = "";
-            const string RefreshId = "__clowd_refresh__"; // not a device id any platform can produce
+            const string RefreshId = "__prisc_refresh__"; // not a device id any platform can produce
 
             var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
             combo.ItemTemplate = new FuncDataTemplate<CameraDeviceInfo>((o, ns) => ComboItemText(o?.FriendlyName));

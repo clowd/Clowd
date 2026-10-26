@@ -1,5 +1,5 @@
-//! vid2gif — convert a video (mkv/mp4/…) into an optimized GIF by linking the
-//! FFmpeg libraries bundled next to obs-express (no subprocesses, no separate
+//! prisc_vid2gif — convert a video (mkv/mp4/…) into an optimized GIF by linking the
+//! FFmpeg libraries bundled next to prisc_recorder (no subprocesses, no separate
 //! ffmpeg binary).
 //!
 //! Stdout protocol (one message per line, nothing else is ever printed):

@@ -1,7 +1,7 @@
 using System;
 using Avalonia.Media;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     public sealed class HslRgbColor : SimpleNotifyObject, ICloneable
     {

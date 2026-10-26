@@ -6,7 +6,7 @@ use std::mem;
 use std::path::Path;
 use std::sync::OnceLock;
 
-use obs::data::ObsData;
+use prisc_obs::data::ObsData;
 use windows::core::{BOOL, PCWSTR};
 use windows::Wdk::System::SystemServices::RtlGetVersion;
 use windows::Win32::Foundation::{LPARAM, POINT, RECT, TRUE};

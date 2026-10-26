@@ -41,12 +41,12 @@ jobs:
 
       - name: Commit and push if changed
         run: |
-          if git diff --quiet -- clowd_ui/Clowd.Ui/Assets/credits.json; then
+          if git diff --quiet -- ui/Prisc.Ui/Assets/credits.json; then
             echo "credits.json is already up to date — nothing to commit."
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add clowd_ui/Clowd.Ui/Assets/credits.json
+          git add ui/Prisc.Ui/Assets/credits.json
           git commit -m "Update open-source credits list"
           git push

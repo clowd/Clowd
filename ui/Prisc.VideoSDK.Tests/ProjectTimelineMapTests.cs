@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The timeline↔source mapping CompositionPlayer plays a project through (internal class,
     // reached via InternalsVisibleTo). Pure math — no FFmpeg, no timing.

@@ -1,8 +1,8 @@
 using System;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The one place a <see cref="Surround"/>'s fractions become pixels, and the Skia filter

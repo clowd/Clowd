@@ -1,5 +1,5 @@
 //! The key table: every key a global hotkey can name, with its Avalonia value, its alias names
-//! and its platform codes, on one row per key. This is the only global-hotkey key map in Clowd —
+//! and its platform codes, on one row per key. This is the only global-hotkey key map in Prisc —
 //! the C# `HotkeyKey` mirror is generated from it (`csharp.rs`), and the backends map OS codes
 //! through it.
 

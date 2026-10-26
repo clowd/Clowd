@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>A half-open [Start, End) span of media time.</summary>
     public readonly struct TimeRange : IEquatable<TimeRange>

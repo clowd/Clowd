@@ -4,16 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI.Helpers;
-using Clowd.UI.VideoEditor;
-using Clowd.VideoSDK;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.Config;
+using Prisc.UI.Helpers;
+using Prisc.UI.VideoEditor;
+using Prisc.VideoSDK;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>An in-flight video render, surfaced on the Recent page through
     /// <see cref="SessionInfo.ActiveRender"/> exactly as <see cref="GifConversion"/> is. The render
@@ -109,7 +109,7 @@ namespace Clowd.UI.Services
 
     /// <summary>
     /// Renders an edited recording beside its source (<c>video.mp4</c> → <c>video-edited.mp4</c>)
-    /// in the out-of-process <c>Clowd.VideoRender</c> tool. The render is surfaced as its own Recent-page entry
+    /// in the out-of-process <c>Prisc.VideoRender</c> tool. The render is surfaced as its own Recent-page entry
     /// named "Rendered Video" carrying a <see cref="SessionInfo.ActiveRender"/> while it runs; when it
     /// finishes the entry drops the render and behaves like any other video entry, and when it is
     /// canceled or fails the entry is removed again. Re-rendering the same recording replaces the
@@ -265,7 +265,7 @@ namespace Clowd.UI.Services
 
         /// <summary>Where the FFmpeg natives live; see
         /// <see cref="ObsBinaryLocator.ResolveFFmpegDirectory"/>. Dev machines set
-        /// CLOWD_FFMPEG_PATH, which FFmpegLoader checks before calling this.</summary>
+        /// PRISC_FFMPEG_PATH, which FFmpegLoader checks before calling this.</summary>
         private static string FFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         /// <summary>

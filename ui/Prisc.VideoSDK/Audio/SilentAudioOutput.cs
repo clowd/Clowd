@@ -1,8 +1,8 @@
 using System;
 using System.Threading;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// An output that makes no sound but behaves like a device for <em>timing</em>: it pulls the

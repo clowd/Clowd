@@ -2,10 +2,10 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Text exported onto a transparent background (Copy, Save) must use grayscale antialiasing:
@@ -16,7 +16,7 @@ namespace Clowd.Drawing.Tests
         static ExportTextTests()
         {
             // DrawingCanvas reads tool settings from SettingsRoot.Current, which the app assigns
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         [AvaloniaFact]

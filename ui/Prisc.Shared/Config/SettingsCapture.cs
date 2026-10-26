@@ -2,9 +2,9 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using Avalonia.Media;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
-    /// <summary>Mirrors the capturer's --tips-mode flag (clowd_capture, see CAPTURE_PROTOCOL.md).</summary>
+    /// <summary>Mirrors the capturer's --tips-mode flag (prisc_capture, see CAPTURE_PROTOCOL.md).</summary>
     public enum CapturerTipsMode
     {
         Hints,
@@ -22,7 +22,7 @@ namespace Clowd.Config
         /// shipping features off. Hides the button in both strips: the capture panel's UPLOAD and
         /// the OCR panel's, because someone who turned uploading off did not mean "except for
         /// text". Turning it off also takes the U accelerator with it, so a hidden button cannot
-        /// still fire (clowd_capture PanelFeatures).
+        /// still fire (prisc_capture PanelFeatures).
         ///
         /// RENAMED from <c>UploadButtonEnabled</c> to carry existing users to the new default.
         /// The settings file is written with every property spelled out (no
@@ -52,7 +52,7 @@ namespace Clowd.Config
         /// the action itself stays reachable from the tray item and the Share Region hotkey, which
         /// dispatch it without ever raising the panel. Same division as
         /// <see cref="UploadButtonVisible"/>, which hides the strip's UPLOAD while the shell's
-        /// "Upload File…" tray item stays (clowd_capture PanelFeatures, over <c>--no-share</c>).
+        /// "Upload File…" tray item stays (prisc_capture PanelFeatures, over <c>--no-share</c>).
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Share region")]
@@ -66,7 +66,7 @@ namespace Clowd.Config
 
         /// <summary>
         /// Whether the capture overlay offers SCROLL. On both platforms: the driver
-        /// (<c>clowd_scroll_driver</c>) has a Win32 and a macOS backend, and the overlay shows the
+        /// (<c>prisc_scroll_driver</c>) has a Win32 and a macOS backend, and the overlay shows the
         /// button wherever this is on.
         /// </summary>
         [Category("Optional features")]
@@ -96,7 +96,7 @@ namespace Clowd.Config
         /// Whether the capture overlay offers SEARCH — a reverse image search of the selection.
         /// The shell hands the cropped image to the default browser, which posts it to Google Lens
         /// and lands on the results; nothing else reaches that action, so switching this off
-        /// removes the feature rather than just trimming a button (clowd_capture PanelFeatures,
+        /// removes the feature rather than just trimming a button (prisc_capture PanelFeatures,
         /// over <c>--no-image-search</c>).
         /// </summary>
         [Category("Optional features")]
@@ -157,7 +157,7 @@ namespace Clowd.Config
         /// capture-window hotkey) takes on that window's OS corner radius — rounded dashed
         /// border in the overlay, transparent corners in the copied / saved / uploaded image
         /// — instead of a sharp rectangle that ships a few pixels of whatever sat behind the
-        /// window. Dragged selections stay square either way (clowd_capture
+        /// window. Dragged selections stay square either way (prisc_capture
         /// <c>--no-rounded-corners</c>). On by default: it is what the screen actually shows.
         /// </summary>
         [Category("Behavior")]
@@ -190,7 +190,7 @@ namespace Clowd.Config
 
         /// <summary>
         /// Whether a scrolling capture winds the target back to the top before it starts
-        /// (<c>clowd_scroll_driver</c>, inverted onto its <c>--no-rewind</c> flag). On by default:
+        /// (<c>prisc_scroll_driver</c>, inverted onto its <c>--no-rewind</c> flag). On by default:
         /// someone who selects a region halfway down a page almost always wants the whole page,
         /// and capturing only the bottom half gives them no sign the top is missing. Turning it
         /// off is the "capture from here" intent — a long thread from one particular message.

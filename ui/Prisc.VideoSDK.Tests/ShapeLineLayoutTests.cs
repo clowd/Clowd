@@ -1,11 +1,11 @@
 using System;
-using Clowd.Geometry2D;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.Geometry2D;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// How a line kind's geometry lives in the model (<see cref="ShapeLineLayout"/>): canvas points

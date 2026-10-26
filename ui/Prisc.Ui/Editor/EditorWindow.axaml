@@ -1,14 +1,14 @@
 ﻿<local:SystemThemedWindow
-    x:Class="Clowd.UI.EditorWindow"
+    x:Class="Prisc.UI.EditorWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:colors="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
-    xmlns:controls="clr-namespace:Clowd.UI.Controls"
-    xmlns:conv="clr-namespace:Clowd.UI.Converters"
-    xmlns:draw="clr-namespace:Clowd.Drawing;assembly=Clowd.Drawing"
-    xmlns:local="clr-namespace:Clowd.UI"
-    xmlns:tray="clr-namespace:Clowd.UI.Controls.Tray"
-    xmlns:util="clr-namespace:Clowd.Util"
+    xmlns:colors="clr-namespace:Prisc.UI.Dialogs.ColorPicker"
+    xmlns:controls="clr-namespace:Prisc.UI.Controls"
+    xmlns:conv="clr-namespace:Prisc.UI.Converters"
+    xmlns:draw="clr-namespace:Prisc.Drawing;assembly=Prisc.Drawing"
+    xmlns:local="clr-namespace:Prisc.UI"
+    xmlns:tray="clr-namespace:Prisc.UI.Controls.Tray"
+    xmlns:util="clr-namespace:Prisc.Util"
     DragDrop.AllowDrop="True"
     Title="Edit - Prisc"
     Width="1050"
@@ -82,7 +82,7 @@
             <!--  ===== Modern chrome =====  -->
 
             <!--  The tool bar buttons, shared with the video editor.  -->
-            <StyleInclude Source="avares://Clowd.Ui/Assets/EditorChromeStyles.axaml" />
+            <StyleInclude Source="avares://Prisc.Ui/Assets/EditorChromeStyles.axaml" />
 
             <!--  42px strips: a 32px item lane with 5px either side of it. The canvas-facing 5 is
                   4 of gutter plus 1 for the canvas shadow, which falls across the rest of it; the
@@ -188,7 +188,7 @@
                 <Setter Property="IsModern" Value="True" />
             </Style>
             <Style Selector="Grid.modern Border#sidebarBorder">
-                <Setter Property="Background" Value="{DynamicResource ClowdEditorSidebarBrush}" />
+                <Setter Property="Background" Value="{DynamicResource PriscEditorSidebarBrush}" />
             </Style>
             <Style Selector="Grid.modern Border#sidebarHeader">
                 <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
@@ -207,7 +207,7 @@
                   short halfway along the top edge.  -->
             <Style Selector="Grid.modern Border#contentSurface">
                 <Setter Property="CornerRadius" Value="12,0,0,0" />
-                <Setter Property="BoxShadow" Value="{DynamicResource ClowdEditorSurfaceShadow}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource PriscEditorSurfaceShadow}" />
             </Style>
             <Style Selector="Grid.modern Border#canvasSurface">
                 <Setter Property="CornerRadius" Value="12,0,0,0" />
@@ -290,7 +290,7 @@
                       so the state reads identically wherever it is shown. Unstarred keeps the
                       strip's white and the outline glyph (both set in SyncStarButton).  -->
                 <Style Selector="controls|ToolButton.starOn">
-                    <Setter Property="Foreground" Value="{DynamicResource ClowdStarBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource PriscStarBrush}" />
                 </Style>
 
                 <!--  A bare Border carries no focus adorner, so the swatches paint their own
@@ -545,7 +545,7 @@
                 x:Name="contentSurface"
                 Grid.Column="1"
                 Grid.ColumnSpan="3"
-                Background="{DynamicResource ClowdEditorCanvasBrush}" />
+                Background="{DynamicResource PriscEditorCanvasBrush}" />
 
             <!--  Two borders, not one: ClipToBounds is what rounds the canvas off at the corner,
                   and it clips the control's own drawing too — so this pair cannot be collapsed
@@ -556,10 +556,10 @@
             <Border
                 x:Name="canvasSurface"
                 Grid.Column="1"
-                Background="{DynamicResource ClowdEditorCanvasBrush}">
+                Background="{DynamicResource PriscEditorCanvasBrush}">
                 <Border
                     x:Name="canvasClip"
-                    Background="{DynamicResource ClowdEditorCanvasBrush}"
+                    Background="{DynamicResource PriscEditorCanvasBrush}"
                     ClipToBounds="True">
                     <Panel>
                         <draw:DrawingCanvas
@@ -730,7 +730,7 @@
                 Grid.Column="1"
                 Grid.ColumnSpan="3"
                 ZIndex="2"
-                BorderBrush="{DynamicResource ClowdEditorSurfaceEdgeBrush}"
+                BorderBrush="{DynamicResource PriscEditorSurfaceEdgeBrush}"
                 IsHitTestVisible="False" />
 
         </Grid>

@@ -3,11 +3,11 @@ using System.IO;
 using System.Linq;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.Util;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.Util;
 
-namespace Clowd
+namespace Prisc
 {
     public sealed class SessionWindow
     {
@@ -37,7 +37,7 @@ namespace Clowd
     /// <summary>
     /// The second video track inside a recording's mp4 — the webcam, kept out of the composited
     /// picture on purpose so the overlay can be placed (or dropped) later in the video editor.
-    /// Recorded at capture time from obs-express's <c>tracks</c> report, or probed off the file
+    /// Recorded at capture time from the recorder's <c>tracks</c> report, or probed off the file
     /// when the recorder was too old to send one. A record so <see cref="FileSyncObject"/>'s
     /// equality check can skip a redundant disk write, exactly like <see cref="SessionOpenEditor"/>.
     /// </summary>
@@ -71,7 +71,7 @@ namespace Clowd
         public SessionInfo(string file) : base(file)
         { }
 
-        protected override JsonTypeInfo GetJsonTypeInfo() => ClowdUiJsonContext.Default.SessionInfo;
+        protected override JsonTypeInfo GetJsonTypeInfo() => PriscUiJsonContext.Default.SessionInfo;
 
         public DateTime CreatedUtc
         {
@@ -322,7 +322,7 @@ namespace Clowd
             }
         }
 
-        // recorded duration in milliseconds (from the last obs-express status line).
+        // recorded duration in milliseconds (from the last prisc_recorder status line).
         public long DurationMs
         {
             get => Get<long>();
@@ -482,7 +482,7 @@ namespace Clowd
             }
         }
 
-        // set on recordings captured with composition turned off: obs-express was run without
+        // set on recordings captured with composition turned off: prisc_recorder was run without
         // --multi-track and wrote one flattened track, so there are no separate streams for the
         // editor to trim, place or mix. Written once, when the session is created. Absent (false)
         // on recordings made before composition was a choice — those stay editable, which is what
@@ -597,7 +597,7 @@ namespace Clowd
 
         // not persisted — the in-flight upload for this session, set by UploadsManager.
         [JsonIgnore]
-        public Clowd.UI.ActiveUpload ActiveUpload
+        public Prisc.UI.ActiveUpload ActiveUpload
         {
             get => _activeUpload;
             set
@@ -612,7 +612,7 @@ namespace Clowd
         // not persisted — the in-flight video→gif conversion filling this session in, set by
         // GifConversionManager. Non-null only while it runs.
         [JsonIgnore]
-        public Clowd.UI.Services.GifConversion ActiveGifConversion
+        public Prisc.UI.Services.GifConversion ActiveGifConversion
         {
             get => _activeGifConversion;
             set
@@ -629,7 +629,7 @@ namespace Clowd
         // VideoRenderManager. Non-null only while it runs; the mirror image of
         // ActiveGifConversion, and treated the same everywhere a busy entry is.
         [JsonIgnore]
-        public Clowd.UI.Services.VideoRender ActiveRender
+        public Prisc.UI.Services.VideoRender ActiveRender
         {
             get => _activeRender;
             set
@@ -775,9 +775,9 @@ namespace Clowd
             OnPropertyChanged(nameof(ShowNotUploaded));
         }
 
-        private Clowd.UI.ActiveUpload _activeUpload;
-        private Clowd.UI.Services.GifConversion _activeGifConversion;
-        private Clowd.UI.Services.VideoRender _activeRender;
+        private Prisc.UI.ActiveUpload _activeUpload;
+        private Prisc.UI.Services.GifConversion _activeGifConversion;
+        private Prisc.UI.Services.VideoRender _activeRender;
         private DateTime _contentModifiedUtc;
         private string _renderStatusText;
         private bool _linkedToPrevious;

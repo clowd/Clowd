@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The rules behind the FPS tile at the head of the recording and share strips: which frame

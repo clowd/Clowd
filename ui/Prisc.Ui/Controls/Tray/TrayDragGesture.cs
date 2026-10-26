@@ -1,7 +1,7 @@
 using System;
 using Avalonia;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// The press → threshold → drag → release state machine behind the tray's grip, lifted out of the

@@ -1,5 +1,5 @@
 [package]
-name = "clowd_scroll_driver"
+name = "prisc_scroll_driver"
 version = "1.0.0"
 edition = "2021"
 
@@ -7,9 +7,9 @@ edition = "2021"
 # this binary scrolls, photographs and stitches. Kept out of the capturer because starting a
 # window or GPU here would put pixels in front of the very content it is about to photograph.
 
-# image, euclid and sentry all reach this crate through clowd_rust_core and are not named directly.
+# image, euclid and sentry all reach this crate through prisc_rust_core and are not named directly.
 [dependencies]
-clowd_rust_core.workspace = true
+prisc_rust_core.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 log.workspace = true

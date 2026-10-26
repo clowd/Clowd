@@ -8,11 +8,11 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.Localization;
-using Clowd.UI.Controls.Tray;
-using Clowd.UI.Helpers;
+using Prisc.Localization;
+using Prisc.UI.Controls.Tray;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// The draw-on-screen toolbar: a two-lane strip behind a full-height grip. The primary lane is

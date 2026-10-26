@@ -6,9 +6,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <!-- Not Clowd.Geometry: a namespace of that name would shadow Avalonia's Geometry type in
-         every file under namespace Clowd.*, because C# finds Clowd's member namespaces before
+    <!-- Not Prisc.Geometry: a namespace of that name would shadow Avalonia's Geometry type in
+         every file under namespace Prisc.*, because C# finds Prisc's member namespaces before
          the file's using directives. -->
-    <RootNamespace>Clowd.Geometry2D</RootNamespace>
+    <RootNamespace>Prisc.Geometry2D</RootNamespace>
   </PropertyGroup>
 </Project>

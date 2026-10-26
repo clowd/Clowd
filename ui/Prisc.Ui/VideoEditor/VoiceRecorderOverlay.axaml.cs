@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// The voice-over recorder's face: a dark pill parked at the bottom of the video preview with a

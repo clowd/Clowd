@@ -1,7 +1,7 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:controls="using:Clowd.UI.Controls"
-        xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker">
+        xmlns:controls="using:Prisc.UI.Controls"
+        xmlns:cp="using:Prisc.UI.Dialogs.ColorPicker">
 
     <!--  The color dialog's look, in one place for all three of its tabs (ColorDialog includes it
           in its window styles, so nothing here leaks into the rest of the app). It wears the
@@ -53,7 +53,7 @@
                     <SolidColorBrush x:Key="ColorDialogRailTextBrush" Color="#B8FFFFFF" />
                     <SolidColorBrush x:Key="ColorDialogRailSelectedTextBrush" Color="#FFFFFF" />
 
-                    <!--  The accent. The fill is Clowd's own blue on both variants (OK, with the
+                    <!--  The accent. The fill is Prisc's own blue on both variants (OK, with the
                           dark ink on it); the "strong" one is for marks — rings, selected icons,
                           focus — and is lighter here so it reads on the dark surface.  -->
                     <SolidColorBrush x:Key="ColorDialogAccentBrush" Color="#00AFF0" />

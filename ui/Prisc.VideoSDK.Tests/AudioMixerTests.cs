@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // Pure mixing math against a fake IAudioSource — no FFmpeg, no pixels: volume, transition
     // volume ramps (shared easing), overlap summing, clamping, span coverage and the

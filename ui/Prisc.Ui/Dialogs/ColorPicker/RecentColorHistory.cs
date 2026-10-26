@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Media;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The MRU list of custom colors shown as an extra swatch row in both color pickers, backed by

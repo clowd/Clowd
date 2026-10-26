@@ -7,7 +7,7 @@ use std::ffi::CStr;
 use std::path::Path;
 use std::ptr::NonNull;
 
-use obs::data::ObsData;
+use prisc_obs::data::ObsData;
 use objc2_core_foundation::{CFRetained, CFUUID};
 use objc2_core_graphics::{
     CGDisplayBounds, CGDisplayCopyDisplayMode, CGDisplayMode, CGError, CGGetActiveDisplayList,

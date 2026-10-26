@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Geometry2D
+namespace Prisc.Geometry2D
 {
     /// <summary>
     /// How a line's mid handle bows it into a quadratic, in the image editor's terms

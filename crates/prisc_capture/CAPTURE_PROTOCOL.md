@@ -1,29 +1,29 @@
-# clowd_capture protocol
+# prisc_capture protocol
 
-The contract between the Clowd.Ui shell and the Rust capture processes.
+The contract between the Prisc.Ui shell and the Rust capture processes.
 
-The capture overlay `clowd_capture` runs **one-shot**: the shell spawns one
+The capture overlay `prisc_capture` runs **one-shot**: the shell spawns one
 process per capture with CLI flags; the process shows the overlay, writes its
 result into `--session-dir`, and exits. Completion signal = process exit.
 
-A **separate binary**, `clowd_scroll_driver` (§2), carries out the second half
+A **separate binary**, `prisc_scroll_driver` (§2), carries out the second half
 of a scrolling capture the overlay already set up. It is not a capture overlay
 at all — no window, no event loop, no GPU — and shares the session format with
 the capturer and nothing else. It is documented here because it speaks to the
 same shell across the same boundary.
 
-A second separate binary, `clowd_ai` (§3, its `ocr` subcommand), does text
+A second separate binary, `prisc_ai` (§3, its `ocr` subcommand), does text
 recognition. It is the odd one out: the shell never spawns it for this and
 never speaks to it — the *overlay* does, per OCR press. (The same binary's
 `matte`/`denoise` subcommands serve the video editor's AI effects, over a
-different protocol owned by `Clowd.VideoSDK`'s `AiClient.cs`.) It is
+different protocol owned by `Prisc.VideoSDK`'s `AiClient.cs`.) It is
 documented here because it is the third process in the same family and shares
-`clowd_rust_core` with the other two.
+`prisc_rust_core` with the other two.
 
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
-files), `clowd_scroll_driver/src/drive.rs` (scrolling-capture driver),
-`src/ocr/client.rs` + `clowd_ai/src/ocr.rs` (recognizer), and
-`clowd_rust_core` for what the binaries must agree on — the `session.json`
+files), `crates/prisc_scroll_driver/src/drive.rs` (scrolling-capture driver),
+`src/ocr/client.rs` + `crates/prisc_ai/src/ocr.rs` (recognizer), and
+`prisc_rust_core` for what the binaries must agree on — the `session.json`
 shape (`session.rs`), the recognition contract (`ocr.rs`), the coordinate space
 (`geometry.rs`) and the exit codes (`exit.rs`). C# counterparts:
 `ScreenCaptureService.cs` (spawn + session dispatch), `Scroll/ScrollDriver.cs`
@@ -72,12 +72,12 @@ repeatable, one occurrence per gesture in the action's list order (less any
 combination the OS reserves for itself, which the shell never binds), and zero
 occurrences means that action has no hotkey (hotkeys take effect when the
 first settings snapshot arrives — see below). The capturer prints
-`CLOWD_STANDBY_READY` and waits event-driven without initializing capture/GPU
+`PRISC_STANDBY_READY` and waits event-driven without initializing capture/GPU
 resources (the main loop is fully blocked, and so is the Windows hook thread
 between key events; on macOS the hook thread and a permission watcher wake
 about once a second for tap-health and Accessibility checks, and a hook that
 is down is retried every 2 s while a gesture needs it — see below), then
-creates a unique child directory and prints `CLOWD_SESSION <absolute-path>` when a hotkey fires, followed by one
+creates a unique child directory and prints `PRISC_SESSION <absolute-path>` when a hotkey fires, followed by one
 ordinary capture cycle. stdout carries ONLY protocol lines — the log goes to
 stderr (and the session's `capture.log`), because a log record spliced into
 the protocol stream could corrupt a line the shell must not miss. Both pipes
@@ -88,11 +88,11 @@ and the waiting capturer exits without starting a capture (mid-capture, it
 exits immediately).
 
 The capturer owns the screenshot hotkeys, via a low-level keyboard hook
-(the clowd_hotkeys crate: WH_KEYBOARD_LL on Windows, a CGEventTap on macOS —
+(the prisc_hotkeys crate: WH_KEYBOARD_LL on Windows, a CGEventTap on macOS —
 which needs the Accessibility permission; there is no Linux backend yet, and
 that error is reported per gesture), NOT via RegisterHotKey-style
 registration. Both halves of that choice are load-bearing: the trigger path
-must not depend on the shell being resident (a paged-out Clowd.UI would add
+must not depend on the shell being resident (a paged-out Prisc.UI would add
 its page-in time to every capture), and the key must be suppressed before OS
 handlers see it — Windows 11's "PrintScreen opens Snipping Tool" feature
 consumes the key ahead of RegisterHotKey delivery, so a plain registration
@@ -100,7 +100,7 @@ reports success and then never fires. Gestures travel in the settings form:
 `Control`/`Alt`/`Shift`/`Meta` joined with `+`, then a canonical key name
 (`PrintScreen`, `Control+Shift+D1`, `Alt+Meta+Oem3`); aliases such as
 `Snapshot` are accepted. The shell translates nothing — the key names are
-clowd_hotkeys' key table, which the shell's `HotkeyKey` is generated from —
+prisc_hotkeys' key table, which the shell's `HotkeyKey` is generated from —
 and a key with no code on this OS surfaces as an explicit per-hotkey error.
 A hook that cannot start, or dies later, is fatal only on Windows, where the
 failure (`HookFailed`, the hook's message loop failing, or a silently
@@ -120,13 +120,13 @@ reason rather than per try and a death as an error only the first time per
 run (a revoked grant never), and announces each change (the
 hook coming up, going down, failing differently, or dying and coming straight
 back with its gestures registered again) with an unsolicited
-`CLOWD_SETTINGS_STATUS`; granting
+`PRISC_SETTINGS_STATUS`; granting
 Accessibility later makes the hotkeys work without restarting anything. The
 capturer never prompts for the permission — the shell does, keyed off
 `error_code` (below). `Unsupported` (Linux) is reported and never retried.
 Standby is not the only capture path: the
 shell only runs it while its "keep capturer warm" setting is in effect, and
-it falls back to its own clowd_hotkeys registrations plus classic one-shot
+it falls back to its own prisc_hotkeys registrations plus classic one-shot
 spawns for the rest of its process lifetime when standby proves unusable —
 no permission or binary, exit code 3 (permission revoked), or repeated
 crashes.
@@ -134,7 +134,7 @@ crashes.
 While waiting, stdin is also a newline-delimited JSON control channel. A
 `{"type":"settings","args":[...]}` message replaces the complete standby CLI
 snapshot (including hotkeys) after parsing it through `CliArgs`; every
-snapshot is answered with `CLOWD_SETTINGS_STATUS <json>` (statuses cannot
+snapshot is answered with `PRISC_SETTINGS_STATUS <json>` (statuses cannot
 arrive out of order: one pipe, one sequential reader), and one may also arrive
 unasked when the hook comes up or goes down. Its `hotkeys` object
 maps each of `main`, `window`, and `monitor` to an array with one entry per
@@ -151,7 +151,7 @@ the received string verbatim, which is what the shell matches back to
   "monitor":[{"gesture":"Control+PrintScreen","active":true,"error":null,"error_code":null}]}}
 ```
 
-`error` is display text (clowd_hotkeys' error text, echoed verbatim) and may
+`error` is display text (prisc_hotkeys' error text, echoed verbatim) and may
 change; `error_code` is its stable, machine-readable twin, and the one to
 branch on. Both are null exactly when `active` is true. Codes: `permission`
 (macOS Accessibility not granted, or a stale grant: listed and trusted, but
@@ -178,12 +178,12 @@ changes nothing and is answered with the surviving hotkeys' real state. A
 (paused: registered gestures neither fire nor are suppressed) while the shell
 records a gesture in its settings UI, so the recorded press reaches the
 shell. It is applied immediately, even mid-capture, gets no reply, and the
-shell re-sends it after every `CLOWD_STANDBY_READY`. A
+shell re-sends it after every `PRISC_STANDBY_READY`. A
 `{"type":"capture","mode":"region|screen|window"}` message starts the same
 single capture cycle as a native hotkey. This is how shell and tray capture
 buttons reuse the waiting process instead of spawning a second one; the shell
 sends one only when no overlay is open or requested — nothing is ever queued
-on either side. `CLOWD_IPC_ERROR <text>` (always a single line) reports a
+on either side. `PRISC_IPC_ERROR <text>` (always a single line) reports a
 rejected message or a failed session-dir creation; the shell treats it as a
 NACK and clears its overlay-pending state. Overlay exclusion is per-side:
 during the brief windows where the shell falls back to a one-shot spawn, a
@@ -192,9 +192,9 @@ accepted as rare and harmless rather than adding cross-process locking.
 
 Normal completion does not exit the standby process. After all overlay windows,
 render workers and GPU objects have been dropped, the capturer closes that
-session's `capture.log`, prints `CLOWD_CAPTURE_FINISHED <absolute-path>` —
+session's `capture.log`, prints `PRISC_CAPTURE_FINISHED <absolute-path>` —
 the shell dispatches that directory immediately — and prints
-`CLOWD_STANDBY_READY` again. Process exit is therefore reserved for parent EOF
+`PRISC_STANDBY_READY` again. Process exit is therefore reserved for parent EOF
 or a fatal error, after which the shell restarts the standby process (with
 backoff) or falls back as above.
 
@@ -203,7 +203,7 @@ gestures remain suppressed system-wide for the overlay's duration (the
 dedicated hook thread keeps pumping regardless of what the capture cycle is
 doing). Everything received during that interval — hotkey presses and stdin
 messages alike — is stale and discarded before the next
-`CLOWD_STANDBY_READY` (best effort: an event in flight between hook and
+`PRISC_STANDBY_READY` (best effort: an event in flight between hook and
 channel during the final microseconds of teardown can survive the drain and
 start a capture, which is what the press asked for). The shell re-sends its
 full settings snapshot in
@@ -236,7 +236,7 @@ File contents:
 | `ocr.txt` | The text recognized in the selection, UTF-8 without BOM, lines separated by `\n`. Present only with the `ocr-upload` marker; the shell reads it, uploads it as a text paste, and deletes the directory. |
 | `action.txt` | Routing marker read by `CaptureSessionDispatcher` (missing = edit). |
 | `capture.log` | Mirror of the capturer's log, read by the shell after a non-zero exit — and the only diagnostics that survive a native fault, which never reaches a Rust error path. |
-| `scroll.log` | Same, for the `clowd_scroll_driver` pass (§2). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
+| `scroll.log` | Same, for the `prisc_scroll_driver` pass (§2). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
 
 **Write ordering** (`session_output.rs`) — the last file to appear is the
 completion signal, so readers must wait for process exit and then key off
@@ -247,7 +247,7 @@ these files:
    strictly last**. `session.json` present = capture succeeded.
 2. VIDEO: `cropped.png` first, then **`action.txt` last**. Its appearance is
    the completion signal; no `desktop.png`, no `session.json` (the session is
-   created by Clowd.Ui when recording finishes).
+   created by Prisc.Ui when recording finishes).
 3. SEARCH-IMAGE: `cropped.png` first, then **`action.txt` last**. Its
    appearance is the completion signal; no `desktop.png` and no
    `session.json` — the shell hands that one file to the browser to search
@@ -261,7 +261,7 @@ these files:
 
 The VIDEO rect is emitted in the platform capture coordinate space: physical
 pixels (virtual-desktop, possibly negative origin) on Windows, CG points on
-macOS — passed verbatim to obs-express `--region`. W and H are always >= 2.
+macOS — passed verbatim to prisc_recorder `--region`. W and H are always >= 2.
 
 `R` is the optional corner radius of the recording region, in that same space
 and separated from the rect by a space: the OS corner radius of the window the
@@ -283,13 +283,13 @@ never emits this marker.
 
 The SHARE marker is the leading rect of the VIDEO marker and nothing else —
 same space, same grammar, no radius and no poster. The shell hands it
-straight to `clowd_share_region --region X,Y,W,H`, a long-lived helper that
+straight to `prisc_share_region --region X,Y,W,H`, a long-lived helper that
 mirrors the rectangle into a borderless window a meeting app can pick out of
 its share picker; the pixels are read live off the screen for as long as the
 share lasts, so there is no frame worth photographing at selection time and
 no session to open when it ends. The helper normalises what it is handed
 (each side forced to at least 64 px and made even) and reports the region it
-actually applied, so unlike VIDEO — which obs-express takes literally — the
+actually applied, so unlike VIDEO — which prisc_recorder takes literally — the
 rect here is a request. It is emitted two ways: by the SHARE button on the
 capture strip (accelerator `H`), and by `--share`, which auto-dispatches the
 same action the moment a selection is confirmed — the twin of the VIDEO
@@ -316,9 +316,9 @@ to the text in `ocr.txt`.
 
 ### 1.3 `session.json` schema
 
-Fixed-schema JSON, shared with `Clowd.Ui`'s `SessionInfo`.
+Fixed-schema JSON, shared with `Prisc.Ui`'s `SessionInfo`.
 Rects serialize as `{ "X": …, "Y": …, "Width": …, "Height": … }`
-(`Clowd.PlatformUtil.ScreenRect` casing).
+(`Prisc.PlatformUtil.ScreenRect` casing).
 
 | Key | Type | Notes |
 |---|---|---|
@@ -346,7 +346,7 @@ Constants in `src/system/mod.rs`; keep in sync with
 Any other non-zero exit is a crash; the shell reports it with the stderr and
 `capture.log` tails.
 
-## 2. Scrolling-capture driver (`clowd_scroll_driver`)
+## 2. Scrolling-capture driver (`prisc_scroll_driver`)
 
 The driver is the second half of a scrolling capture. The first half is an
 ordinary capture cycle: the user selects a region, presses SCROLL, clicks the
@@ -358,7 +358,7 @@ the region, and spawns the driver to do the mechanical part.
 It is a **separate binary**, not a mode of the capturer. Nothing it does needs
 a window, an event loop, a GPU or the screen-recording permission dance, and
 bringing any of that up would put pixels on screen in front of the content it
-is about to photograph. It ships beside `clowd_capture`, which is where
+is about to photograph. It ships beside `prisc_capture`, which is where
 `CaptureBinaryLocator.ResolveScrollDriver` looks for it.
 
 **Windows and macOS.** The loop, the caps, the stitcher, this protocol and the
@@ -368,7 +368,7 @@ parking the cursor, resolving and raising the target, photographing the region
 refuses without them (`fatal_error`): Screen Recording to photograph the
 region, and Accessibility, because the window server silently discards
 synthetic events from a process it does not trust. TCC records both against
-`Clowd.app`, which is what makes the shell's own grants cover this executable
+`Prisc.app`, which is what makes the shell's own grants cover this executable
 (`MacPermissions`); `ScrollCapturePage` asks for Accessibility before it
 spawns anything, so the usual path to a missing grant is a dialog with a button
 to the right Settings pane rather than a driver refusal.
@@ -376,7 +376,7 @@ to the right Settings pane rather than a driver refusal.
 ### 2.1 Spawn
 
 ```
-clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N [--no-rewind]
+prisc_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N [--no-rewind]
 ```
 
 | Flag | Required | Meaning |
@@ -389,7 +389,7 @@ clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N 
 
 The shell must redirect **all three** stdio streams. Stdin in particular: the
 driver reads a closed stdin as "the shell is gone" and cancels, which is what
-keeps a crashed Clowd.Ui from leaving something scrolling the user's window.
+keeps a crashed Prisc.Ui from leaving something scrolling the user's window.
 On Windows the shell also calls `AllowSetForegroundWindow(driver pid)` right
 after spawn — without it `SetForegroundWindow` in the driver is refused and the
 run relies on Win10+ scroll-inactive-windows routing alone. macOS has no
@@ -515,12 +515,12 @@ excluded from the wall-clock cap. One pause may last 60 s — reachable only by
 a cursor that keeps *moving* that whole time — after which the run finalizes
 as `stopped` with everything captured so far.
 
-## 3. Text recognizer (`clowd_ai ocr`)
+## 3. Text recognizer (`prisc_ai ocr`)
 
 The only protocol here that the shell is not a party to. When the user presses
 OCR, the overlay extracts the selected region's pixels — compositing a
 click-locked peek if one is up, so what is recognized is what the user can
-actually see — spawns `clowd_ai ocr`, and waits for it on the detached `ocr`
+actually see — spawns `prisc_ai ocr`, and waits for it on the detached `ocr`
 worker thread. **One request, one process, one answer.**
 
 It is a **separate binary** because recognition runs on a large native engine
@@ -529,7 +529,7 @@ would unwind harmlessly, but an `abort`, a segfault or a refused allocation on
 a degenerate selection kills the process it is running in — which in-process
 meant the overlay, mid-capture, with the user's selection already framed.
 Out-of-process the same failure is an exit code the capturer turns into an
-"OCR failed" pill. It is also the license boundary: `clowd_ai` embeds GPL-3.0
+"OCR failed" pill. It is also the license boundary: `prisc_ai` embeds GPL-3.0
 matting weights and is GPL-3.0 itself, which the process boundary keeps out of
 the MIT overlay.
 
@@ -540,18 +540,18 @@ the next one queues behind it; and the tens of MB of embedded models plus the
 static runtime left the overlay, which is spawned fresh for every capture and
 therefore pays for its own size in start-up latency.
 
-It ships beside `clowd_capture` on every platform that has an ONNX
+It ships beside `prisc_capture` on every platform that has an ONNX
 Runtime build — Windows x64/arm64 and Apple Silicon, **not** Intel macOS,
 where the spawn fails and the overlay shows OCR as unavailable — which is
 where `src/ocr/client.rs` looks for it (sibling of `current_exe()`; the
-`CLOWD_AI_BINARY` environment variable overrides that, for tests and local
+`PRISC_AI_BINARY` environment variable overrides that, for tests and local
 development). It needs no window, no event loop, no GPU, and — because it is
 handed pixels rather than taking them — no screen-recording permission.
 
 ### 3.1 Spawn
 
 ```
-clowd_ai ocr --out <path> [--log-file <path>]
+prisc_ai ocr --out <path> [--log-file <path>]
 ```
 
 | Flag | Required | Meaning |

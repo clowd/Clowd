@@ -1,9 +1,9 @@
 <ui:SystemThemedWindow xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:controls="using:Clowd.UI.Controls"
-        xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
-        xmlns:ui="using:Clowd.UI"
-        x:Class="Clowd.UI.Dialogs.ColorPicker.ColorDialog"
+        xmlns:controls="using:Prisc.UI.Controls"
+        xmlns:cp="using:Prisc.UI.Dialogs.ColorPicker"
+        xmlns:ui="using:Prisc.UI"
+        x:Class="Prisc.UI.Dialogs.ColorPicker.ColorDialog"
         Title="Color Wheel"
         Width="720"
         Height="520"
@@ -17,7 +17,7 @@
           top bar and the rail sit on the window's own backdrop (Mica where the compositor grants
           it); the tabs sit on the raised surface, rounded where the two bars meet it.  -->
     <Window.Styles>
-        <StyleInclude Source="avares://Clowd.Ui/Dialogs/ColorPicker/ColorDialogTheme.axaml" />
+        <StyleInclude Source="avares://Prisc.Ui/Dialogs/ColorPicker/ColorDialogTheme.axaml" />
     </Window.Styles>
 
     <!--  "modern" is the editors' chrome class: the shared bar styles key off it.  -->
@@ -29,7 +29,7 @@
         <Grid.Styles>
             <!--  The editors' tool buttons, and their top bar's metrics (VideoEditorWindow's TopBar
                   rules): a 32px lane, 5px above and below it, groups 6px apart, buttons 2px apart.  -->
-            <StyleInclude Source="avares://Clowd.Ui/Assets/EditorChromeStyles.axaml" />
+            <StyleInclude Source="avares://Prisc.Ui/Assets/EditorChromeStyles.axaml" />
             <Style Selector="controls|DockAndWrapPanel#topBar">
                 <Setter Property="ItemHeight" Value="32" />
                 <Setter Property="Margin" Value="4,5,4,5" />
@@ -221,7 +221,7 @@
                 Grid.Row="1"
                 Grid.Column="1"
                 Background="{DynamicResource ColorDialogSurfaceBrush}"
-                BoxShadow="{DynamicResource ClowdEditorSurfaceShadow}"
+                BoxShadow="{DynamicResource PriscEditorSurfaceShadow}"
                 CornerRadius="12,0,0,0" />
 
         <!--  The body's tips are the bars' strip tips (ColorDialogTips), shown by this one host. The
@@ -275,7 +275,7 @@
         <Border x:Name="contentOutline"
                 Grid.Row="1"
                 Grid.Column="1"
-                BorderBrush="{DynamicResource ClowdEditorSurfaceEdgeBrush}"
+                BorderBrush="{DynamicResource PriscEditorSurfaceEdgeBrush}"
                 BorderThickness="1,1,0,0"
                 CornerRadius="12,0,0,0"
                 IsHitTestVisible="False" />

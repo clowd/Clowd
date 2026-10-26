@@ -4,7 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The small flat icon button used at the right of a list row — the layers panel's eye/lock/delete

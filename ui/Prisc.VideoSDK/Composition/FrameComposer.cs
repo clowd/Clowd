@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The ONLY place that knows what the picture looks like. <see cref="Compose"/> is a pure

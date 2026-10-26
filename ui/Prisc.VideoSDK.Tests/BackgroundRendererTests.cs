@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The renderer's pixels and its clock: every style draws a full, opaque, non-uniform
@@ -258,7 +258,7 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>The solid style has no scene to fetch: the entry point every tile and the
         /// composer share fills the destination with the color it is handed, and falls back to
-        /// Clowd blue for a color it cannot read.</summary>
+        /// Prisc blue for a color it cannot read.</summary>
         [Fact]
         public void Solid_style_draws_the_color_it_is_handed()
         {

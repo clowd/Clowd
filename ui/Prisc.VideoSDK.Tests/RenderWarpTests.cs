@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
-using Clowd.VideoSDK.Render;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
+using Prisc.VideoSDK.Render;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // RenderJob under a speed warp: the output frame grid runs in output time (frame count from
     // TimeWarp.OutputDurationTicks, each frame composed at ToProject of its instant), explicit
@@ -43,7 +43,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string TempMp4()
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-renderwarp-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-renderwarp-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
             return path;
         }

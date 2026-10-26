@@ -1,6 +1,6 @@
-# Translating Clowd
+# Translating Prisc
 
-Clowd has no translation platform and no crowdsourcing. Locale files are plain `.resx` in this
+Prisc has no translation platform and no crowdsourcing. Locale files are plain `.resx` in this
 folder, edited by hand or by an AI, and validated by unit tests. That is the whole workflow.
 
 ## File layout
@@ -13,7 +13,7 @@ folder, edited by hand or by an AI, and validated by unit tests. That is the who
 | `TExtension.cs` | The `{loc:T Key}` XAML markup extension. |
 
 The .NET SDK compiles each `Strings.<culture>.resx` into a satellite assembly
-(`<culture>/Clowd.Shared.resources.dll`) beside the executable. Clowd finds the languages it can
+(`<culture>/Prisc.Shared.resources.dll`) beside the executable. Prisc finds the languages it can
 offer by scanning for those folders, so **adding a file is all that is needed** — no list to update,
 no csproj edit, no code change.
 
@@ -39,7 +39,7 @@ Keys are `Area_Name` in PascalCase and **must be valid C# identifiers** (`^[A-Za
 
 A `_Desc` suffix marks the longer caption shown under a setting.
 
-**Never translate**: the product name *Clowd*, provider brand names (Azure, imgur, …), file
+**Never translate**: the product name *Prisc*, provider brand names (Azure, imgur, …), file
 extensions, and hotkey key names.
 
 ## Placeholder rules
@@ -74,7 +74,7 @@ Anything longer than its English source by more than roughly half is worth a sec
 2. Translate the `<value>` elements **only**. Leave `name` attributes, `<comment>` elements, the
    `<xsd:schema>` block and the `<resheader>` entries exactly as they are.
 3. Keep the file sorted by key, same order as `Strings.resx`, so diffs stay readable.
-4. Run `dotnet test clowd_ui/Clowd.Shared.Tests`. The localization tests check key parity,
+4. Run `dotnet test ui/Prisc.Shared.Tests`. The localization tests check key parity,
    placeholder arity and key syntax.
 5. Build and run — the new language shows up in the General settings language list automatically.
 
@@ -100,7 +100,7 @@ This is the intended way to produce and maintain a translation:
    - honor the length limits above,
    - keep product and brand names untranslated,
    - use the register of a desktop utility: short, plain, imperative for buttons.
-3. Save the result, run `dotnet test clowd_ui/Clowd.Shared.Tests`, and feed any failure message
+3. Save the result, run `dotnet test ui/Prisc.Shared.Tests`, and feed any failure message
    back to the model verbatim. Repeat until green.
 4. Skim the result in the running app before committing. The tests prove the file is *structurally*
    correct; they cannot tell you a word is wrong.

@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Avalonia.Media;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Whether Draw on Screen exists as a feature. Rendered by the Draw on Screen page as the tile
@@ -42,7 +42,7 @@ namespace Clowd.Config
 
     /// <summary>
     /// Which keystrokes the overlay shows. Mirrors the video editor's
-    /// <c>Clowd.VideoSDK.Model.KeystrokeFilter</c> member for member, mapped inside Clowd.Ui: this
+    /// <c>Prisc.VideoSDK.Model.KeystrokeFilter</c> member for member, mapped inside Prisc.Ui: this
     /// assembly does not reference the SDK.
     /// </summary>
     public enum DrawKeystrokeFilter
@@ -53,7 +53,7 @@ namespace Clowd.Config
     }
 
     /// <summary>How a keystroke row arrives or leaves. The visual members of the SDK's
-    /// <c>TransitionKind</c>, by the same names (mapped inside Clowd.Ui).</summary>
+    /// <c>TransitionKind</c>, by the same names (mapped inside Prisc.Ui).</summary>
     public enum DrawKeystrokeAnimation
     {
         [Description("None")] None,
@@ -65,7 +65,7 @@ namespace Clowd.Config
         [Description("Wipe")] Wipe,
     }
 
-    /// <summary>The SDK's <c>TransitionEasing</c>, by the same names (mapped inside Clowd.Ui).</summary>
+    /// <summary>The SDK's <c>TransitionEasing</c>, by the same names (mapped inside Prisc.Ui).</summary>
     public enum DrawKeystrokeEasing
     {
         [Description("Linear")] Linear,

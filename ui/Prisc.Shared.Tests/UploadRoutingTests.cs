@@ -1,16 +1,16 @@
 using System;
 using System.IO;
-using Clowd.Config;
-using Clowd.Upload;
+using Prisc.Config;
+using Prisc.Upload;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class UploadRoutingTests : IDisposable
     {
         private static readonly IMimeProvider _mime = new MimeProvider();
 
-        private readonly string _path = Path.Combine(Path.GetTempPath(), "ClowdSettingsTests", Guid.NewGuid() + ".json");
+        private readonly string _path = Path.Combine(Path.GetTempPath(), "PriscSettingsTests", Guid.NewGuid() + ".json");
 
         public void Dispose()
         {

@@ -12,7 +12,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
-    <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
+    <ProjectReference Include="..\Prisc.Shared\Prisc.Shared.csproj" />
+    <ProjectReference Include="..\Prisc.Upload\Prisc.Upload.csproj" />
   </ItemGroup>
 </Project>

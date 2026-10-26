@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// Decode + present pipeline for one video track.
@@ -255,8 +255,8 @@ namespace Clowd.VideoSDK.Playback
         public void Start()
         {
             _running = true;
-            _decodeThread = new Thread(DecodeLoop) { Name = $"clowd-vdec-{_streamIndex}", IsBackground = true };
-            _presentThread = new Thread(PresentLoop) { Name = $"clowd-vpres-{_streamIndex}", IsBackground = true };
+            _decodeThread = new Thread(DecodeLoop) { Name = $"prisc-vdec-{_streamIndex}", IsBackground = true };
+            _presentThread = new Thread(PresentLoop) { Name = $"prisc-vpres-{_streamIndex}", IsBackground = true };
             _decodeThread.Start();
             _presentThread.Start();
         }

@@ -5,14 +5,14 @@ using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Ink;
-using Clowd.Drawing.Rendering;
-using Clowd.Drawing.Tools;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Ink;
+using Prisc.Drawing.Rendering;
+using Prisc.Drawing.Tools;
 using Xunit;
-using Sample = Clowd.Drawing.Graphics.GraphicBrush.Sample;
+using Sample = Prisc.Drawing.Graphics.GraphicBrush.Sample;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The brush stroke as a graphic (NonZero fill through self-crossings, bounds and hit
@@ -25,7 +25,7 @@ namespace Clowd.Drawing.Tests
     {
         static GraphicBrushTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static readonly DpiScale Dpi = new DpiScale(1, 1);

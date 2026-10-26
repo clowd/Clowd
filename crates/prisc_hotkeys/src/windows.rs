@@ -61,7 +61,7 @@ impl Drop for Backend {
 pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, Error> {
     let (ready_tx, ready_rx) = mpsc::channel();
     let thread = thread::Builder::new()
-        .name("clowd-hotkeys-hook".into())
+        .name("prisc-hotkeys-hook".into())
         .spawn(move || run(shared, tx, ready_tx))
         .map_err(|e| Error::HookFailed(e.to_string()))?;
     match ready_rx.recv() {
@@ -173,7 +173,7 @@ fn install() -> windows::core::Result<HHOOK> {
 /// The watchdog's canary: a message-only window that gets keyboard raw input (WM_INPUT) on this
 /// thread, foreground or not. Keyboard raw input goes to one window per process, so this is `None`
 /// when the process already takes it elsewhere (a winit event loop does, unless it hands it back
-/// as `clowd_capture` does): the watchdog is then off.
+/// as `prisc_capture` does): the watchdog is then off.
 fn create_canary() -> Option<HWND> {
     if keyboard_raw_input_target() != Ok(None) {
         return None;

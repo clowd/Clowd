@@ -4,7 +4,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Styling;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The editor properties-bar checkbox: a small check over a caption. A labeled CheckBox is the

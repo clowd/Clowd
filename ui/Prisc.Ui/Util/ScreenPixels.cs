@@ -4,12 +4,12 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.UI;
+using Prisc.UI;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     /// <summary>
-    /// Reads the screen as it is right now, anywhere on the virtual desktop and outside any Clowd
+    /// Reads the screen as it is right now, anywhere on the virtual desktop and outside any Prisc
     /// window, with no overlay and no process of its own. Two reads, each on the cheapest path for
     /// its caller: <see cref="GetColorAt"/>, one pixel, for the color pickers' eyedropper (called on
     /// every mouse move of a drag); and <see cref="Grab"/>, a whole monitor, for the frozen backdrop

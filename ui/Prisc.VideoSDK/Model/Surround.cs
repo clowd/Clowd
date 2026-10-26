@@ -1,4 +1,4 @@
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>The surround styles the editor offers on a drawn item, in menu order.
 /// <see cref="None"/> is stored as a null <see cref="Item.Surround"/> rather than a kind — "nothing

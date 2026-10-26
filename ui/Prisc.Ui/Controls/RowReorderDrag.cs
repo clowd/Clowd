@@ -7,9 +7,9 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.Drawing;
+using Prisc.Drawing;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The vertical geometry shared by every drag-to-reorder list: which insertion slot a pointer

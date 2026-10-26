@@ -5,7 +5,7 @@
 //! page-in time to every capture. Second, the key must be SUPPRESSED, not
 //! merely observed: Windows 11's "PrintScreen opens Snipping Tool" feature
 //! consumes the key ahead of RegisterHotKey delivery, so an ordinary hotkey
-//! registration reports success and then never fires. clowd_hotkeys provides
+//! registration reports success and then never fires. prisc_hotkeys provides
 //! a low-level hook (WH_KEYBOARD_LL / CGEventTap) that swallows a registered
 //! press before any OS handler sees it.
 //!
@@ -26,7 +26,7 @@ use std::hash::Hash;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use clowd_hotkeys::{Error, Event, Gesture, HotkeyId, Hotkeys};
+use prisc_hotkeys::{Error, Event, Gesture, HotkeyId, Hotkeys};
 use winit::event_loop::EventLoopProxy;
 
 use crate::settings::{CaptureMode, CliArgs};
@@ -98,7 +98,7 @@ enum Recovery {
     /// As `Retry`, but trying again is pointless (no Linux backend).
     Report,
     /// Exit, so the shell's crash accounting restarts us or falls back to
-    /// its own clowd_hotkeys registrations.
+    /// its own prisc_hotkeys registrations.
     Exit,
 }
 
@@ -106,9 +106,9 @@ fn recovery(err: &Error) -> Recovery {
     match err {
         // macOS: a NULL tap, a stale grant and a revocation all come down to
         // the Accessibility grant, which the shell's own tap shares (same
-        // crate, same TCC answer for Clowd.app), so exiting would only burn
+        // crate, same TCC answer for Prisc.app), so exiting would only burn
         // crash strikes. Granting it later must make the hotkeys work without
-        // restarting Clowd.
+        // restarting Prisc.
         Error::PermissionDenied | Error::HookFailed(_) | Error::Stopped if cfg!(target_os = "macos") => Recovery::Retry,
         // Windows: the OS refused or lost this process's hook (a failed
         // SetWindowsHookEx, a message-loop error, or a silently removed hook
@@ -119,7 +119,7 @@ fn recovery(err: &Error) -> Recovery {
     }
 }
 
-/// The machine-readable twin of an error's text in CLOWD_SETTINGS_STATUS:
+/// The machine-readable twin of an error's text in PRISC_SETTINGS_STATUS:
 /// the shell keys behaviour (the Accessibility prompt) off this, never off
 /// the display text. Exhaustive on purpose, so a new variant picks a code.
 fn error_code(err: &Error) -> &'static str {
@@ -184,7 +184,7 @@ pub enum Poll {
     Unchanged,
     /// The hook came up, went down, failed differently, or died and was
     /// restarted at once: the gestures' new statuses, for an unsolicited
-    /// CLOWD_SETTINGS_STATUS.
+    /// PRISC_SETTINGS_STATUS.
     Statuses(serde_json::Map<String, serde_json::Value>),
     /// The hook died where that is fatal (`Recovery::Exit`).
     Fatal(String),
@@ -301,7 +301,7 @@ impl<H: Hook> StandbyHotkeys<H> {
     }
 
     /// Replaces the whole gesture set from a CLI snapshot and returns the
-    /// per-gesture statuses for CLOWD_SETTINGS_STATUS. Hook-based hotkeys
+    /// per-gesture statuses for PRISC_SETTINGS_STATUS. Hook-based hotkeys
     /// cannot conflict with other applications, so a gesture is active exactly
     /// when it parses, is usable on this OS, is not a duplicate, and the hook
     /// accepted it. A hook that is down is tried again first if
@@ -336,7 +336,7 @@ impl<H: Hook> StandbyHotkeys<H> {
                 }
                 // Retried, so reported once per run like the shell's own hook:
                 // a revoked grant is the user's choice, not a defect.
-                if reason == clowd_hotkeys::REVOKED_REASON || self.reported_death {
+                if reason == prisc_hotkeys::REVOKED_REASON || self.reported_death {
                     log::warn!("standby hotkey hook died: {reason}");
                 } else {
                     self.reported_death = true;
@@ -747,7 +747,7 @@ mod tests {
             // PrintScreen and Cancel have no macOS key code: refused up front, never a
             // silent dead hotkey.
             #[cfg(target_os = "macos")]
-            if !matches!(gesture(text).key, clowd_hotkeys::Key::PrintScreen | clowd_hotkeys::Key::Cancel) {
+            if !matches!(gesture(text).key, prisc_hotkeys::Key::PrintScreen | prisc_hotkeys::Key::Cancel) {
                 assert_eq!(status["active"], true, "{text}");
             } else {
                 let key = gesture(text).key;
@@ -781,7 +781,7 @@ mod tests {
     fn cli_flags_are_repeatable() {
         use clap::Parser;
         let args = CliArgs::try_parse_from([
-            "clowd_capture",
+            "prisc_capture",
             "--standby",
             "--session-root",
             "x",
@@ -868,14 +868,14 @@ mod tests {
 
     fn snapshot(main: &[&str]) -> CliArgs {
         use clap::Parser;
-        let mut argv = vec!["clowd_capture", "--standby", "--session-root", "x"];
+        let mut argv = vec!["prisc_capture", "--standby", "--session-root", "x"];
         for gesture in main {
             argv.extend(["--hk-main", gesture]);
         }
         CliArgs::try_parse_from(argv).unwrap()
     }
 
-    /// Granting Accessibility to a running Clowd makes the hotkeys work at
+    /// Granting Accessibility to a running Prisc makes the hotkeys work at
     /// the next retry, without a restart, and a pause sent while the hook was
     /// down holds on the hook that comes up.
     #[cfg(target_os = "macos")]
@@ -1171,7 +1171,7 @@ mod tests {
         for (k, reason) in [
             "the event tap kept timing out",
             "the event tap was invalidated",
-            clowd_hotkeys::REVOKED_REASON,
+            prisc_hotkeys::REVOKED_REASON,
         ]
         .into_iter()
         .enumerate()

@@ -95,7 +95,7 @@ fn build_macos() {
 
     // Stage the prebuilt dependency dylibs (FFmpeg, x264, rist/srt, mbedtls,
     // ...) beside the binaries, the way build_windows() stages the DLLs.
-    // OUT_DIR = target[/<triple>]/{debug,release}/build/obs-express-<hash>/out
+    // OUT_DIR = target[/<triple>]/{debug,release}/build/prisc_recorder-<hash>/out
     if let Some(ref deps) = deps_lib {
         let profile_dir = Path::new(&out_dir)
             .ancestors()
@@ -108,11 +108,11 @@ fn build_macos() {
 /// Copy every top-level `*.dylib` in the obs-deps `lib` dir into the cargo
 /// profile dir and make each one self-resolving.
 ///
-/// obs-express itself does not need this: it carries absolute rpaths into
+/// prisc_recorder itself does not need this: it carries absolute rpaths into
 /// `.deps`. Two things do:
 ///
 /// - Parity with Windows, where the profile dir holds a complete FFmpeg runtime
-///   next to the executable. A consumer that links or `dlopen`s FFmpeg (Clowd
+///   next to the executable. A consumer that links or `dlopen`s FFmpeg (Prisc
 ///   does) can then probe `target/{debug,release}` on both platforms instead of
 ///   reaching into `obs-studio/.deps/obs-deps-*/lib` and pinning its layout.
 /// - The CI Stage step ships *these* copies (not the raw `.deps` files), so the
@@ -135,7 +135,7 @@ fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
         Ok(e) => e,
         Err(e) => {
             println!(
-                "cargo:warning=obs-express: cannot read {}: {e}",
+                "cargo:warning=prisc_recorder: cannot read {}: {e}",
                 deps_lib.display()
             );
             return;
@@ -165,7 +165,7 @@ fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
             let _ = fs::remove_file(&dst);
             if let Err(e) = symlink(&target, &dst) {
                 println!(
-                    "cargo:warning=obs-express: failed to symlink {} -> {}: {e}",
+                    "cargo:warning=prisc_recorder: failed to symlink {} -> {}: {e}",
                     dst.display(),
                     target.display()
                 );
@@ -195,7 +195,7 @@ fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
         let _ = fs::remove_file(&dst);
         if let Err(e) = fs::copy(&src, &dst) {
             println!(
-                "cargo:warning=obs-express: failed to copy {} -> {}: {e}",
+                "cargo:warning=prisc_recorder: failed to copy {} -> {}: {e}",
                 src.display(),
                 dst.display()
             );
@@ -251,34 +251,34 @@ fn run_checked(cmd: &str, args: &[&str], benign: &[&str]) -> bool {
                 return true;
             }
             println!(
-                "cargo:warning=obs-express: `{cmd} {}` failed: {}",
+                "cargo:warning=prisc_recorder: `{cmd} {}` failed: {}",
                 args.join(" "),
                 stderr.trim()
             );
             false
         }
         Err(e) => {
-            println!("cargo:warning=obs-express: failed to run {cmd}: {e}");
+            println!("cargo:warning=prisc_recorder: failed to run {cmd}: {e}");
             false
         }
     }
 }
 
 fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    obs_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
+    prisc_build_support::obs_deps_bundles(&repo_root.join("obs-studio"))
         .into_iter()
         .map(|dir| dir.join("lib"))
         .find(|lib| lib.exists())
 }
 
 // ---------------------------------------------------------------------------
-// Windows (assemble a self-contained runtime next to obs-express.exe)
+// Windows (assemble a self-contained runtime next to prisc_recorder.exe)
 // ---------------------------------------------------------------------------
 
 fn build_windows() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // OUT_DIR = target/{debug,release}/build/obs-express-<hash>/out
-    // ancestors: [0]=out [1]=obs-express-<hash> [2]=build [3]={debug,release}
+    // OUT_DIR = target/{debug,release}/build/prisc_recorder-<hash>/out
+    // ancestors: [0]=out [1]=prisc_recorder-<hash> [2]=build [3]={debug,release}
     let profile_dir = out_dir
         .ancestors()
         .nth(3)
@@ -302,7 +302,7 @@ fn build_windows() {
 
     // bin/64bit/* (dll + exe) -> profile dir. Gives obs.dll, w32-pthreads.dll,
     // libobs-d3d11.dll, libobs-winrt.dll, obs-ffmpeg-mux.exe and the three
-    // obs-*-test.exe probes — all must sit next to obs-express.exe.
+    // obs-*-test.exe probes — all must sit next to prisc_recorder.exe.
     copy_dir_filtered(
         &rundir.join("bin").join("64bit"),
         &profile_dir,
@@ -341,7 +341,7 @@ fn build_windows() {
             copy_if_newer(&src, &profile_dir.join(name));
         } else {
             println!(
-                "cargo:warning=obs-express: deps DLL not found: {}",
+                "cargo:warning=prisc_recorder: deps DLL not found: {}",
                 src.display()
             );
         }
@@ -370,7 +370,7 @@ fn copy_if_newer(src: &Path, dst: &Path) {
         }
         if let Err(e) = fs::copy(src, dst) {
             println!(
-                "cargo:warning=obs-express: failed to copy {} -> {}: {e}",
+                "cargo:warning=prisc_recorder: failed to copy {} -> {}: {e}",
                 src.display(),
                 dst.display()
             );
@@ -384,7 +384,7 @@ fn copy_dir_filtered(src_dir: &Path, dst_dir: &Path, exts: &[&str]) {
         Ok(e) => e,
         Err(_) => {
             println!(
-                "cargo:warning=obs-express: missing dir {}",
+                "cargo:warning=prisc_recorder: missing dir {}",
                 src_dir.display()
             );
             return;
@@ -414,7 +414,7 @@ fn copy_dir_all(src_dir: &Path, dst_dir: &Path) {
         Ok(e) => e,
         Err(_) => {
             println!(
-                "cargo:warning=obs-express: missing dir {}",
+                "cargo:warning=prisc_recorder: missing dir {}",
                 src_dir.display()
             );
             return;
@@ -434,7 +434,7 @@ fn copy_dir_all(src_dir: &Path, dst_dir: &Path) {
 }
 
 // ---------------------------------------------------------------------------
-// Linux (assemble a self-contained, relocatable runtime next to obs-express)
+// Linux (assemble a self-contained, relocatable runtime next to prisc_recorder)
 // ---------------------------------------------------------------------------
 
 /// Stages the OBS runtime into the cargo profile dir, mirroring
@@ -442,7 +442,7 @@ fn copy_dir_all(src_dir: &Path, dst_dir: &Path) {
 /// the release archive ships:
 ///
 /// ```text
-/// obs-express, obs-ffmpeg-mux, vid2gif
+/// prisc_recorder, obs-ffmpeg-mux, prisc_vid2gif
 /// libobs.so.30, libobs-opengl.so.30        RUNPATH $ORIGIN
 /// libavcodec.so.62, ... (FFmpeg)           RUNPATH $ORIGIN
 /// obs-plugins/<plugin>.so                  RUNPATH $ORIGIN/..
@@ -463,10 +463,10 @@ fn copy_dir_all(src_dir: &Path, dst_dir: &Path) {
 /// development link nor the legacy libobs.so.0 copy): the loader asks for
 /// nothing else, and plain files survive any archive format.
 fn build_linux() {
-    use obs_build_support::linux::{self, FfmpegBundle};
+    use prisc_build_support::linux::{self, FfmpegBundle};
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // OUT_DIR = target/{debug,release}/build/obs-express-<hash>/out
+    // OUT_DIR = target/{debug,release}/build/prisc_recorder-<hash>/out
     let profile_dir = out_dir
         .ancestors()
         .nth(3)
@@ -509,7 +509,7 @@ fn build_linux() {
     }
 
     // Located by libobs as <dir of /proc/self/exe>/obs-ffmpeg-mux, so it must
-    // sit next to obs-express, exactly as on Windows.
+    // sit next to prisc_recorder, exactly as on Windows.
     let mux = rundir.join("bin").join("obs-ffmpeg-mux");
     assert!(mux.exists(), "OBS build output missing: {}", mux.display());
     linux::stage_with_runpath(&mux, &profile_dir.join("obs-ffmpeg-mux"), "$ORIGIN");

@@ -5,10 +5,10 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.Upload.Accelerate;
+using Prisc.Upload.Accelerate;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class SigV4PresignerTests
     {

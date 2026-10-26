@@ -21,23 +21,23 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.Config;
-using Clowd.Drawing;
-using Clowd.UI.Controls;
-using Clowd.UI.Helpers;
-using Clowd.UI.Services;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
-using Clowd.Util;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.UI.Controls;
+using Prisc.UI.Helpers;
+using Prisc.UI.Services;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
+using Prisc.Util;
 using Path = System.IO.Path;
-using Project = Clowd.VideoSDK.Model.Project;
+using Project = Prisc.VideoSDK.Model.Project;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// The video editor window: in-process preview of a recording composed by the SDK
@@ -394,7 +394,7 @@ namespace Clowd.UI.VideoEditor
         /// video player with a notice when in-process playback is unavailable.</summary>
         public static void ShowSession(SessionInfo session) => ShowSession(session, restoring: false);
 
-        /// <summary>Reopens an editor that was still open when Clowd last went down without the
+        /// <summary>Reopens an editor that was still open when Prisc last went down without the
         /// user closing it (see <see cref="App.KeepOpenEditorsOnExit"/>) — in the background, like
         /// the image editor's restored windows. The stale marker is dropped first: an editor that
         /// does open writes a fresh one, and one that can no longer open (recording gone, video
@@ -1686,7 +1686,7 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>The letterbox checker behind the preview, tinted for the surround it shows
         /// through — white over the dark one, black over the light. The image editor's canvas does
-        /// the same thing in Clowd.Drawing.CheckeredBackground, for the same reason: the brush
+        /// the same thing in Prisc.Drawing.CheckeredBackground, for the same reason: the brush
         /// cannot be stated once in the markup because it depends on the variant.</summary>
         private void ApplyPreviewChecker()
         {
@@ -2554,7 +2554,7 @@ namespace Clowd.UI.VideoEditor
             var outputPath = String.IsNullOrEmpty(request.OutputPath)
                 ? VideoRenderManager.GetOutputPath(_videoPath, request.Container)
                 : request.OutputPath;
-            var workDir = Path.Combine(Path.GetTempPath(), "clowd-video-edit-" + Guid.NewGuid().ToString("N"));
+            var workDir = Path.Combine(Path.GetTempPath(), "prisc-video-edit-" + Guid.NewGuid().ToString("N"));
 
             try
             {
@@ -2563,7 +2563,7 @@ namespace Clowd.UI.VideoEditor
                 var argsPath = ProjectFileWriter.Write(
                     Path.Combine(workDir, VideoRenderManager.RenderArgsFileName), project, outputPath,
                     RenderPresets.ClampCrf(request.Crf),
-                    request.HardwareEncoder ? Clowd.VideoSDK.Media.VideoEncoder.Auto : Clowd.VideoSDK.Media.VideoEncoder.Software,
+                    request.HardwareEncoder ? Prisc.VideoSDK.Media.VideoEncoder.Auto : Prisc.VideoSDK.Media.VideoEncoder.Software,
                     Math.Max(0, request.MaxHeight));
 
                 _devRunner = new VidRenderRunner();
@@ -2959,7 +2959,7 @@ namespace Clowd.UI.VideoEditor
         private void AspectRatio_PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
         {
             if (_syncingAspectRatio || _editor == null ||
-                e.Property != Clowd.UI.Controls.ThemedDropDown.SelectedItemProperty)
+                e.Property != Prisc.UI.Controls.ThemedDropDown.SelectedItemProperty)
                 return;
 
             if (e.GetNewValue<object>() is not AspectRatioOption option)
@@ -3078,7 +3078,7 @@ namespace Clowd.UI.VideoEditor
         private void SyncSessionName()
         {
             txtSessionName.Text = !String.IsNullOrEmpty(_session?.Name) ? _session.Name : _fallbackSessionName;
-            Title = $"{txtSessionName.Text} - Clowd";
+            Title = $"{txtSessionName.Text} - Prisc";
             ToolTip.SetTip(btnRename, _session?.RenameTooltip);
         }
 

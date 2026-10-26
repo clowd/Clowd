@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Avalonia;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     /// <summary>
     /// The eraser (draw on screen only): the pointer tool's hover and marquee, but what it lands

@@ -7,9 +7,9 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.UI.Converters;
+using Prisc.UI.Converters;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The color dialog's OKLCH tab: oklch.com's controls in four equal quadrants. The first holds

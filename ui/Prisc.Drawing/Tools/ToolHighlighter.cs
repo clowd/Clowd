@@ -1,9 +1,9 @@
 using System;
 using Avalonia;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Ink;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Ink;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     /// <summary>
     /// The highlighter: the brush's gesture, laying down a <see cref="GraphicHighlighter"/> stroke

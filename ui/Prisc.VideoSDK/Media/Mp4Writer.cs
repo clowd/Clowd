@@ -1,7 +1,7 @@
 using System;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>Options for <see cref="Mp4Writer"/>. Width/Height are the output canvas (must be
     /// even — 4:2:0 chroma), FpsNum/FpsDen the constant output rate.</summary>
@@ -119,7 +119,7 @@ namespace Clowd.VideoSDK.Media
     /// </summary>
     public sealed unsafe class Mp4Writer : IDisposable
     {
-        /// <summary>AAC bitrate, bits/s — the recorder's 192 kbps (obs-express
+        /// <summary>AAC bitrate, bits/s — the recorder's 192 kbps (prisc_recorder
         /// <c>AUDIO_BITRATE_KBPS</c>), up from the 160 kb/s render.rs used.</summary>
         public const int AudioBitRate = 192_000;
 

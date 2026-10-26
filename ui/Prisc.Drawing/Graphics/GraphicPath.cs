@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>
     /// A bezier path drawn with the pen tool: a run of <see cref="PathAnchor"/>s, each with two

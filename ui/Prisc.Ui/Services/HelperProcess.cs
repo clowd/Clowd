@@ -5,20 +5,20 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The semantics-free plumbing every helper-binary driver in this app repeats: build the
     /// <see cref="ProcessStartInfo"/>, spawn, join the stdio pumps at the end, and hand the child
-    /// the right to take the foreground. obs-express, vid2gif, clowd_scroll_driver, clowd_ai and
-    /// clowd_share_region all spawn a redirected console child in exactly the same way, and the
+    /// the right to take the foreground. prisc_recorder, prisc_vid2gif, prisc_scroll_driver, prisc_ai and
+    /// prisc_share_region all spawn a redirected console child in exactly the same way, and the
     /// differences between their copies of that code have historically been bugs rather than
     /// intent (a missing <c>AutoFlush</c>, a missing UTF-8 encoding, a missing working directory).
     /// <para>
     /// NOTHING HERE MAY INTERPRET A PROTOCOL LINE. In particular, <see cref="ObsCapturer"/>'s rule
-    /// that "an exit without a terminal message is fatal" is a rule of the *obs-express* protocol
+    /// that "an exit without a terminal message is fatal" is a rule of the *prisc_recorder* protocol
     /// (DESIGN §1.4), not a rule of child processes in general, and it must never migrate into this
-    /// file: clowd_share_region deliberately exits 0 with no terminal message once a share ends, so
+    /// file: prisc_share_region deliberately exits 0 with no terminal message once a share ends, so
     /// a driver that inherited that rule from shared code would report every normal share session
     /// as a crash. Each driver keeps its own protocol; this class only keeps the pipes.
     /// </para>
@@ -35,7 +35,7 @@ namespace Clowd.UI
         /// folder because these helpers load native libraries (libobs, FFmpeg, ONNX Runtime) that
         /// ship beside them. All three streams are redirected even when a driver never intends to
         /// read stderr or write stdin: an *unredirected* stdout inherits the parent's, which for a
-        /// GUI-subsystem Clowd.Ui is nothing at all, and every JSON line the helper writes would be
+        /// GUI-subsystem Prisc.Ui is nothing at all, and every JSON line the helper writes would be
         /// silently discarded — and a redirected-but-undrained stream eventually blocks the child on
         /// a full pipe, which is why callers must pump both output streams for the child's lifetime.
         /// </para>
@@ -118,12 +118,12 @@ namespace Clowd.UI
 
         /// <summary>
         /// Grants <paramref name="proc"/> the right to call <c>SetForegroundWindow</c>, for helpers
-        /// that put a window of their own on screen (clowd_share_region's "share this window"
-        /// prompt, clowd_scroll_driver's target activation).
+        /// that put a window of their own on screen (prisc_share_region's "share this window"
+        /// prompt, prisc_scroll_driver's target activation).
         /// <para>
         /// Windows refuses a freshly spawned process the foreground by default; this hands it our
         /// own foreground rights. Strictly best-effort: it only works while *we* still hold those
-        /// rights (so the caller should spawn while Clowd.Ui is the foreground app), it is a no-op
+        /// rights (so the caller should spawn while Prisc.Ui is the foreground app), it is a no-op
         /// on every other platform, and every helper carries on without it — its window simply
         /// blinks in the taskbar instead of coming to the front.
         /// </para>

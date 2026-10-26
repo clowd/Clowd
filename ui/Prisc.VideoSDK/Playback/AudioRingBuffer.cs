@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// Single-producer / single-consumer lock-free ring of float samples (~500ms of decoded

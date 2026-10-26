@@ -1,8 +1,8 @@
 using System.Linq;
-using Clowd.VideoSDK;
+using Prisc.VideoSDK;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class VideoEditDocumentTests
     {

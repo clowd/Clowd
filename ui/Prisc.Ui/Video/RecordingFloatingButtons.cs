@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Data;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.Localization;
-using Clowd.UI.Controls.Tray;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.Localization;
+using Prisc.UI.Controls.Tray;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The floating recording strip: grip · FPS (target to cycle before, measured readout after) ·
@@ -241,7 +241,7 @@ namespace Clowd.UI
             UpdateFps();
         }
 
-        /// <summary>Drives the microphone / system-audio level bars from obs-express's 100 ms levels
+        /// <summary>Drives the microphone / system-audio level bars from the recorder's 100 ms levels
         /// feed (the page forwards <see cref="ObsLevels"/>). Peak dBFS; null means that source does not
         /// exist or the capturer was torn down — the bar empties rather than freezing.</summary>
         public void SetAudioLevels(double? micDb, double? spkDb)

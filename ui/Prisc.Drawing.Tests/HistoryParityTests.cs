@@ -6,10 +6,10 @@ using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Pins the history delta engine (final-design §B) against the retained JSON oracle:
@@ -24,7 +24,7 @@ namespace Clowd.Drawing.Tests
     {
         static HistoryParityTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static readonly FieldInfo PolyPointsField =
@@ -284,7 +284,7 @@ namespace Clowd.Drawing.Tests
                 default:
                     // never decoded in these tests (nothing renders and no obscure areas are added
                     // through the decode path), so a missing file is fine — paths are just fields
-                    return new GraphicImage(@"C:\clowd-fuzz-does-not-exist\image.png", RandRect(rng), default);
+                    return new GraphicImage(@"C:\prisc-fuzz-does-not-exist\image.png", RandRect(rng), default);
             }
         }
 
@@ -545,7 +545,7 @@ namespace Clowd.Drawing.Tests
         public void ObscuredShapeEdit_EmitsMemberAndItemPaths()
         {
             var canvas = new DrawingCanvas();
-            var img = new GraphicImage(@"C:\clowd-fuzz-does-not-exist\image.png", new Rect(0, 0, 50, 50), default);
+            var img = new GraphicImage(@"C:\prisc-fuzz-does-not-exist\image.png", new Rect(0, 0, 50, 50), default);
             img.ObscuredShapes = new[]
             {
                 new GraphicImage.ObscuredShape(new Point(0, 0), new Point(1, 0), new Point(1, 1), new Point(0, 1), 8),

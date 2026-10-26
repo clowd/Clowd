@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The wallpaper cards' body art: one <see cref="BackgroundSwatch"/> grid per (style, theme)

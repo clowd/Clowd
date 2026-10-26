@@ -9,7 +9,7 @@ using System.Reflection;
 using System.Resources;
 using Avalonia.Threading;
 
-namespace Clowd.Localization
+namespace Prisc.Localization
 {
     /// <summary>
     /// The single entry point for localized text.
@@ -227,7 +227,7 @@ namespace Clowd.Localization
 
         /// <summary>
         /// The languages this build can actually display: the neutral language compiled into
-        /// Clowd.Shared plus every satellite assembly shipped beside the executable. Discovered, not
+        /// Prisc.Shared plus every satellite assembly shipped beside the executable. Discovered, not
         /// hardcoded — dropping in a new <c>Strings.xx.resx</c> is all it takes for it to appear.
         /// </summary>
         public static IReadOnlyList<CultureInfo> GetAvailableLanguages()

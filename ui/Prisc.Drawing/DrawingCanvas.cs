@@ -14,14 +14,14 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Media.Immutable;
-using Clowd.Config;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.History;
-using Clowd.Drawing.Rendering;
-using Clowd.Drawing.Tools;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.History;
+using Prisc.Drawing.Rendering;
+using Prisc.Drawing.Tools;
+using Prisc.UI.Helpers;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     public class DrawingCanvas : Canvas
     {
@@ -1610,7 +1610,7 @@ namespace Clowd.Drawing
                     break;
                 }
                 case NotifyCollectionChangedAction.Move:
-                    // logical-only reorder; not used by Clowd
+                    // logical-only reorder; not used by Prisc
                     break;
                 default:
                     throw new NotSupportedException("Reset is not supported on the Children collection.");

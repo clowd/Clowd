@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Geometry2D
+namespace Prisc.Geometry2D
 {
     /// <summary>The Shift angle snap shared by every line-like handle (the image editor's
     /// <c>HelperFunctions.SnapPointToCommonAngle</c>).</summary>

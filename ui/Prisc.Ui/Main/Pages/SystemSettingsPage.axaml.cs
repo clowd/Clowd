@@ -5,11 +5,11 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI.Config;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.UI.Config;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Pages
+namespace Prisc.UI.Pages
 {
     public partial class SystemSettingsPage : UserControl
     {
@@ -108,9 +108,9 @@ namespace Clowd.UI.Pages
         // ---- Permissions group (macOS only) ----
 
         /// <summary>
-        /// The macOS privacy permissions Clowd depends on (issue #49): Screen Recording for capture,
+        /// The macOS privacy permissions Prisc depends on (issue #49): Screen Recording for capture,
         /// recording and the eyedropper, Accessibility for the global hotkeys. Neither is something
-        /// Clowd can grant itself, so this group's whole job is to say where each one stands and get
+        /// Prisc can grant itself, so this group's whole job is to say where each one stands and get
         /// the user to the right System Settings pane. It sits at the top of the page on macOS — an
         /// ungranted Screen Recording permission makes every other setting here moot.
         /// </summary>
@@ -203,7 +203,7 @@ namespace Clowd.UI.Pages
         /// A permission reading as missing again hands the state back to this method, so the rows are
         /// on screen whenever they matter even if the user had closed them earlier. That is also the
         /// state a fresh Screen Recording grant lands in: macOS only hands out that TCC answer at
-        /// launch, so the just granted permission still reads as missing here until Clowd restarts,
+        /// launch, so the just granted permission still reads as missing here until Prisc restarts,
         /// and the group keeps showing the restart hint rather than folding itself away under the
         /// user's cursor.
         /// </remarks>

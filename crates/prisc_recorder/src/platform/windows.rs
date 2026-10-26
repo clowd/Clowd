@@ -1,6 +1,6 @@
 //! Windows platform implementation (DESIGN §2.2) — the recorder-specific
 //! remainder: cursor/mouse sampling and audio/webcam helpers. The monitor /
-//! paths / display-capture layer moved to the shared `obs-platform` crate
+//! paths / display-capture layer moved to the shared `prisc_obs_platform` crate
 //! (SHARE_REGION_PLAN §4.3).
 
 use std::collections::HashMap;
@@ -8,7 +8,7 @@ use std::ffi::c_void;
 use std::mem;
 use std::sync::{Mutex, OnceLock};
 
-use obs::data::ObsData;
+use prisc_obs::data::ObsData;
 use windows::core::{w, BOOL, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{
@@ -711,7 +711,7 @@ const MIN_WINDOW_SIZE: i32 = 25;
 /// Window classes that are never a real application window: the desktop
 /// itself, the shell chrome, and the immersive-shell surfaces (Start, Search,
 /// taskbar hover previews) that come and go while a recording runs. Ported
-/// wholesale from Clowd's `win_walker.rs` — each entry is there because it
+/// wholesale from Prisc's `win_walker.rs` — each entry is there because it
 /// showed up as a phantom window in practice. Kept sorted for `binary_search`
 /// (ASCII case-sensitive).
 const BLACKLISTED_CLASSES: &[&str] = &[
@@ -726,7 +726,7 @@ const BLACKLISTED_CLASSES: &[&str] = &[
     "NativeHWNDHost",
     "Progman",
     "SearchPane",
-    // NB: `Shell_Dialog` sorts before `Shell_Dim` ('a' < 'm'). Clowd's
+    // NB: `Shell_Dialog` sorts before `Shell_Dim` ('a' < 'm'). Prisc's
     // win_walker.rs has these two transposed, which makes its own
     // `binary_search` miss `Shell_Dim` entirely — the sortedness test below
     // exists so this copy cannot drift the same way.
@@ -880,7 +880,7 @@ fn true_bounds(hwnd: HWND) -> Option<RECT> {
 /// Classifies one top-level window, returning `None` for everything that is
 /// not a real, visible application window.
 ///
-/// The filter set is ported from Clowd's `win_walker.rs`, whose ordering and
+/// The filter set is ported from Prisc's `win_walker.rs`, whose ordering and
 /// membership are load-bearing: `IsWindowVisible && !IsIconic && !cloaked`
 /// alone admits a large population of windows that draw nothing a user would
 /// call a window — transparent full-screen overlays, popup menus, IME hosts,

@@ -6,17 +6,17 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Avalonia;
-using Clowd.UI.Preview;
-using Clowd.UI.Preview.Icons;
+using Prisc.UI.Preview;
+using Prisc.UI.Preview.Icons;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The covering test for the shipped file-type icon set and the lettered page generated beside
-    /// it. Clowd.Ui has no test project of its own, so the asset-integrity checks live here — this
-    /// project already references Clowd.Ui for the timeline math suites, which is what makes
+    /// it. Prisc.Ui has no test project of its own, so the asset-integrity checks live here — this
+    /// project already references Prisc.Ui for the timeline math suites, which is what makes
     /// <see cref="MiniSvg"/>, <see cref="FileIconCatalog"/> and <see cref="FileIconRenderer"/>
     /// reachable at all.
     ///
@@ -134,7 +134,7 @@ namespace Clowd.VideoSDK.Tests
         private static readonly Lazy<string> _iconDir = new Lazy<string>(FindIconDir);
 
         /// <summary>
-        /// Walks up from the test binary to <c>clowd_ui/Clowd.Ui/Assets/FileIcons</c>. The same
+        /// Walks up from the test binary to <c>ui/Prisc.Ui/Assets/FileIcons</c>. The same
         /// find-the-checkout walk <see cref="TestFFmpeg"/> and the AI-sidecar suites use, for the
         /// same reason: the test binary's own directory is several configurations deep and its
         /// depth changes with the TFM.
@@ -144,14 +144,14 @@ namespace Clowd.VideoSDK.Tests
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
-                string candidate = Path.Combine(dir.FullName, "clowd_ui", "Clowd.Ui", "Assets", "FileIcons");
+                string candidate = Path.Combine(dir.FullName, "ui", "Prisc.Ui", "Assets", "FileIcons");
                 if (Directory.Exists(candidate))
                     return candidate;
                 dir = dir.Parent;
             }
 
             throw new DirectoryNotFoundException(
-                "Could not find clowd_ui/Clowd.Ui/Assets/FileIcons by walking up from " +
+                "Could not find ui/Prisc.Ui/Assets/FileIcons by walking up from " +
                 AppContext.BaseDirectory + "; the asset-integrity tests read the shipped art off " +
                 "the repo tree rather than out of the built resources.");
         }

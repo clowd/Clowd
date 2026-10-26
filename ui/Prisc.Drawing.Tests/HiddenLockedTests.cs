@@ -5,11 +5,11 @@ using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Tools;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Tools;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Covers the opt-in Hidden/Locked flags on <see cref="GraphicBase"/> and the
@@ -27,7 +27,7 @@ namespace Clowd.Drawing.Tests
     {
         static HiddenLockedTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static GraphicRectangle Rect(double x, double y, double w, double h, Color? color = null) =>

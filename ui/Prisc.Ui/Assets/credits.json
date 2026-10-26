@@ -150,18 +150,6 @@
           "url": "https://github.com/clap-rs/clap"
         },
         {
-          "name": "clowd_hotkeys",
-          "version": "1.0.0",
-          "license": "MIT",
-          "url": "https://github.com/clowd/Clowd"
-        },
-        {
-          "name": "clowd_rust_core",
-          "version": "1.0.0",
-          "license": "MIT",
-          "url": "https://github.com/clowd/Clowd"
-        },
-        {
           "name": "core-foundation",
           "version": "0.10.1",
           "license": "MIT OR Apache-2.0",
@@ -202,6 +190,12 @@
           "version": "0.22.14",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/servo/euclid"
+        },
+        {
+          "name": "FFmpeg",
+          "version": "",
+          "license": "GPL-2.0-or-later",
+          "url": "https://ffmpeg.org"
         },
         {
           "name": "fontdb",
@@ -294,6 +288,12 @@
           "url": "https://github.com/madsmtm/objc2"
         },
         {
+          "name": "OBS Studio",
+          "version": "",
+          "license": "GPL-2.0-or-later",
+          "url": "https://github.com/obsproject/obs-studio"
+        },
+        {
           "name": "ONNX Runtime",
           "version": "",
           "license": "MIT",
@@ -376,6 +376,12 @@
           "version": "0.30.13",
           "license": "Apache-2.0",
           "url": "https://github.com/rust-windowing/winit"
+        },
+        {
+          "name": "x264",
+          "version": "",
+          "license": "GPL-2.0",
+          "url": "https://www.videolan.org/developers/x264.html"
         },
         {
           "name": "xdialog",

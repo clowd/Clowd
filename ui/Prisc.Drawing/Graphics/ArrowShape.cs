@@ -2,10 +2,10 @@ using System;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
-using Clowd.Drawing.Rendering;
-using Clowd.Geometry2D;
+using Prisc.Drawing.Rendering;
+using Prisc.Geometry2D;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>
     /// The arrow look shared by <see cref="GraphicArrow"/> and the numeric step badge's pointer: a

@@ -1,8 +1,8 @@
 <Window
-    x:Class="Clowd.UI.VideoEditor.CustomResolutionDialog"
+    x:Class="Prisc.UI.VideoEditor.CustomResolutionDialog"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Clowd.UI.Controls"
+    xmlns:controls="using:Prisc.UI.Controls"
     Title="Custom resolution"
     Width="400"
     Background="{DynamicResource ApplicationBackgroundBrush}"

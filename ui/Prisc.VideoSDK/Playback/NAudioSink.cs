@@ -1,8 +1,8 @@
 using System;
 using System.Threading;
-using Clowd.VideoSDK.Audio;
+using Prisc.VideoSDK.Audio;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// Drains the decode ring into the platform audio output (<see cref="IAudioOutput"/>), and is

@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     // Markers that say something about a settings row in general rather than about one section's
     // subject matter, which is why they live here instead of beside whichever settings class first
@@ -14,7 +14,7 @@ namespace Clowd.Config
     /// Hides a settings row from the generated settings UI on macOS. The property still persists
     /// and is still applied where the platform honors it — used for the speaker device picker,
     /// which selects nothing on macOS: ScreenCaptureKit captures the whole system mix, so there
-    /// is no output device to choose (obs-express ignores the id on macOS 13+).
+    /// is no output device to choose (prisc_recorder ignores the id on macOS 13+).
     /// </summary>
     [AttributeUsage(AttributeTargets.Property)]
     public class HiddenOnMacOSAttribute : Attribute

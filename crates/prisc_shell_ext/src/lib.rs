@@ -1,7 +1,7 @@
-// Win11 "Upload with Clowd" modern context-menu handler: an IExplorerCommand COM
-// server registered through a sparse MSIX package (see clowd_shell_ext/msix). The
+// Win11 "Upload with Prisc" modern context-menu handler: an IExplorerCommand COM
+// server registered through a sparse MSIX package (see crates/prisc_shell_ext/msix). The
 // DLL is loaded into dllhost.exe, so it does the absolute minimum — resolve
-// Clowd.Ui.exe relative to its own location and spawn it with the selected paths.
+// Prisc.Ui.exe relative to its own location and spawn it with the selected paths.
 // No logging, telemetry, or network in here.
 
 // invoke's callers are all behind cfg(windows); elsewhere the module only exists

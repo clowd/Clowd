@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>One span of a <see cref="TimeWarp"/>: a half-open project-time interval mapped
     /// onto a half-open output-time interval, either at a constant speed or through an eased

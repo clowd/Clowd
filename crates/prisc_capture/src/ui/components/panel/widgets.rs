@@ -318,7 +318,7 @@ pub fn emblem(ui: &mut Ui, slot: Vec2) -> egui::Rect {
     let mark = Vec2::splat(tokens::EMBLEM_MARK);
     // `paint_at` rounds its rect to whole pixels and asks the loader for
     // exactly that many, so the mark is 1:1 at every DPI.
-    Image::new(assets::CLOWD_LOGO.source())
+    Image::new(assets::PRISC_LOGO.source())
         .fit_to_exact_size(mark)
         .show_loading_spinner(false)
         .paint_at(ui, egui::Rect::from_center_size(rect.center(), mark));

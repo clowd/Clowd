@@ -1,6 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:controls="using:Clowd.UI.Controls">
+        xmlns:controls="using:Prisc.UI.Controls">
 
     <!-- The selector adds this file to its own Styles collection (the CollapsingSegmentedBar
          pattern), so the banner's chrome travels with the control rather than with whichever page
@@ -17,7 +17,7 @@
         <!-- The glow's falloff, as a mask over an accent-filled square: GradientStop colors cannot
              take a DynamicResource, but a mask only reads alpha, so the accent stays a brush on
              the square and this one never has to change. 30% at the center, gone by the edge. -->
-        <RadialGradientBrush x:Key="ClowdModeGlowMask"
+        <RadialGradientBrush x:Key="PriscModeGlowMask"
                              Center="50%,50%"
                              GradientOrigin="50%,50%"
                              RadiusX="50%"
@@ -34,7 +34,7 @@
              and without them the spill at each tile corner would be clipped away and the lines
              would show a notch every 13px. Source and destination are the same absolute rect, so
              the drawing is neither scaled nor re-fitted to its own bounds. -->
-        <DrawingBrush x:Key="ClowdModeHatchMask"
+        <DrawingBrush x:Key="PriscModeHatchMask"
                       TileMode="Tile"
                       Stretch="None"
                       SourceRect="0,0,13,13"
@@ -57,7 +57,7 @@
              what the dark theme's darkened accent is made for); the checked *Off* chip is ink
              instead — the text color as a fill with the window's ground as its label — so
              switching a feature off never wears the accent. -->
-        <ControlTheme x:Key="ClowdModeChip" TargetType="RadioButton">
+        <ControlTheme x:Key="PriscModeChip" TargetType="RadioButton">
             <Setter Property="Padding" Value="14,6" />
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="MinHeight" Value="0" />
@@ -131,7 +131,7 @@
          is texture saying "inactive", not a pattern to look at. -->
     <Style Selector="controls|ModeSelector Rectangle.ModeHatch">
         <Setter Property="Fill" Value="{DynamicResource SemiColorText2}" />
-        <Setter Property="OpacityMask" Value="{StaticResource ClowdModeHatchMask}" />
+        <Setter Property="OpacityMask" Value="{StaticResource PriscModeHatchMask}" />
         <Setter Property="Opacity" Value="0.22" />
     </Style>
 
@@ -157,14 +157,14 @@
     <!-- Running: the soft accent glow behind the icon, top-left. -->
     <Style Selector="controls|ModeSelector Border.ModeGlow">
         <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
-        <Setter Property="OpacityMask" Value="{StaticResource ClowdModeGlowMask}" />
+        <Setter Property="OpacityMask" Value="{StaticResource PriscModeGlowMask}" />
     </Style>
 
     <!-- Running: the accent outline, at 55% over the card's own border. A line on a surface, so
-         ClowdAccentTextBrush — the lifted accent in the dark theme, where the fill accent would
+         PriscAccentTextBrush — the lifted accent in the dark theme, where the fill accent would
          sink into the ground. -->
     <Style Selector="controls|ModeSelector Border.ModeRing">
-        <Setter Property="BorderBrush" Value="{DynamicResource ClowdAccentTextBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PriscAccentTextBrush}" />
         <Setter Property="Opacity" Value="0.55" />
     </Style>
 
@@ -245,7 +245,7 @@
     </Style>
 
     <Style Selector="controls|ModeSelector RadioButton.ModeChip">
-        <Setter Property="Theme" Value="{StaticResource ClowdModeChip}" />
+        <Setter Property="Theme" Value="{StaticResource PriscModeChip}" />
         <!-- A style rather than a theme setter: a FocusAdorner set app-wide by a style would
              outrank the theme. Drawn just outside the pill (the group's 4px padding leaves room),
              in the theme's focus-ring color. -->

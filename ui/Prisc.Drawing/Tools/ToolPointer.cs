@@ -5,10 +5,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     internal class ToolPointer : ToolBase
     {

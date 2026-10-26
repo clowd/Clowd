@@ -1,13 +1,13 @@
 using System;
-using Clowd.UI.Controls;
+using Prisc.UI.Controls;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // WheelNotchAccumulator is what stands between a trackpad and the properties bar's numeric
     // spinners: it pools fractional wheel deltas until a whole notch has accrued. Pure arithmetic —
     // no Avalonia, no control instance — so the pooling rule is testable without a UI thread
-    // (Clowd.Ui exposes its internals here via InternalsVisibleTo).
+    // (Prisc.Ui exposes its internals here via InternalsVisibleTo).
     public class WheelNotchAccumulatorTests
     {
         [Fact]

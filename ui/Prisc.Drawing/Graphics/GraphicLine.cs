@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing.Rendering;
-using Clowd.Geometry2D;
+using Prisc.Drawing.Rendering;
+using Prisc.Geometry2D;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     [GraphicDesc("Line", Skills = Skill.Stroke | Skill.Color | Skill.DashStyle)]
     public class GraphicLine : GraphicBase

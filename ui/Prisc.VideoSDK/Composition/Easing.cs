@@ -1,7 +1,7 @@
 using System;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Maps a linear progress value in [0,1] through a <see cref="TransitionEasing"/> curve.

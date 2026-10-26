@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The render path's <see cref="IFrameSource"/>: forward decode, no playback machinery. Each

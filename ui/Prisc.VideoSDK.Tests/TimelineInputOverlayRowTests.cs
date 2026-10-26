@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The timeline's input-capture rows: how the layout classifies them, how it pins each one
     // directly above its own screen row whatever the track Order says, and how the reorder math
     // keeps them (and the boundaries either side of them) out of every drag — against the same
-    // EditorSession refusals the drop would hit. Pure model math, no Avalonia runtime — Clowd.Ui
+    // EditorSession refusals the drop would hit. Pure model math, no Avalonia runtime — Prisc.Ui
     // exposes its internals to this project via InternalsVisibleTo.
     public class TimelineInputOverlayRowTests
     {

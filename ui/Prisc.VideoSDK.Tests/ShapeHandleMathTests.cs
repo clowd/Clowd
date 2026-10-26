@@ -1,16 +1,16 @@
 using System;
 using System.Linq;
 using System.Text.Json;
-using Clowd.Geometry2D;
-using Clowd.UI.VideoEditor;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.Geometry2D;
+using Prisc.UI.VideoEditor;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using Xunit;
-using ModelTransform = Clowd.VideoSDK.Model.Transform;
+using ModelTransform = Prisc.VideoSDK.Model.Transform;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The preview's line handles (<see cref="ShapeHandleMath"/>, <see cref="ShapeHandleDrag"/>):

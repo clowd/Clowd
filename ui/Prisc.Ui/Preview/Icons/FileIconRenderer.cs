@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using Avalonia.Platform;
 using SkiaSharp;
 
-namespace Clowd.UI.Preview.Icons
+namespace Prisc.UI.Preview.Icons
 {
     /// <summary>
     /// Turns an icon tag into pixels: either one of the shipped icons8 "fluent" SVGs under

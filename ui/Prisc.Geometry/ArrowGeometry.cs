@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Geometry2D
+namespace Prisc.Geometry2D
 {
     /// <summary>How an arrow's shaft is drawn.</summary>
     public enum ArrowShaftKind

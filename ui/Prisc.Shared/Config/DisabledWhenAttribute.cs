@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Grays out a settings row in the generated settings UI while another bool property on the

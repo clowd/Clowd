@@ -10,7 +10,7 @@ use core_graphics::window::{
 };
 
 use crate::system::MonitorInfo;
-use clowd_rust_core::geometry::ScreenRect;
+use prisc_rust_core::geometry::ScreenRect;
 
 pub struct DesktopBitmap {
     pub bgra: Vec<u8>,

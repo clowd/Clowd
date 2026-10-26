@@ -1,13 +1,13 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Editing
+namespace Prisc.VideoSDK.Editing
 {
     /// <summary>
-    /// Writes the job file <c>Clowd.VideoRender</c> takes: the v2 <see cref="Project"/> itself, plus
+    /// Writes the job file <c>Prisc.VideoRender</c> takes: the v2 <see cref="Project"/> itself, plus
     /// the four things the model deliberately does not carry — the file the render is written to,
     /// the encoder quality it is written at, which H.264 encoder writes it, and the encode-time cap
     /// on the output height — as siblings of the project's own properties.
@@ -30,7 +30,7 @@ namespace Clowd.VideoSDK.Editing
         public const string EncoderProperty = "encoder";
 
         /// <summary>Sibling property carrying the encode-time cap on the output height in pixels
-        /// (<see cref="Clowd.VideoSDK.Render.RenderJobOptions.MaxHeight"/>). Written only when
+        /// (<see cref="Prisc.VideoSDK.Render.RenderJobOptions.MaxHeight"/>). Written only when
         /// there is a cap: absent — like 0 — means the project's own canvas height.</summary>
         public const string MaxHeightProperty = "maxHeight";
 

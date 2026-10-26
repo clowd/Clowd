@@ -4,11 +4,11 @@ using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Rendering;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The pen path: handle numbering in three runs of n, hit-test priority (live handles beat
@@ -21,7 +21,7 @@ namespace Clowd.Drawing.Tests
     {
         static GraphicPathTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static readonly DpiScale Dpi = new DpiScale(1, 1);

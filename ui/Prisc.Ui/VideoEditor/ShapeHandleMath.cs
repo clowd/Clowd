@@ -1,10 +1,10 @@
 using System;
-using Clowd.Geometry2D;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
-using ModelTransform = Clowd.VideoSDK.Model.Transform;
+using Prisc.Geometry2D;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
+using ModelTransform = Prisc.VideoSDK.Model.Transform;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>What a press on a line kind lands on: one of the image editor's three line handles
     /// (start, end, and the bend handle riding the ink at t = 0.5), the ink itself, or nothing.</summary>

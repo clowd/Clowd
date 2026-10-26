@@ -1,9 +1,9 @@
 using System;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// OS hotkey backend used by <see cref="HotkeyManager"/>. The settings layer (Clowd.Shared)
+    /// OS hotkey backend used by <see cref="HotkeyManager"/>. The settings layer (Prisc.Shared)
     /// only stores gestures — all registration machinery lives in the UI layer.
     /// </summary>
     public interface IGlobalTriggerHost

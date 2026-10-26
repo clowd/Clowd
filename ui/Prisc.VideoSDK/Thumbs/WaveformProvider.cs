@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 
-namespace Clowd.VideoSDK.Thumbs
+namespace Prisc.VideoSDK.Thumbs
 {
     /// <summary>
     /// Waveforms for the timeline's audio rows: ask for a stream, get whatever peaks exist right
@@ -15,7 +15,7 @@ namespace Clowd.VideoSDK.Thumbs
     /// <para>
     /// <see cref="Changed"/> is raised on a thread-pool thread, coalesced to about 10 Hz: it
     /// carries no payload precisely because a consumer re-reads through
-    /// <see cref="GetOrStart"/>, so a raise can never be stale, only redundant. The Clowd.Ui
+    /// <see cref="GetOrStart"/>, so a raise can never be stale, only redundant. The Prisc.Ui
     /// adapter marshals it to the UI thread (the timeline's provider contract requires that).
     /// </para>
     ///

@@ -2,13 +2,13 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// How the shared region is obscured when the HIDE tile is on. Mirrors the three non-none modes
-    /// clowd_share_region's <c>obscure</c> command accepts; <c>none</c> is deliberately absent —
+    /// prisc_share_region's <c>obscure</c> command accepts; <c>none</c> is deliberately absent —
     /// that state is the toolbar tile being off, not a configuration. Mapped to
-    /// <c>Clowd.UI.ShareObscureMode</c> inside Clowd.Ui: the protocol enum lives in the Clowd.Ui
+    /// <c>Prisc.UI.ShareObscureMode</c> inside Prisc.Ui: the protocol enum lives in the Prisc.Ui
     /// assembly and the project reference is one-way, so this cannot reuse it.
     /// Declaration order is dropdown order, so the default goes first.
     /// </summary>
@@ -20,7 +20,7 @@ namespace Clowd.Config
     }
 
     /// <summary>
-    /// Settings for a shared region — the live mirror <c>clowd_share_region</c> puts on screen for a
+    /// Settings for a shared region — the live mirror <c>prisc_share_region</c> puts on screen for a
     /// meeting app to share.
     /// <para>Its own settings class, and its own page in the main window, rather than a section of
     /// <see cref="SettingsCapture"/>: a share is not a capture, nothing here is a property of the
@@ -48,7 +48,7 @@ namespace Clowd.Config
         public bool IsEnabled => Mode == ShareRegionMode.On;
 
         /// <summary>
-        /// Canvas frame rate of the mirror window, handed to <c>clowd_share_region --fps</c>.
+        /// Canvas frame rate of the mirror window, handed to <c>prisc_share_region --fps</c>.
         /// <para>Unlike the obscure settings below it this one is read at SPAWN time, because the
         /// frame rate is a property of the OBS canvas the helper builds during bootstrap and there
         /// is no stdin command to change it. Editing it therefore affects the NEXT shared region,
@@ -69,7 +69,7 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// Handed to <c>clowd_share_region --capture-method</c>. Spawn-time like <see cref="Fps"/>
+        /// Handed to <c>prisc_share_region --capture-method</c>. Spawn-time like <see cref="Fps"/>
         /// and for the same reason — it picks the capture source the helper builds during bootstrap
         /// — so its description carries the same warning about the next share rather than this one.
         /// </summary>

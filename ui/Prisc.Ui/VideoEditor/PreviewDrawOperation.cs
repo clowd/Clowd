@@ -4,12 +4,12 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using SkiaSharp;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// The preview's picture: <c>FrameComposer.Compose</c> straight onto Avalonia's own leased

@@ -1,7 +1,7 @@
 using System;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class CliArgsTests
     {

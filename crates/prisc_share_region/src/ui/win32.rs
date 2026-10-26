@@ -1,11 +1,11 @@
 //! Win32 UI: ONE window, two phases (ui/mod.rs "Lifecycle"), and the message
 //! loop that pumps it. There is no other window, no chrome and no painting
 //! beyond the prompt's own client area — the border and the floating controls
-//! around the live region belong to the Clowd shell that spawns this process,
+//! around the live region belong to the Prisc shell that spawns this process,
 //! and anything drawn here would land on top of them.
 //!
 //! Coordinates are capture space throughout, which on Windows is physical
-//! pixels on the virtual desktop: `obs_platform::init_process()` opted the
+//! pixels on the virtual desktop: `prisc_obs_platform::init_process()` opted the
 //! process into per-monitor-v2 DPI awareness before any window exists, so
 //! client px == screen px == capture units and no COORDINATE scaling happens
 //! anywhere in this file. The prompt's own measurements are the one exception
@@ -15,9 +15,9 @@
 //! which is where it is about to be. They stop mattering the instant the prompt is accepted, because from
 //! then on the window is a bare `WS_POPUP` sized to the region in capture px.
 //!
-//! Uses the `windows` crate (0.62) rather than obs-express's `windows-sys`.
+//! Uses the `windows` crate (0.62) rather than prisc_recorder's `windows-sys`.
 //! The window and the `App` state live for the whole process (exit only ever
-//! happens through `AppEvents::quit` → `obs_platform::exit_process`), which is
+//! happens through `AppEvents::quit` → `prisc_obs_platform::exit_process`), which is
 //! why the `Box<App>` is deliberately leaked and no window handle is ever
 //! destroyed or freed here. The only handle that is destroyed is the prompt's
 //! OK button, at the moment the prompt phase ends; GDI+ is started for the
@@ -71,7 +71,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_OVERLAPPED, WS_POPUP, WS_SYSMENU, WS_VISIBLE,
 };
 
-use obs_platform::region::Rect;
+use prisc_obs_platform::region::Rect;
 
 use crate::commands::Command;
 
@@ -148,7 +148,7 @@ const PROMPT_CLIENT_W: i32 = 460;
 const PROMPT_CLIENT_H: i32 = 188;
 
 /// Prompt metrics, all logical px scaled to the window's DPI by `layout_prompt`.
-/// The shape is Clowd's own message dialog (Clowd.Ui/Dialogs/MessageDialog):
+/// The shape is Prisc's own message dialog (Prisc.Ui/Dialogs/MessageDialog):
 /// text block on the window background, action button alone in a slightly
 /// lighter footer strip separated by a hairline.
 const PROMPT_PAD_X: i32 = 24;
@@ -170,13 +170,13 @@ const PROMPT_BTN_RADIUS: i32 = 5;
 // -- palette ----------------------------------------------------------------
 //
 // 0xRRGGBB, the order GDI+ wants once an opaque alpha is prepended (`argb`).
-// Taken from Clowd's own shell so the prompt reads as part of it:
-// clowd_ui/Clowd.Ui/Assets/AppResources.axaml — dark `ApplicationBackgroundColor`
-// #202020 and `ClowdAccentColor` #00AFF0. The rest are the Semi dark-theme
+// Taken from Prisc's own shell so the prompt reads as part of it:
+// ui/Prisc.Ui/Assets/AppResources.axaml — dark `ApplicationBackgroundColor`
+// #202020 and `PriscAccentColor` #00AFF0. The rest are the Semi dark-theme
 // relationships those two sit in: a fill one step up from the background for the
 // footer, a hairline one step above that, and text at full/60% strength.
 
-/// Window background — Clowd's dark `ApplicationBackgroundColor`.
+/// Window background — Prisc's dark `ApplicationBackgroundColor`.
 const CLR_BG: u32 = 0x202020;
 /// Footer strip: Semi's `SemiColorFill0` over the background (white at ~4%).
 const CLR_FOOTER: u32 = 0x282828;
@@ -292,7 +292,7 @@ struct App {
 
 fn fatal(what: &str) -> ! {
     eprintln!("Error: {what} failed");
-    obs_platform::exit_process(1);
+    prisc_obs_platform::exit_process(1);
 }
 
 // -- offscreen placement ----------------------------------------------------
@@ -378,13 +378,13 @@ unsafe fn park_offscreen(mirror: HWND, region: Rect, extra: SET_WINDOW_POS_FLAGS
 /// because a caption that is light for one frame and dark for the next is
 /// exactly the flash this is meant to avoid.
 ///
-/// Mica is what Clowd's own shell windows ask for
-/// (Clowd.Ui/SystemThemedWindow: Mica → AcrylicBlur → None). It reaches only
+/// Mica is what Prisc's own shell windows ask for
+/// (Prisc.Ui/SystemThemedWindow: Mica → AcrylicBlur → None). It reaches only
 /// the frame here, not the client area: making Mica show *through* the client
 /// area needs the frame extended across it and every pixel painted with a real
 /// alpha channel, which GDI text and GDI+'s ClearType path do not produce — the
 /// text would come out translucent. So the client stays the opaque
-/// `ApplicationBackgroundBrush` colour, which is what Clowd falls back to on
+/// `ApplicationBackgroundBrush` colour, which is what Prisc falls back to on
 /// compositors that grant neither material. Where Mica is refused (Win10, or a
 /// Win11 with transparency effects off) the caption and border are painted that
 /// same colour instead, so the window still reads as one dark shape rather than
@@ -1092,7 +1092,7 @@ unsafe fn strip_mirror_frame(mirror: HWND, region: Rect) {
 /// `sharing_started` line, which is only true once the display exists.
 ///
 /// What is deliberately absent: there is no mask window, no frame window, no
-/// Z-order work, and the window is never shown on screen again. Clowd draws
+/// Z-order work, and the window is never shown on screen again. Prisc draws
 /// everything the user sees around the live region.
 unsafe fn accept_prompt(app: *mut App) {
     if !(*app).prompt_active {
@@ -1112,7 +1112,7 @@ unsafe fn accept_prompt(app: *mut App) {
 
 /// Drains everything the stdin thread has queued and applies it, on the UI
 /// thread. Called from the WM_APP_COMMAND arm; the whole queue is drained per
-/// wake so a burst of `move`s (Clowd dragging its border) costs one message.
+/// wake so a burst of `move`s (Prisc dragging its border) costs one message.
 ///
 /// Every protocol line that answers a command is emitted HERE rather than
 /// inside the `AppEvents` implementation or on the reader thread, because this
@@ -1142,7 +1142,7 @@ unsafe fn drain_commands(app: *mut App) {
                         // to the stored region only; the window picks the size
                         // up at the OK transition, which reads `(*app).region`.
                         // The ack is still emitted, because the region genuinely
-                        // did change — Clowd repositions its border before the
+                        // did change — Prisc repositions its border before the
                         // user has pressed anything, and it needs the answer
                         // either way.
                         if !(*app).prompt_active {
@@ -1229,7 +1229,7 @@ unsafe extern "system" fn mirror_proc(
         // the origin is only ever recomputed when a `move` arrives, and between
         // two `move`s the desktop can grow over the parked window. A borderless,
         // region-sized window full of live mirrored content would then simply be
-        // on screen — over Clowd's own border and toolbar, and if it lands on a
+        // on screen — over Prisc's own border and toolbar, and if it lands on a
         // display the capture owns, feeding itself the infinite corridor the
         // parking exists to prevent.
         //
@@ -1372,7 +1372,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
             hbrBackground: HBRUSH::default(),
             lpszMenuName: PCWSTR::null(),
-            lpszClassName: w!("clowd_share_region_mirror"),
+            lpszClassName: w!("prisc_share_region_mirror"),
         };
         if RegisterClassW(&wc) == 0 {
             fatal("RegisterClassW");
@@ -1391,7 +1391,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
         let title_w: Vec<u16> = cfg.title.encode_utf16().chain(Some(0)).collect();
         let mirror = CreateWindowExW(
             MIRROR_EX_STYLE,
-            w!("clowd_share_region_mirror"),
+            w!("prisc_share_region_mirror"),
             PCWSTR(title_w.as_ptr()),
             MIRROR_STYLE,
             CW_USEDEFAULT,

@@ -4,7 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The rich tip behind a tool-strip button in either editor: a header naming the tool (with
@@ -12,7 +12,7 @@ namespace Clowd.UI.Controls
     /// it does (plus a bullet list of gestures for a tool with many), a short looping demo, and, when the button is disabled, the reason why along the
     /// bottom. Hosted as <c>ToolTip.Tip</c> content inside a
     /// <c>ToolTip</c> wearing the bare <c>RichTipToolTipTheme</c> (AppResources.axaml). The video
-    /// editor uses it through <see cref="Clowd.UI.VideoEditor.TrackTip"/>, which resolves the
+    /// editor uses it through <see cref="Prisc.UI.VideoEditor.TrackTip"/>, which resolves the
     /// demo by name; the image editor builds it in code (EditorWindow.CreateToolButton).
     /// </summary>
     public partial class ToolTipCard : UserControl
@@ -92,7 +92,7 @@ namespace Clowd.UI.Controls
         /// style rules and how to add a demo for a new tool.
         /// </summary>
         public static Uri DemoUri(string folder, string stem) =>
-            new Uri("avares://Clowd.Ui/Assets/" + folder + "/" + stem + ".gif");
+            new Uri("avares://Prisc.Ui/Assets/" + folder + "/" + stem + ".gif");
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {

@@ -4,21 +4,21 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using Clowd.VideoSDK;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Render;
+using Prisc.VideoSDK;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Render;
 
-namespace Clowd.VideoRender
+namespace Prisc.VideoRender
 {
     /// <summary>
     /// Renders an edited recording to an mp4, replacing the external Rust <c>vid-render</c> tool
     /// with the in-repo <see cref="RenderJob"/>. Deliberately thin: locate the FFmpeg natives, turn
     /// the args file into a <see cref="Project"/>, run the render, speak the protocol.
     ///
-    /// <para>Usage: <c>Clowd.VideoRender &lt;path-to-args.json&gt; [output.mp4]</c> — the args file
+    /// <para>Usage: <c>Prisc.VideoRender &lt;path-to-args.json&gt; [output.mp4]</c> — the args file
     /// is the whole job description, exactly as vid-render took it (the caller,
     /// <c>VidRenderRunner</c>, passes nothing else). Two file shapes are accepted:</para>
     /// <list type="bullet">
@@ -33,7 +33,7 @@ namespace Clowd.VideoRender
     /// present.</item>
     /// </list>
     ///
-    /// <para>Stdout protocol, byte-compatible with vid-render (and vid2gif before it), one message
+    /// <para>Stdout protocol, byte-compatible with vid-render (and prisc_vid2gif before it), one message
     /// per line and <b>nothing else on stdout ever</b>:</para>
     /// <code>
     /// progress &lt;0-100&gt;       monotonically increasing integer percent
@@ -91,25 +91,25 @@ namespace Clowd.VideoRender
                         // one. v2 projects render on the CFR grid with full sample durations.
                         FrameTimestampsTicks = job.FrameTimestampsTicks,
                         LegacyContainerTiming = job.LegacyContainerTiming,
-                        // CLOWD_RENDER_BACKEND=cpu forces the raster path — used by the GPU/CPU
+                        // PRISC_RENDER_BACKEND=cpu forces the raster path — used by the GPU/CPU
                         // equivalence checks; the surface factory falls back to CPU on its own
                         // when no usable GPU context exists, so this is a test/diagnostic knob,
                         // not something the app needs to set.
                         PreferGpu = !String.Equals(
-                            Environment.GetEnvironmentVariable("CLOWD_RENDER_BACKEND"), "cpu",
+                            Environment.GetEnvironmentVariable("PRISC_RENDER_BACKEND"), "cpu",
                             StringComparison.OrdinalIgnoreCase),
-                        // CLOWD_RENDER_ZEROCOPY=0 forces the readback path for NVENC/AMF renders
+                        // PRISC_RENDER_ZEROCOPY=0 forces the readback path for NVENC/AMF renders
                         // (the zero-copy Direct3D 11 hand-off falls back to it on its own when
                         // anything is missing) — the A/B knob for benchmarking the two, in the
-                        // same spirit as CLOWD_RENDER_BACKEND.
+                        // same spirit as PRISC_RENDER_BACKEND.
                         ZeroCopyEncode = !String.Equals(
-                            Environment.GetEnvironmentVariable("CLOWD_RENDER_ZEROCOPY"), "0",
+                            Environment.GetEnvironmentVariable("PRISC_RENDER_ZEROCOPY"), "0",
                             StringComparison.Ordinal),
                         // the job file sits beside the project's videoedit.json, which is where
                         // the AI sidecars live (AiSidecars) — matte/denoise consumption and any
                         // pre-render generation both key off this directory.
                         SidecarCacheDir = Path.GetDirectoryName(Path.GetFullPath(argsPath)),
-                        DiagnosticLog = message => Console.Error.WriteLine("Clowd.VideoRender: " + message),
+                        DiagnosticLog = message => Console.Error.WriteLine("Prisc.VideoRender: " + message),
                     },
                     new InlineProgress(percent => emitter.Emit(percent)),
                     cancel.Token);
@@ -149,7 +149,7 @@ namespace Clowd.VideoRender
         {
             outputOverride = null;
             if (argv == null || argv.Length == 0 || argv.Length > 2)
-                throw new InvalidOperationException("usage: Clowd.VideoRender <path-to-args.json> [output.mp4]");
+                throw new InvalidOperationException("usage: Prisc.VideoRender <path-to-args.json> [output.mp4]");
 
             if (argv.Length == 2)
                 outputOverride = argv[1];
@@ -302,10 +302,10 @@ namespace Clowd.VideoRender
         // ------------------------------------------------------------------------ FFmpeg natives
 
         /// <summary>
-        /// Where the FFmpeg natives live when <c>CLOWD_FFMPEG_PATH</c> is unset. Release layout
+        /// Where the FFmpeg natives live when <c>PRISC_FFMPEG_PATH</c> is unset. Release layout
         /// first: the DLLs ship beside this binary (the runner starts us in our own directory for
-        /// exactly that reason, and vid-render loaded them the same way). Then the dev layout: an
-        /// <c>obs-express-rs</c> sibling checkout's cargo target directory, mirroring
+        /// exactly that reason, and vid-render loaded them the same way). Then the dev layout: the
+        /// Prisc repository's cargo target directory (built by <c>cargo rec</c>), mirroring
         /// <c>ObsBinaryLocator</c> and the test suite's resolver.
         /// </summary>
         private static string FindFFmpegDirectory()
@@ -314,10 +314,10 @@ namespace Clowd.VideoRender
             if (HasFFmpeg(baseDirectory))
                 return baseDirectory;
 
-            // Release layout: this exe publishes beside Clowd.Ui, and the FFmpeg DLLs ship in
-            // the obs-express/ subdirectory (ci.yml). The runner also passes CLOWD_FFMPEG_PATH
+            // Release layout: this exe publishes beside Prisc.Ui, and the FFmpeg DLLs ship in
+            // the recorder/ subdirectory (ci.yml). The runner also passes PRISC_FFMPEG_PATH
             // explicitly; this probe keeps a manually-invoked exe working in that layout too.
-            var obsSubdir = Path.Combine(baseDirectory, "obs-express");
+            var obsSubdir = Path.Combine(baseDirectory, "recorder");
             if (HasFFmpeg(obsSubdir))
                 return obsSubdir;
 
@@ -329,11 +329,14 @@ namespace Clowd.VideoRender
             var directory = new DirectoryInfo(baseDirectory);
             while (directory != null)
             {
-                foreach (var configuration in new[] { "release", "debug" })
+                if (File.Exists(Path.Combine(directory.FullName, "Cargo.toml")))
                 {
-                    var candidate = Path.Combine(directory.FullName, "obs-express-rs", "target", configuration);
-                    if (HasFFmpeg(candidate))
-                        return candidate;
+                    foreach (var configuration in new[] { "release", "debug" })
+                    {
+                        var candidate = Path.Combine(directory.FullName, "target", configuration);
+                        if (HasFFmpeg(candidate))
+                            return candidate;
+                    }
                 }
 
                 directory = directory.Parent;
@@ -343,14 +346,14 @@ namespace Clowd.VideoRender
         }
 
         /// <summary>
-        /// Where the <c>clowd_ai</c> inference binary ships when <c>CLOWD_AI_PATH</c>
+        /// Where the <c>prisc_ai</c> inference binary ships when <c>PRISC_AI_PATH</c>
         /// is unset (the loader consults the env var itself): beside this exe, the release
         /// layout. The probe lives here rather than in the SDK because the SDK cannot know the
         /// app's layout — the same seam as <see cref="FindFFmpegDirectory"/>.
         /// </summary>
         private static string FindAiBinary()
         {
-            string name = OperatingSystem.IsWindows() ? "clowd_ai.exe" : "clowd_ai";
+            string name = OperatingSystem.IsWindows() ? "prisc_ai.exe" : "prisc_ai";
             var candidate = Path.Combine(AppContext.BaseDirectory, name);
             return File.Exists(candidate) ? candidate : null;
         }

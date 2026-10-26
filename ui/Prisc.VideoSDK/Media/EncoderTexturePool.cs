@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>
     /// The texture pool behind <see cref="HardwareFrames"/>: GPU textures an encoder reads

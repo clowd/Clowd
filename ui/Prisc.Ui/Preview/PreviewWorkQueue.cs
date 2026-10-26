@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 
-namespace Clowd.UI.Preview
+namespace Prisc.UI.Preview
 {
     /// <summary>
     /// A queued (or running) Lane A item. Disposing it unqueues the item if it has not started and
@@ -397,7 +397,7 @@ namespace Clowd.UI.Preview
                 int slot = i;
                 var thread = new Thread(() => WorkLoop(slot))
                 {
-                    Name = "clowd-preview-" + slot.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    Name = "prisc-preview-" + slot.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     IsBackground = true,
 
                     // the same priority the editor's thumbnail worker runs at: a preview is never

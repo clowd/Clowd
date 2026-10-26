@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="ObscureContent"/> through <see cref="FrameComposer"/>: what the box does to the
@@ -35,7 +35,7 @@ namespace Clowd.VideoSDK.Tests
             // the card is deterministic, so one shared file serves every run: the composer's image
             // cache maps the file it decodes, which rules out both rewriting it and deleting it
             // while a run lasts, and a per-run name would leave one behind in temp every time
-            var path = Path.Combine(Path.GetTempPath(), "clowd-obscure-test-card-v1.png");
+            var path = Path.Combine(Path.GetTempPath(), "prisc-obscure-test-card-v1.png");
             if (File.Exists(path))
                 return path;
 

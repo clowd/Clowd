@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using Avalonia.Input;
 
-namespace Clowd
+namespace Prisc
 {
     public class SimpleKeyGesture : IEquatable<SimpleKeyGesture>
     {

@@ -1,9 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.Threading;
-using Clowd.UI.Preview.Icons;
+using Prisc.UI.Preview.Icons;
 
-namespace Clowd.UI.Preview.Producers
+namespace Prisc.UI.Preview.Producers
 {
     /// <summary>
     /// Lane A. The terminal producer: whatever else failed or was never there, a session still has

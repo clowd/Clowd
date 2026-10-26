@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 public enum TransitionKind
 {

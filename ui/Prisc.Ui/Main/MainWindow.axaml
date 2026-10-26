@@ -2,8 +2,8 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:u="https://irihi.tech/ursa"
-    xmlns:ui="using:Clowd.UI"
-    x:Class="Clowd.UI.MainWindow"
+    xmlns:ui="using:Prisc.UI"
+    x:Class="Prisc.UI.MainWindow"
     Title="Prisc"
     Width="800"
     Height="600"
@@ -14,15 +14,15 @@
     <ui:SystemThemedWindow.Styles>
         <!-- Ursa paints the selected nav item in SemiColorPrimaryLight, the palest step of the
              accent ramp (~8% accent over white) — next to invisible on the light window.
-             ClowdNavSelectedBrush (AccentTheme) is one step up there, and the stock accent in
+             PriscNavSelectedBrush (AccentTheme) is one step up there, and the stock accent in
              the dark theme. Set on the template border too: Ursa's own pointer-over style writes
              the border's Background directly, which would otherwise win over the control's
              Background while hovered. -->
         <Style Selector="u|NavMenuItem:selected">
-            <Setter Property="Background" Value="{DynamicResource ClowdNavSelectedBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PriscNavSelectedBrush}" />
         </Style>
         <Style Selector="u|NavMenuItem:selected /template/ Border#PART_Border">
-            <Setter Property="Background" Value="{DynamicResource ClowdNavSelectedBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PriscNavSelectedBrush}" />
         </Style>
         <!-- The glyphs sit a touch behind the labels. -->
         <Style Selector="u|NavMenuItem PathIcon">
@@ -49,9 +49,9 @@
         <Viewbox Height="40" Margin="6,0,0,24" HorizontalAlignment="Left" AutomationProperties.Name="Prisc">
             <Grid Width="51.47" Height="16">
                 <Path Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Top"
-                      Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
+                      Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource PriscAccentBrush}" />
                 <Path HorizontalAlignment="Left" VerticalAlignment="Top"
-                      Data="{StaticResource PathLogoWordmark}" Stroke="{DynamicResource ClowdWordmarkBrush}"
+                      Data="{StaticResource PathLogoWordmark}" Stroke="{DynamicResource PriscWordmarkBrush}"
                       StrokeThickness="1.6627" StrokeLineCap="Round" StrokeJoin="Round" />
             </Grid>
         </Viewbox>

@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Upload.Accelerate
+namespace Prisc.Upload.Accelerate
 {
     /// <summary>
     /// Encodes the (upload id, delete token) pair an accelerated upload needs to later remove its

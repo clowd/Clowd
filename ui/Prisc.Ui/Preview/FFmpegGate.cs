@@ -1,10 +1,10 @@
 using System;
 using System.Diagnostics;
 using System.Threading;
-using Clowd.UI.Services;
-using Clowd.VideoSDK;
+using Prisc.UI.Services;
+using Prisc.VideoSDK;
 
-namespace Clowd.UI.Preview
+namespace Prisc.UI.Preview
 {
     /// <summary>
     /// The preview engine's one-time answer to "can we open a video at all". Every producer that
@@ -20,7 +20,7 @@ namespace Clowd.UI.Preview
     /// </para>
     /// <para>
     /// A false answer is permanent and is meant to be. Native libraries cannot be re-pathed once
-    /// the process has tried, so a machine with no obs-express beside it will fail identically for
+    /// the process has tried, so a machine with no recorder beside it will fail identically for
     /// every row, forever — and a recents list of two hundred video sessions must not turn that
     /// into two hundred directory probes. Every video and project source simply degrades to its
     /// file-type icon, which is a perfectly good preview for a machine that cannot decode.

@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>An in-flight video → GIF conversion, surfaced on the Recent page through
     /// <see cref="SessionInfo.ActiveGifConversion"/> exactly as <see cref="ActiveUpload"/> is. The
@@ -93,7 +93,7 @@ namespace Clowd.UI.Services
 
     /// <summary>
     /// Turns a finished recording into a GIF beside it (<c>video.mp4</c> → <c>video.gif</c>) using
-    /// the external vid2gif tool. The conversion is surfaced as its own Recent-page entry named
+    /// the external prisc_vid2gif tool. The conversion is surfaced as its own Recent-page entry named
     /// "GIF" carrying an <see cref="SessionInfo.ActiveGifConversion"/> while it runs; when it
     /// finishes the entry drops the conversion and behaves like any other video entry, and when it
     /// is canceled or fails the entry is removed again.
@@ -309,7 +309,7 @@ namespace Clowd.UI.Services
             }
         }
 
-        /// <summary>vid2gif removes its own half-written gif when it honors a <c>quit</c>; this only
+        /// <summary>prisc_vid2gif removes its own half-written gif when it honors a <c>quit</c>; this only
         /// matters on the path where it had to be killed instead, which leaves the file behind.</summary>
         private static void DeletePartialOutput(string gifPath)
         {

@@ -1,15 +1,15 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Runtime.Versioning;
-using Clowd.Util;
+using Prisc.Util;
 using Microsoft.Win32;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Backs "Add 'Upload with Clowd' to the Explorer context menu"
-    /// (<see cref="Clowd.Config.SettingsGeneral.RegisterExplorerContextMenu"/>, gated on uploads
-    /// being on at all — see <see cref="Clowd.Config.SettingsRoot.ShouldRegisterExplorerContextMenu"/>).
+    /// Backs "Add 'Upload with Prisc' to the Explorer context menu"
+    /// (<see cref="Prisc.Config.SettingsGeneral.RegisterExplorerContextMenu"/>, gated on uploads
+    /// being on at all — see <see cref="Prisc.Config.SettingsRoot.ShouldRegisterExplorerContextMenu"/>).
     ///
     /// This is the legacy (Windows 7 style) shell verb the WPF build used: a pair of per-user keys
     /// under <c>HKCU\Software\Classes</c>, one for all files and one for directories. No elevation,
@@ -33,9 +33,9 @@ namespace Clowd.UI
         // debug builds register under their own key so running from the IDE cannot overwrite (or
         // delete) the verb belonging to a real install — same split as SettingsService.FilePath.
 #if DEBUG
-        private const string VerbKeyName = Constants.ClowdAppName + ".DEBUG";
+        private const string VerbKeyName = Constants.PriscAppName + ".DEBUG";
 #else
-        private const string VerbKeyName = Constants.ClowdAppName;
+        private const string VerbKeyName = Constants.PriscAppName;
 #endif
 
         /// <summary>Raised after every <see cref="TrySetEnabled"/>, so the settings page can show

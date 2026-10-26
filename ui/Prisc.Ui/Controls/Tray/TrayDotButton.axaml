@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
 
     <!-- No template: TrayDotButton.Render paints Background, the BorderBrush edge and the dot, so every
          state here is just a value for one of those. The current choice is a light fill with a 1 px

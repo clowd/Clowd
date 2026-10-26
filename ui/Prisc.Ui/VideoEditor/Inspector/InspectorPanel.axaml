@@ -1,11 +1,11 @@
 ﻿<UserControl
-    x:Class="Clowd.UI.VideoEditor.Inspector.InspectorPanel"
+    x:Class="Prisc.UI.VideoEditor.Inspector.InspectorPanel"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:colors="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
-    xmlns:controls="clr-namespace:Clowd.UI.Controls"
-    xmlns:insp="clr-namespace:Clowd.UI.VideoEditor.Inspector"
-    xmlns:ve="clr-namespace:Clowd.UI.VideoEditor">
+    xmlns:colors="clr-namespace:Prisc.UI.Dialogs.ColorPicker"
+    xmlns:controls="clr-namespace:Prisc.UI.Controls"
+    xmlns:insp="clr-namespace:Prisc.UI.VideoEditor.Inspector"
+    xmlns:ve="clr-namespace:Prisc.UI.VideoEditor">
 
     <UserControl.Resources>
         <!--  the render button's determinate progress arc (see ToolButton.axaml), reused by the

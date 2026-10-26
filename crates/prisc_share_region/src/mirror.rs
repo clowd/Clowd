@@ -1,7 +1,7 @@
 //! The obs half of the binary: scene + display-capture sources + the
 //! `obs_display` that paints the composited canvas into the mirror window.
 //!
-//! Bootstrap mirrors `Recorder::new` steps 1–7 in obs-express (same ordering
+//! Bootstrap mirrors `Recorder::new` steps 1–7 in prisc_recorder (same ordering
 //! constraints, same fail/exit discipline) minus everything recorder-shaped:
 //! no audio devices, no encoders, no output, no webcam, no tracker. With no
 //! output the pipeline is just capture → compose → swapchain present, which is
@@ -15,14 +15,14 @@
 use std::ffi::{c_void, CString};
 use std::fmt::Display;
 
-use obs::audio::AudioInfo;
-use obs::context::ObsContext;
-use obs::display::ObsDisplay;
-use obs::scene::{ObsScene, ObsSceneItem};
-use obs::source::ObsSource;
-use obs::video::VideoInfo;
-use obs_platform::region::{self, Rect, RegionPlan};
-use obs_platform::{CaptureMethod, MonitorInfo};
+use prisc_obs::audio::AudioInfo;
+use prisc_obs::context::ObsContext;
+use prisc_obs::display::ObsDisplay;
+use prisc_obs::scene::{ObsScene, ObsSceneItem};
+use prisc_obs::source::ObsSource;
+use prisc_obs::video::VideoInfo;
+use prisc_obs_platform::region::{self, Rect, RegionPlan};
+use prisc_obs_platform::{CaptureMethod, MonitorInfo};
 
 /// Floor on the region width/height accepted by `bootstrap` and `set_region`.
 /// A degenerate or one-pixel region would produce a canvas the swapchain and
@@ -47,10 +47,10 @@ const MIN_REGION: u32 = 64;
 ///   is sized from the region. An odd 801-px region would otherwise present an
 ///   800-px-wide swapchain into an 801-px-wide window, and DXGI would stretch
 ///   the mirror by 801/800 — a resampled, slightly soft picture — while the
-///   `region_changed` ack told Clowd to draw its border at 801. Rounding the
+///   `region_changed` ack told Prisc to draw its border at 801. Rounding the
 ///   region itself keeps the window, the canvas and the ack in one value
 ///   domain, which is the property `AppEvents::set_region` is built on. (Odd
-///   sizes are easy to produce: Clowd computes the region from a border the
+///   sizes are easy to produce: Prisc computes the region from a border the
 ///   user drags by hand.) Rounding down rather than up keeps a region that was
 ///   just inside a display from being pushed a pixel past its edge.
 ///
@@ -65,19 +65,19 @@ fn normalize_region(region: Rect) -> Rect {
 }
 
 /// Runtime/obs failures exit 1. Never unwind: partial OBS state is never torn
-/// down (same invariant as obs-express — libobs shutdown is a known crash
-/// source; see crates/obs/src/context.rs), so every failure path must leave
+/// down (same invariant as prisc_recorder — libobs shutdown is a known crash
+/// source; see crates/prisc_obs/src/context.rs), so every failure path must leave
 /// through `exit_process`.
 fn fail(msg: impl Display) -> ! {
     eprintln!("Fatal: {msg}");
-    obs_platform::exit_process(1)
+    prisc_obs_platform::exit_process(1)
 }
 
-/// Argument-shaped failures exit 2 (matching obs-express's `fail_args`), so
+/// Argument-shaped failures exit 2 (matching prisc_recorder's `fail_args`), so
 /// callers can distinguish their own bad input from an obs breakage.
 fn fail_args(msg: impl Display) -> ! {
     eprintln!("Fatal: {msg}");
-    obs_platform::exit_process(2)
+    prisc_obs_platform::exit_process(2)
 }
 
 pub struct Mirror {
@@ -129,7 +129,7 @@ impl Mirror {
     ///
     /// Exits (never unwinds) on any failure: exit 2 for a region that
     /// intersects no monitor (caller input), exit 1 for everything else.
-    /// `obs_platform::init_process()` must already have run (main.rs does it
+    /// `prisc_obs_platform::init_process()` must already have run (main.rs does it
     /// before the platform app setup).
     ///
     /// The `--region` rect goes through [`normalize_region`] exactly like a
@@ -156,7 +156,7 @@ impl Mirror {
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
             .unwrap_or_else(|| fail("Could not determine the executable directory"));
-        let paths = obs_platform::default_obs_paths(&exe_dir);
+        let paths = prisc_obs_platform::default_obs_paths(&exe_dir);
         if let Some(ref libobs_data) = paths.libobs_data {
             context.add_data_path(libobs_data);
         }
@@ -166,7 +166,7 @@ impl Mirror {
         //    this reports back — is built from the rect that will actually be
         //    mirrored rather than the one that was asked for.
         let region = normalize_region(region);
-        let monitors = obs_platform::enumerate_monitors();
+        let monitors = prisc_obs_platform::enumerate_monitors();
         if monitors.is_empty() {
             fail("No displays found");
         }
@@ -181,7 +181,7 @@ impl Mirror {
         // required by the DXGI duplicator, which only sees monitors attached to
         // the current device's adapter, and a free cross-adapter copy saved
         // under WGC.
-        let adapter = match obs_platform::region_adapter_index(region, &plan, &monitors) {
+        let adapter = match prisc_obs_platform::region_adapter_index(region, &plan, &monitors) {
             Some(0) | None => 0,
             Some(n) => {
                 eprintln!(
@@ -207,14 +207,14 @@ impl Mirror {
         //    get_display_name returns null exactly when unregistered.
         context.add_module_path(&paths.module_bin, &paths.module_data);
         context.load_all_modules();
-        let display_capture_c = CString::new(obs_platform::display_capture_id()).unwrap();
+        let display_capture_c = CString::new(prisc_obs_platform::display_capture_id()).unwrap();
         let display_name =
-            unsafe { obs_sys::obs_source_get_display_name(display_capture_c.as_ptr()) };
+            unsafe { prisc_obs_sys::obs_source_get_display_name(display_capture_c.as_ptr()) };
         if display_name.is_null() {
             fail(format_args!(
                 "Display capture source '{}' is not registered — the capture plugin failed to \
                  load.\n  module bin:  {}\n  module data: {}",
-                obs_platform::display_capture_id(),
+                prisc_obs_platform::display_capture_id(),
                 paths.module_bin,
                 paths.module_data
             ));
@@ -281,7 +281,7 @@ impl Mirror {
     }
 
     /// Full reconcile, driven by the shell's `move X,Y,W,H` stdin command
-    /// (there are no drags any more — Clowd owns the border and tells us where
+    /// (there are no drags any more — Prisc owns the border and tells us where
     /// it ended up). The request is [`normalize_region`]d, and `Ok` carries the
     /// rect that was actually applied — which is what the caller acks back over
     /// stdout as `region_changed`, so the shell always learns the real region,
@@ -292,7 +292,7 @@ impl Mirror {
     /// `status::emit_command_error`, because a refusal has to be visible as a
     /// refusal — echoing the unchanged region back as `region_changed` would be
     /// indistinguishable on the wire from a successful move to that rect, and
-    /// Clowd (which resizes its border to whatever `region_changed` reports)
+    /// Prisc (which resizes its border to whatever `region_changed` reports)
     /// would see its border snap back with no explanation. This is reachable in
     /// normal operation, not just from a nonsense request: `self.monitors` is
     /// the snapshot taken at bootstrap, so after a display is unplugged or
@@ -306,9 +306,9 @@ impl Mirror {
             Err(e) => return Err(format!("move rejected: {e}")),
         };
 
-        // Canvas first: reset_video is safe HERE, unlike in obs-express —
+        // Canvas first: reset_video is safe HERE, unlike in prisc_recorder —
         // there are no outputs and no obs_view mixes to destroy (see
-        // crates/obs/src/view.rs's warning), and obs displays survive
+        // crates/prisc_obs/src/view.rs's warning), and obs displays survive
         // reset_video (libobs rebuilds their swapchains).
         if plan.canvas != self.canvas {
             if let Err(e) =
@@ -326,7 +326,7 @@ impl Mirror {
         if new_set != self.monitor_set {
             // Monitor set changed: rebuild sources/items. Removing the item
             // detaches it from the scene; dropping source + item releases our
-            // refs (see crates/obs/src/scene.rs).
+            // refs (see crates/prisc_obs/src/scene.rs).
             for item in self.items.drain(..) {
                 item.remove();
             }
@@ -358,7 +358,7 @@ impl Mirror {
 /// base == output == canvas: the mirror never downscales (no encoder to feed).
 fn video_info(canvas: (u32, u32), fps: u32, adapter: u32) -> VideoInfo {
     VideoInfo {
-        graphics_module: obs_platform::GRAPHICS_MODULE,
+        graphics_module: prisc_obs_platform::GRAPHICS_MODULE,
         base_width: canvas.0,
         base_height: canvas.1,
         output_width: canvas.0,
@@ -383,9 +383,9 @@ fn build_scene_items(
     for (i, planned) in plan.items.iter().enumerate() {
         let m = &monitors[planned.monitor_index];
         let source_settings =
-            obs_platform::display_capture_settings(m, show_cursor, capture_method);
+            prisc_obs_platform::display_capture_settings(m, show_cursor, capture_method);
         let source = match ObsSource::create(
-            obs_platform::display_capture_id(),
+            prisc_obs_platform::display_capture_id(),
             &format!("display_{i}"),
             Some(&source_settings),
         ) {
@@ -431,7 +431,7 @@ mod tests {
                 // What `plan_region` would make of it at canvas_scale 1.0.
                 assert_eq!(((n.w & !1).max(2), (n.h & !1).max(2)), (n.w, n.h));
                 // Idempotent: re-sending an acked region must not move it again,
-                // or Clowd's border would creep by a pixel per round trip.
+                // or Prisc's border would creep by a pixel per round trip.
                 assert_eq!(normalize_region(n), n);
                 // Position is never touched — only a display change can move
                 // the region, and that is the shell's business, not ours.

@@ -3,7 +3,7 @@ using System.Runtime.Versioning;
 using System.Threading;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The asynchronous <see cref="IReadbackRing"/> for the Direct3D 12 backend. Each slot owns a

@@ -33,7 +33,7 @@ pub struct TextureSnapshot {
 }
 
 /// What one monitor's worker paints this broadcast. `primitives` are `Send`
-/// (meshes are plain data; Clowd never emits paint callbacks).
+/// (meshes are plain data; Prisc never emits paint callbacks).
 #[derive(Debug)]
 pub struct EguiFrame {
     pub pixels_per_point: f32,

@@ -4,53 +4,53 @@ use crate::error::ObsError;
 use crate::source::ObsSource;
 
 pub struct ObsScene {
-    pub(crate) ptr: *mut obs_sys::obs_scene_t,
+    pub(crate) ptr: *mut prisc_obs_sys::obs_scene_t,
 }
 
 pub struct ObsSceneItem {
-    pub(crate) ptr: *mut obs_sys::obs_sceneitem_t,
+    pub(crate) ptr: *mut prisc_obs_sys::obs_sceneitem_t,
 }
 
 impl ObsScene {
     pub fn create(name: &str) -> Result<Self, ObsError> {
         let name_c = CString::new(name).unwrap();
-        let ptr = unsafe { obs_sys::obs_scene_create(name_c.as_ptr()) };
+        let ptr = unsafe { prisc_obs_sys::obs_scene_create(name_c.as_ptr()) };
         if ptr.is_null() {
             return Err(ObsError::NullPointer("obs_scene_create"));
         }
         Ok(Self { ptr })
     }
 
-    pub fn get_source(&self) -> *mut obs_sys::obs_source_t {
-        unsafe { obs_sys::obs_scene_get_source(self.ptr as *const _) }
+    pub fn get_source(&self) -> *mut prisc_obs_sys::obs_source_t {
+        unsafe { prisc_obs_sys::obs_scene_get_source(self.ptr as *const _) }
     }
 
     pub fn add(&self, source: &ObsSource) -> ObsSceneItem {
-        let ptr = unsafe { obs_sys::obs_scene_add(self.ptr, source.ptr) };
-        unsafe { obs_sys::obs_sceneitem_addref(ptr) };
+        let ptr = unsafe { prisc_obs_sys::obs_scene_add(self.ptr, source.ptr) };
+        unsafe { prisc_obs_sys::obs_sceneitem_addref(ptr) };
         ObsSceneItem { ptr }
     }
 }
 
 impl Drop for ObsScene {
     fn drop(&mut self) {
-        unsafe { obs_sys::obs_scene_release(self.ptr) };
+        unsafe { prisc_obs_sys::obs_scene_release(self.ptr) };
     }
 }
 
 impl ObsSceneItem {
-    pub fn as_ptr(&self) -> *mut obs_sys::obs_sceneitem_t {
+    pub fn as_ptr(&self) -> *mut prisc_obs_sys::obs_sceneitem_t {
         self.ptr
     }
 
     pub fn set_visible(&self, visible: bool) {
-        unsafe { obs_sys::obs_sceneitem_set_visible(self.ptr, visible) };
+        unsafe { prisc_obs_sys::obs_sceneitem_set_visible(self.ptr, visible) };
     }
 
     /// Detaches the item from its scene (releasing the scene's reference).
     /// The wrapper's own reference is still released by `Drop`.
     pub fn remove(&self) {
-        unsafe { obs_sys::obs_sceneitem_remove(self.ptr) };
+        unsafe { prisc_obs_sys::obs_sceneitem_remove(self.ptr) };
     }
 
     pub fn set_pos(&self, x: f32, y: f32) {
@@ -64,7 +64,7 @@ impl ObsSceneItem {
         }
         let pos = Vec2 { x, y };
         unsafe {
-            obs_sys::obs_sceneitem_set_pos(self.ptr, &pos as *const Vec2 as *const obs_sys::vec2)
+            prisc_obs_sys::obs_sceneitem_set_pos(self.ptr, &pos as *const Vec2 as *const prisc_obs_sys::vec2)
         };
     }
 
@@ -77,20 +77,20 @@ impl ObsSceneItem {
         }
         let scale = Vec2 { x, y };
         unsafe {
-            obs_sys::obs_sceneitem_set_scale(
+            prisc_obs_sys::obs_sceneitem_set_scale(
                 self.ptr,
-                &scale as *const Vec2 as *const obs_sys::vec2,
+                &scale as *const Vec2 as *const prisc_obs_sys::vec2,
             )
         };
     }
 
-    pub fn set_bounds_type(&self, bounds_type: obs_sys::obs_bounds_type) {
-        unsafe { obs_sys::obs_sceneitem_set_bounds_type(self.ptr, bounds_type) };
+    pub fn set_bounds_type(&self, bounds_type: prisc_obs_sys::obs_bounds_type) {
+        unsafe { prisc_obs_sys::obs_sceneitem_set_bounds_type(self.ptr, bounds_type) };
     }
 
     /// `alignment` is an OBS_ALIGN_* bitmask; 0 = centered inside the bounds.
     pub fn set_bounds_alignment(&self, alignment: u32) {
-        unsafe { obs_sys::obs_sceneitem_set_bounds_alignment(self.ptr, alignment) };
+        unsafe { prisc_obs_sys::obs_sceneitem_set_bounds_alignment(self.ptr, alignment) };
     }
 
     /// The bounds box size (px); only meaningful once a bounds type is set.
@@ -103,9 +103,9 @@ impl ObsSceneItem {
         }
         let bounds = Vec2 { x: w, y: h };
         unsafe {
-            obs_sys::obs_sceneitem_set_bounds(
+            prisc_obs_sys::obs_sceneitem_set_bounds(
                 self.ptr,
-                &bounds as *const Vec2 as *const obs_sys::vec2,
+                &bounds as *const Vec2 as *const prisc_obs_sys::vec2,
             )
         };
     }
@@ -125,8 +125,8 @@ impl ObsSceneItem {
     /// 1092x819. Re-applying everything here after the reset is the fix.
     pub fn place_top_left_bounded(&self, w: f32, h: f32) {
         self.set_pos(0.0, 0.0);
-        self.set_bounds_type(obs_sys::obs_bounds_type_OBS_BOUNDS_MAX_ONLY);
-        self.set_bounds_alignment(obs_sys::OBS_ALIGN_LEFT | obs_sys::OBS_ALIGN_TOP);
+        self.set_bounds_type(prisc_obs_sys::obs_bounds_type_OBS_BOUNDS_MAX_ONLY);
+        self.set_bounds_alignment(prisc_obs_sys::OBS_ALIGN_LEFT | prisc_obs_sys::OBS_ALIGN_TOP);
         self.set_bounds(w, h);
     }
 
@@ -141,7 +141,7 @@ impl ObsSceneItem {
         }
         let mut v = Vec2 { x: 0.0, y: 0.0 };
         unsafe {
-            obs_sys::obs_sceneitem_get_pos(self.ptr, &mut v as *mut Vec2 as *mut obs_sys::vec2)
+            prisc_obs_sys::obs_sceneitem_get_pos(self.ptr, &mut v as *mut Vec2 as *mut prisc_obs_sys::vec2)
         };
         (v.x, v.y)
     }
@@ -157,7 +157,7 @@ impl ObsSceneItem {
         }
         let mut v = Vec2 { x: 0.0, y: 0.0 };
         unsafe {
-            obs_sys::obs_sceneitem_get_bounds(self.ptr, &mut v as *mut Vec2 as *mut obs_sys::vec2)
+            prisc_obs_sys::obs_sceneitem_get_bounds(self.ptr, &mut v as *mut Vec2 as *mut prisc_obs_sys::vec2)
         };
         (v.x, v.y)
     }
@@ -165,13 +165,13 @@ impl ObsSceneItem {
 
 impl Clone for ObsSceneItem {
     fn clone(&self) -> Self {
-        unsafe { obs_sys::obs_sceneitem_addref(self.ptr) };
+        unsafe { prisc_obs_sys::obs_sceneitem_addref(self.ptr) };
         Self { ptr: self.ptr }
     }
 }
 
 impl Drop for ObsSceneItem {
     fn drop(&mut self) {
-        unsafe { obs_sys::obs_sceneitem_release(self.ptr) };
+        unsafe { prisc_obs_sys::obs_sceneitem_release(self.ptr) };
     }
 }

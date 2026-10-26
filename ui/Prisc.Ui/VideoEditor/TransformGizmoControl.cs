@@ -5,13 +5,13 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
-using Clowd.Drawing;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
-using ModelTransform = Clowd.VideoSDK.Model.Transform;
+using Prisc.Drawing;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
+using ModelTransform = Prisc.VideoSDK.Model.Transform;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// The on-preview transform <b>gizmo</b>: a transparent, hit-testable rectangle sitting over the

@@ -1,9 +1,9 @@
 using System;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Playback;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>
     /// Synchronous forward-only decode of one audio stream for the render path — the audio twin

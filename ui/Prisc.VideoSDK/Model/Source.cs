@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>One media file feeding the composition, with the probed shape of each of its streams.
 /// Items reference it by <see cref="Id"/> (<see cref="MediaContent.SourceId"/>) rather than by
@@ -57,7 +57,7 @@ public sealed class SourceStream
     /// at one size and declares that each pixel is wider or narrower than square, so the picture
     /// must be shown at <see cref="DisplayWidth"/>×<see cref="DisplayHeight"/> rather than
     /// <see cref="Width"/>×<see cref="Height"/>. 0/0 (a project written before the field existed,
-    /// or a stream that declares nothing) means square pixels, exactly like 1/1. Clowd's own
+    /// or a stream that declares nothing) means square pixels, exactly like 1/1. Prisc's own
     /// recordings are always square; only imported files carry anything else.
     /// </summary>
     public int PixelAspectNum { get; set; }

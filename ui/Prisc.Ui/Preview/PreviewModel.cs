@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 
-namespace Clowd.UI.Preview
+namespace Prisc.UI.Preview
 {
     /// <summary>
     /// How badly a row needs its preview, expressed as a scheduler band. The values are the raw
     /// integers both work lanes order by, so a request keeps its meaning whichever lane it lands
-    /// in: <see cref="Clowd.VideoSDK.Thumbs.ThumbWork"/>'s editor work sits at 10/20/30 and every
+    /// in: <see cref="Prisc.VideoSDK.Thumbs.ThumbWork"/>'s editor work sits at 10/20/30 and every
     /// value here is above it — an open editor's timeline always outranks a recents tile.
     /// A tile that has been realized but never given a viewport starts at <see cref="BufferBelow"/>:
     /// never dropped, never outranking a row the user is actually looking at.

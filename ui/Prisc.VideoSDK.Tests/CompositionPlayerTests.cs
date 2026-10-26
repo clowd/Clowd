@@ -5,15 +5,15 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // CompositionPlayer + PlaybackFrameSource: the preview-side engine playing a Project through
     // the real demux/decode pipelines. Media tests skip when the FFmpeg natives are absent (same
@@ -47,7 +47,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string TempMp4()
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-composition-player-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-composition-player-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
             return path;
         }
@@ -512,7 +512,7 @@ namespace Clowd.VideoSDK.Tests
             var project = NewProject();
             var goodId = AddVideoSource(project, fixture);
             var missingId = AddVideoSource(project,
-                Path.Combine(Path.GetTempPath(), $"clowd-missing-{Guid.NewGuid():N}.mp4"));
+                Path.Combine(Path.GetTempPath(), $"prisc-missing-{Guid.NewGuid():N}.mp4"));
             var track = AddVideoTrack(project);
             AddMediaItem(project, track, goodId, 0, Second, 0);
             AddMediaItem(project, track, missingId, Second, Second, 0);
@@ -545,7 +545,7 @@ namespace Clowd.VideoSDK.Tests
             // relink to a missing file: signature changes → background rebuild → the rebuild
             // fails. The task must complete WITHOUT faulting (the error channel is the Failed
             // state + LastError, never an exception escaping into the caller's thread).
-            project.Sources[0].Path = Path.Combine(Path.GetTempPath(), $"clowd-missing-{Guid.NewGuid():N}.mp4");
+            project.Sources[0].Path = Path.Combine(Path.GetTempPath(), $"prisc-missing-{Guid.NewGuid():N}.mp4");
             await player.UpdateProject(project);
 
             Assert.True(WaitUntil(() => player.State == PlayerState.Failed, 4000),
@@ -785,7 +785,7 @@ namespace Clowd.VideoSDK.Tests
         {
             RequireFFmpeg();
 
-            string cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-matte-preview-{Guid.NewGuid():N}");
+            string cacheDir = Path.Combine(Path.GetTempPath(), $"prisc-matte-preview-{Guid.NewGuid():N}");
             Directory.CreateDirectory(cacheDir);
             try
             {
@@ -836,7 +836,7 @@ namespace Clowd.VideoSDK.Tests
         {
             RequireFFmpeg();
 
-            string cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-matte-late-{Guid.NewGuid():N}");
+            string cacheDir = Path.Combine(Path.GetTempPath(), $"prisc-matte-late-{Guid.NewGuid():N}");
             Directory.CreateDirectory(cacheDir);
             try
             {

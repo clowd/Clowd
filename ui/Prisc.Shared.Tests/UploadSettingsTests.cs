@@ -2,15 +2,15 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using Clowd.Config;
-using Clowd.Upload;
+using Prisc.Config;
+using Prisc.Upload;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class UploadSettingsTests : IDisposable
     {
-        private readonly string _path = Path.Combine(Path.GetTempPath(), "ClowdSettingsTests", Guid.NewGuid() + ".json");
+        private readonly string _path = Path.Combine(Path.GetTempPath(), "PriscSettingsTests", Guid.NewGuid() + ".json");
 
         public void Dispose()
         {
@@ -25,7 +25,7 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void DiscoverProviders_FindsShippedProviders()
         {
-            // force the Clowd.Upload assembly into the AppDomain, mirroring App startup
+            // force the Prisc.Upload assembly into the AppDomain, mirroring App startup
             _ = typeof(MimeProvider).Assembly;
 
             var settings = new SettingsUpload();
@@ -40,7 +40,7 @@ namespace Clowd.Shared.Tests
             Assert.Contains("PicsurUploadProvider", names);
             Assert.Contains("VgyMeUploadProvider", names);
             Assert.Contains("S3UploadProvider", names);
-            Assert.Contains("ClowdUploadProvider", names);
+            Assert.Contains("PriscUploadProvider", names);
 
             // third-party providers start disabled with no defaults (built-ins are seeded on —
             // see BuiltInProviderTests)

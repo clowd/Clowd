@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.UI.VideoEditor.Timeline;
+using Prisc.UI.VideoEditor.Timeline;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // TimelineReorder is the geometry of dragging a track header by its grip. Pure math, no
-    // Avalonia runtime — Clowd.Ui exposes its internals to this project via InternalsVisibleTo.
+    // Avalonia runtime — Prisc.Ui exposes its internals to this project via InternalsVisibleTo.
     public class TimelineReorderTests
     {
         /// <summary>Rows as the header panel sees them: video rows top to bottom (frontmost layer

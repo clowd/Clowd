@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>Where each keystroke line sits against the block's anchor x: its left edge, its
     /// center, or its right edge.</summary>

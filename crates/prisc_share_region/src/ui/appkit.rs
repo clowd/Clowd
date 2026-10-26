@@ -28,7 +28,7 @@
 //! will accept, and hangs off a corner for the rest. Everything but that single
 //! point is outside every display's bounds, so there is nothing for the region's
 //! display capture to photograph and no infinite corridor, and nothing lands on
-//! top of Clowd's border or toolbar.
+//! top of Prisc's border or toolbar.
 //!
 //! [`parked_region`] picks the corner: one that the window can hang off without
 //! straying onto a *second* display, preferring the bottom corners, where the
@@ -47,10 +47,10 @@
 //! still draws it over the wallpaper.
 //!
 //! There is deliberately no other UI here at all: no border, no handles, no
-//! buttons. The Clowd shell that spawns this process draws the border around
-//! the live region and the floating controls itself (Clowd.Ui/Video/
+//! buttons. The Prisc shell that spawns this process draws the border around
+//! the live region and the floating controls itself (Prisc.Ui/Video/
 //! BorderWindow and FloatingToolbarWindow), and anything this process put on
-//! screen would land on top of Clowd's own chrome.
+//! screen would land on top of Prisc's own chrome.
 //!
 //! Threading: everything here runs on the main thread. `main.rs` created the
 //! NSApplication (Accessory policy) before the obs bootstrap; we only fetch the
@@ -60,7 +60,7 @@
 //! through `ui::post_command` and are drained by the repeating timer below.
 //!
 //! Retention / pointer validity: the process NEVER returns from `run` — every
-//! exit path goes through `AppEvents::quit` → `obs_platform::exit_process`. The
+//! exit path goes through `AppEvents::quit` → `prisc_obs_platform::exit_process`. The
 //! window (and thus its contentView, whose raw pointer we hand to
 //! `AppEvents::mirror_ready` for `obs_display_create`) is retained in the
 //! process-global `APP` cell below and deliberately never dropped, so that
@@ -86,7 +86,7 @@ use objc2_foundation::{
     NSString, NSTimer,
 };
 
-use obs_platform::region::Rect;
+use prisc_obs_platform::region::Rect;
 
 use super::{AppEvents, UiConfig};
 use crate::commands::Command;
@@ -116,7 +116,7 @@ const PROMPT_OK: &str = "OK";
 /// handing an ObjC object to the stdin thread), so [`wake`] is a no-op and this
 /// poll is what actually gets commands onto the UI thread. 30 ms is
 /// imperceptible for the two things the shell sends — a region change while the
-/// user drags Clowd's border, and quit — and costs one no-op timer callback per
+/// user drags Prisc's border, and quit — and costs one no-op timer callback per
 /// frame-ish, which is nothing next to the mirror itself.
 const COMMAND_POLL_SECS: f64 = 0.03;
 
@@ -137,7 +137,7 @@ struct App {
     events: Box<dyn AppEvents>,
     /// The region actually being mirrored — the last rect that
     /// `AppEvents::set_region` accepted, not the last one that was asked for.
-    /// The shell is free to send `move` while the prompt is still up (Clowd
+    /// The shell is free to send `move` while the prompt is still up (Prisc
     /// repositions its border before the user has pressed anything), so this
     /// is also what the mirror phase sizes the window from, rather than the
     /// `--region` value `run` was given.
@@ -672,7 +672,7 @@ define_class!(
 /// The shape is the Win32 prompt's (`win32.rs`, "prompt phase"): a heading and
 /// a supporting line stacked top-left, and the action button alone in the
 /// bottom-right corner. What is deliberately NOT copied is that dialog's
-/// hand-painted surface — no Clowd palette, no footer strip, no owner-drawn
+/// hand-painted surface — no Prisc palette, no footer strip, no owner-drawn
 /// button. Windows had to paint those because its default dialog chrome is not
 /// dark; here the system's own appearance is already the right answer, and
 /// stock controls track the user's theme and accent colour for free.
@@ -954,7 +954,7 @@ fn apply_move(request: Rect) {
         Ok(applied) => applied,
         // Refused: no window change, and a `command_error` INSTEAD of the ack —
         // echoing the unchanged region as `region_changed` would be
-        // indistinguishable from a successful move to that rect, and Clowd would
+        // indistinguishable from a successful move to that rect, and Prisc would
         // snap its border back with no explanation.
         Err(reason) => {
             crate::status::emit_command_error(&reason);
@@ -968,7 +968,7 @@ fn apply_move(request: Rect) {
     }
 
     // Acked last, after the window has actually taken the new size — the move
-    // is not fully applied until then, and this line is what Clowd resizes its
+    // is not fully applied until then, and this line is what Prisc resizes its
     // border to.
     crate::status::emit_region_changed(applied);
 }
@@ -1136,7 +1136,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
     // run() only returns if something stops the app (nothing here does — all
     // exit paths go through events.quit()); treat a stop as a clean quit and
     // keep the "never shut libobs down" invariant via exit_process.
-    obs_platform::exit_process(0)
+    prisc_obs_platform::exit_process(0)
 }
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ use crate::render::protocol::{RenderMsg, WorkerInput};
 use crate::system::MonitorInfo;
 use crate::telemetry::perf::PerfSlot;
 use crate::telemetry::startup::StartupTimings;
-use clowd_rust_core::geometry::ScreenRect;
+use prisc_rust_core::geometry::ScreenRect;
 
 pub struct RenderWorkerParams {
     pub monitor: MonitorInfo,

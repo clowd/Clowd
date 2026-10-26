@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="using:Clowd.UI.Controls"
-             xmlns:local="using:Clowd.UI.Dialogs.ColorPicker"
-             xmlns:util="using:Clowd.Util"
-             x:Class="Clowd.UI.Dialogs.ColorPicker.MiniColorDialog">
+             xmlns:controls="using:Prisc.UI.Controls"
+             xmlns:local="using:Prisc.UI.Dialogs.ColorPicker"
+             xmlns:util="using:Prisc.Util"
+             x:Class="Prisc.UI.Dialogs.ColorPicker.MiniColorDialog">
 
     <UserControl.Styles>
         <!-- one component of the color readout: a value box with its channel letter beneath,

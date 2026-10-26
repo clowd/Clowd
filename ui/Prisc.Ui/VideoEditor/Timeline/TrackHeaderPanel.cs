@@ -8,12 +8,12 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.Drawing;
-using Clowd.UI.Controls;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.Drawing;
+using Prisc.UI.Controls;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The native column to the left of the drawing surface: one header per row (heights from

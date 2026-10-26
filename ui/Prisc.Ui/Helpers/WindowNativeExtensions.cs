@@ -4,12 +4,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>
     /// Native window-style helpers for the recording UI windows (BorderWindow,
     /// ShareResizeWindow and FloatingTrayWindow, design §4.2), and the capture exclusion every
-    /// Clowd top level is subject to (CaptureExclusion). Every member is safe to call on any OS —
+    /// Prisc top level is subject to (CaptureExclusion). Every member is safe to call on any OS —
     /// each one is a no-op off its own platform, so callers need no cfg guards.
     /// </summary>
     internal static class WindowNativeExtensions

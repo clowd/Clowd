@@ -3,9 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.VideoSDK.Editing;
+using Prisc.VideoSDK.Editing;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// Where an <see cref="EditorSession"/>'s project lands on disk: a latest-wins background

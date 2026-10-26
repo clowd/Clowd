@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>
     /// The mouse position right now, in the same units <see cref="DesktopScreens"/> reports

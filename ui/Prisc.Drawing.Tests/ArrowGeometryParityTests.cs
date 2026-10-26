@@ -6,14 +6,14 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Media.Immutable;
-using Clowd.Drawing.Graphics;
-using Clowd.Geometry2D;
+using Prisc.Drawing.Graphics;
+using Prisc.Geometry2D;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
-    /// The arrow maths moved into the shared <c>Clowd.Geometry</c> core so the video editor's shapes
+    /// The arrow maths moved into the shared <c>Prisc.Geometry</c> core so the video editor's shapes
     /// draw the same arrow; the image editor's arrows must not move by a single bit. Every case is
     /// checked against <see cref="LegacyArrowShape"/>, a frozen copy of the old builder: the points
     /// the core emits must equal the old ones exactly (no tolerance; a one-ULP drift is a Vec2

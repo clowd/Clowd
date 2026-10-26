@@ -19,7 +19,7 @@ use windows::{
     },
 };
 
-use clowd_rust_core::geometry::{RectExt, ScreenRect};
+use prisc_rust_core::geometry::{RectExt, ScreenRect};
 
 #[derive(Debug, Clone)]
 pub struct ImplMonitor {

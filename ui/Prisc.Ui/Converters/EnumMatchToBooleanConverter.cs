@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using Avalonia.Data.Converters;
 
-namespace Clowd.UI.Converters
+namespace Prisc.UI.Converters
 {
     /// <summary>
     /// Returns true when the bound enum value has the flag named by the converter parameter.

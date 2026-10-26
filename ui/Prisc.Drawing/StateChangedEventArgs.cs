@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Nodes;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     public class StateChangedEventArgs : EventArgs
     {

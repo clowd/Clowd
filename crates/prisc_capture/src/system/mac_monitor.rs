@@ -4,7 +4,7 @@ use anyhow::Result;
 use core_graphics::display::{CGDisplay, CGMainDisplayID};
 
 use crate::system::MonitorInfo;
-use clowd_rust_core::geometry::{LogicalPoint, RectExt, ScreenRect};
+use prisc_rust_core::geometry::{LogicalPoint, RectExt, ScreenRect};
 
 struct RawMonitor {
     cg_x: f64,

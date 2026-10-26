@@ -1,7 +1,7 @@
 //! libobs log/crash handler installation.
 //!
 //! libobs's default log handler writes DEBUG/INFO/WARNING lines to **stdout**,
-//! which would corrupt the line-delimited JSON protocol obs-express speaks on
+//! which would corrupt the line-delimited JSON protocol prisc_recorder speaks on
 //! stdout. `install_handlers` must therefore be called first thing in `main`,
 //! before `obs_startup`, so every libobs line goes to stderr from the start.
 //!

@@ -13,16 +13,16 @@ commit both the script and the regenerated GIFs.
 | What | Path |
 | --- | --- |
 | Generator (this script) | `tools/track-tips/generate.py` |
-| Output GIFs, embedded as Avalonia resources | `clowd_ui/Clowd.Ui/Assets/TrackTips/track-*.gif` |
-| The flyout control (header, description, demo, disabled footer) | `clowd_ui/Clowd.Ui/Controls/ToolTipCard.axaml(.cs)`, shared with the image editor's tool tips (`tools/tool-tips/`); `VideoEditor/TrackTip.cs` is the thin subclass that resolves `DemoName` |
-| The bare ToolTip theme the card sits in | `RichTipToolTipTheme` in `clowd_ui/Clowd.Ui/Assets/AppResources.axaml` |
-| The GIF player (streams frames through SkiaSharp `SKCodec`) | `clowd_ui/Clowd.Ui/Controls/AnimatedGifImage.cs` |
-| Where the tips are attached to the buttons | `clowd_ui/Clowd.Ui/VideoEditor/VideoEditorWindow.axaml` (the `ToolBar` strip) |
+| Output GIFs, embedded as Avalonia resources | `ui/Prisc.Ui/Assets/TrackTips/track-*.gif` |
+| The flyout control (header, description, demo, disabled footer) | `ui/Prisc.Ui/Controls/ToolTipCard.axaml(.cs)`, shared with the image editor's tool tips (`tools/tool-tips/`); `VideoEditor/TrackTip.cs` is the thin subclass that resolves `DemoName` |
+| The bare ToolTip theme the card sits in | `RichTipToolTipTheme` in `ui/Prisc.Ui/Assets/AppResources.axaml` |
+| The GIF player (streams frames through SkiaSharp `SKCodec`) | `ui/Prisc.Ui/Controls/AnimatedGifImage.cs` |
+| Where the tips are attached to the buttons | `ui/Prisc.Ui/VideoEditor/VideoEditorWindow.axaml` (the `ToolBar` strip) |
 | Disabled reasons driven from code | `VideoEditorWindow.axaml.cs`: `RefreshAddSpeedButton`, `RefreshInputOverlayButtons` |
-| Timeline colours the demos copy | `clowd_ui/Clowd.Ui/VideoEditor/Timeline/TimelinePalette.cs` |
-| Row order the demos copy | `clowd_ui/Clowd.Ui/VideoEditor/Timeline/TimelineRowLayout.cs` |
+| Timeline colours the demos copy | `ui/Prisc.Ui/VideoEditor/Timeline/TimelinePalette.cs` |
+| Row order the demos copy | `ui/Prisc.Ui/VideoEditor/Timeline/TimelineRowLayout.cs` |
 
-`TrackTip` resolves its demo as `avares://Clowd.Ui/Assets/TrackTips/track-{DemoName}.gif`. A missing
+`TrackTip` resolves its demo as `avares://Prisc.Ui/Assets/TrackTips/track-{DemoName}.gif`. A missing
 file just hides the demo area, so the app builds and runs with or without the GIFs.
 
 ## Tooling
@@ -57,7 +57,7 @@ file just hides the demo area, so the app builds and runs with or without the GI
    DemoName="<name>" Header="Add Xxx Track" Description="..." /></ToolTip>`.
 4. If the button can be disabled, set `tipXxx.DisabledReason` from the code-behind wherever its
    command's CanExecute is refreshed (null when enabled), as `RefreshAddSpeedButton` does.
-5. Build `clowd_ui/Clowd.Ui` and hover the button in the editor to check placement and playback.
+5. Build `ui/Prisc.Ui` and hover the button in the editor to check placement and playback.
 
 ## Storyboard contract
 

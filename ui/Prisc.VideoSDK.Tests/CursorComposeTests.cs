@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // Cursor overlay drawing: the shared picture mapping (crop/aspect respected), glyph
     // resolution fallbacks, the default native-sprite overlay and its suppression by a cursor
@@ -64,7 +64,7 @@ namespace Clowd.VideoSDK.Tests
 
         private static string WriteCapture(params string[] lines)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-cursor-compose-{Guid.NewGuid():N}.jsonl");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-cursor-compose-{Guid.NewGuid():N}.jsonl");
             File.WriteAllLines(path, lines);
             return path;
         }

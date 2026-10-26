@@ -1,9 +1,9 @@
 //! A snapshot of where the key table started: every name Avalonia 12.1.2's `Key` enum accepted
-//! (canonical and duplicate names) round-trips through `clowd_hotkeys::Key`, so settings saved by
+//! (canonical and duplicate names) round-trips through `prisc_hotkeys::Key`, so settings saved by
 //! builds that stored Avalonia names load unchanged. If the table drifts on purpose later, edit or
 //! delete this test.
 
-use clowd_hotkeys::{Key, Modifiers};
+use prisc_hotkeys::{Key, Modifiers};
 
 fn snapshot() -> serde_json::Value {
     let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/avalonia-12.1.2-keys.json")).unwrap();

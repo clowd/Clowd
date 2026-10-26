@@ -1,5 +1,5 @@
 [package]
-name = "clowd_rust_core"
+name = "prisc_rust_core"
 version = "1.0.0"
 authors.workspace = true
 repository.workspace = true

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using Clowd.PlatformUtil;
-using Clowd.UI;
+using Prisc.PlatformUtil;
+using Prisc.UI;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The drag math behind a live share-region resize, pinned rule by rule.
@@ -30,9 +30,9 @@ namespace Clowd.VideoSDK.Tests
     /// </para>
     ///
     /// <para>
-    /// The clamp itself mirrors the helper's <c>normalize_region</c> (clowd_share_region
+    /// The clamp itself mirrors the helper's <c>normalize_region</c> (prisc_share_region
     /// <c>mirror.rs</c>): each side floored at 64 and THEN rounded DOWN to even. It is a copy of a
-    /// rule that lives in another language in another repository, so these tests are also the
+    /// rule that lives in another language (crates/prisc_share_region), so these tests are also the
     /// tripwire for the two drifting apart: if the helper's rule changes and this one does not, the
     /// resize preview quietly lies about the rectangle that will actually be applied.
     /// </para>

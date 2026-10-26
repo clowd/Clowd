@@ -1,6 +1,6 @@
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// What the editor calls each <see cref="ShapeKind"/> and which glyph stands for it: the picker

@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
 // The timeline's pure math (this file, TimelineRowLayout, TimelineHitTester, the persistence
 // loader…) is unit-tested against the real production code by the SDK test project.
-[assembly: InternalsVisibleTo("Clowd.VideoSDK.Tests")]
+[assembly: InternalsVisibleTo("Prisc.VideoSDK.Tests")]
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The pure tick&lt;-&gt;pixel math behind the multi-track timeline: the horizontal viewport
     /// mapping, anchored zoom, zoom/scroll clamps, ruler tick steps and edit snapping. Deliberately
-    /// free of every Avalonia type so <c>Clowd.VideoSDK.Tests</c> can exercise it directly, and so
+    /// free of every Avalonia type so <c>Prisc.VideoSDK.Tests</c> can exercise it directly, and so
     /// the ruler, the surface and the header panel all agree on one implementation.
     ///
     /// The horizontal axis is <b>virtual</b>: there is no million-pixel control. A viewport is

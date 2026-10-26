@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Media;
 
-namespace Clowd.Drawing.Rendering
+namespace Prisc.Drawing.Rendering
 {
     /// <summary>
     /// Per-graphic transient sidecar of derived render state (final-design §A.5/§C.2). It lives

@@ -2,10 +2,10 @@ using System;
 using Avalonia.Input;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     /// <summary>
-    /// <see cref="HotkeyKey"/> (generated from the clowd_hotkeys key table) mirrors Avalonia's
+    /// <see cref="HotkeyKey"/> (generated from the prisc_hotkeys key table) mirrors Avalonia's
     /// <see cref="Key"/> one to one today. Nothing depends on that for matching keys, but the tray
     /// menu shows global hotkeys through <see cref="HotkeyGesture.ToKeyGestureOrNull"/>, which goes
     /// by name and silently shows no shortcut once the two tables drift apart. These fail first.

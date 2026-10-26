@@ -7,7 +7,7 @@ use crate::gxi;
 use crate::sync::VisibleLatch;
 use crate::system::{CapturedDesktop, WindowPeekImage};
 use crate::ui::shared::UiSharedState;
-use clowd_rust_core::geometry::{ScreenPointF, ScreenRect};
+use prisc_rust_core::geometry::{ScreenPointF, ScreenRect};
 
 /// Messages the main thread sends to a render thread during the frame loop.
 pub enum RenderMsg {

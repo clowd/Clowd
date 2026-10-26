@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// A wallpaper boiled down to a tiny grid of colors: the frame the composer would draw,

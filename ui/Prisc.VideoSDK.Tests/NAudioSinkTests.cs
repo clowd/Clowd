@@ -1,9 +1,9 @@
 using System;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The sink's master gain. It is applied to the samples in the render callback and nowhere

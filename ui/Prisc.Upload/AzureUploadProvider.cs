@@ -8,9 +8,9 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.Upload.Accelerate;
+using Prisc.Upload.Accelerate;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     public class AzureProgressHandler : IProgress<StorageProgress>
     {

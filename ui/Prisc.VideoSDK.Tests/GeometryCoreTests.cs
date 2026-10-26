@@ -1,11 +1,11 @@
 using System;
-using Clowd.Geometry2D;
+using Prisc.Geometry2D;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// The shared geometry core (<c>Clowd.Geometry</c>) as the video editor's shapes use it: the
+    /// The shared geometry core (<c>Prisc.Geometry</c>) as the video editor's shapes use it: the
     /// image editor's bend handle maths (the cases of its <c>GraphicArrowCurveTests</c>, ported onto
     /// <see cref="CurveBend"/>), the quadratic helpers the arrow builder and the box fit lean on,
     /// the arrow's head sizing, the double arrow's symmetry, and the Shift angle snap. Exact parity

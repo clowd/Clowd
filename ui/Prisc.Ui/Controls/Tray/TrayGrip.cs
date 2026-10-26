@@ -7,7 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>How a <see cref="TrayGrip"/> divides its room between the rotate button and the handle.</summary>
     public enum TrayGripLayout

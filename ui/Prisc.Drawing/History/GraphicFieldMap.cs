@@ -3,9 +3,9 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.History
+namespace Prisc.Drawing.History
 {
     /// <summary>
     /// The single source of truth for "persisted graphic field" (final-design §B.1), factored out

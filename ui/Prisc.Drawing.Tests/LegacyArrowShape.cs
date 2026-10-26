@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Media;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>The points one <see cref="LegacyArrowShape.Build"/> call emitted, in figure order.</summary>
     internal sealed class LegacyArrowPoints
@@ -28,7 +28,7 @@ namespace Clowd.Drawing.Tests
 
     /// <summary>
     /// The permanent oracle for the arrow geometry: a verbatim copy of <c>ArrowShape.Build</c> and
-    /// its builders as they were before the maths moved to <c>Clowd.Geometry</c>, changed only so
+    /// its builders as they were before the maths moved to <c>Prisc.Geometry</c>, changed only so
     /// that it also returns the points it emits. The quadratic helpers it used from
     /// <c>GraphicLine</c> are inlined, so it stays the old maths whatever later happens to them.
     /// Do not "fix" anything here: it is the reference the shared core is held to.

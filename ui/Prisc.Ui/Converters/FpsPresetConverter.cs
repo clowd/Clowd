@@ -3,7 +3,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Data.Converters;
 
-namespace Clowd.UI.Converters
+namespace Prisc.UI.Converters
 {
     /// <summary>
     /// The two-way converter behind a frame-rate preset box, where an empty box and a stored 0 are

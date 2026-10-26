@@ -6,10 +6,10 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Pins the persistent undo history (history.json — MIGRATION.md §8.8): the serialized chain
@@ -23,7 +23,7 @@ namespace Clowd.Drawing.Tests
     {
         static HistoryPersistenceTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static bool CanUndo(DrawingCanvas c) => c.CommandUndo.CanExecute(null);

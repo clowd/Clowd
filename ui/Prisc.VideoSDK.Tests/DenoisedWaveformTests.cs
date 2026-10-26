@@ -1,9 +1,9 @@
 using System;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK.Thumbs;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK.Thumbs;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// What an audio row draws once its track is AI-denoised: the peaks the timeline projects come

@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The <see cref="IReadbackRing"/> every backend can run: one factory surface per slot, read

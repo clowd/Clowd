@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Avalonia.Input;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// A global hotkey: a <see cref="HotkeyKey"/> and the <see cref="HotkeyModifiers"/> held with
-    /// it. The key names and the serialized form are the clowd_hotkeys crate's, so the settings
+    /// it. The key names and the serialized form are the prisc_hotkeys crate's, so the settings
     /// file, the standby capturer's <c>--hk-*</c> flags and its status echo all carry the same
     /// text, and nothing translates between them. In-app shortcuts are a different type
     /// (<see cref="SimpleKeyGesture"/>, on Avalonia keys); the only bridge is the display-only

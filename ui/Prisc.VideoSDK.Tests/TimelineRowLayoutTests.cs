@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // TimelineRowLayout turns a Project into the timeline's vertical layout. Pure model math, no
-    // Avalonia runtime — Clowd.Ui exposes its internals to this project via InternalsVisibleTo.
+    // Avalonia runtime — Prisc.Ui exposes its internals to this project via InternalsVisibleTo.
     public class TimelineRowLayoutTests
     {
         private static Track NewTrack(TrackKind kind, int order, string name = null) => new Track

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>Resolves the editor toolbar tool order and hidden-tool set from the persisted
     /// (and potentially stale/invalid) settings, tolerating unknown enum names.</summary>

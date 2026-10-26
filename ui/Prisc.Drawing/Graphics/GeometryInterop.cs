@@ -1,7 +1,7 @@
 using Avalonia;
-using Clowd.Geometry2D;
+using Prisc.Geometry2D;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>Conversions between Avalonia's points and the shared geometry core's
     /// <see cref="Vec2"/>. Both are plain coordinate pairs, so the round trip is exact.</summary>

@@ -1,4 +1,4 @@
-//! The coordinate spaces every Clowd process speaks.
+//! The coordinate spaces every Prisc process speaks.
 //!
 //! `ScreenUnit` — physical pixels in virtual-desktop space — is the one that
 //! crosses process boundaries: `session.json` and every Win32 call agree on

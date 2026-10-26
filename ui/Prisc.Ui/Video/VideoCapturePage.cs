@@ -5,13 +5,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.UI.Helpers;
-using Clowd.VideoSDK;
-using Clowd.VideoSDK.Playback;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.UI.Helpers;
+using Prisc.VideoSDK;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Orchestrates a screen-recording session (DESIGN §4.2): hosts the <see cref="ObsCapturer"/>
@@ -34,7 +34,7 @@ namespace Clowd.UI
 
         public event EventHandler Closed;
 
-        // set once obs-express has emitted "initialized" — Start/Toggle are no-ops before that
+        // set once prisc_recorder has emitted "initialized" — Start/Toggle are no-ops before that
         // (the WAIT state, §4.2/F6): an ungated "start" pre-initialized combined with a slow
         // first-run OBS init would time out inside an async void.
         private bool _initialized;
@@ -141,7 +141,7 @@ namespace Clowd.UI
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
                         $"The recording binary ({ObsBinaryLocator.BinaryFileName}) could not be found. " +
-                        $"Run 'cargo build' in the obs-express-rs repository, or set the {ObsBinaryLocator.EnvVarName} " +
+                        $"Run 'cargo rec' in the Prisc repository, or set the {ObsBinaryLocator.EnvVarName} " +
                         "environment variable to its location.",
                         "Screen recording unavailable");
                     DeleteDirectory(_sessionDir);
@@ -186,7 +186,7 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Spawns obs-express with the current recording settings and waits for it to report
+        /// Spawns prisc_recorder with the current recording settings and waits for it to report
         /// ready. Also the recovery path after a failed <c>configure</c>: the settings file is
         /// rewritten here, so the replacement process starts from exactly the values the running
         /// one refused to take.
@@ -318,7 +318,7 @@ namespace Clowd.UI
         }
 
         /// <summary>Pauses or resumes a rolling recording. Paused time is excluded from the output
-        /// (obs-express pauses the encoder, not the pipeline: levels keep flowing, statuses stop).
+        /// (prisc_recorder pauses the encoder, not the pipeline: levels keep flowing, statuses stop).
         /// No-op while a start/finish/another toggle is in flight.</summary>
         public async void TogglePauseRecording()
         {
@@ -513,7 +513,7 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// App-exit path: without this, exiting Clowd during an active recording lets obs-express
+        /// App-exit path: without this, exiting Prisc during an active recording lets prisc_recorder
         /// flush a valid video.mp4 (stdin EOF == quit, §1.2) but no session.json is ever written,
         /// so the recording is invisible in Recents and the dir leaks forever. Stops the recording
         /// (bounded by the capturer's stop timeout), registers the session — keeping a partial
@@ -895,7 +895,7 @@ namespace Clowd.UI
         /// <summary>Shuts the current capturer down AND waits out a process an in-flight
         /// <see cref="RespawnCapturerAsync"/> is still killing — both hold the session's video.mp4
         /// open, so measuring or deleting that file before this completes races a live
-        /// obs-express.</summary>
+        /// prisc_recorder.</summary>
         private async Task ShutdownCapturersAsync()
         {
             if (_obs != null)
@@ -967,7 +967,7 @@ namespace Clowd.UI
                 var logPath = WriteErrorLog(message);
 
                 // shut the process down before touching its output file: the mp4 length check
-                // and the directory delete below must not race a still-live obs-express.
+                // and the directory delete below must not race a still-live prisc_recorder.
                 await ShutdownCapturersAsync();
 
                 bool keepSession = HasPartialVideo();
@@ -1170,8 +1170,8 @@ namespace Clowd.UI
             }
         }
 
-        /// <summary>Production layout: the FFmpeg DLLs sit next to obs-express; dev machines set
-        /// CLOWD_FFMPEG_PATH, which FFmpegLoader checks before consulting this.</summary>
+        /// <summary>Production layout: the FFmpeg DLLs sit next to prisc_recorder; dev machines set
+        /// PRISC_FFMPEG_PATH, which FFmpegLoader checks before consulting this.</summary>
         private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         /// <summary>
@@ -1181,7 +1181,7 @@ namespace Clowd.UI
         /// video ended up and returns the failure, if any, so the caller can report it; a failed
         /// move is never fatal — the video simply stays in the session directory, which is exactly
         /// where the pre-#50 rewrite always left it. Callers must have shut the capturer down
-        /// first: obs-express holds the file open until its process exits.
+        /// first: prisc_recorder holds the file open until its process exits.
         /// </summary>
         private async Task<Exception> MoveToOutputFolderAsync()
         {
@@ -1235,7 +1235,7 @@ namespace Clowd.UI
         }
 
         /// <summary>Writes the capturer's ring-buffer log next to the settings file
-        /// (%APPDATA%\Clowd), falling back to the Desktop (WPF parity). Returns null on
+        /// (%APPDATA%\Prisc), falling back to the Desktop (WPF parity). Returns null on
         /// failure.</summary>
         private string WriteErrorLog(string message)
         {

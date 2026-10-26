@@ -1,12 +1,12 @@
-/// The application manifest is shared with the other Clowd binaries and
-/// lives in `clowd_rust_core/` beside the Rust they share (see that crate's
+/// The application manifest is shared with the other Prisc binaries and
+/// lives in `crates/prisc_rust_core/` beside the Rust they share (see that crate's
 /// manifest note). It cannot be embedded *by* that crate — `/MANIFEST:EMBED`
 /// is a link argument, and only the crate producing the executable links one
 /// — so each binary's build script points at the single copy instead of
 /// keeping its own. What it buys us is per-monitor DPI awareness; a copy
 /// that silently drifted would make one binary read virtualized coordinates
 /// and photograph the wrong pixels.
-const SHARED_MANIFEST: &str = "../clowd_rust_core/app.manifest";
+const SHARED_MANIFEST: &str = "../prisc_rust_core/app.manifest";
 
 // Windows precompiles the capture shaders (WGSL → naga → HLSL → FXC → DXBC)
 // and the binary consumes the blobs directly — the d3d11 backend feeds
@@ -25,9 +25,9 @@ include!("src/shader_bindings.rs");
 fn main() {
     println!("cargo:rerun-if-changed={SHARED_MANIFEST}");
     println!("cargo:rerun-if-changed=src/shader_bindings.rs");
-    // baked into the Sentry release name via option_env! (clowd_rust_core's
+    // baked into the Sentry release name via option_env! (prisc_rust_core's
     // telemetry::release), so a version bump has to invalidate the cached build
-    println!("cargo:rerun-if-env-changed=CLOWD_VERSION");
+    println!("cargo:rerun-if-env-changed=PRISC_VERSION");
 
     #[cfg(windows)]
     {

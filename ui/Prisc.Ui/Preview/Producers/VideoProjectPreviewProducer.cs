@@ -1,11 +1,11 @@
 using System;
 using System.Diagnostics;
 using System.Threading;
-using Clowd.UI.Services;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.Services;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.Preview.Producers
+namespace Prisc.UI.Preview.Producers
 {
     /// <summary>
     /// Lane B only. Composes one frame of a video-edit project the same way the renderer would, so

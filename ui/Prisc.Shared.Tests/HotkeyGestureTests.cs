@@ -2,10 +2,10 @@ using System;
 using System.Runtime.InteropServices;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     /// <summary>
-    /// <see cref="HotkeyGesture"/> parses and prints exactly as the clowd_hotkeys crate's
+    /// <see cref="HotkeyGesture"/> parses and prints exactly as the prisc_hotkeys crate's
     /// <c>Gesture</c> does (the same vectors as its unit tests), since the settings file, the
     /// standby capturer's command line and its status echo all carry that one text.
     /// </summary>

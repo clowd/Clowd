@@ -2,10 +2,10 @@ using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Pins the persistence boundary (final-design §B.6): discrete history actions (append / undo /
@@ -20,7 +20,7 @@ namespace Clowd.Drawing.Tests
     {
         static AutosaveThrottleTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static (DrawingCanvas Canvas, GraphicRectangle Rect) CanvasWithRect()

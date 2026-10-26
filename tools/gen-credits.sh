@@ -3,7 +3,7 @@
 #
 # Usage: ./tools/gen-credits.sh
 #
-# Produces clowd_ui/Clowd.Ui/Assets/credits.json (embedded as an Avalonia
+# Produces ui/Prisc.Ui/Assets/credits.json (embedded as an Avalonia
 # resource and rendered by AboutPage). Re-run this whenever dependencies
 # change — the output is deterministic (sorted, deduplicated) so diffs stay
 # clean and only reflect real dependency changes.
@@ -24,16 +24,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="$ROOT/clowd_ui/Clowd.Ui/Assets/credits.json"
+OUT="$ROOT/ui/Prisc.Ui/Assets/credits.json"
 JQ="${JQ:-jq}"
 
-# .NET projects that ship inside the Clowd.Ui executable. Test/benchmark/tool
+# .NET projects that ship inside the Prisc.Ui executable. Test/benchmark/tool
 # projects are intentionally excluded — their packages are not distributed.
 SHIPPED_CSPROJ=(
-    "clowd_ui/Clowd.Ui/Clowd.Ui.csproj"
-    "clowd_ui/Clowd.Shared/Clowd.Shared.csproj"
-    "clowd_ui/Clowd.Upload/Clowd.Upload.csproj"
-    "clowd_ui/Clowd.Drawing/Clowd.Drawing.csproj"
+    "ui/Prisc.Ui/Prisc.Ui.csproj"
+    "ui/Prisc.Shared/Prisc.Shared.csproj"
+    "ui/Prisc.Upload/Prisc.Upload.csproj"
+    "ui/Prisc.Drawing/Prisc.Drawing.csproj"
 )
 
 # Some older packages ship a nuspec without an SPDX <license type="expression">
@@ -46,15 +46,20 @@ declare -A LICENSE_OVERRIDES=(
 )
 
 # Shipped components no dependency manifest can enumerate: the model weights
-# clowd_ai embeds (see clowd_ai/assets/models/README.md) and the
-# ONNX Runtime the ort crate links statically into it. Merged into the Rust
-# section.
+# prisc_ai embeds (see crates/prisc_ai/assets/models/README.md), the
+# ONNX Runtime the ort crate links statically into it, and the native stack the
+# recorder (crates/prisc_recorder) builds and ships in its recorder/ folder:
+# libobs and its plugins from the obs-studio submodule, FFmpeg and x264.
+# Merged into the Rust section.
 # Fields are name|version|license|url; version may be empty.
 EXTRA_ENTRIES=(
     "RobustVideoMatting|1.0.0|GPL-3.0|https://github.com/PeterL1n/RobustVideoMatting"
     "DPDFNet||Apache-2.0|https://huggingface.co/Ceva-IP/DPDFNet"
     "PaddleOCR PP-OCRv6 models||Apache-2.0|https://github.com/PaddlePaddle/PaddleOCR"
     "ONNX Runtime||MIT|https://github.com/microsoft/onnxruntime"
+    "OBS Studio||GPL-2.0-or-later|https://github.com/obsproject/obs-studio"
+    "FFmpeg||GPL-2.0-or-later|https://ffmpeg.org"
+    "x264||GPL-2.0|https://www.videolan.org/developers/x264.html"
 )
 
 command -v cargo >/dev/null || { echo "error: cargo not found on PATH" >&2; exit 1; }
@@ -66,6 +71,8 @@ trap 'rm -rf "$TMP"' EXIT
 
 # ---------------------------------------------------------------------------
 # Rust: direct dependencies of the workspace crates (normal + build, no dev).
+# Path dependencies (the workspace's own crates, `.source == null`) are not
+# third-party code, so they are left out.
 # ---------------------------------------------------------------------------
 echo "==> Collecting Rust dependencies (cargo metadata)"
 cargo metadata --format-version 1 --manifest-path "$ROOT/Cargo.toml" \
@@ -77,6 +84,7 @@ cargo metadata --format-version 1 --manifest-path "$ROOT/Cargo.toml" \
             | .deps[]
             | select([.dep_kinds[].kind] | any(. == null or . == "build"))
             | $pkgs[.pkg]
+            | select(.source != null)
             | {
                 name,
                 version,
@@ -104,7 +112,7 @@ mv "$TMP/rust.merged.json" "$TMP/rust.json"
 # each package's cached .nuspec (SPDX license expression / repository url).
 # ---------------------------------------------------------------------------
 echo "==> Restoring .NET packages"
-dotnet restore "$ROOT/clowd_ui/Clowd.Ui/Clowd.Ui.csproj" >/dev/null
+dotnet restore "$ROOT/ui/Prisc.Ui/Prisc.Ui.csproj" >/dev/null
 
 NUGET="$(dotnet nuget locals global-packages --list | sed -E 's/^[^:]*: *//' | tr -d '\r')"
 echo "==> Reading NuGet package licenses from $NUGET"

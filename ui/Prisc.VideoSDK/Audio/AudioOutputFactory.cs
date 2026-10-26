@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Audio
+namespace Prisc.VideoSDK.Audio
 {
     /// <summary>Picks the audio backend for the running OS.</summary>
     public static class AudioOutputFactory

@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The frame-at-time-t selection state machine of the render path, extracted from

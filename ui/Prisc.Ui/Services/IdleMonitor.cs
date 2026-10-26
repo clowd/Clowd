@@ -4,20 +4,20 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
-using Clowd.Config;
-using Clowd.UI.VideoEditor;
+using Prisc.Config;
+using Prisc.UI.VideoEditor;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Decides whether now is a quiet enough moment to restart Clowd underneath the user in order to
-    /// apply a downloaded update (<see cref="Clowd.Config.SettingsGeneral.AutoApplyUpdates"/>).
+    /// Decides whether now is a quiet enough moment to restart Prisc underneath the user in order to
+    /// apply a downloaded update (<see cref="Prisc.Config.SettingsGeneral.AutoApplyUpdates"/>).
     ///
     /// The primary signal is how long the *machine* has been without keyboard or mouse input — an
     /// update should land while the user is away from the computer, not merely while they happen not
-    /// to be looking at Clowd. Windows and macOS both expose that directly
+    /// to be looking at Prisc. Windows and macOS both expose that directly
     /// (<see cref="GetSystemIdleTime"/>); anywhere else it is unavailable and the fallback is the
-    /// last interaction with a Clowd window, which the windows themselves report in here.
+    /// last interaction with a Prisc window, which the windows themselves report in here.
     ///
     /// On top of the idle test are a few hard guards that hold regardless of how long the machine has
     /// been untouched: an unattended recording or upload is still running work that a restart would
@@ -29,12 +29,12 @@ namespace Clowd.UI
         /// considered acceptable.</summary>
         public static readonly TimeSpan IdleThreshold = TimeSpan.FromMinutes(10);
 
-        // seeded with "now" rather than DateTime.MinValue: a Clowd that has only just started is not
+        // seeded with "now" rather than DateTime.MinValue: a Prisc that has only just started is not
         // idle, and shouldn't restart itself moments after the user launched it.
         private static long _lastInteractionTicks = DateTime.UtcNow.Ticks;
         private static long _lastCaptureTicks = DateTime.UtcNow.Ticks;
 
-        /// <summary>Called when the user does something in a Clowd window (editors, settings). Only
+        /// <summary>Called when the user does something in a Prisc window (editors, settings). Only
         /// used where the OS cannot report system-wide idle time.</summary>
         public static void NotifyInteraction() =>
             Interlocked.Exchange(ref _lastInteractionTicks, DateTime.UtcNow.Ticks);
@@ -73,7 +73,7 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// True when Clowd can be restarted without the user noticing or losing anything.
+        /// True when Prisc can be restarted without the user noticing or losing anything.
         /// <paramref name="reason"/> describes the blocker when it returns false, so the settings
         /// page can explain why a downloaded update is still waiting.
         /// </summary>
@@ -107,7 +107,7 @@ namespace Clowd.UI
             }
 
             if ((EditorWindow.GetOpenEditors().Any() || VideoEditorWindow.GetOpenEditors().Any())
-                && SettingsRoot.Current?.Editor?.RestoreSessionsOnClowdStart != true)
+                && SettingsRoot.Current?.Editor?.RestoreSessionsOnPriscStart != true)
             {
                 // reopening the editors after the restart is what makes this non-destructive; without
                 // session restore the update would silently throw away the user's open annotations.
@@ -131,7 +131,7 @@ namespace Clowd.UI
             }
             else if (TimeSinceInteraction < IdleThreshold)
             {
-                // no system-wide idle API here — fall back to how long ago Clowd itself was touched.
+                // no system-wide idle API here — fall back to how long ago Prisc itself was touched.
                 reason = "Prisc was used recently";
                 return false;
             }

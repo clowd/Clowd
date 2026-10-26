@@ -3,10 +3,10 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.VisualTree;
-using Clowd.UI.Controls;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls;
+using Prisc.UI.Controls.Tray;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// Tips in the dialog's body. The body is one StripToolTips host (ColorDialog's content grid), so

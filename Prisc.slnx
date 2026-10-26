@@ -1,14 +1,14 @@
 <Solution>
-  <Project Path="clowd_ui/Clowd.Drawing/Clowd.Drawing.csproj" />
-  <Project Path="clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj" />
-  <Project Path="clowd_ui/Clowd.Geometry/Clowd.Geometry.csproj" />
-  <Project Path="clowd_ui/Clowd.Shared/Clowd.Shared.csproj" />
-  <Project Path="clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj" />
-  <Project Path="clowd_ui/Clowd.Ui/Clowd.Ui.csproj" />
-  <Project Path="clowd_ui/Clowd.Upload/Clowd.Upload.csproj" />
-  <Project Path="clowd_ui/Clowd.VideoRender/Clowd.VideoRender.csproj" />
-  <Project Path="clowd_ui/Clowd.VideoSDK/Clowd.VideoSDK.csproj" />
-  <Project Path="clowd_ui/Clowd.VideoSDK.Tests/Clowd.VideoSDK.Tests.csproj" />
-  <Project Path="clowd_ui/CursorGenerator/CursorGenerator.csproj" />
+  <Project Path="ui/Prisc.Drawing/Prisc.Drawing.csproj" />
+  <Project Path="ui/Prisc.Drawing.Tests/Prisc.Drawing.Tests.csproj" />
+  <Project Path="ui/Prisc.Geometry/Prisc.Geometry.csproj" />
+  <Project Path="ui/Prisc.Shared/Prisc.Shared.csproj" />
+  <Project Path="ui/Prisc.Shared.Tests/Prisc.Shared.Tests.csproj" />
+  <Project Path="ui/Prisc.Ui/Prisc.Ui.csproj" />
+  <Project Path="ui/Prisc.Upload/Prisc.Upload.csproj" />
+  <Project Path="ui/Prisc.VideoRender/Prisc.VideoRender.csproj" />
+  <Project Path="ui/Prisc.VideoSDK/Prisc.VideoSDK.csproj" />
+  <Project Path="ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj" />
+  <Project Path="ui/CursorGenerator/CursorGenerator.csproj" />
   <Project Path="tools/background-tiles/BackgroundTiles.csproj" />
 </Solution>

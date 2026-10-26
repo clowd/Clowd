@@ -1,8 +1,8 @@
 using System;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The resolved geometry of one drawn picture: the source-pixel region shown

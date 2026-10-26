@@ -1,9 +1,9 @@
 using System;
 using System.Globalization;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>
     /// The frame rate a render is encoded at. There is no project-wide rate to pick any more: the

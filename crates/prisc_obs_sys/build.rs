@@ -11,7 +11,7 @@ fn main() {
         "macos" => build_macos(),
         "windows" => build_windows(),
         "linux" => build_linux(),
-        other => panic!("obs-sys: unsupported CARGO_CFG_TARGET_OS `{other}`"),
+        other => panic!("prisc_obs_sys: unsupported CARGO_CFG_TARGET_OS `{other}`"),
     }
 }
 
@@ -35,7 +35,7 @@ fn obs_version_override() -> String {
 /// Rust's target arch (`CARGO_CFG_TARGET_ARCH`) drives the native OBS build's
 /// architecture, so a single `cargo build --target <triple>` yields a matching
 /// native or cross build. `x86_64` and `aarch64` are the only architectures
-/// obs-express ships (Windows x64/ARM64, macOS x86_64/arm64, Linux x86_64/aarch64).
+/// prisc_recorder ships (Windows x64/ARM64, macOS x86_64/arm64, Linux x86_64/aarch64).
 fn target_arch() -> String {
     env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default()
 }
@@ -45,7 +45,7 @@ fn win_vs_platform() -> &'static str {
     match target_arch().as_str() {
         "x86_64" => "x64",
         "aarch64" => "ARM64",
-        other => panic!("obs-sys: unsupported Windows target arch `{other}`"),
+        other => panic!("prisc_obs_sys: unsupported Windows target arch `{other}`"),
     }
 }
 
@@ -57,7 +57,7 @@ fn mac_osx_arch() -> &'static str {
     match target_arch().as_str() {
         "x86_64" => "x86_64",
         "aarch64" => "arm64",
-        other => panic!("obs-sys: unsupported macOS target arch `{other}`"),
+        other => panic!("prisc_obs_sys: unsupported macOS target arch `{other}`"),
     }
 }
 
@@ -215,10 +215,10 @@ fn mac_emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
     println!("cargo:rustc-link-lib=framework=libobs");
 
     // rpaths so this crate's own test harness can launch. `cargo:rustc-link-arg`
-    // is package-scoped: it applies to obs-sys's tests/benches but does NOT
+    // is package-scoped: it applies to prisc_obs_sys's tests/benches but does NOT
     // propagate to dependents, so every executable-producing consumer repeats
-    // these in its own build script (obs-express, obs-platform, obs,
-    // clowd_share_region). Even an empty harness dies in dyld without them:
+    // these in its own build script (prisc_recorder, prisc_obs_platform, prisc_obs,
+    // prisc_share_region). Even an empty harness dies in dyld without them:
     // libobs's install name and its FFmpeg/x264 references are all @rpath.
     println!(
         "cargo:rustc-link-arg=-Wl,-rpath,{}",
@@ -238,7 +238,7 @@ fn mac_emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
 /// downstream build scripts, but rooted at the obs-studio checkout we already
 /// hold rather than walking up from OUT_DIR.
 fn mac_find_obs_deps_lib(obs_src: &Path) -> Option<PathBuf> {
-    obs_build_support::obs_deps_bundles(obs_src)
+    prisc_build_support::obs_deps_bundles(obs_src)
         .into_iter()
         .map(|dir| dir.join("lib"))
         .find(|lib| lib.exists())
@@ -287,7 +287,7 @@ fn win_build_dir() -> PathBuf {
 /// `OBS_BUILD_DIR`, else `<workspace_target>/obs-<arch_suffix>` — the layout
 /// shared by the Windows and Linux branches (see [`win_build_dir`]). Keeping
 /// the OBS tree outside cargo's OUT_DIR also means it survives `cargo clean -p
-/// obs-sys` and can be shared across worktrees via `OBS_BUILD_DIR`.
+/// prisc_obs_sys` and can be shared across worktrees via `OBS_BUILD_DIR`.
 fn workspace_obs_build_dir(arch_suffix: &str) -> PathBuf {
     if let Ok(dir) = env::var("OBS_BUILD_DIR") {
         return PathBuf::from(dir);
@@ -515,7 +515,7 @@ fn win_emit_exports(obs_src: &Path, build_dir: &Path, config: &str) {
         println!("cargo:deps_bin={}", bin.display());
     } else {
         println!(
-            "cargo:warning=obs-sys: could not locate the obs-deps bin dir under {}",
+            "cargo:warning=prisc_obs_sys: could not locate the obs-deps bin dir under {}",
             obs_src.join(".deps").display()
         );
     }
@@ -533,7 +533,7 @@ fn find_obs_deps_bin(obs_src: &Path) -> Option<PathBuf> {
 /// `obs-deps-*` would ship x64 runtime DLLs in an ARM64 bundle, or generate
 /// bindings against the wrong headers.
 fn find_obs_deps_subdir(obs_src: &Path, sub: &str) -> Option<PathBuf> {
-    obs_build_support::obs_deps_bundles(obs_src)
+    prisc_build_support::obs_deps_bundles(obs_src)
         .into_iter()
         .find(|dir| {
             let name = dir.file_name().unwrap_or_default().to_string_lossy();
@@ -563,8 +563,8 @@ fn is_target_arch_bundle(name: &str) -> bool {
 // Linux has no obs-deps bundle, so the two third-party pieces OBS cannot take
 // from the distro are supplied here before CMake runs:
 //
-// - FFmpeg: the pinned BtbN build (obs-build-support), shared with ffmpeg-sys
-//   so libobs, the plugins and vid2gif all load one FFmpeg. The system libav*
+// - FFmpeg: the pinned BtbN build (prisc_build_support), shared with prisc_ffmpeg_sys
+//   so libobs, the plugins and prisc_vid2gif all load one FFmpeg. The system libav*
 //   is never used — distro FFmpeg versions vary per release, and two copies in
 //   one process would each carry their own codec registry and allocator.
 // - x264: built from a pinned source commit into a static, PIC archive that
@@ -594,7 +594,7 @@ const X264_COMMIT: &str = "b35605ace3ddf7c1a5d67a2eb553f034aef41d55";
 /// bytes are stable and the SHA-256 below — the one upstream publishes in
 /// `mbedtls-<ver>-sha256sum.txt` — pins it).
 ///
-/// Only obs-outputs links it (for RTMPS, which obs-express never uses, but
+/// Only obs-outputs links it (for RTMPS, which prisc_recorder never uses, but
 /// the plugin also carries mp4_output, which --multi-track needs). It is built
 /// static and embedded rather than taken from the distro because the Mbed TLS
 /// SONAMEs change between releases (`libmbedtls.so.14` on 2.28, `.so.21` on
@@ -655,21 +655,21 @@ const LINUX_TARGETS: &[&str] = &[
 /// registers exe-relative (`<exe>/../lib/obs-plugins`) and CWD-relative plugin
 /// dirs that no configure option removes. Plugin loading is therefore
 /// restricted to our own registered directory at runtime instead
-/// (`obs::ObsContext::load_all_modules`, Linux branch). libobs *data* files
+/// (`prisc_obs::ObsContext::load_all_modules`, Linux branch). libobs *data* files
 /// still resolve CWD-relative `share/obs/libobs/` and exe-relative
 /// `../share/obs/libobs/` before our `obs_add_data_path` entry
 /// (`find_libobs_data_file`, libobs/obs-nix.c); that only matters if the
 /// bundle is unpacked next to a system OBS's `share/obs`, and fixing it would
 /// need a libobs patch.
-const LINUX_INSTALL_PREFIX: &str = "/nonexistent/obs-express";
+const LINUX_INSTALL_PREFIX: &str = "/nonexistent/prisc-recorder";
 
 /// OBS build-dir suffix for the target arch (`<target>/obs-x64`,
 /// `<target>/obs-arm64`), matching the Windows naming. The FFmpeg asset lookup
-/// (obs-build-support) panics with instructions for any unsupported arch, and
+/// (prisc_build_support) panics with instructions for any unsupported arch, and
 /// calling it first makes sure that happens before any other work.
 fn linux_arch_suffix() -> &'static str {
     let arch = target_arch();
-    let _ = obs_build_support::linux::ffmpeg_asset(&arch);
+    let _ = prisc_build_support::linux::ffmpeg_asset(&arch);
     match arch.as_str() {
         "x86_64" => "x64",
         "aarch64" => "arm64",
@@ -678,7 +678,7 @@ fn linux_arch_suffix() -> &'static str {
 }
 
 fn build_linux() {
-    use obs_build_support::linux;
+    use prisc_build_support::linux;
 
     let arch_suffix = linux_arch_suffix();
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -743,7 +743,7 @@ fn build_linux() {
     // Consumed downstream as DEP_OBS_*: the build dir/config (same keys as the
     // other platforms), the rundir lib dir holding libobs.so.30,
     // libobs-opengl.so.30 and obs-plugins/, and the FFmpeg bundle (the same
-    // one ffmpeg-sys exports as DEP_FFMPEG_DEPS_*).
+    // one prisc_ffmpeg_sys exports as DEP_FFMPEG_DEPS_*).
     println!("cargo:obs_build_dir={}", build_dir.display());
     println!("cargo:obs_build_config={config}");
     println!("cargo:obs_lib_dir={}", lib_dir.display());
@@ -764,10 +764,10 @@ fn build_linux() {
 /// for the same sharing. The prefix name carries the commit, so a pin bump
 /// builds side by side instead of reusing a stale archive.
 fn linux_ensure_x264(deps_dir: &Path, arch_suffix: &str) -> PathBuf {
-    use obs_build_support::linux::run;
+    use prisc_build_support::linux::run;
 
     let prefix = deps_dir.join(format!("x264-{}-{arch_suffix}", &X264_COMMIT[..12]));
-    let marker = prefix.join(".obs-express-complete");
+    let marker = prefix.join(".prisc-complete");
     let is_complete = || std::fs::read_to_string(&marker).is_ok_and(|s| s.trim() == X264_COMMIT);
     if is_complete() {
         return prefix;
@@ -814,7 +814,7 @@ fn linux_ensure_x264(deps_dir: &Path, arch_suffix: &str) -> PathBuf {
 /// checks it out, asserting the result really is that commit (which pins the
 /// content as firmly as an archive hash would).
 fn linux_git_checkout(dir: &Path, repo: &str, commit: &str) {
-    use obs_build_support::linux::run;
+    use prisc_build_support::linux::run;
 
     std::fs::create_dir_all(dir).unwrap();
     let git = |args: &[&str]| {
@@ -854,7 +854,7 @@ fn linux_git_checkout(dir: &Path, repo: &str, commit: &str) {
 /// it is header-only, so a pinned checkout is all it takes.
 fn linux_ensure_simde(deps_dir: &Path) -> PathBuf {
     let dir = deps_dir.join(format!("simde-{}", &SIMDE_COMMIT[..12]));
-    let marker = dir.join(".obs-express-complete");
+    let marker = dir.join(".prisc-complete");
     let is_complete = || std::fs::read_to_string(&marker).is_ok_and(|s| s.trim() == SIMDE_COMMIT);
     if is_complete() {
         return dir;
@@ -895,10 +895,10 @@ fn linux_ensure_simde(deps_dir: &Path) -> PathBuf {
 ///
 /// Same `.deps` placement, versioned prefix and lock/marker scheme as x264.
 fn linux_ensure_mbedtls(deps_dir: &Path, arch_suffix: &str) -> PathBuf {
-    use obs_build_support::linux::{download_verified, run};
+    use prisc_build_support::linux::{download_verified, run};
 
     let prefix = deps_dir.join(format!("mbedtls-{MBEDTLS_VERSION}-{arch_suffix}"));
-    let marker = prefix.join(".obs-express-complete");
+    let marker = prefix.join(".prisc-complete");
     let is_complete = || std::fs::read_to_string(&marker).is_ok_and(|s| s.trim() == MBEDTLS_SHA256);
     if is_complete() {
         return prefix;
@@ -920,7 +920,7 @@ fn linux_ensure_mbedtls(deps_dir: &Path, arch_suffix: &str) -> PathBuf {
         MBEDTLS_URL,
         MBEDTLS_SHA256,
         &archive,
-        "MBEDTLS_SHA256 in crates/obs-sys/build.rs",
+        "MBEDTLS_SHA256 in crates/prisc_obs_sys/build.rs",
     );
     run(Command::new("tar")
         .arg("-xjf")
@@ -1008,7 +1008,7 @@ fn linux_ensure_mbedtls(deps_dir: &Path, arch_suffix: &str) -> PathBuf {
 /// `${pcfiledir}`-relative, so they are valid wherever the bundle sits). The
 /// system path is kept, not replaced: PipeWire, Gio, libva and the rest are
 /// found through it.
-fn linux_pkg_config_path(ffmpeg: &obs_build_support::linux::FfmpegBundle, x264: &Path) -> String {
+fn linux_pkg_config_path(ffmpeg: &prisc_build_support::linux::FfmpegBundle, x264: &Path) -> String {
     let mut parts = vec![
         ffmpeg.pkgconfig().display().to_string(),
         x264.join("lib/pkgconfig").display().to_string(),
@@ -1021,7 +1021,7 @@ fn linux_pkg_config_path(ffmpeg: &obs_build_support::linux::FfmpegBundle, x264: 
     parts.join(":")
 }
 
-/// The prefixes of the dependencies obs-sys fetches or builds from source.
+/// The prefixes of the dependencies prisc_obs_sys fetches or builds from source.
 struct LinuxSourceDeps<'a> {
     x264: &'a Path,
     mbedtls: &'a Path,
@@ -1032,7 +1032,7 @@ fn linux_cmake_configure(
     obs_src: &Path,
     build_dir: &Path,
     manifest_dir: &Path,
-    ffmpeg: &obs_build_support::linux::FfmpegBundle,
+    ffmpeg: &prisc_build_support::linux::FfmpegBundle,
     deps: &LinuxSourceDeps,
 ) {
     let LinuxSourceDeps {
@@ -1087,7 +1087,7 @@ fn linux_cmake_configure(
         "-DENABLE_V4L2=ON".into(),
         // $ORIGIN-relative INSTALL_RPATHs. The build tree itself keeps absolute
         // RUNPATHs into rundir (so it runs in place), and the copies that
-        // obs-express's build script stages are re-pointed at $ORIGIN with
+        // prisc_recorder's build script stages are re-pointed at $ORIGIN with
         // patchelf, so neither relies on this; it only makes a `cmake
         // --install` of this tree relocatable as well.
         "-DENABLE_RELOCATABLE=ON".into(),
@@ -1129,7 +1129,7 @@ fn linux_cmake_configure(
         "-DMbedTLS_INCLUDES_X509=TRUE".into(),
         "-DMbedTLS_INCLUDES_CRYPTO=TRUE".into(),
         format!("-DSIMDe_INCLUDE_DIR={}", simde.display()),
-        // Our finder overrides (crates/obs-sys/cmake), searched before OBS's
+        // Our finder overrides (crates/prisc_obs_sys/cmake), searched before OBS's
         // own (OBS appends its finder dirs to CMAKE_MODULE_PATH).
         format!(
             "-DCMAKE_MODULE_PATH={}",
@@ -1196,7 +1196,7 @@ fn linux_cmake_configure(
 
 fn linux_cmake_build(
     build_dir: &Path,
-    ffmpeg: &obs_build_support::linux::FfmpegBundle,
+    ffmpeg: &prisc_build_support::linux::FfmpegBundle,
     x264: &Path,
 ) {
     let marker = build_dir.join(".build_complete");
@@ -1228,7 +1228,7 @@ fn linux_cmake_build(
 fn linux_emit_link_directives(
     build_dir: &Path,
     config: &str,
-    ffmpeg: &obs_build_support::linux::FfmpegBundle,
+    ffmpeg: &prisc_build_support::linux::FfmpegBundle,
 ) -> PathBuf {
     let link_search = build_dir.join("libobs");
     assert!(
@@ -1313,12 +1313,12 @@ fn generate_bindings(
         // timestamps must share obs_get_video_frame_time's timebase.
         .allowlist_function("os_gettime_ns")
         // Graphics API (graphics/graphics.h): effects, texrenders and sprite
-        // draws, used by clowd_share_region's obscure renderer to post-process
+        // draws, used by prisc_share_region's obscure renderer to post-process
         // the composited canvas inside the display draw callback.
         .allowlist_function("gs_.*")
         .allowlist_type("obs_.*")
         // Graphics types (graphics/graphics.h): gs_init_data / gs_window and
-        // the GS_* enums, needed by obs_display_create (crates/obs display.rs).
+        // the GS_* enums, needed by obs_display_create (crates/prisc_obs display.rs).
         .allowlist_type("gs_.*")
         .allowlist_type("signal_handler_t")
         .allowlist_type("calldata_t")
@@ -1329,7 +1329,7 @@ fn generate_bindings(
         .allowlist_var("GS_.*")
         .allowlist_var("VIDEO_.*")
         .allowlist_var("AUDIO_.*")
-        // Track-count limits: obs-express asserts its own constants against
+        // Track-count limits: prisc_recorder asserts its own constants against
         // these at compile time, so a libobs bump that changes them fails the
         // build instead of silently dropping tracks.
         .allowlist_var("MAX_AUDIO_MIXES")
@@ -1366,7 +1366,7 @@ fn assert_no_opaque_regressions(generated: &str) {
             "bindgen emitted `{name}` as an opaque 1-byte struct — this is the \
              bindgen/libclang layout bug (seen with bindgen 0.71 + libclang 22). \
              Check the installed LLVM version against the bindgen version in \
-             crates/obs-sys/Cargo.toml."
+             crates/prisc_obs_sys/Cargo.toml."
         );
     }
 }

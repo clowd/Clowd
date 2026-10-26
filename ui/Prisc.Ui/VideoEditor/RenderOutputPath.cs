@@ -1,8 +1,8 @@
 using System;
 using System.IO;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// What the render dialog's "Save to" box means: the full <c>.mp4</c> or <c>.mkv</c> path a render can be

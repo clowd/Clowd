@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // Real-decode round trip: Mp4Writer encodes a fixture whose frames are distinguishable
     // (grayscale ramp), SequentialFrameSource decodes it back and the frame-at-time-t pull is
@@ -44,7 +44,7 @@ namespace Clowd.VideoSDK.Tests
         /// steps to survive the BGRA→yuv420p→BGRA round trip unambiguously.</summary>
         private string EncodeFixture()
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-seqsrc-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-seqsrc-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using var writer = new Mp4Writer(path, new Mp4WriterOptions
@@ -268,7 +268,7 @@ namespace Clowd.VideoSDK.Tests
         public void Attaches_masks_from_a_valid_matte_sidecar_paired_by_pts()
         {
             RequireFFmpeg();
-            string cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-seqsrc-matte-{Guid.NewGuid():N}");
+            string cacheDir = Path.Combine(Path.GetTempPath(), $"prisc-seqsrc-matte-{Guid.NewGuid():N}");
             Directory.CreateDirectory(cacheDir);
             try
             {
@@ -306,7 +306,7 @@ namespace Clowd.VideoSDK.Tests
         public void A_sidecar_without_a_valid_companion_delivers_maskless_frames()
         {
             RequireFFmpeg();
-            string cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-seqsrc-matte-{Guid.NewGuid():N}");
+            string cacheDir = Path.Combine(Path.GetTempPath(), $"prisc-seqsrc-matte-{Guid.NewGuid():N}");
             Directory.CreateDirectory(cacheDir);
             try
             {

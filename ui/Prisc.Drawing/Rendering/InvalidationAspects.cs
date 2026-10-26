@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Drawing.Rendering
+namespace Prisc.Drawing.Rendering
 {
     /// <summary>
     /// The classes of cached state a property change can invalidate (final-design §C.2). Each

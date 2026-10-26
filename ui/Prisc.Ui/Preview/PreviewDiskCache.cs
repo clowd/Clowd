@@ -9,11 +9,11 @@ using System.Text;
 using System.Threading;
 using SkiaSharp;
 
-namespace Clowd.UI.Preview
+namespace Prisc.UI.Preview
 {
     /// <summary>
     /// The on-disk preview cache: one PNG per (source file, stamp, format version), under
-    /// <c>%LOCALAPPDATA%/Clowd/previews</c>. It exists for the two kinds that are genuinely
+    /// <c>%LOCALAPPDATA%/Prisc/previews</c>. It exists for the two kinds that are genuinely
     /// expensive to produce — a video poster (an avformat open, a backward keyframe seek and up to
     /// a GOP of decoding) and a project composite (a whole <c>FrameComposer</c> pass). An image is
     /// cheaper to re-decode at sample size than to round-trip through here, and an icon rasterizes
@@ -295,7 +295,7 @@ namespace Clowd.UI.Preview
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
-                        // a shard being read by another Clowd process; leave it for next time
+                        // a shard being read by another Prisc process; leave it for next time
                     }
                 }
 

@@ -1,7 +1,7 @@
 //! Window walker — enumerates visible top-level windows and walks the child
 //! hierarchy to find the best capture-target rectangle under a given point.
 //!
-//! Port of `clowd_capture_dx/WindowWalker.cpp`.
+//! Port of the retired C++ capturer's `WindowWalker.cpp`.
 
 #![allow(dead_code)]
 
@@ -28,7 +28,7 @@ use windows::{
 };
 
 use super::{HitTestResult, MonitorInfo, ObstructedWindow, WindowCaptureRef, WindowTarget};
-use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;

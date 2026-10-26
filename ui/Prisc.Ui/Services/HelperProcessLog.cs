@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// A bounded ring buffer of a helper process's output, the other half of the plumbing every

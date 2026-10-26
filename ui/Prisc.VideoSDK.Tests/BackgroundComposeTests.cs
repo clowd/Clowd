@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// A <see cref="BackgroundContent"/> item through <see cref="FrameComposer.Compose"/> on the
@@ -462,7 +462,7 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>The solid style draws no artwork at all: the very box a wallpaper would have
         /// covered, filled flat with the item's own color. A missing or unparseable color is
-        /// Clowd blue rather than nothing, and an alpha composites over what is behind.</summary>
+        /// Prisc blue rather than nothing, and an alpha composites over what is behind.</summary>
         [Fact]
         public void Solid_style_fills_the_box_with_the_items_color()
         {
@@ -471,7 +471,7 @@ namespace Clowd.VideoSDK.Tests
             for (int i = 0; i < px.Length; i += 4)
                 Assert.Equal((0, 0, 255, 255), (px[i], px[i + 1], px[i + 2], px[i + 3]));
 
-            // the default color is Clowd blue, and an unparseable one falls back to it
+            // the default color is Prisc blue, and an unparseable one falls back to it
             var (blue, _) = OneBackground(BackgroundCatalog.SolidStyle);
             var (bad, _) = OneBackground(BackgroundCatalog.SolidStyle, color: "not-a-color");
             var expected = Render(blue, 0);

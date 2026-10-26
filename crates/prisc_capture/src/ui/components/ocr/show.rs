@@ -31,7 +31,7 @@ use crate::ui::components::pill;
 use crate::ui::components::{InputCtx, Local};
 use crate::ui::egui_host::REPAINT_FLOOR;
 use crate::ui::shared::{aabb_intersects, UiMonitor};
-use clowd_rust_core::geometry::{RectExt, ScreenRect, ScreenRectF};
+use prisc_rust_core::geometry::{RectExt, ScreenRect, ScreenRectF};
 
 /// Peak opacity of the sweep band.
 pub const SWEEP_ALPHA: f32 = 0.30;
@@ -450,7 +450,7 @@ mod tests {
     use super::*;
     use crate::interaction::InteractionState;
     use crate::ui::shared::monitor_index_at;
-    use clowd_rust_core::geometry::ScreenPointF;
+    use prisc_rust_core::geometry::ScreenPointF;
 
     fn region() -> ScreenRectF {
         ScreenRectF::from_xy_size(100.0, 200.0, 400.0, 300.0)

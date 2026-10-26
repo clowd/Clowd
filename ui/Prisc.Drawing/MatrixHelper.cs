@@ -1,6 +1,6 @@
 using Avalonia;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     /// <summary>
     /// Replacements for WPF RotateTransform(angle, cx, cy) and Matrix.ScaleAt (decision table #28).

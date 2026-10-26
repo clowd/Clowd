@@ -2,33 +2,33 @@ using System;
 using System.IO;
 using System.Linq;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Locates the native <c>clowd_hotkeys</c> library behind the global hotkeys
-    /// (<see cref="HotkeysNative"/>). Probe order: the <c>CLOWD_HOTKEYS_PATH</c> environment
-    /// variable, then alongside the Clowd.Ui executable (release layout), then walking up from the
+    /// Locates the native <c>prisc_hotkeys</c> library behind the global hotkeys
+    /// (<see cref="HotkeysNative"/>). Probe order: the <c>PRISC_HOTKEYS_PATH</c> environment
+    /// variable, then alongside the Prisc.Ui executable (release layout), then walking up from the
     /// app base directory to a cargo workspace root and taking the newest of
     /// <c>target/{debug,release}</c> and their <c>deps/</c> folders (debug-time layout) — the
     /// shape <see cref="AiBinaryLocator"/> uses.
     /// </summary>
     /// <remarks>
-    /// <c>deps/</c> matters: building a crate that depends on clowd_hotkeys (<c>cargo build -p
-    /// clowd_capture</c>, <c>cargo r</c>) compiles the library into <c>target/&lt;profile&gt;/deps/</c>
+    /// <c>deps/</c> matters: building a crate that depends on prisc_hotkeys (<c>cargo build -p
+    /// prisc_capture</c>, <c>cargo r</c>) compiles the library into <c>target/&lt;profile&gt;/deps/</c>
     /// without copying it up to <c>target/&lt;profile&gt;/</c>, so probing only the latter would
     /// load a stale copy and fail the ABI check. Newest wins for the same reason.
-    /// <para>Dev loop: a running Clowd.Ui holds the library open, so relinking clowd_hotkeys
-    /// fails with LNK1104 on Windows. Close Clowd.Ui and the standby capturer, build, then
+    /// <para>Dev loop: a running Prisc.Ui holds the library open, so relinking prisc_hotkeys
+    /// fails with LNK1104 on Windows. Close Prisc.Ui and the standby capturer, build, then
     /// relaunch.</para>
     /// </remarks>
     public static class HotkeysLibraryLocator
     {
-        public const string EnvVarName = "CLOWD_HOTKEYS_PATH";
+        public const string EnvVarName = "PRISC_HOTKEYS_PATH";
 
         public static string FileName =>
-            OperatingSystem.IsWindows() ? "clowd_hotkeys.dll"
-            : OperatingSystem.IsMacOS() ? "libclowd_hotkeys.dylib"
-            : "libclowd_hotkeys.so";
+            OperatingSystem.IsWindows() ? "prisc_hotkeys.dll"
+            : OperatingSystem.IsMacOS() ? "libprisc_hotkeys.dylib"
+            : "libprisc_hotkeys.so";
 
         public static string Resolve() =>
             Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory);
@@ -40,7 +40,7 @@ namespace Clowd.UI
             if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
                 return Path.GetFullPath(envVarValue);
 
-            // (b) next to the Clowd.Ui executable (release layout copies the library alongside)
+            // (b) next to the Prisc.Ui executable (release layout copies the library alongside)
             var local = Path.Combine(baseDirectory, FileName);
             if (File.Exists(local))
                 return Path.GetFullPath(local);

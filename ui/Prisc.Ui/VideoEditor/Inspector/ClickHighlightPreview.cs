@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 
-namespace Clowd.UI.VideoEditor.Inspector
+namespace Prisc.UI.VideoEditor.Inspector
 {
     /// <summary>
     /// A looping preview of one click-highlight animation, drawn from <see cref="ClickHighlight"/> —

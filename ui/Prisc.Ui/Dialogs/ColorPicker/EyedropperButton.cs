@@ -3,14 +3,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.UI.Controls;
-using Clowd.Util;
+using Prisc.UI.Controls;
+using Prisc.Util;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// Press-and-drag eyedropper. Holding the button and dragging samples whatever is under the
-    /// pointer — anywhere on the desktop, not just over Clowd — raising <see cref="Preview"/> as
+    /// pointer — anywhere on the desktop, not just over Prisc — raising <see cref="Preview"/> as
     /// it moves and <see cref="Picked"/> on release. Releasing without ever leaving the button
     /// (a plain click) is treated as a canceled drag, since the pixel under the button is the
     /// button itself.
@@ -22,7 +22,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
     /// Hidden entirely where <see cref="ScreenPixels"/> cannot sample the screen at all
     /// (Linux), but only disabled — with a tooltip saying why — when the platform could sample and
     /// macOS Screen Recording permission is what's missing. That's a state the user can fix, and a
-    /// vanished button reads as a feature Clowd doesn't have.
+    /// vanished button reads as a feature Prisc doesn't have.
     /// </remarks>
     public class EyedropperButton : ToolButton
     {

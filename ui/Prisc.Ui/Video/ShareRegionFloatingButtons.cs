@@ -3,11 +3,11 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Interactivity;
-using Clowd.Config;
-using Clowd.Localization;
-using Clowd.UI.Controls.Tray;
+using Prisc.Config;
+using Prisc.Localization;
+using Prisc.UI.Controls.Tray;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The floating strip of a share-region session: grip · FPS readout · Hide/Show · Resize ·

@@ -2,10 +2,10 @@
 using System.IO;
 using System.Linq;
 using System.Text;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The window-capture JSONL parser: header/window_info/window rows into per-window

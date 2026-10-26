@@ -12,7 +12,7 @@ using Avalonia.Platform.Storage;
 using Clowd.Clipboard;
 using AvaBitmap = Avalonia.Media.Imaging.Bitmap;
 
-namespace Clowd;
+namespace Prisc;
 
 public static class ClipboardImpl
 {
@@ -26,7 +26,7 @@ public static class ClipboardImpl
     // which is why copy appeared to do nothing there. The canvas identifier is a valid UTI on
     // every platform (macOS rejects a pasteboard item carrying a malformed type), and clipboard
     // contents are transient so there is no older-build wire format to preserve.
-    private const string CANVAS_CLIPBOARD_FORMAT = "com.clowd.canvas-graphics";
+    private const string CANVAS_CLIPBOARD_FORMAT = "com.prisc.canvas-graphics";
     private static readonly string PNG_CLIPBOARD_FORMAT = OperatingSystem.IsMacOS() ? "public.png" : "image/png";
 
     // These stay "Platform" (rather than "Application") formats so the identifier reaches the OS
@@ -57,7 +57,7 @@ public static class ClipboardImpl
     static ClipboardImpl()
     {
         if (OperatingSystem.IsWindowsVersionAtLeast(6, 1)) {
-            canvasFormat = ClipboardFormat.CreateCustomFormat(CANVAS_CLIPBOARD_FORMAT, new Clipboard.Formats.BytesDataConverter());
+            canvasFormat = ClipboardFormat.CreateCustomFormat(CANVAS_CLIPBOARD_FORMAT, new global::Clowd.Clipboard.Formats.BytesDataConverter());
         }
     }
 

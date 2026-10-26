@@ -5,13 +5,13 @@
 # the host's ~/.cargo, so CI's actions/cache of those dirs applies. Build
 # outputs (target/, obs-studio/.deps) land in the checkout as usual.
 #
-#   docker build -t obs-express-linux tools/linux-build
-#   tools/linux-build/run-in-image.sh cargo build --release
+#   docker build -t prisc-recorder-linux tools/linux-build
+#   tools/linux-build/run-in-image.sh cargo build --release -p prisc_recorder -p prisc_vid2gif
 #
-# IMAGE overrides the image tag (default obs-express-linux).
+# IMAGE overrides the image tag (default prisc-recorder-linux).
 set -euo pipefail
 
-image=${IMAGE:-obs-express-linux}
+image=${IMAGE:-prisc-recorder-linux}
 root=$(git rev-parse --show-toplevel)
 mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git"
 

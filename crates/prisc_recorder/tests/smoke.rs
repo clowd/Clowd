@@ -2,7 +2,7 @@
 //! display and the assembled OBS runtime next to the binary. Run explicitly:
 //!
 //! ```text
-//! cargo test -p obs-express --test smoke -- --ignored
+//! cargo test -p prisc_recorder --test smoke -- --ignored
 //! ```
 
 use std::io::{BufRead, BufReader, Write};
@@ -83,12 +83,12 @@ impl ProtocolReader {
 #[test]
 #[ignore]
 fn record_three_seconds_and_validate_mp4() {
-    let out_dir = std::env::temp_dir().join("obs-express-smoke");
+    let out_dir = std::env::temp_dir().join("prisc-recorder-smoke");
     std::fs::create_dir_all(&out_dir).unwrap();
     let out_mp4 = out_dir.join("smoke.mp4");
     let _ = std::fs::remove_file(&out_mp4);
 
-    let exe = env!("CARGO_BIN_EXE_obs-express");
+    let exe = env!("CARGO_BIN_EXE_prisc_recorder");
     let mut child = Command::new(exe)
         .arg("--region")
         .arg("0,0,640,480")
@@ -105,7 +105,7 @@ fn record_three_seconds_and_validate_mp4() {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("spawn obs-express");
+        .expect("spawn prisc_recorder");
 
     let reader = ProtocolReader::new(&mut child);
     let mut stdin = child.stdin.take().expect("stdin piped");
@@ -171,12 +171,12 @@ fn record_three_seconds_and_validate_mp4() {
 #[test]
 #[ignore]
 fn multi_track_records_four_separate_streams() {
-    let out_dir = std::env::temp_dir().join("obs-express-smoke");
+    let out_dir = std::env::temp_dir().join("prisc-recorder-smoke");
     std::fs::create_dir_all(&out_dir).unwrap();
     let out_mp4 = out_dir.join("smoke-multi-track.mp4");
     let _ = std::fs::remove_file(&out_mp4);
 
-    let exe = env!("CARGO_BIN_EXE_obs-express");
+    let exe = env!("CARGO_BIN_EXE_prisc_recorder");
     let mut child = Command::new(exe)
         .args(["--region", "0,0,640,480"])
         .args(["--fps", "30"])
@@ -191,7 +191,7 @@ fn multi_track_records_four_separate_streams() {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("spawn obs-express");
+        .expect("spawn prisc_recorder");
 
     let reader = ProtocolReader::new(&mut child);
     let mut stdin = child.stdin.take().expect("stdin piped");
@@ -231,12 +231,12 @@ fn multi_track_records_four_separate_streams() {
 #[test]
 #[ignore]
 fn single_track_records_one_stream_per_media_type() {
-    let out_dir = std::env::temp_dir().join("obs-express-smoke");
+    let out_dir = std::env::temp_dir().join("prisc-recorder-smoke");
     std::fs::create_dir_all(&out_dir).unwrap();
     let out_mp4 = out_dir.join("smoke-single-track.mp4");
     let _ = std::fs::remove_file(&out_mp4);
 
-    let exe = env!("CARGO_BIN_EXE_obs-express");
+    let exe = env!("CARGO_BIN_EXE_prisc_recorder");
     let refused = Command::new(exe)
         .args(["--region", "0,0,640,480"])
         .args(["--webcam", "test"])
@@ -245,7 +245,7 @@ fn single_track_records_one_stream_per_media_type() {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .expect("spawn obs-express");
+        .expect("spawn prisc_recorder");
     assert_eq!(refused.code(), Some(2), "--webcam without --multi-track");
 
     let mut child = Command::new(exe)
@@ -259,7 +259,7 @@ fn single_track_records_one_stream_per_media_type() {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("spawn obs-express");
+        .expect("spawn prisc_recorder");
 
     let reader = ProtocolReader::new(&mut child);
     let mut stdin = child.stdin.take().expect("stdin piped");

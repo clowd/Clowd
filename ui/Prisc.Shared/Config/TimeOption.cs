@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     public enum TimeOptionUnit
     {

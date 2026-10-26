@@ -8,10 +8,10 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Pins the in-place undo restore of every graphic type (final-design §B.4 / risk #2): after a
@@ -27,7 +27,7 @@ namespace Clowd.Drawing.Tests
     {
         static InPlaceRestoreTests()
         {
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         private static readonly DpiScale Dpi = new DpiScale(1, 1);

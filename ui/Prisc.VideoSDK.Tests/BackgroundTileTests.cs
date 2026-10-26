@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Avalonia.Platform;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.VideoSDK.Composition;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The covering test for the pre-rendered loop sheets the video editor's background STYLE tiles
@@ -27,7 +27,7 @@ namespace Clowd.VideoSDK.Tests
     /// </para>
     /// <para>
     /// The suite lives in this project for the reason <see cref="FileIconAssetTests"/> does:
-    /// Clowd.Ui has no test project of its own and this one already references it, which is what
+    /// Prisc.Ui has no test project of its own and this one already references it, which is what
     /// makes <see cref="BackgroundTileLoop"/> and the embedded assets reachable at all.
     /// </para>
     /// </remarks>

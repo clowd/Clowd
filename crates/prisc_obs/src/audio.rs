@@ -3,11 +3,11 @@ pub struct AudioInfo {
 }
 
 impl AudioInfo {
-    pub fn to_raw(&self) -> obs_sys::obs_audio_info {
+    pub fn to_raw(&self) -> prisc_obs_sys::obs_audio_info {
         // Both fields set explicitly (obs_audio_info has only these two).
-        obs_sys::obs_audio_info {
+        prisc_obs_sys::obs_audio_info {
             samples_per_sec: self.samples_per_sec,
-            speakers: obs_sys::speaker_layout_SPEAKERS_STEREO,
+            speakers: prisc_obs_sys::speaker_layout_SPEAKERS_STEREO,
         }
     }
 }

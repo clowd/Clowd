@@ -1,7 +1,7 @@
 using System;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// A decoded source frame ready to draw: the image (owned by the delivering

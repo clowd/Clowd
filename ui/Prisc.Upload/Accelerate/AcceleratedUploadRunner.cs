@@ -3,7 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.Upload.Accelerate
+namespace Prisc.Upload.Accelerate
 {
     /// <summary>
     /// Drives one accelerated upload end to end — create session, surface the download URL early,

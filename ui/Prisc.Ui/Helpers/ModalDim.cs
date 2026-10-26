@@ -9,12 +9,12 @@ using Avalonia.Media;
 using Avalonia.Reactive;
 using Avalonia.Threading;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>
     /// Dims a window while a modal dialog it owns is open, the way a sheet dims the document
     /// behind it. Installed once for the whole app: every <see cref="Window.ShowDialog{TResult}"/>
-    /// in Clowd is covered without touching a single call site, because the hook is a class
+    /// in Prisc is covered without touching a single call site, because the hook is a class
     /// handler on <see cref="Visual.IsVisibleProperty"/> rather than anything the caller does.
     ///
     /// The veil is a hit-test-invisible black <see cref="Border"/> in the owner's

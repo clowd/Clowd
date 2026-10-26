@@ -2,13 +2,13 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using Clowd.UI.VideoEditor;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="WindowCropMath"/>: a recorded window's rect resolved into the fractional crop a
@@ -125,7 +125,7 @@ namespace Clowd.VideoSDK.Tests
         /// BOM, as the recorder writes it — a BOM is not JSON and would cost the header row.</summary>
         private static string WriteSidecar(params string[] lines)
         {
-            var path = Path.Combine(Path.GetTempPath(), $"clowd-wincrop-{Guid.NewGuid():N}.jsonl");
+            var path = Path.Combine(Path.GetTempPath(), $"prisc-wincrop-{Guid.NewGuid():N}.jsonl");
             File.WriteAllBytes(path, Encoding.UTF8.GetBytes(String.Join("\n", lines)));
             return path;
         }
@@ -588,7 +588,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Same(stored, Effective(project, media, stored, 500));
 
             // a path that no longer resolves is the same degrade, cached after the first probe
-            var gone = Path.Combine(Path.GetTempPath(), $"clowd-wincrop-missing-{Guid.NewGuid():N}.jsonl");
+            var gone = Path.Combine(Path.GetTempPath(), $"prisc-wincrop-missing-{Guid.NewGuid():N}.jsonl");
             var (project2, media2, stored2) = Following(gone);
             Assert.Same(stored2, Effective(project2, media2, stored2, 500));
             Assert.Same(stored2, Effective(project2, media2, stored2, 500));

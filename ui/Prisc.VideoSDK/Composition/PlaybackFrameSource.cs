@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The preview path's <see cref="IFrameSource"/>: the latest committed frame per

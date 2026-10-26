@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <RootNamespace>Clowd.VideoSDK</RootNamespace>
+    <RootNamespace>Prisc.VideoSDK</RootNamespace>
     <!-- The whole playback engine is a thin managed layer over the FFmpeg C API. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CA2007</NoWarn>
@@ -11,7 +11,7 @@
   <ItemGroup>
     <!-- for DemuxBudget: the read-ahead rule is testable without the native FFmpeg plumbing
          the rest of the demuxer needs. -->
-    <InternalsVisibleTo Include="Clowd.VideoSDK.Tests" />
+    <InternalsVisibleTo Include="Prisc.VideoSDK.Tests" />
   </ItemGroup>
   <ItemGroup>
     <!-- The ful1e5 cursor packs' own SVG sources, read by CursorPackLoader. The logical name is
@@ -21,7 +21,7 @@
          backslash-only replace would leave `bibata-r/appstarting/000.svg` in the name and every
          pack would silently fail to load. -->
     <EmbeddedResource Include="Composition\CursorPacks\**\*.svg">
-      <LogicalName>Clowd.VideoSDK.Composition.CursorPacks.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.').Replace('/','.'))%(Filename)%(Extension)</LogicalName>
+      <LogicalName>Prisc.VideoSDK.Composition.CursorPacks.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.').Replace('/','.'))%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
@@ -30,13 +30,13 @@
          explicit LogicalName and both-separator fold as the cursor packs above). Every file is
          an SVG parsed live by BackgroundSvgReader. -->
     <EmbeddedResource Include="Composition\Backgrounds\Art\**\*.svg">
-      <LogicalName>Clowd.VideoSDK.Composition.Backgrounds.Art.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.').Replace('/','.'))%(Filename)%(Extension)</LogicalName>
+      <LogicalName>Prisc.VideoSDK.Composition.Backgrounds.Art.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.').Replace('/','.'))%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <!-- 8.1.0 is the FFmpeg.AutoGen series generated against FFmpeg 8.1
          (avcodec 62 / avformat 62 / avutil 60 / swscale 9 / swresample 6) — the exact
-         majors of the DLLs shipped in the obs-express folder. FFmpegLoader asserts the
+         majors of the DLLs shipped in the recorder folder. FFmpegLoader asserts the
          runtime majors match at initialize time. -->
     <PackageReference Include="FFmpeg.AutoGen.Abstractions" Version="8.1.0" />
     <PackageReference Include="FFmpeg.AutoGen.Bindings.DynamicallyLoaded" Version="8.1.0" />
@@ -44,11 +44,11 @@
     <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
     <!-- Pinned (via Directory.Build.props) to the exact version Avalonia resolves — a mismatch
          would mean the SDK compiles against a different Skia than the one Avalonia loads in
-         the Clowd.Ui process. Clowd.Ui's VerifySkiaSharpMatchesAvalonia target enforces it. -->
+         the Prisc.Ui process. Prisc.Ui's VerifySkiaSharpMatchesAvalonia target enforces it. -->
     <PackageReference Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
   </ItemGroup>
   <ItemGroup>
     <!-- the arrow and curve maths the image editor draws with, so shapes match it exactly -->
-    <ProjectReference Include="..\Clowd.Geometry\Clowd.Geometry.csproj" />
+    <ProjectReference Include="..\Prisc.Geometry\Prisc.Geometry.csproj" />
   </ItemGroup>
 </Project>

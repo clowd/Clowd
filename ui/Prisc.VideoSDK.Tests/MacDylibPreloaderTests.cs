@@ -4,10 +4,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
-using Clowd.VideoSDK;
+using Prisc.VideoSDK;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The Mach-O reader behind the macOS dylib preload, checked against <c>otool</c> — the only
@@ -217,7 +217,7 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS only");
 
-            var text = Path.Combine(Path.GetTempPath(), $"clowd-macho-{Guid.NewGuid():N}.txt");
+            var text = Path.Combine(Path.GetTempPath(), $"prisc-macho-{Guid.NewGuid():N}.txt");
             File.WriteAllText(text, "this is certainly not a Mach-O file");
             try
             {
@@ -239,7 +239,7 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS only");
 
-            var empty = Path.Combine(Path.GetTempPath(), $"clowd-noffmpeg-{Guid.NewGuid():N}");
+            var empty = Path.Combine(Path.GetTempPath(), $"prisc-noffmpeg-{Guid.NewGuid():N}");
             Directory.CreateDirectory(empty);
             try
             {

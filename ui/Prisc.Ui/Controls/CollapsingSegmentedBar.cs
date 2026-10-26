@@ -11,7 +11,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// A strip of mutually exclusive segments — one ToggleButton per option, each tagged with the
@@ -70,7 +70,7 @@ namespace Clowd.UI.Controls
             AffectsMeasure<CollapsingSegmentedBar>(SpacingProperty);
         }
 
-        private static readonly Uri _stylesUri = new("avares://Clowd.Ui/Controls/CollapsingSegmentedBar.axaml");
+        private static readonly Uri _stylesUri = new("avares://Prisc.Ui/Controls/CollapsingSegmentedBar.axaml");
 
         private readonly Button _dropdown;
         private readonly TextBlock _dropdownLabel;

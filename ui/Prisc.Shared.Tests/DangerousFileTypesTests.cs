@@ -1,7 +1,7 @@
-using Clowd.Upload;
+using Prisc.Upload;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class DangerousFileTypesTests
     {

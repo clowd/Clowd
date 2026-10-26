@@ -1,9 +1,9 @@
 using System;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The wallpaper reader's own path tokenizer: the corpus's grammar exactly — implicit

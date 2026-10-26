@@ -12,9 +12,9 @@
 
 use std::ffi::CString;
 
-use obs::audio::AudioInfo;
-use obs::context::ObsContext;
-use obs::video::VideoInfo;
+use prisc_obs::audio::AudioInfo;
+use prisc_obs::context::ObsContext;
+use prisc_obs::video::VideoInfo;
 
 use crate::platform;
 use crate::status;
@@ -43,7 +43,7 @@ pub fn run() -> ! {
     }
 }
 
-fn list_cameras() -> Result<Vec<obs::properties::ListItem>, String> {
+fn list_cameras() -> Result<Vec<prisc_obs::properties::ListItem>, String> {
     platform::init_process();
     let context = ObsContext::new("en-US").map_err(|e| format!("Failed to initialize OBS: {e}"))?;
 
@@ -88,7 +88,7 @@ fn list_cameras() -> Result<Vec<obs::properties::ListItem>, String> {
     // null exactly when the id is unregistered).
     let source_id = platform::WEBCAM_SOURCE_ID;
     let source_c = CString::new(source_id).unwrap();
-    if unsafe { obs_sys::obs_source_get_display_name(source_c.as_ptr()) }.is_null() {
+    if unsafe { prisc_obs_sys::obs_source_get_display_name(source_c.as_ptr()) }.is_null() {
         return Err(format!(
             "Camera source '{source_id}' is not registered — the camera capture plugin failed \
              to load.\n  module bin:  {}\n  module data: {}",
@@ -108,13 +108,13 @@ fn list_cameras() -> Result<Vec<obs::properties::ListItem>, String> {
     let key = platform::WEBCAM_DEVICE_KEY;
     #[cfg(not(target_os = "linux"))]
     {
-        let from_type = obs::properties::source_list_property(source_id, key);
+        let from_type = prisc_obs::properties::source_list_property(source_id, key);
         if let Some(items) = from_type {
             if !items.is_empty() {
                 return Ok(items);
             }
         }
     }
-    obs::properties::source_instance_list_property(source_id, key)
+    prisc_obs::properties::source_instance_list_property(source_id, key)
         .ok_or_else(|| "Failed to enumerate camera devices".to_string())
 }

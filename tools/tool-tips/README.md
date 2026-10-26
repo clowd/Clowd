@@ -24,16 +24,16 @@ each can be edited without touching the other.
 | CLI, demo discovery, encoding | `tools/tool-tips/generate.py` |
 | The shared framework every demo draws with | `tools/tool-tips/common.py` |
 | One demo per tool | `tools/tool-tips/demos/<name>.py` |
-| Output GIFs, embedded as Avalonia resources | `clowd_ui/Clowd.Ui/Assets/ToolTips/tool-*.gif` |
-| The flyout control (header, shortcut keycap, description, demo, disabled footer) | `clowd_ui/Clowd.Ui/Controls/ToolTipCard.axaml(.cs)` |
-| The bare ToolTip theme the card sits in | `RichTipToolTipTheme` in `clowd_ui/Clowd.Ui/Assets/AppResources.axaml` |
-| The GIF player (streams frames through SkiaSharp `SKCodec`) | `clowd_ui/Clowd.Ui/Controls/AnimatedGifImage.cs` |
-| Where the tips are attached to the buttons, the copy and the shortcuts | `clowd_ui/Clowd.Ui/Editor/EditorWindow.axaml.cs`: `ToolRegistry` (`Shortcut`, `Description`, `DemoName`), `CreateToolButton` |
+| Output GIFs, embedded as Avalonia resources | `ui/Prisc.Ui/Assets/ToolTips/tool-*.gif` |
+| The flyout control (header, shortcut keycap, description, demo, disabled footer) | `ui/Prisc.Ui/Controls/ToolTipCard.axaml(.cs)` |
+| The bare ToolTip theme the card sits in | `RichTipToolTipTheme` in `ui/Prisc.Ui/Assets/AppResources.axaml` |
+| The GIF player (streams frames through SkiaSharp `SKCodec`) | `ui/Prisc.Ui/Controls/AnimatedGifImage.cs` |
+| Where the tips are attached to the buttons, the copy and the shortcuts | `ui/Prisc.Ui/Editor/EditorWindow.axaml.cs`: `ToolRegistry` (`Shortcut`, `Description`, `DemoName`), `CreateToolButton` |
 | The bare-key handler, derived from the registry's `Shortcut` | `EditorWindow.axaml.cs`: `ToolShortcuts`, `OnTunnelKeyDown` |
-| The cursors the demos paste | `clowd_ui/Clowd.Drawing/Cursors/*.cur` |
-| The graphics the ink painters mimic | `clowd_ui/Clowd.Drawing/Graphics/*.cs`, tools in `clowd_ui/Clowd.Drawing/Tools/*.cs` |
+| The cursors the demos paste | `ui/Prisc.Drawing/Cursors/*.cur` |
+| The graphics the ink painters mimic | `ui/Prisc.Drawing/Graphics/*.cs`, tools in `ui/Prisc.Drawing/Tools/*.cs` |
 
-`EditorWindow` resolves each demo as `avares://Clowd.Ui/Assets/ToolTips/tool-{DemoName}.gif`. A
+`EditorWindow` resolves each demo as `avares://Prisc.Ui/Assets/ToolTips/tool-{DemoName}.gif`. A
 missing file just hides the demo area (the card collapses to header + description), so the app builds
 and runs with or without the GIFs.
 
@@ -48,10 +48,10 @@ and runs with or without the GIFs.
   - `--sheet PATH.png` also writes a review contact sheet (6 evenly spaced frames per GIF, labelled
     with the frame index); `--frames DIR` writes every output frame as `DIR/<name>-NN.png`; `--out DIR`
     overrides the output folder. The exit code is 1 when any demo failed validation.
-- Fonts: Inter from `clowd_ui/Clowd.Ui/Assets/Fonts/Inter` (the editor's own face) and Cascadia Mono from
-  `clowd_ui/Clowd.Ui/Assets/Fonts` (the count badge), falling back to Arial / DejaVu / Helvetica and
+- Fonts: Inter from `ui/Prisc.Ui/Assets/Fonts/Inter` (the editor's own face) and Cascadia Mono from
+  `ui/Prisc.Ui/Assets/Fonts` (the count badge), falling back to Arial / DejaVu / Helvetica and
   then Pillow's built-in font. Regenerate on the same machine if pixel-identical output matters.
-- Cursors: the real Clowd cursor art, read straight out of the `.cur` files (the 256 px PNG frame
+- Cursors: the real Prisc cursor art, read straight out of the `.cur` files (the 256 px PNG frame
   and its hotspot), so the pointer in every demo is the one the editor shows.
 - Always review before committing (see Review workflow). Typical things to catch: clipped shapes,
   text too small to read, a loop that jumps, a one-shot tool whose cursor forgets to revert.
@@ -68,7 +68,7 @@ and runs with or without the GIFs.
    and `DemoName = "<name>"`. `CreateToolButton` wraps them in a `ToolTipCard` inside a `ToolTip`
    wearing `RichTipToolTipTheme`. The key handler is built from the registry, so a duplicate
    shortcut trips a `Debug.Assert` at startup rather than silently shadowing another tool.
-4. Build `clowd_ui/Clowd.Ui` and hover the button in the editor to check placement and playback.
+4. Build `ui/Prisc.Ui` and hover the button in the editor to check placement and playback.
 
 ## Demo module contract
 
@@ -246,7 +246,7 @@ Every demo tells the same short story so the family reads as one set (70 ms per 
 - Selection chrome in the accent `#2F7CAE` scaled down from the editor's 12 DIP handles (rings r 3.5,
   rotation handle green 18 px right of the right-middle ring, dashed borders, pen squares and dots,
   marquee). Chrome is drawn after ink, cursor last.
-- The real Clowd cursor art at 26 logical px, hotspot-aligned, 92 % while pressed. Travel is eased
+- The real Prisc cursor art at 26 logical px, hotspot-aligned, 92 % while pressed. Travel is eased
   with a 6 px lift so the hand reads as lifted between actions; drags are `ease_out` with no lift.
   Every press and release gets a `press_pulse`.
 - Text in demos: Inter, 9 to 11 logical px (SemiBold for notes); measure labels 7 bold. No text

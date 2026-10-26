@@ -1,8 +1,8 @@
 using System;
 using System.Threading;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Thumbs
+namespace Prisc.VideoSDK.Thumbs
 {
     /// <summary>
     /// One decoded poster frame: BGRA, top-down, <see cref="Stride"/> bytes per row, and the

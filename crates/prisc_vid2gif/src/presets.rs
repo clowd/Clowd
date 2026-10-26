@@ -37,7 +37,7 @@ impl Quality {
 /// Resolves the `--max-width`/`--max-height` clamps against the source size:
 /// aspect is preserved, the more restrictive clamp wins, and the result is
 /// `None` when no downscale is needed (never upscales — same contract as
-/// obs-express's recording resolution cap). The width is floored to even,
+/// prisc_recorder's recording resolution cap). The width is floored to even,
 /// which keeps output dimensions stable and predictable.
 pub fn clamp_width(src_w: u32, src_h: u32, max_w: Option<u32>, max_h: Option<u32>) -> Option<u32> {
     let fw = max_w.map(|m| m as f64 / src_w as f64);

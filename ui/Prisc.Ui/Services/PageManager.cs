@@ -5,9 +5,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
-using Clowd.PlatformUtil;
+using Prisc.PlatformUtil;
 
-namespace Clowd
+namespace Prisc
 {
     public enum SettingsPageTab
     {
@@ -83,7 +83,7 @@ namespace Clowd
     }
 }
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     internal sealed class PageManager : SimpleNotifyObject
     {

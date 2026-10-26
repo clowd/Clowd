@@ -7,7 +7,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     // Avalonia port of the WPF CursorResources (MIGRATION.md §3 #18). The Win32 message window
     // (Vanara WM_DPICHANGED listener) is replaced by TopLevel.ScalingChanged subscriptions, and the
@@ -29,7 +29,7 @@ namespace Clowd.Drawing
     // TopLevel raises ScalingChanged.
     public partial class CursorResources : EmbeddedResource
     {
-        private const string RSX_NS = "Clowd.Drawing.Cursors";
+        private const string RSX_NS = "Prisc.Drawing.Cursors";
         private const int BASE_CURSOR_SIZE = 32;
 
         private static readonly object _lock = new object();

@@ -5,7 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Input;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// Editor properties-bar dropdown (22px, same chrome idiom as CompactSpinner): a flat label

@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Playback;
 using FFmpeg.AutoGen.Abstractions;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The render pipeline's convert stage: slice-threaded sws_scale_frame must produce exactly
     // what the legacy single-threaded sws_scale produces, so the staged loop encodes the same
@@ -136,7 +136,7 @@ namespace Clowd.VideoSDK.Tests
             AssertPlanesEqual(legacy, Convert(bgra, w * 4, w, h, threads: 8), "8 threads");
         }
 
-        /// <summary>The encode-time size cap (<see cref="Clowd.VideoSDK.Render.RenderJobOptions.MaxHeight"/>)
+        /// <summary>The encode-time size cap (<see cref="Prisc.VideoSDK.Render.RenderJobOptions.MaxHeight"/>)
         /// rides on the same stage: the convert stage scales BGRA → NV12 in one swscale pass, and
         /// that pass must be exactly what the legacy scaling context produces — the render's
         /// downscale is swscale's bilinear, nothing of our own.</summary>
@@ -427,6 +427,6 @@ namespace Clowd.VideoSDK.Tests
         }
 
         private static string TempMp4() =>
-            Path.Combine(Path.GetTempPath(), $"clowd-nv12-test-{Guid.NewGuid():N}.mp4");
+            Path.Combine(Path.GetTempPath(), $"prisc-nv12-test-{Guid.NewGuid():N}.mp4");
     }
 }

@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Avalonia.Threading;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>One key edge for the keystroke overlay, already marshalled to the UI thread.
     /// <paramref name="Character"/> is the translated character of a press, or null for a key that

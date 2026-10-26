@@ -5,7 +5,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// The key combinations bound to one global hotkey action, in the order the user added them —

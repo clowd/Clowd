@@ -1,12 +1,12 @@
 using System;
 using System.Linq;
-using Clowd.UI.Services;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.Services;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The inspector over the AI features: the EFFECT section's gating and tile/dial writes, the

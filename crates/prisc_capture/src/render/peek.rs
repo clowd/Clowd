@@ -1,4 +1,4 @@
-use clowd_rust_core::geometry::ScreenRect;
+use prisc_rust_core::geometry::ScreenRect;
 
 use crate::gxi;
 

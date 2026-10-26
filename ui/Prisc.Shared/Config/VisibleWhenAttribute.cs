@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Shows a settings row only while another property on the same object holds one of

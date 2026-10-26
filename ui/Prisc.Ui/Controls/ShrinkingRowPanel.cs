@@ -2,7 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// One left-packed horizontal row. Every child keeps its natural width except the one marked with

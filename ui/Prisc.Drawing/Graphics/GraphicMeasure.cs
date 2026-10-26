@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>
     /// A dimension line: the inherited line stroked in the object color with round caps, capped with

@@ -1,9 +1,9 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     [GraphicDesc("Ellipse", Skills = Skill.Stroke | Skill.Color | Skill.Angle | Skill.DashStyle)]
     public class GraphicEllipse : GraphicRectangle

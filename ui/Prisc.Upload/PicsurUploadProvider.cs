@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     public class PicsurUploadProvider : UploadProviderBase
     {

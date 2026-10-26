@@ -1,14 +1,14 @@
-//! Error and crash reporting (Sentry), shared by every Clowd Rust binary.
+//! Error and crash reporting (Sentry), shared by every Prisc Rust binary.
 //!
 //! Release builds only — in a debug build [`init`] returns immediately and the
 //! plain terminal logger is installed unwrapped, because local failures belong in
 //! a debugger rather than in the issue tracker.
 //!
 //! Reports into the same Sentry project as the C# shell
-//! (clowd_ui/Clowd.Ui/Util/SentryConfig.cs) under the same rule. Processes are
+//! (ui/Prisc.Ui/Util/SentryConfig.cs) under the same rule. Processes are
 //! told apart by the `app` tag each passes to [`init`], and share a release
 //! name, so a failure in any of them lines up against the same release. That
-//! sharing is the whole reason this lives in `clowd_rust_core`: a DSN, an
+//! sharing is the whole reason this lives in `prisc_rust_core`: a DSN, an
 //! opt-out variable or a release format that drifted between binaries would
 //! split one incident across several projects.
 //!
@@ -32,7 +32,7 @@ const DSN: &str = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.se
 /// Set to any non-empty value to turn reporting off. The shell honors the same
 /// variable, and every process it spawns inherits its environment, so opting
 /// out once covers all of them.
-const OPT_OUT_VAR: &str = "CLOWD_DISABLE_TELEMETRY";
+const OPT_OUT_VAR: &str = "PRISC_DISABLE_TELEMETRY";
 
 /// True when this build reports at all. Debug builds never do.
 const fn reporting_compiled_in() -> bool {
@@ -75,20 +75,20 @@ pub fn install_logger(dest: Box<dyn log::Log>) {
 
 /// Log target of the panic mirror in [`install_logger`] — filtered to a breadcrumb
 /// so Sentry's panic hook stays the single source of panic events.
-const PANIC_TARGET: &str = "clowd_panic";
+const PANIC_TARGET: &str = "prisc_panic";
 
 /// Starts Sentry. The returned guard flushes queued events when dropped; hold it
 /// for the lifetime of `main`. `None` means reporting is off — a debug build, the
 /// user opted out, or the client refused the DSN.
 ///
 /// `app` is the value of the `app` tag every event from this process carries —
-/// the crate name of the binary (`clowd_capture`, `clowd_scroll_driver`). It is
+/// the crate name of the binary (`prisc_capture`, `prisc_scroll_driver`). It is
 /// how one project's issues are told apart, so give each binary its own.
 ///
-/// Not every Rust binary calls this. `clowd_ai` deliberately has no Sentry
+/// Not every Rust binary calls this. `prisc_ai` deliberately has no Sentry
 /// client of its own: it is spawned per OCR press / per effect job, so
 /// release-health sessions would measure key presses rather than app runs,
-/// and it reports through its spawner instead (`clowd_capture/src/ocr/client.rs`,
+/// and it reports through its spawner instead (`crates/prisc_capture/src/ocr/client.rs`,
 /// `AiClient.cs`).
 pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
     if !reporting_compiled_in() {
@@ -151,17 +151,17 @@ fn opted_out() -> bool {
     std::env::var_os(OPT_OUT_VAR).is_some_and(|v| !v.is_empty())
 }
 
-/// `clowd@<version>`, matching the shell's release name. `CLOWD_VERSION` is stamped
+/// `prisc@<version>`, matching the shell's release name. `PRISC_VERSION` is stamped
 /// at build time by build.sh and CI from the same nbgv version that stamps
-/// Clowd.Ui; a build without it falls back to this crate's version. That fallback
+/// Prisc.Ui; a build without it falls back to this crate's version. That fallback
 /// is reachable in a local `cargo build --release` — reporting is gated on
 /// `debug_assertions`, not on the variable — so such a build reports against
-/// release `clowd@<core's version>`. Harmless, but it is not "off".
+/// release `prisc@<core's version>`. Harmless, but it is not "off".
 ///
 /// Resolved here rather than per-binary so every process reports the same
-/// release string — `build.rs` re-runs this crate on a `CLOWD_VERSION` change so
+/// release string — `build.rs` re-runs this crate on a `PRISC_VERSION` change so
 /// a cached object file cannot keep the old one.
 fn release() -> Cow<'static, str> {
-    let version = option_env!("CLOWD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
-    Cow::Owned(format!("clowd@{version}"))
+    let version = option_env!("PRISC_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
+    Cow::Owned(format!("prisc@{version}"))
 }

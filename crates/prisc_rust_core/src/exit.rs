@@ -22,7 +22,7 @@ pub const NO_SCREEN_PERMISSION: i32 = 3;
 /// it is not implemented.
 pub const CAPTURE_FAILED: i32 = 4;
 
-/// "Inference is unavailable on this install" (`clowd_ai`). The
+/// "Inference is unavailable on this install" (`prisc_ai`). The
 /// binary now links ONNX Runtime statically, so it no longer emits this at
 /// startup; the code stays reserved because the shell's AI effect
 /// generators still map it (`AiClient.cs`'s `ExitInferenceUnavailable`

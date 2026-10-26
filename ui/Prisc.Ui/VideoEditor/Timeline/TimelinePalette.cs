@@ -4,7 +4,7 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Styling;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// Every brush and pen the timeline draws with, resolved once per <see cref="ThemeVariant"/>

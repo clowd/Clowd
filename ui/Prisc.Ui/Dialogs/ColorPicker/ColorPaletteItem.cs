@@ -4,7 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     public class ColorSelectedEventArgs : EventArgs
     {
@@ -129,7 +129,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             var bounds = new Rect(0, 0, width, height);
 
             if (Color.A < 255)
-                context.DrawRectangle(Clowd.Util.CheckerBrushes.Light, null, bounds, radius, radius);
+                context.DrawRectangle(Prisc.Util.CheckerBrushes.Light, null, bounds, radius, radius);
             context.DrawRectangle(new SolidColorBrush(Color), null, bounds, radius, radius);
 
             // hover and selection: the same white-over-black double edge as the square chips,

@@ -11,10 +11,10 @@ using Avalonia.Media.Immutable;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.PlatformUtil;
-using Clowd.UI.Helpers;
+using Prisc.PlatformUtil;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>Construction-time choices for a <see cref="FloatingTrayWindow"/>. Immutable on purpose:
     /// every one of these is baked into the native window before it is first shown.</summary>
@@ -90,7 +90,7 @@ namespace Clowd.UI.Controls.Tray
     /// </summary>
     public abstract class FloatingTrayWindow : Window
     {
-        private static readonly Uri PopupStylesUri = new("avares://Clowd.Ui/Controls/Tray/TrayPopups.axaml");
+        private static readonly Uri PopupStylesUri = new("avares://Prisc.Ui/Controls/Tray/TrayPopups.axaml");
 
         // the transparent band TrayPopups.axaml keeps around the menu's visible border for its shadow;
         // see ShowMenu.

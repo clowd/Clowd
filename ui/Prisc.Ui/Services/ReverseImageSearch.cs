@@ -5,9 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Clowd.UI.Helpers;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The capture overlay's SEARCH action (CAPTURE_PROTOCOL.md §1.2, the <c>search-image</c>
@@ -43,7 +43,7 @@ namespace Clowd.UI
         /// <summary>Prefix of the throwaway pages, so one left behind by a browser that never
         /// started (or by a crash between writing and opening) can be swept on the next
         /// search.</summary>
-        private const string PagePrefix = "clowd-lens-";
+        private const string PagePrefix = "prisc-lens-";
 
         /// <summary>How long a page is left on disk before the sweep treats it as abandoned. Long
         /// enough for a cold browser start on a slow machine, short enough that a capture does not

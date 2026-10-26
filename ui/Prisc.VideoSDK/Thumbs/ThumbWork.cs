@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace Clowd.VideoSDK.Thumbs
+namespace Prisc.VideoSDK.Thumbs
 {
     /// <summary>
     /// The public door onto the process-wide thumbnail worker — one <see cref="ThreadPriority.BelowNormal"/>

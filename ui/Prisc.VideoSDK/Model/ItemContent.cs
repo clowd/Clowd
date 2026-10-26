@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>
 /// What fills an <see cref="Item"/>'s span. Polymorphic on a <c>$type</c> discriminator
@@ -166,7 +166,7 @@ public sealed class BackgroundContent : ItemContent
 
     public const double MaxAnimationSpeed = 4.0;
 
-    /// <summary>Clowd blue as <c>#AARRGGBB</c> — what a fresh <c>solid</c> background is filled
+    /// <summary>Prisc blue as <c>#AARRGGBB</c> — what a fresh <c>solid</c> background is filled
     /// with, and what an unparseable <see cref="Color"/> falls back to.</summary>
     public const string DefaultColor = "#FF00AFF0";
 

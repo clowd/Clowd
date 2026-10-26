@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.Versioning;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Media;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The zero-copy encode path on Windows: hands the <see cref="D3D12ReadbackRing"/>'s render

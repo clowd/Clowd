@@ -1,9 +1,9 @@
 using System;
 using System.Xml.Linq;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The SMIL sampler: a real interval search over non-uniform keyTimes, a seamless loop at

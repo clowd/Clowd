@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="Clowd.UI.Dialogs.MessageDialog"
+        x:Class="Prisc.UI.Dialogs.MessageDialog"
         Title="Prisc"
         Width="420"
         SizeToContent="Height"

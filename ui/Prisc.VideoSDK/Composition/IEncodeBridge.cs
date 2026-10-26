@@ -1,7 +1,7 @@
 using System;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Media;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The render loop's view of a zero-copy encode path: composed slots of the readback ring

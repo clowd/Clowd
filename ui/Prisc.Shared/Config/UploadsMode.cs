@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Whether uploading exists as a feature. Rendered by the Uploads page as the mode banner at

@@ -6,10 +6,10 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Clowd.UI.Preview;
-using Clowd.UI.Preview.Producers;
+using Prisc.UI.Preview;
+using Prisc.UI.Preview.Producers;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// The 110x75 thumbnail in a Recent list row. Draws whatever <see cref="SessionPreviewEngine"/>

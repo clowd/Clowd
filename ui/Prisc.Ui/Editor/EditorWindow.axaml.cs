@@ -26,18 +26,18 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.Drawing;
-using Clowd.Drawing.Graphics;
-using Clowd.PlatformUtil;
-using Clowd.UI.Config;
-using Clowd.UI.Controls;
-using Clowd.UI.Helpers;
-using Clowd.UI.VideoEditor;
-using Clowd.Util;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.Drawing.Graphics;
+using Prisc.PlatformUtil;
+using Prisc.UI.Config;
+using Prisc.UI.Controls;
+using Prisc.UI.Helpers;
+using Prisc.UI.VideoEditor;
+using Prisc.Util;
 using Path = System.IO.Path;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     public partial class EditorWindow : SystemThemedWindow
     {
@@ -293,7 +293,7 @@ namespace Clowd.UI
         /// and in the rename tooltip.</summary>
         private void SyncRenameButton()
         {
-            Title = !String.IsNullOrEmpty(_session?.Name) ? $"{_session.Name} - Clowd" : "Edit - Clowd";
+            Title = !String.IsNullOrEmpty(_session?.Name) ? $"{_session.Name} - Prisc" : "Edit - Prisc";
             ToolTip.SetTip(btnRename, _session?.RenameTooltip);
         }
 

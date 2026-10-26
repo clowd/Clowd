@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // FrameComposer pixel tests on the CPU factory. Solid-color scenes assert exact regions;
     // text/image are smoke-level (they draw, they land roughly where placed).
@@ -384,7 +384,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Image_item_draws_decoded_file()
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-compose-test-{Guid.NewGuid():N}.png");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-compose-test-{Guid.NewGuid():N}.png");
             try
             {
                 using (var surface = SKSurface.Create(new SKImageInfo(8, 8, SKColorType.Bgra8888, SKAlphaType.Premul)))

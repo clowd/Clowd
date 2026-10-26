@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The shape of a path's <c>d</c> attribute with its numbers taken out: the verb sequence

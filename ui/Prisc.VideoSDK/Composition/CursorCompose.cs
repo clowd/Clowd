@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// The pure pieces of cursor-overlay drawing: kind → glyph resolution, monitor/region math on

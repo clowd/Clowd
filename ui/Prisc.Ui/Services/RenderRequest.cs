@@ -1,13 +1,13 @@
 using System;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>
     /// Everything a single video render is asked to do that the project itself does not carry: the
     /// encoder quality, the encode-time size cap, where the file goes, and what should happen once
     /// it is there. One of these is built by the Render flyout (from a preset) or by the "Render
-    /// video" dialog and handed to <see cref="VideoRenderManager.StartRenderAsync(Clowd.SessionInfo, Clowd.VideoSDK.Model.Project, RenderRequest)"/>;
+    /// video" dialog and handed to <see cref="VideoRenderManager.StartRenderAsync(Prisc.SessionInfo, Prisc.VideoSDK.Model.Project, RenderRequest)"/>;
     /// the dev harness (<c>--video-edit</c>) runs the same request in-process.
     /// </summary>
     public sealed record RenderRequest
@@ -23,7 +23,7 @@ namespace Clowd.UI.Services
 
         /// <summary>Cap on the output frame rate in whole frames per second, 0 for none. Never
         /// raises the rate: the render is encoded at the project's fastest clip, or at this cap
-        /// when it is lower (see <see cref="RenderFrameRate.Resolve(Clowd.VideoSDK.Model.Project, int)"/>).</summary>
+        /// when it is lower (see <see cref="RenderFrameRate.Resolve(Prisc.VideoSDK.Model.Project, int)"/>).</summary>
         public int MaxFps { get; init; }
 
         /// <summary>Let the GPU encoder (NVENC, AMF or VideoToolbox, whichever opens; x264 when

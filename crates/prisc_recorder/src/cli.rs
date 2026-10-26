@@ -10,7 +10,7 @@ use crate::tracks::MAX_AUDIO_TRACKS;
 pub const MAX_AUDIO_SOURCES: usize = 8;
 
 #[derive(Parser, Debug)]
-#[command(name = "obs-express", about = "Minimal screen recorder backed by OBS")]
+#[command(name = "prisc_recorder", about = "Minimal screen recorder backed by OBS")]
 pub struct Cli {
     /// Recording file path; must end .mp4 or .mkv (the extension picks the
     /// container) and its parent directory must exist. .mkv is single-track
@@ -316,7 +316,7 @@ mod tests {
     use super::*;
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
-        Cli::try_parse_from(std::iter::once("obs-express").chain(args.iter().copied()))
+        Cli::try_parse_from(std::iter::once("prisc_recorder").chain(args.iter().copied()))
     }
 
     /// A command line that is valid apart from requesting a sidecar: it
@@ -596,7 +596,7 @@ mod tests {
     fn settings_file_resolves_the_effective_config() {
         let dir = std::env::temp_dir();
         let path = dir.join(format!(
-            "obs-express-cli-settings-{}.json",
+            "prisc-recorder-cli-settings-{}.json",
             std::process::id()
         ));
         // The tracker is rejected on Linux (Settings::validate), so the
@@ -724,7 +724,7 @@ mod tests {
     fn settings_webcam_device_flows_through_and_requires_multi_track() {
         let dir = std::env::temp_dir();
         let path = dir.join(format!(
-            "obs-express-cli-webcam-{}.json",
+            "prisc-recorder-cli-webcam-{}.json",
             std::process::id()
         ));
         std::fs::write(&path, r#"{"webcam_device": "test"}"#).unwrap();
@@ -789,7 +789,7 @@ mod tests {
 
         // The same rejection covers a tracker requested by a settings file.
         let path = std::env::temp_dir().join(format!(
-            "obs-express-linux-tracker-{}.json",
+            "prisc-recorder-linux-tracker-{}.json",
             std::process::id()
         ));
         std::fs::write(&path, r#"{"tracker": true}"#).unwrap();

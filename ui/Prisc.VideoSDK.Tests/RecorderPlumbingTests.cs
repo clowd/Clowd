@@ -1,20 +1,20 @@
 ﻿using System;
 using System.Linq;
 using System.Text.Json;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.UI;
-using Clowd.UI.VideoEditor;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.UI;
+using Prisc.UI.VideoEditor;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// The seam between the recorder and the editor: which arguments obs-express is spawned with,
+    /// The seam between the recorder and the editor: which arguments prisc_recorder is spawned with,
     /// what its <c>tracks</c> report is read as, and how that becomes the audio row labels a fresh
-    /// edit opens with (Clowd.Ui exposes its internals to this project).
+    /// edit opens with (Prisc.Ui exposes its internals to this project).
     ///
-    /// The report shapes here are obs-express's own, copied from its documented protocol: a
+    /// The report shapes here are the recorder's own, copied from its documented protocol: a
     /// multi-track recording lists one <c>{"index","kind","device","name"}</c> entry per device
     /// (<c>kind</c> = "speaker" | "microphone"), a single-track one lists a single "mixed" entry,
     /// and an older recorder sends no <c>audio</c> array at all. Everything downstream has to
@@ -210,7 +210,7 @@ namespace Clowd.VideoSDK.Tests
         private static JsonDocument WriteSettings(SettingsRecording settings)
         {
             var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
-                "clowd-obs-settings-" + Guid.NewGuid().ToString("N") + ".json");
+                "prisc-obs-settings-" + Guid.NewGuid().ToString("N") + ".json");
             try
             {
                 ObsArguments.WriteSettingsFile(path, settings);

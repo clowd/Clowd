@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Avalonia.Media.Imaging;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// A filmstrip request for one video stream: the thumbnails covering

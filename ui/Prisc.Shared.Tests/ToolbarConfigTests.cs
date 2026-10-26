@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
-using Clowd;
-using Clowd.Config;
+using Prisc;
+using Prisc.Config;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class ToolbarConfigTests
     {

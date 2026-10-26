@@ -1,9 +1,9 @@
 using System;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Playback;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Synchronous decode of one video stream for the render path: no threads, no queues —

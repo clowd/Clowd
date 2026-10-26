@@ -4,14 +4,14 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Clowd;
-using Clowd.Config;
-using Clowd.UI;
-using Clowd.UI.Config;
-using Clowd.UI.Helpers;
+using Prisc;
+using Prisc.Config;
+using Prisc.UI;
+using Prisc.UI.Config;
+using Prisc.UI.Helpers;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The platform-free rules behind the Hotkeys settings page: which actions it shows, the list

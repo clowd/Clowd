@@ -1,9 +1,9 @@
-//! stdin command grammar. The Clowd shell drives this process the same way it
-//! drives obs-express: line-oriented text in, JSON status lines out. Parsing
+//! stdin command grammar. The Prisc shell drives this process the same way it
+//! drives prisc_recorder: line-oriented text in, JSON status lines out. Parsing
 //! lives here, apart from the reader thread and from the UI, so the grammar is
 //! unit-testable without a window, an OBS context or a live pipe.
 //!
-//! Unlike obs-express (whose parser returns `Option` and whose caller just logs
+//! Unlike prisc_recorder (whose parser returns `Option` and whose caller just logs
 //! "unknown command"), every rejection here carries a human-readable reason:
 //! the caller turns it into a `{"type":"command_error","message":...}` line, so
 //! the shell can surface *why* a command was refused rather than watching it
@@ -15,7 +15,7 @@
 
 use std::io::{BufRead, ErrorKind};
 
-use obs_platform::region::Rect;
+use prisc_obs_platform::region::Rect;
 
 use crate::obscure::Mode;
 
@@ -53,7 +53,7 @@ pub enum Command {
     /// (a `PostMessage` round trip on Windows, up to one poll tick on macOS, and
     /// longer still while `Mirror::set_region` is inside `reset_video`). A
     /// caller that correlates "the next line is the answer to my command" — the
-    /// model Clowd's ObsCapturer uses — would then attribute the failure to the
+    /// model Prisc's ObsCapturer uses — would then attribute the failure to the
     /// wrong command.
     Error(String),
 }
@@ -117,7 +117,7 @@ fn parse_move(args: &[&str]) -> Result<Rect, String> {
         .map(str::trim)
         .filter(|piece| !piece.is_empty())
         .collect();
-    obs_platform::region::parse_region(&components.join(",")).map_err(|e| e.to_string())
+    prisc_obs_platform::region::parse_region(&components.join(",")).map_err(|e| e.to_string())
 }
 
 /// `blur [strength]`, `pixelate [strength]`, `hide`, `none`. The mode token is
@@ -365,7 +365,7 @@ mod tests {
             err.contains("bogus"),
             "reason should quote the token: {err}"
         );
-        // Commands that exist in the sibling obs-express grammar but not here.
+        // Commands that exist in the sibling prisc_recorder grammar but not here.
         assert!(parse_command("start").is_err());
         assert!(parse_command("configure /tmp/x.json").is_err());
     }

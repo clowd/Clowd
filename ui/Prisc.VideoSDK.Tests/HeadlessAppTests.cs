@@ -3,7 +3,7 @@ using System.Linq;
 using System.Reflection;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// While an [AvaloniaFact] runs, its <see cref="HeadlessApp"/> and locator scope are the whole

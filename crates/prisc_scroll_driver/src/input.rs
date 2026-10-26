@@ -48,7 +48,7 @@
 
 use std::time::Duration;
 
-use clowd_rust_core::geometry::ScreenPoint;
+use prisc_rust_core::geometry::ScreenPoint;
 
 #[cfg(target_os = "macos")]
 mod mac;

@@ -3,27 +3,27 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.Versioning;
 using System.Security;
-using Clowd.Util;
+using Prisc.Util;
 using Microsoft.Win32;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Backs "Start Clowd when your computer starts up" (<see cref="Clowd.Config.SettingsGeneral.RegisterAutoStart"/>).
+    /// Backs "Start Prisc when your computer starts up" (<see cref="Prisc.Config.SettingsGeneral.RegisterAutoStart"/>).
     ///
-    /// Both registrations launch Clowd with <see cref="Clowd.Program.AutoStartedArg"/>: that flag is
+    /// Both registrations launch Prisc with <see cref="Prisc.Program.AutoStartedArg"/>: that flag is
     /// what tells the new process the machine started it rather than the user, and so it must stay
     /// in the tray instead of opening a window.
     ///
     /// Windows: an <c>HKCU\...\CurrentVersion\Run</c> value. The Velopack install hook (Program.cs)
     /// writes it at install time and the uninstall hook removes it again, which is why the setting
-    /// defaults to on there — a fresh install is already registered before Clowd first runs.
+    /// defaults to on there — a fresh install is already registered before Prisc first runs.
     ///
     /// macOS: a per-user LaunchAgent plist. Velopack's fast callbacks are Windows-only and dropping
     /// a file into the user's LaunchAgents folder isn't something the installer does, so the setting
     /// defaults to off and registration happens after the fact when the user ticks the box. Writing
     /// (or deleting) the plist takes effect at the next login; we deliberately don't
-    /// <c>launchctl load</c> it, since RunAtLoad would immediately spawn a second Clowd.
+    /// <c>launchctl load</c> it, since RunAtLoad would immediately spawn a second Prisc.
     /// </summary>
     internal static class AutoStartManager
     {
@@ -32,11 +32,11 @@ namespace Clowd.UI
         // debug builds register under their own name so running from the IDE cannot overwrite (or
         // delete) the login item belonging to a real install — same split as SettingsService.FilePath.
 #if DEBUG
-        private const string RunValueName = Constants.ClowdAppName + ".DEBUG";
-        private const string LaunchAgentLabel = "com.clowd.Clowd.DEBUG";
+        private const string RunValueName = Constants.PriscAppName + ".DEBUG";
+        private const string LaunchAgentLabel = "com.prisc.Prisc.DEBUG";
 #else
-        private const string RunValueName = Constants.ClowdAppName;
-        private const string LaunchAgentLabel = "com.clowd.Clowd";
+        private const string RunValueName = Constants.PriscAppName;
+        private const string LaunchAgentLabel = "com.prisc.Prisc";
 #endif
 
         /// <summary>Raised after every <see cref="TrySetEnabled"/>, so the settings page can show
@@ -48,7 +48,7 @@ namespace Clowd.UI
 
         public static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
 
-        /// <summary>Whether the OS is currently configured to launch Clowd at login. Returns false
+        /// <summary>Whether the OS is currently configured to launch Prisc at login. Returns false
         /// (rather than throwing) if the state can't be read.</summary>
         public static bool IsEnabled()
         {
@@ -101,7 +101,7 @@ namespace Clowd.UI
         }
 
         /// <summary>Reconciles the OS state with the saved setting at startup — the setting is the
-        /// source of truth, so this repairs a login item removed behind Clowd's back (or left behind
+        /// source of truth, so this repairs a login item removed behind Prisc's back (or left behind
         /// by an install whose setting was later turned off). Rewrites rather than merely checking
         /// presence when enabled, so an entry pointing at a stale executable path repairs itself.</summary>
         public static void Sync(bool enabled)
@@ -179,7 +179,7 @@ namespace Clowd.UI
                 "Library", "LaunchAgents", LaunchAgentLabel + ".plist");
 
         /// <summary>The <c>.app</c> bundle to hand to <c>open -a</c>, found by walking up from the
-        /// running executable (<c>Clowd.app/Contents/MacOS/Clowd</c>).</summary>
+        /// running executable (<c>Prisc.app/Contents/MacOS/Prisc.Ui</c>).</summary>
         private static string GetMacOSLaunchTarget()
         {
             var exePath = Environment.ProcessPath

@@ -2,14 +2,14 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // An imported file can store its frame at one size and declare that its pixels are not
     // square (FFmpeg's sample_aspect_ratio — the classic case is a 720×720 file with 3:4 pixels
@@ -22,7 +22,7 @@ namespace Clowd.VideoSDK.Tests
     {
         private const long Ms = TimeSpan.TicksPerMillisecond;
 
-        private readonly string _dir = Path.Combine(Path.GetTempPath(), "clowd-par-" + Guid.NewGuid().ToString("N"));
+        private readonly string _dir = Path.Combine(Path.GetTempPath(), "prisc-par-" + Guid.NewGuid().ToString("N"));
 
         public void Dispose()
         {

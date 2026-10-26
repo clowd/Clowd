@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// The preview's audio producer, replacing the single-stream <see cref="AudioDecodeWorker"/>:
@@ -174,7 +174,7 @@ namespace Clowd.VideoSDK.Playback
             _running = true;
             _thread = new Thread(MixLoop)
             {
-                Name = "clowd-amix",
+                Name = "prisc-amix",
                 IsBackground = true,
                 Priority = ThreadPriority.AboveNormal,
             };

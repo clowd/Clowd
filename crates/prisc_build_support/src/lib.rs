@@ -4,7 +4,7 @@
 //! from the prebuilt obs-deps archives that OBS's own CMake configure
 //! downloads, and their build scripts keep their original, self-contained
 //! logic. Linux has no obs-deps bundle, so the workspace fetches a pinned
-//! FFmpeg itself — and because obs-sys (libobs + plugins), ffmpeg-sys (vid2gif)
+//! FFmpeg itself — and because prisc_obs_sys (libobs + plugins), prisc_ffmpeg_sys (prisc_vid2gif)
 //! and the staging scripts must all agree on the *same* copy, the pin and the
 //! code that materialises it live here once rather than in four `build.rs`
 //! files that could drift apart.
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 ///
 /// `.deps` keeps every bundle it ever downloaded, so after an OBS bump a dev
 /// tree holds two (e.g. FFmpeg 7 and FFmpeg 8). Matching this exact version is
-/// what keeps libobs, ffmpeg-sys and the staged runtime on the same one;
+/// what keeps libobs, prisc_ffmpeg_sys and the staged runtime on the same one;
 /// "first `obs-deps-*` dir" picked whichever `read_dir` listed first.
 pub fn obs_deps_version(obs_src: &Path) -> String {
     let presets = obs_src.join("CMakePresets.json");

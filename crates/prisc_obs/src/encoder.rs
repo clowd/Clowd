@@ -5,7 +5,7 @@ use crate::data::ObsData;
 use crate::error::ObsError;
 
 pub struct ObsEncoder {
-    pub(crate) ptr: *mut obs_sys::obs_encoder_t,
+    pub(crate) ptr: *mut prisc_obs_sys::obs_encoder_t,
 }
 
 impl ObsEncoder {
@@ -18,7 +18,7 @@ impl ObsEncoder {
         let name_c = CString::new(name).unwrap();
         let settings_ptr = settings.map_or(ptr::null_mut(), |s| s.ptr);
         let ptr = unsafe {
-            obs_sys::obs_video_encoder_create(
+            prisc_obs_sys::obs_video_encoder_create(
                 id_c.as_ptr(),
                 name_c.as_ptr(),
                 settings_ptr,
@@ -41,7 +41,7 @@ impl ObsEncoder {
         let name_c = CString::new(name).unwrap();
         let settings_ptr = settings.map_or(ptr::null_mut(), |s| s.ptr);
         let ptr = unsafe {
-            obs_sys::obs_audio_encoder_create(
+            prisc_obs_sys::obs_audio_encoder_create(
                 id_c.as_ptr(),
                 name_c.as_ptr(),
                 settings_ptr,
@@ -57,26 +57,26 @@ impl ObsEncoder {
 
     // The raw pointer is passed straight to libobs, never dereferenced here.
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn set_video(&self, video: *mut obs_sys::video_t) {
-        unsafe { obs_sys::obs_encoder_set_video(self.ptr, video) };
+    pub fn set_video(&self, video: *mut prisc_obs_sys::video_t) {
+        unsafe { prisc_obs_sys::obs_encoder_set_video(self.ptr, video) };
     }
 
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn set_audio(&self, audio: *mut obs_sys::audio_t) {
-        unsafe { obs_sys::obs_encoder_set_audio(self.ptr, audio) };
+    pub fn set_audio(&self, audio: *mut prisc_obs_sys::audio_t) {
+        unsafe { prisc_obs_sys::obs_encoder_set_audio(self.ptr, audio) };
     }
 
     pub fn update(&self, settings: &ObsData) {
-        unsafe { obs_sys::obs_encoder_update(self.ptr, settings.ptr) };
+        unsafe { prisc_obs_sys::obs_encoder_update(self.ptr, settings.ptr) };
     }
 
-    pub fn as_ptr(&self) -> *mut obs_sys::obs_encoder_t {
+    pub fn as_ptr(&self) -> *mut prisc_obs_sys::obs_encoder_t {
         self.ptr
     }
 }
 
 impl Drop for ObsEncoder {
     fn drop(&mut self) {
-        unsafe { obs_sys::obs_encoder_release(self.ptr) };
+        unsafe { prisc_obs_sys::obs_encoder_release(self.ptr) };
     }
 }

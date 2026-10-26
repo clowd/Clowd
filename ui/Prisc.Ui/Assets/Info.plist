@@ -3,14 +3,14 @@
 <plist version="1.0">
   <dict>
     <!-- Identity keys mirror what vpk generates by default (verified against a shipped
-         Clowd.app) — the additions are the commented keys below (LSUIElement, NSServices)
+         app bundle) — the additions are the commented keys below (LSUIElement, NSServices)
          and the *UsageDescription strings. TCC KILLS a
          bundled process that touches the mic or a system-audio tap without them.
          {{VERSION}} / {{SHORT_VERSION}} are substituted by release.yml before vpk pack. -->
     <key>CFBundleName</key>
-    <string>Clowd</string>
+    <string>Prisc</string>
     <key>CFBundleIdentifier</key>
-    <string>com.Caelan_Sayler.Clowd</string>
+    <string>com.Caelan_Sayler.Prisc</string>
     <key>CFBundleVersion</key>
     <string>{{VERSION}}</string>
     <key>CFBundlePackageType</key>
@@ -18,20 +18,20 @@
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleExecutable</key>
-    <string>Clowd.Ui</string>
+    <string>Prisc.Ui</string>
     <key>CFBundleIconFile</key>
-    <string>clowd-default.icns</string>
+    <string>prisc-default.icns</string>
     <key>CFBundleShortVersionString</key>
     <string>{{SHORT_VERSION}}</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSHighResolutionCapable</key>
     <true />
-    <!-- Agent app: keeps Clowd out of the Dock's "recent applications" section after the
+    <!-- Agent app: keeps Prisc out of the Dock's "recent applications" section after the
          runtime activation-policy toggle (MacDockIcon) hides the live icon. -->
     <key>LSUIElement</key>
     <true />
-    <!-- Finder right-click → "Upload with Clowd". Delivered to the in-process provider
+    <!-- Finder right-click → "Upload with Prisc". Delivered to the in-process provider
          registered by MacServicesProvider (NSMessage → uploadFiles:userData:error:);
          NSPortName must match CFBundleName. Living in the bundle's own plist means the
          entry is registered and unregistered with the app itself — no install hooks. -->
@@ -54,7 +54,7 @@
           <string>FilePath</string>
         </dict>
         <key>NSPortName</key>
-        <string>Clowd</string>
+        <string>Prisc</string>
         <key>NSSendFileTypes</key>
         <array>
           <string>public.item</string>

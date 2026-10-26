@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // VideoDecodeWorker driven directly (demuxer + packet queue, no player above it), so a test
     // can hold the present thread at an exact instant. The sink stands in for the UI's frame
@@ -36,7 +36,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string EncodeVideoFixture(int seconds)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-video-decode-worker-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-video-decode-worker-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
             using var writer = new Mp4Writer(path, new Mp4WriterOptions
             {

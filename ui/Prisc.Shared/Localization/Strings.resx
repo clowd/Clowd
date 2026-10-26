@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
-    Neutral (English) strings for Clowd. This file is the source of truth: every other language is
+    Neutral (English) strings for Prisc. This file is the source of truth: every other language is
     a sibling Strings.<culture>.resx holding the same keys with translated <value>s.
     See TRANSLATING.md before editing.
   -->
@@ -193,7 +193,7 @@
   </data>
   <data name="Main_Tagline" xml:space="preserve">
     <value>Screen Capture</value>
-    <comment>Subtitle under the CLOWD wordmark in the main window. "Clowd" itself is a brand name and is never translated.</comment>
+    <comment>Subtitle under the PRISC wordmark in the main window. "Prisc" itself is a brand name and is never translated.</comment>
   </data>
   <data name="Nav_About" xml:space="preserve">
     <value>About</value>
@@ -241,7 +241,7 @@
   </data>
   <data name="Tray_Exit" xml:space="preserve">
     <value>Exit</value>
-    <comment>Tray menu item: quits Clowd.</comment>
+    <comment>Tray menu item: quits Prisc.</comment>
   </data>
   <data name="Tray_ImageEditor" xml:space="preserve">
     <value>Image Editor</value>

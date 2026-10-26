@@ -6,15 +6,15 @@ use std::time::{Duration, Instant};
 /// from its headers. Import libraries (Windows), dylibs (macOS) and shared
 /// objects (Linux) all live in the bundle's `lib` dir; headers in `include`.
 ///
-/// On Linux the "bundle" is the pinned BtbN FFmpeg that obs-sys links libobs
-/// against (see obs-build-support). It is not downloaded by the OBS configure
-/// there, so instead of waiting for obs-sys this script materialises it
+/// On Linux the "bundle" is the pinned BtbN FFmpeg that prisc_obs_sys links libobs
+/// against (see prisc_build_support). It is not downloaded by the OBS configure
+/// there, so instead of waiting for prisc_obs_sys this script materialises it
 /// itself through the same locked, idempotent routine — which also lets
-/// vid2gif build on Linux without building OBS first.
+/// prisc_vid2gif build on Linux without building OBS first.
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os != "windows" && target_os != "macos" && target_os != "linux" {
-        panic!("ffmpeg-sys: unsupported CARGO_CFG_TARGET_OS `{target_os}`");
+        panic!("prisc_ffmpeg_sys: unsupported CARGO_CFG_TARGET_OS `{target_os}`");
     }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -22,7 +22,7 @@ fn main() {
     let deps_dir = repo_root.join("obs-studio").join(".deps");
     let deps = if target_os == "linux" {
         let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-        obs_build_support::linux::ensure_ffmpeg(&deps_dir, &arch).root
+        prisc_build_support::linux::ensure_ffmpeg(&deps_dir, &arch).root
     } else {
         wait_for_deps(&deps_dir)
     };
@@ -58,7 +58,7 @@ fn main() {
 /// Locates the non-qt6 obs-deps bundle containing the FFmpeg headers **for the
 /// target architecture**.
 ///
-/// The bundles are downloaded by the OBS CMake configure that obs-sys runs,
+/// The bundles are downloaded by the OBS CMake configure that prisc_obs_sys runs,
 /// and cargo may schedule this build script before (or concurrently with)
 /// that download on a fresh checkout — so poll instead of failing
 /// immediately. Incremental builds hit the happy path instantly.
@@ -75,7 +75,7 @@ fn wait_for_deps(deps_dir: &Path) -> PathBuf {
     loop {
         if let Some(found) = find_deps(deps_dir) {
             println!(
-                "cargo:warning=ffmpeg-sys: using obs-deps bundle {}",
+                "cargo:warning=prisc_ffmpeg_sys: using obs-deps bundle {}",
                 found.display()
             );
             return found;
@@ -90,17 +90,17 @@ fn wait_for_deps(deps_dir: &Path) -> PathBuf {
                 })
                 .unwrap_or_default();
             panic!(
-                "ffmpeg-sys: no obs-deps bundle with FFmpeg headers for target arch `{}` found \
+                "prisc_ffmpeg_sys: no obs-deps bundle with FFmpeg headers for target arch `{}` found \
                  under {} after waiting 10 minutes (present: {seen:?}). The bundle is downloaded \
-                 by the OBS build (obs-sys); run a full workspace `cargo build` at least once \
-                 before building vid2gif/ffmpeg-sys on their own.",
+                 by the OBS build (prisc_obs_sys); run `cargo rec` (`cargo build -p prisc_recorder`) \
+                 at least once before building prisc_vid2gif/prisc_ffmpeg_sys on their own.",
                 env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default(),
                 deps_dir.display()
             );
         }
         if !announced {
             eprintln!(
-                "ffmpeg-sys: waiting for the obs-deps download (obs-sys CMake configure) \
+                "prisc_ffmpeg_sys: waiting for the obs-deps download (prisc_obs_sys CMake configure) \
                  to populate {}...",
                 deps_dir.display()
             );
@@ -115,7 +115,7 @@ fn wait_for_deps(deps_dir: &Path) -> PathBuf {
 fn find_deps(deps_dir: &Path) -> Option<PathBuf> {
     // deps_dir is <obs-studio>/.deps; the bundle version comes from the
     // checkout's CMakePresets.json.
-    obs_build_support::obs_deps_bundles(deps_dir.parent()?)
+    prisc_build_support::obs_deps_bundles(deps_dir.parent()?)
         .into_iter()
         .find(|dir| {
             let name = dir.file_name().unwrap_or_default().to_string_lossy();
@@ -166,9 +166,9 @@ fn generate_bindings(manifest_dir: &Path, include: &Path) {
         .blocklist_item("AVERROR_.*")
         .derive_default(true)
         .generate()
-        .expect("ffmpeg-sys: failed to generate bindings");
+        .expect("prisc_ffmpeg_sys: failed to generate bindings");
 
     bindings
         .write_to_file(out_dir.join("bindings.rs"))
-        .expect("ffmpeg-sys: failed to write bindings");
+        .expect("prisc_ffmpeg_sys: failed to write bindings");
 }

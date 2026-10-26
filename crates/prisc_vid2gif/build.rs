@@ -2,21 +2,21 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Runtime plumbing for the FFmpeg libraries vid2gif links (via ffmpeg-sys):
+/// Runtime plumbing for the FFmpeg libraries prisc_vid2gif links (via prisc_ffmpeg_sys):
 ///
 /// - Windows: copy the FFmpeg DLLs (and their dependency DLLs) from the
 ///   obs-deps bundle next to the binary AND into the `deps` dir, so both
-///   `vid2gif.exe` and the cargo test executables load without PATH setup.
+///   `prisc_vid2gif.exe` and the cargo test executables load without PATH setup.
 /// - macOS: add rpaths so the dylibs resolve from the obs-deps bundle during
 ///   development and from `@executable_path/Frameworks` in the shipped
 ///   bundle (the release staging strips the absolute rpath).
 /// - Linux: both of the above — copy the bundle's FFmpeg shared objects next
-///   to the binary (under their SONAMEs, see obs-build-support) and link with
+///   to the binary (under their SONAMEs, see prisc_build_support) and link with
 ///   RUNPATH `$ORIGIN` so the profile dir is self-contained, plus an absolute
 ///   RUNPATH into the bundle for the test executables in `deps/`.
 ///
-/// The bundle location comes from ffmpeg-sys (`links = "ffmpeg"`), NOT from a
-/// scan of `.deps` here: that ordering guarantee is the point. ffmpeg-sys
+/// The bundle location comes from prisc_ffmpeg_sys (`links = "ffmpeg"`), NOT from a
+/// scan of `.deps` here: that ordering guarantee is the point. prisc_ffmpeg_sys
 /// waits for the OBS build to download the bundle and picks the one matching
 /// the target arch; a scan in this script could run first, find nothing, and
 /// silently emit no rpath — leaving a test binary that aborts at startup with
@@ -32,7 +32,7 @@ fn main() {
 
 fn windows() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // OUT_DIR = target/{debug,release}/build/vid2gif-<hash>/out
+    // OUT_DIR = target/{debug,release}/build/prisc_vid2gif-<hash>/out
     let profile_dir = out_dir
         .ancestors()
         .nth(3)
@@ -40,7 +40,7 @@ fn windows() {
         .to_path_buf();
 
     let Some(deps_bin) = env::var_os("DEP_FFMPEG_DEPS_BIN").map(PathBuf::from) else {
-        println!("cargo:warning=vid2gif: obs-deps bundle not found; runtime DLLs not copied");
+        println!("cargo:warning=prisc_vid2gif: obs-deps bundle not found; runtime DLLs not copied");
         return;
     };
 
@@ -68,7 +68,7 @@ fn windows() {
             copy_if_newer(&src, &profile_dir.join("deps").join(name));
         } else {
             println!(
-                "cargo:warning=vid2gif: not found in obs-deps: {}",
+                "cargo:warning=prisc_vid2gif: not found in obs-deps: {}",
                 src.display()
             );
         }
@@ -84,7 +84,7 @@ fn macos() {
         // Hard error, not a warning: a binary linked without this rpath builds
         // fine and then aborts the moment it runs.
         None => panic!(
-            "vid2gif: DEP_FFMPEG_DEPS_LIB not set — ffmpeg-sys did not export the obs-deps \
+            "prisc_vid2gif: DEP_FFMPEG_DEPS_LIB not set — prisc_ffmpeg_sys did not export the obs-deps \
              bundle path (is its `links = \"ffmpeg\"` key still present?)"
         ),
     }
@@ -93,7 +93,7 @@ fn macos() {
 
 fn linux() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // OUT_DIR = target/{debug,release}/build/vid2gif-<hash>/out
+    // OUT_DIR = target/{debug,release}/build/prisc_vid2gif-<hash>/out
     let profile_dir = out_dir
         .ancestors()
         .nth(3)
@@ -104,23 +104,23 @@ fn linux() {
     // start.
     let root = env::var_os("DEP_FFMPEG_DEPS_ROOT").map(PathBuf::from).unwrap_or_else(|| {
         panic!(
-            "vid2gif: DEP_FFMPEG_DEPS_ROOT not set — ffmpeg-sys did not export the FFmpeg              bundle path (is its `links = \"ffmpeg\"` key still present?)"
+            "prisc_vid2gif: DEP_FFMPEG_DEPS_ROOT not set — prisc_ffmpeg_sys did not export the FFmpeg              bundle path (is its `links = \"ffmpeg\"` key still present?)"
         )
     });
-    let bundle = obs_build_support::linux::FfmpegBundle { root };
+    let bundle = prisc_build_support::linux::FfmpegBundle { root };
 
-    // $ORIGIN first, so a staged or relocated vid2gif always prefers the copies
+    // $ORIGIN first, so a staged or relocated prisc_vid2gif always prefers the copies
     // beside it; the absolute bundle path serves the test executables in
     // `deps/` (the release staging strips it). `$ORIGIN` reaches the linker
     // verbatim: cargo passes link args without a shell.
     println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", bundle.lib().display());
 
-    obs_build_support::linux::stage_ffmpeg_runtime(&bundle, &profile_dir);
+    prisc_build_support::linux::stage_ffmpeg_runtime(&bundle, &profile_dir);
 }
 
 /// Copy `src` to `dst` only when it is newer or a different size, keeping
-/// incremental builds cheap (same contract as the obs-express build script).
+/// incremental builds cheap (same contract as the prisc_recorder build script).
 fn copy_if_newer(src: &Path, dst: &Path) {
     let should_copy = match (fs::metadata(src), fs::metadata(dst)) {
         (Ok(s), Ok(d)) => {
@@ -141,7 +141,7 @@ fn copy_if_newer(src: &Path, dst: &Path) {
         }
         if let Err(e) = fs::copy(src, dst) {
             println!(
-                "cargo:warning=vid2gif: failed to copy {} -> {}: {e}",
+                "cargo:warning=prisc_vid2gif: failed to copy {} -> {}: {e}",
                 src.display(),
                 dst.display()
             );

@@ -2,10 +2,10 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Thumbs;
+using Prisc.VideoSDK.Thumbs;
 using SkiaSharp;
 
-namespace Clowd.UI.Preview.Producers
+namespace Prisc.UI.Preview.Producers
 {
     /// <summary>
     /// Lane B. One decoded frame from a recording, a render, or a GIF conversion — the fix for the

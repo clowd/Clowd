@@ -1,4 +1,4 @@
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// How a region obscured by the Pixelate tool is rendered. Mosaic MUST stay 0: obscured shapes

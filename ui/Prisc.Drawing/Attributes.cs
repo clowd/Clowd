@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     [Flags]
     public enum Skill

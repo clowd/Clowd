@@ -11,9 +11,9 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Styling;
-using Clowd.UI.Converters;
+using Prisc.UI.Converters;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>How a palette bar's hex code behaves: plain text (Image), or a button that asks the
     /// tab to open the mini color flyout under it (Palette).</summary>

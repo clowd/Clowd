@@ -1,24 +1,24 @@
 using System;
 using System.IO;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Locates the external obs-express recording binary (DESIGN §4.2, sibling repository
-    /// obs-express-rs). Probe order: the <c>CLOWD_OBS_EXPRESS_PATH</c> environment variable, then
-    /// an <c>obs-express</c> directory alongside the Clowd.Ui executable (future release layout),
+    /// Locates the prisc_recorder recording binary (DESIGN §4.2, built in-repo from
+    /// crates/prisc_recorder). Probe order: the <c>PRISC_RECORDER_PATH</c> environment variable, then
+    /// a <c>recorder</c> directory alongside the Prisc.Ui executable (release layout),
     /// then walking up from the app base directory to each cargo workspace root (a directory
-    /// containing <c>Cargo.toml</c> — the clowd-rust checkout) and probing the *sibling*
-    /// <c>obs-express-rs</c> checkout's <c>target/debug</c> followed by <c>target/release</c>.
-    /// Note: when Clowd.Ui is built to an out-of-tree scratch OutDir the walk-up finds no
-    /// <c>Cargo.toml</c> — the dev launch profile must set <c>CLOWD_OBS_EXPRESS_PATH</c>.
+    /// containing <c>Cargo.toml</c> — the Prisc checkout) and probing its
+    /// <c>target/debug</c> followed by <c>target/release</c>.
+    /// Note: when Prisc.Ui is built to an out-of-tree scratch OutDir the walk-up finds no
+    /// <c>Cargo.toml</c> — the dev launch profile must set <c>PRISC_RECORDER_PATH</c>.
     /// </summary>
     public static class ObsBinaryLocator
     {
-        public const string EnvVarName = "CLOWD_OBS_EXPRESS_PATH";
+        public const string EnvVarName = "PRISC_RECORDER_PATH";
 
         public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "obs-express.exe" : "obs-express";
+            OperatingSystem.IsWindows() ? "prisc_recorder.exe" : "prisc_recorder";
 
         /// <summary>The binary, ready to spawn — see <see cref="HelperBinary.EnsureExecutable"/> for
         /// why resolving one also has to check it is runnable. The overload below stays a pure
@@ -30,10 +30,10 @@ namespace Clowd.UI
         /// <summary>
         /// The directory holding the FFmpeg native libraries, or null when none can be found —
         /// the one answer every caller of <see cref="VideoSDK.FFmpegLoader.TryInitialize"/> passes
-        /// as its fallback resolver. <c>CLOWD_FFMPEG_PATH</c> is checked by the loader itself and
+        /// as its fallback resolver. <c>PRISC_FFMPEG_PATH</c> is checked by the loader itself and
         /// wins over everything here.
         /// <para>
-        /// The libraries ship with obs-express, but not in one place: on Windows they sit beside
+        /// The libraries ship with the recorder, but not in one place: on Windows they sit beside
         /// the binary, and in a macOS bundle they are in a <c>Frameworks/</c> subdirectory next to
         /// it. Both are probed, in that order, and each is confirmed to actually hold an avcodec
         /// of the major the bindings were generated against before it is returned — a directory
@@ -50,7 +50,7 @@ namespace Clowd.UI
                 if (HasFFmpeg(dir))
                     return dir;
 
-                // macOS bundle layout: obs-express/Frameworks/libav*.dylib.
+                // macOS bundle layout: recorder/Frameworks/libav*.dylib.
                 var frameworks = Path.Combine(dir ?? "", "Frameworks");
                 if (HasFFmpeg(frameworks))
                     return frameworks;
@@ -88,21 +88,20 @@ namespace Clowd.UI
             if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
                 return Path.GetFullPath(envVarValue);
 
-            // (b) release layout: obs-express/ subdirectory next to the Clowd.Ui executable
-            // (harmless probe until packaging exists).
-            var local = Path.Combine(baseDirectory, "obs-express", BinaryFileName);
+            // (b) release layout: recorder/ subdirectory next to the Prisc.Ui executable.
+            var local = Path.Combine(baseDirectory, "recorder", BinaryFileName);
             if (File.Exists(local))
                 return Path.GetFullPath(local);
 
-            // (c) dev layout: walk up to each directory containing Cargo.toml (the clowd-rust
-            // repo root) and probe the sibling obs-express-rs checkout's build output. Keep
-            // walking if nothing is built there (nested crate manifests may match first).
+            // (c) dev layout: walk up to each directory containing Cargo.toml (the Prisc repo
+            // root, built with `cargo rec`) and probe its build output. Keep walking if nothing
+            // is built there (nested crate manifests may match first).
             var dir = new DirectoryInfo(Path.GetFullPath(baseDirectory));
             while (dir != null)
             {
-                if (dir.Parent != null && File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
+                if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
                 {
-                    var target = Path.Combine(dir.Parent.FullName, "obs-express-rs", "target");
+                    var target = Path.Combine(dir.FullName, "target");
 
                     var debug = Path.Combine(target, "debug", BinaryFileName);
                     if (File.Exists(debug))

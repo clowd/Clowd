@@ -6,10 +6,10 @@ using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Clowd.Drawing.Ink;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Ink;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>
     /// A freehand brush stroke. What is persisted is the raw pointer input — the samples, local to

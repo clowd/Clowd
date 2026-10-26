@@ -3,14 +3,14 @@
 //! # One FFmpeg for everything
 //!
 //! libobs, every OBS plugin that touches FFmpeg (obs-ffmpeg, the linux-v4l2
-//! MJPEG decoder, libobs's media helpers), obs-ffmpeg-mux and vid2gif (through
-//! ffmpeg-sys) must load the *same* libavcodec. Two copies in one process would
+//! MJPEG decoder, libobs's media helpers), obs-ffmpeg-mux and prisc_vid2gif (through
+//! prisc_ffmpeg_sys) must load the *same* libavcodec. Two copies in one process would
 //! each carry their own codec registry and allocator state, and a distro
 //! FFmpeg of a different major version would not even be ABI compatible with
 //! headers we generated bindings from. So the system libav* is never used:
 //! every consumer links the pinned BtbN build below, which is FFmpeg 8.1 — the
 //! same ABI line (libavcodec 62) the Windows and macOS obs-deps ship, so the
-//! `avcodec_version()` assertion in ffmpeg-sys holds on every OS.
+//! `avcodec_version()` assertion in prisc_ffmpeg_sys holds on every OS.
 //!
 //! BtbN's `gpl-shared` builds link all external codec libraries statically
 //! into the eight FFmpeg `.so` files and depend only on glibc, which is what
@@ -27,7 +27,7 @@
 //! worse, find a distro copy). [`ensure_ffmpeg`] therefore rewrites every
 //! library's RUNPATH to `$ORIGIN` once, at extraction time, so the siblings
 //! resolve each other wherever the set is copied to — the Linux analogue of
-//! the `@loader_path` rpath obs-express's macOS staging adds.
+//! the `@loader_path` rpath prisc_recorder's macOS staging adds.
 
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -66,16 +66,16 @@ pub const FFMPEG_LINUX_ARM64: FfmpegAsset = FfmpegAsset {
 
 /// The asset for a Rust target arch (`CARGO_CFG_TARGET_ARCH`).
 ///
-/// x86_64 and aarch64 are the Linux arches obs-express ships. Anything else
+/// x86_64 and aarch64 are the Linux arches prisc_recorder ships. Anything else
 /// panics here, before any download or native build starts.
 pub fn ffmpeg_asset(target_arch: &str) -> &'static FfmpegAsset {
     match target_arch {
         "x86_64" => &FFMPEG_LINUX_X64,
         "aarch64" => &FFMPEG_LINUX_ARM64,
         other => panic!(
-            "obs-express supports Linux on x86_64 and aarch64 only (target arch `{other}`). \
+            "prisc_recorder supports Linux on x86_64 and aarch64 only (target arch `{other}`). \
              A new arch needs a pinned BtbN FFmpeg archive (URL + SHA-256) in \
-             crates/build-support/src/linux.rs::ffmpeg_asset."
+             crates/prisc_build_support/src/linux.rs::ffmpeg_asset."
         ),
     }
 }
@@ -103,13 +103,13 @@ impl FfmpegBundle {
 /// Name of the marker written inside the bundle once it is complete. It holds
 /// the archive hash, so a bundle extracted from a different pin (same dir name,
 /// re-uploaded archive) is redone rather than trusted.
-const COMPLETE_MARKER: &str = ".obs-express-complete";
+const COMPLETE_MARKER: &str = ".prisc-complete";
 
 /// Makes sure the pinned FFmpeg bundle for `target_arch` exists under
 /// `deps_dir` (the `obs-studio/.deps` directory), downloading, verifying and
 /// extracting it if needed, and returns it.
 ///
-/// Both obs-sys and ffmpeg-sys call this, and cargo runs their build scripts
+/// Both prisc_obs_sys and prisc_ffmpeg_sys call this, and cargo runs their build scripts
 /// concurrently, so the whole check-or-fetch is serialised on an exclusive
 /// file lock: the second caller blocks until the first has finished and then
 /// sees the completion marker. Extraction goes to a scratch directory that is
@@ -151,7 +151,7 @@ pub fn ensure_ffmpeg(deps_dir: &Path, target_arch: &str) -> FfmpegBundle {
         asset.url,
         asset.sha256,
         &archive,
-        "FfmpegAsset::sha256 in crates/build-support/src/linux.rs",
+        "FfmpegAsset::sha256 in crates/prisc_build_support/src/linux.rs",
     );
 
     let scratch = deps_dir.join(format!(".{}.extract", asset.dir_name));
@@ -256,7 +256,7 @@ pub fn stage_ffmpeg_runtime(bundle: &FfmpegBundle, dst_dir: &Path) {
 ///
 /// The copy lands under a temporary name and is renamed over `dst`, because
 /// several build scripts stage the same FFmpeg files into the shared profile
-/// directory concurrently (vid2gif and obs-express both do, as on Windows): a
+/// directory concurrently (prisc_vid2gif and prisc_recorder both do, as on Windows): a
 /// plain `fs::copy` from each would interleave into a corrupt file.
 pub fn copy_if_newer(src: &Path, dst: &Path) {
     let should_copy = match (fs::metadata(src), fs::metadata(dst)) {
@@ -367,7 +367,7 @@ pub fn require_tool(tool: &str) {
             other => other,
         };
         panic!(
-            "`{tool}` is required to build obs-express on Linux but was not found on PATH \
+            "`{tool}` is required to build prisc_recorder on Linux but was not found on PATH \
              (package: {package}). tools/linux-build/Dockerfile is the reference build \
              environment and lists every package the build needs."
         );
@@ -397,7 +397,7 @@ pub fn download_verified(url: &str, sha256: &str, dest: &Path, pin_location: &st
     for tool in ["curl", "sha256sum"] {
         require_tool(tool);
     }
-    eprintln!("obs-build-support: downloading {url}");
+    eprintln!("prisc_build_support: downloading {url}");
     run(Command::new("curl")
         .args(["-fL", "--retry", "3", "--retry-delay", "2", "-sS", "-o"])
         .arg(dest)

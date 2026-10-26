@@ -1,10 +1,10 @@
 using System;
 using Avalonia.Controls;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>
-    /// Keeps Avalonia's Win32 screens cache from going stale while Clowd is tray-resident.
+    /// Keeps Avalonia's Win32 screens cache from going stale while Prisc is tray-resident.
     ///
     /// Avalonia invalidates that cache only from a live window's WM_DISPLAYCHANGE handler (the
     /// hidden message window ignores WM_DISPLAYCHANGE), so a display change while no window is
@@ -19,9 +19,9 @@ namespace Clowd.UI.Helpers
     /// not, and the handler refreshes the cache through Avalonia's own per-window path. Unshown,
     /// it starts no renderer and never appears in the desktop lifetime's window list.
     ///
-    /// This complements <see cref="DesktopScreens"/>: that keeps Clowd's own placement math off
+    /// This complements <see cref="DesktopScreens"/>: that keeps Prisc's own placement math off
     /// the cache entirely; this keeps the cache itself fresh for the consumers inside Avalonia
-    /// that Clowd cannot redirect.
+    /// that Prisc cannot redirect.
     /// </summary>
     internal static class ScreenCacheSentinel
     {
@@ -34,7 +34,7 @@ namespace Clowd.UI.Helpers
 
             _sentinel = new Window
             {
-                Title = "Clowd screen-change sentinel",
+                Title = "Prisc screen-change sentinel",
                 ShowInTaskbar = false,
                 ShowActivated = false,
             };

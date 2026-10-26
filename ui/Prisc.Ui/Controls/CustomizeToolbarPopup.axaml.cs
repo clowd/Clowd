@@ -11,10 +11,10 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI.Config;
+using Prisc.Config;
+using Prisc.UI.Config;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>One row of the customize flyout: a tool the host's strip can show, hide and
     /// reorder. <see cref="Key"/> is whatever the host persists the order by (an enum name in

@@ -5,13 +5,13 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.Util;
+using Prisc.Config;
+using Prisc.Util;
 using Velopack;
 using Velopack.Locators;
 using Velopack.Sources;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     public enum UpdateState
     {
@@ -37,7 +37,7 @@ namespace Clowd.UI
     /// platform (win-x64, osx-arm64, ...); a pre-release differs from a stable release only by the
     /// pre-release flag on the GitHub release itself, so a build is promoted to stable by flipping
     /// that flag on github.com. Everyone follows the newest release on their platform channel;
-    /// opting in to experimental builds (<see cref="Clowd.Config.SettingsGeneral.IncludePrereleaseUpdates"/>)
+    /// opting in to experimental builds (<see cref="Prisc.Config.SettingsGeneral.IncludePrereleaseUpdates"/>)
     /// merely widens the feed to also include releases still flagged pre-release.
     ///
     /// Installs from the retired "-pre" channels are steered back onto the stable channel via an
@@ -46,7 +46,7 @@ namespace Clowd.UI
     /// <see cref="Start"/> installs a one-minute heartbeat that owns the whole background policy:
     /// checking on the configured interval, downloading when the user has opted into automatic
     /// updates, and applying the staged update only once <see cref="IdleMonitor"/> agrees
-    /// Clowd is idle. The settings page drives the same methods for the interactive path, and renders
+    /// Prisc is idle. The settings page drives the same methods for the interactive path, and renders
     /// <see cref="State"/> / <see cref="StatusMessage"/> for both.
     /// </summary>
     public sealed class UpdateService
@@ -378,7 +378,7 @@ namespace Clowd.UI
                 return;
             }
 
-            // a background restart is not the user closing Clowd: whatever editors are open come
+            // a background restart is not the user closing Prisc: whatever editors are open come
             // back after it (IdleMonitor only lets it happen when session restore is on).
             Dispatcher.UIThread.Post(() => App.Current?.ExitApp(keepOpenEditors: silent));
         }

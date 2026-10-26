@@ -1,7 +1,7 @@
 using System;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Creates the offscreen surfaces the compositor draws into. Surfaces are never constructed

@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>
     /// Rational time conversion in 100ns ticks, with pure integer math.

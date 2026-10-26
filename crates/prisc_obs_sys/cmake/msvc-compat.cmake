@@ -1,4 +1,4 @@
-# obs-express compatibility shim for newer MSVC toolsets, injected into the
+# prisc_recorder compatibility shim for newer MSVC toolsets, injected into the
 # Windows OBS configure via CMAKE_PROJECT_INCLUDE (runs right after OBS's
 # top-level project(), so the definitions reach every target below it).
 #

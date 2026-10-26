@@ -1,12 +1,12 @@
 using System;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Draws a background wallpaper into a rectangle: the phase clock, the cover placement, and
-    /// the one entry point Clowd.Ui's inspector tiles and flyouts share with the composer.
+    /// the one entry point Prisc.Ui's inspector tiles and flyouts share with the composer.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -124,7 +124,7 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>A <c>BackgroundContent.Color</c> string as a color, with
-        /// <see cref="BackgroundContent.DefaultColor"/> (Clowd blue) for a null or unparseable
+        /// <see cref="BackgroundContent.DefaultColor"/> (Prisc blue) for a null or unparseable
         /// one — so a solid background always draws something.</summary>
         public static SKColor SolidColorOf(string color)
         {

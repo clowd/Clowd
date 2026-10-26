@@ -271,7 +271,7 @@ mod imp {
 
     fn send(kind: RawEventKind) {
         if let Some(ctx) = CTX.get() {
-            let t_ns = unsafe { obs_sys::os_gettime_ns() };
+            let t_ns = unsafe { prisc_obs_sys::os_gettime_ns() };
             (ctx.sink)(RawEvent { t_ns, kind });
         }
     }
@@ -521,7 +521,7 @@ mod imp {
 
     fn send(kind: RawEventKind) {
         if let Some(ctx) = CTX.get() {
-            let t_ns = unsafe { obs_sys::os_gettime_ns() };
+            let t_ns = unsafe { prisc_obs_sys::os_gettime_ns() };
             (ctx.sink)(RawEvent { t_ns, kind });
         }
     }

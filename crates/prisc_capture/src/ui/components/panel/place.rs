@@ -6,7 +6,7 @@
 //! the monitor bounds are in. `show` turns the result into the
 //! monitor-local point position egui's `Area` wants.
 
-use clowd_rust_core::geometry::{RectExt, ScreenRect};
+use prisc_rust_core::geometry::{RectExt, ScreenRect};
 
 use super::theme::tokens;
 

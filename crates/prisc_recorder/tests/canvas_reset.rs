@@ -12,19 +12,19 @@
 //! and the runtime staged next to the binaries, so it is ignored by default:
 //!
 //! ```sh
-//! cargo test --release -p obs-express --test canvas_reset -- --ignored
+//! cargo test --release -p prisc_recorder --test canvas_reset -- --ignored
 //! # Linux, headless:
-//! xvfb-run -a cargo test --release -p obs-express --test canvas_reset -- --ignored
+//! xvfb-run -a cargo test --release -p prisc_recorder --test canvas_reset -- --ignored
 //! ```
 
-use obs::context::ObsContext;
-use obs::scene::ObsScene;
-use obs::source::ObsSource;
-use obs::video::VideoInfo;
+use prisc_obs::context::ObsContext;
+use prisc_obs::scene::ObsScene;
+use prisc_obs::source::ObsSource;
+use prisc_obs::video::VideoInfo;
 
 fn video(w: u32, h: u32) -> VideoInfo {
     VideoInfo {
-        graphics_module: obs_platform::GRAPHICS_MODULE,
+        graphics_module: prisc_obs_platform::GRAPHICS_MODULE,
         base_width: w,
         base_height: h,
         output_width: w,
@@ -38,13 +38,13 @@ fn video(w: u32, h: u32) -> VideoInfo {
 #[test]
 #[ignore]
 fn placement_after_canvas_reset_is_exact() {
-    obs_platform::init_process();
+    prisc_obs_platform::init_process();
     let context = ObsContext::new("en-US").expect("obs_startup");
     // The test binary lives in target/<profile>/deps; the staged runtime
-    // (data/libobs) is one level up, next to obs-express.
+    // (data/libobs) is one level up, next to prisc_recorder.
     let exe = std::env::current_exe().unwrap();
     let profile_dir = exe.parent().unwrap().parent().unwrap();
-    let paths = obs_platform::default_obs_paths(profile_dir);
+    let paths = prisc_obs_platform::default_obs_paths(profile_dir);
     let data = paths
         .libobs_data
         .expect("libobs data dir not found next to the binaries; build the workspace first");

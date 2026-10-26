@@ -7,10 +7,10 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     public sealed class GraphicCollection : SimpleNotifyObject, ICollection<GraphicBase>
     {

@@ -16,6 +16,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
+    <ProjectReference Include="..\Prisc.Drawing\Prisc.Drawing.csproj" />
   </ItemGroup>
 </Project>

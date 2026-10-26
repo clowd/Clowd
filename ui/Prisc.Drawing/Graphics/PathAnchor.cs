@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Avalonia;
 using Avalonia.Media;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>One node of a <see cref="GraphicPath"/>: the on-curve point and its two bezier
     /// handles as OFFSETS from it (so moving the point moves its handles for free, and the JSON

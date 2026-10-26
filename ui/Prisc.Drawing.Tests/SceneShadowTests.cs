@@ -3,10 +3,10 @@ using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// Pins the live drop shadow drawn by SceneRenderer (a tinted, blurred Skia layer): it is the
@@ -18,7 +18,7 @@ namespace Clowd.Drawing.Tests
         static SceneShadowTests()
         {
             // DrawingCanvas reads tool settings from SettingsRoot.Current, which the app assigns
-            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+            Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
         }
 
         // the export spans the two specks: (0,0) to (200,200)

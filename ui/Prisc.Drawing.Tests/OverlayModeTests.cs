@@ -7,12 +7,12 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
-using Clowd.Config;
-using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Tools;
+using Prisc.Config;
+using Prisc.Drawing.Graphics;
+using Prisc.Drawing.Tools;
 using Xunit;
 
-namespace Clowd.Drawing.Tests
+namespace Prisc.Drawing.Tests
 {
     /// <summary>
     /// The draw-on-screen gates on <see cref="DrawingCanvas.IsOverlayMode"/>, each checked

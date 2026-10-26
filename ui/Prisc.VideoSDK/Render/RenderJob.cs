@@ -5,14 +5,14 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Threading;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Render
+namespace Prisc.VideoSDK.Render
 {
     /// <summary>Settings for one <see cref="RenderJob"/> run.</summary>
     public sealed class RenderJobOptions
@@ -53,7 +53,7 @@ namespace Clowd.VideoSDK.Render
         /// checked at startup and any refusal — no shareable ring, no Direct3D 11.4, the
         /// encoder not opening over GPU frames — logs one line and uses the readback path, so
         /// this is never a reason for a render to fail. False forces the readback path
-        /// (<c>Clowd.VideoRender</c> maps <c>CLOWD_RENDER_ZEROCOPY=0</c> to it for A/B
+        /// (<c>Prisc.VideoRender</c> maps <c>PRISC_RENDER_ZEROCOPY=0</c> to it for A/B
         /// benchmarking); <see cref="RenderResult.ZeroCopy"/> reports which ran.
         /// </summary>
         public bool ZeroCopyEncode { get; init; } = true;
@@ -77,12 +77,12 @@ namespace Clowd.VideoSDK.Render
         public bool LegacyContainerTiming { get; init; }
 
         /// <summary>Directory holding the project's AI sidecar files (the one with
-        /// <c>videoedit.json</c> — see <see cref="Clowd.VideoSDK.Ai.AiSidecars"/>): where the
+        /// <c>videoedit.json</c> — see <see cref="Prisc.VideoSDK.Ai.AiSidecars"/>): where the
         /// audio mix reads denoise sidecars for tracks with <see cref="Model.Track.Denoise"/>
         /// on and the frame source reads matte sidecars for items with a segmented
         /// <see cref="Model.VideoEffect"/>. Sidecars that are needed but missing/stale are
-        /// generated here before the render loop when a <c>clowd_ai</c> binary resolves
-        /// (see <see cref="Clowd.VideoSDK.Ai.AiLoader"/>). Null renders every stream raw
+        /// generated here before the render loop when a <c>prisc_ai</c> binary resolves
+        /// (see <see cref="Prisc.VideoSDK.Ai.AiLoader"/>). Null renders every stream raw
         /// and the segmented effects degrade to plain draws.</summary>
         public string SidecarCacheDir { get; init; }
     }
@@ -571,7 +571,7 @@ namespace Clowd.VideoSDK.Render
                         }
                     })
                     {
-                        Name = "Clowd.VideoSDK Convert",
+                        Name = "Prisc.VideoSDK Convert",
                         IsBackground = true,
                     };
                     convertThread.Start();
@@ -900,7 +900,7 @@ namespace Clowd.VideoSDK.Render
         /// Brings the AI sidecars the render consumes up to date: every needed-but-missing/stale
         /// matte (items with a segmented <see cref="VideoEffect"/>) and denoise (tracks with
         /// <see cref="Track.Denoise"/>) sidecar is generated synchronously when a
-        /// <c>clowd_ai</c> binary resolves. Without a binary — or a cache directory — the
+        /// <c>prisc_ai</c> binary resolves. Without a binary — or a cache directory — the
         /// render proceeds and the effects degrade exactly as the preview does: plain Blur still
         /// applies, the segmented kinds draw plain, denoise plays raw. A stream too long for the
         /// sidecar wav format (denoise's <see cref="NotSupportedException"/>) degrades the same
@@ -939,7 +939,7 @@ namespace Clowd.VideoSDK.Render
             if (AiLoader.TryGetPath() == null)
             {
                 options.DiagnosticLog?.Invoke(
-                    $"RenderJob: {jobs.Count} AI sidecar(s) needed but no clowd_ai binary resolves — rendering without them.");
+                    $"RenderJob: {jobs.Count} AI sidecar(s) needed but no prisc_ai binary resolves — rendering without them.");
                 return 0;
             }
 

@@ -7,7 +7,7 @@ using Avalonia.Threading;
 using NAudio.Dsp;
 using NAudio.Wave;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>
     /// A single microphone held open for the video editor's voice-over recorder: it meters the
@@ -41,7 +41,7 @@ namespace Clowd.UI.Services
         public const string NoDeviceName = "No microphone";
 
         /// <summary>dBFS reported for a window that held nothing but digital silence. Well under
-        /// the -60 dB floor <see cref="Clowd.UI.Controls.Tray.TrayLevel.FromPeakDbfs"/> maps from,
+        /// the -60 dB floor <see cref="Prisc.UI.Controls.Tray.TrayLevel.FromPeakDbfs"/> maps from,
         /// so it draws as an empty meter rather than as a missing one.</summary>
         private const double SilenceDbfs = -100.0;
 
@@ -113,7 +113,7 @@ namespace Clowd.UI.Services
         /// no device: nothing opened, the platform cannot capture, or the open device failed or
         /// was unplugged. Always raised on the Avalonia UI thread, so a handler may touch controls
         /// directly. Feed it through
-        /// <see cref="Clowd.UI.Controls.Tray.TrayLevel.FromPeakDbfs"/> to get a 0..1 meter fill.
+        /// <see cref="Prisc.UI.Controls.Tray.TrayLevel.FromPeakDbfs"/> to get a 0..1 meter fill.
         /// </summary>
         public event Action<double?> PeakDbfsChanged;
 

@@ -21,14 +21,14 @@ using Avalonia.LogicalTree;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.Config;
-using Clowd.UI.Controls;
-using Clowd.UI.Dialogs;
-using Clowd.UI.Helpers;
-using Clowd.UI.Preview;
-using Clowd.UI.Services;
+using Prisc.Config;
+using Prisc.UI.Controls;
+using Prisc.UI.Dialogs;
+using Prisc.UI.Helpers;
+using Prisc.UI.Preview;
+using Prisc.UI.Services;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     public sealed class SessionGroupVm
     {
@@ -63,7 +63,7 @@ namespace Clowd.UI
             get
             {
                 // the first of the action's gestures: the hint names one key, not the whole list
-                var gesture = Clowd.Config.SettingsRoot.Current?.Hotkeys?.CaptureRegionShortcut?.FirstOrDefault()?.ToString();
+                var gesture = Prisc.Config.SettingsRoot.Current?.Hotkeys?.CaptureRegionShortcut?.FirstOrDefault()?.ToString();
                 return String.IsNullOrEmpty(gesture)
                     ? "Use the tray icon to take your first screenshot."
                     : $"Press {gesture} or use the tray icon to take your first screenshot.";
@@ -196,7 +196,7 @@ namespace Clowd.UI
             };
         }
 
-        /// <summary>A recording Clowd made — or the project, render or GIF that came out of one.
+        /// <summary>A recording Prisc made — or the project, render or GIF that came out of one.
         /// All of them are "video" entries carrying the file they wrote; a video *file* someone
         /// uploaded is one too, but has no VideoPath of its own, which is what tells the two apart.
         /// A blank video project has no file at all and is caught by IsProject.</summary>
@@ -928,7 +928,7 @@ namespace Clowd.UI
         private static void DefaultAction(SessionInfo session)
         {
             if (session.CanEditVideo)
-                Clowd.UI.VideoEditor.VideoEditorWindow.ShowSession(session);
+                Prisc.UI.VideoEditor.VideoEditorWindow.ShowSession(session);
             else if (session.IsVideo)
                 PlayVideo(session);
             else if (!session.IsUploadOnly)
@@ -1043,7 +1043,7 @@ namespace Clowd.UI
             if (session == null || !session.CanEditVideo)
                 return;
 
-            Clowd.UI.VideoEditor.VideoEditorWindow.ShowSession(session);
+            Prisc.UI.VideoEditor.VideoEditorWindow.ShowSession(session);
         }
 
         private void CancelGifClicked(object sender, RoutedEventArgs e)

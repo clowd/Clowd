@@ -2,16 +2,16 @@ using System;
 using System.Globalization;
 using System.Diagnostics;
 using System.IO;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Resolves where a finished recording is saved (issue #50 — restores the WPF
     /// <c>VideoCaptureWindow.StopRecording</c> behavior the rewrite dropped, where every recording
     /// landed in a non-configurable <c>video.mp4</c> inside the session directory).
     ///
-    /// obs-express still writes into the session directory while recording — that directory is what
+    /// prisc_recorder still writes into the session directory while recording — that directory is what
     /// the cancel/crash lifecycle owns (§4.2) — and <see cref="VideoCapturePage"/> moves the
     /// finished file here afterwards. Every method degrades to <c>null</c> rather than throwing:
     /// a bad output folder must cost the user the move, never the recording.

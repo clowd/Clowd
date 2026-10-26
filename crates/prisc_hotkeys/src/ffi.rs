@@ -1,10 +1,10 @@
-//! The C ABI Clowd.Ui P/Invokes. Events are pulled (`clowd_hotkeys_next_event` on one dedicated
+//! The C ABI Prisc.Ui P/Invokes. Events are pulled (`prisc_hotkeys_next_event` on one dedicated
 //! thread), never pushed through callbacks, so the hook can never enter managed code.
 //!
 //! Rust never hands out an allocated string: all text is copied into caller buffers (the dll is
 //! built `+crt-static` and has its own heap). The C# side gets the constants and the event struct
 //! generated from `ABI_CONSTS` / `EVENT_FIELDS` (`csharp.rs`); only the function signatures are
-//! hand-written there, guarded by `ABI_REVISION`, which folds into `clowd_hotkeys_abi_version`.
+//! hand-written there, guarded by `ABI_REVISION`, which folds into `prisc_hotkeys_abi_version`.
 
 use std::fmt::Write as _;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -61,7 +61,7 @@ pub(crate) const ABI_CONSTS: &[(&str, i32)] = &[
     ("CH_EVENT_STOPPED", CH_EVENT_STOPPED as i32),
 ];
 
-/// `ClowdHotkeysEvent`'s fields in order, with their C types (the generator's source for the C# struct).
+/// `PriscHotkeysEvent`'s fields in order, with their C types (the generator's source for the C# struct).
 pub(crate) const EVENT_FIELDS: &[(&str, &str)] = &[
     ("kind", "uint32_t"),
     ("id", "uint32_t"),
@@ -78,7 +78,7 @@ const FLAG_REPEAT: u32 = 2;
 /// One event as the C side sees it: 28 bytes, all fields 4-byte.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub struct ClowdHotkeysEvent {
+pub struct PriscHotkeysEvent {
     pub kind: u32,
     /// HOTKEY: the HotkeyId; RECORDING_MODIFIERS / RECORDED: the session token; else 0.
     pub id: u32,
@@ -94,7 +94,7 @@ pub struct ClowdHotkeysEvent {
     pub flags: u32,
 }
 
-/// The opaque `ClowdHotkeys*` handle.
+/// The opaque `PriscHotkeys*` handle.
 pub struct Handle {
     /// `take()`n on stop.
     hotkeys: Mutex<Option<Hotkeys>>,
@@ -150,13 +150,13 @@ fn code_of(error: &Error) -> i32 {
     }
 }
 
-fn to_native(event: &Event) -> ClowdHotkeysEvent {
+fn to_native(event: &Event) -> PriscHotkeysEvent {
     let repeat_flag = |repeat: bool| if repeat { FLAG_REPEAT } else { 0 };
     match *event {
         Event::Hotkey {
             id,
             repeat,
-        } => ClowdHotkeysEvent {
+        } => PriscHotkeysEvent {
             kind: CH_EVENT_HOTKEY,
             id: id.get(),
             flags: repeat_flag(repeat),
@@ -165,7 +165,7 @@ fn to_native(event: &Event) -> ClowdHotkeysEvent {
         Event::RecordingModifiers {
             session,
             modifiers,
-        } => ClowdHotkeysEvent {
+        } => PriscHotkeysEvent {
             kind: CH_EVENT_RECORDING_MODIFIERS,
             id: session,
             modifiers: modifiers.bits() as u32,
@@ -174,14 +174,14 @@ fn to_native(event: &Event) -> ClowdHotkeysEvent {
         Event::Recorded {
             session,
             gesture,
-        } => ClowdHotkeysEvent {
+        } => PriscHotkeysEvent {
             kind: CH_EVENT_RECORDED,
             id: session,
             key: gesture.key as i32,
             modifiers: gesture.modifiers.bits() as u32,
             ..Default::default()
         },
-        Event::Key(key) => ClowdHotkeysEvent {
+        Event::Key(key) => PriscHotkeysEvent {
             kind: CH_EVENT_KEY,
             key: key.key as i32,
             modifiers: key.modifiers.bits() as u32,
@@ -190,7 +190,7 @@ fn to_native(event: &Event) -> ClowdHotkeysEvent {
             flags: if key.down { FLAG_DOWN } else { 0 } | repeat_flag(key.repeat),
             ..Default::default()
         },
-        Event::Stopped(_) => ClowdHotkeysEvent {
+        Event::Stopped(_) => PriscHotkeysEvent {
             kind: CH_EVENT_STOPPED,
             ..Default::default()
         },
@@ -219,12 +219,12 @@ fn guard(body: impl FnOnce() -> i32) -> i32 {
     catch_unwind(AssertUnwindSafe(body)).unwrap_or(CH_ERR_PANIC)
 }
 
-/// The ABI fingerprint; Clowd.Ui refuses a library whose value differs from its generated mirror.
+/// The ABI fingerprint; Prisc.Ui refuses a library whose value differs from its generated mirror.
 ///
 /// # Safety
 /// Always safe to call.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_abi_version() -> u32 {
+pub unsafe extern "C" fn prisc_hotkeys_abi_version() -> u32 {
     catch_unwind(abi_version).unwrap_or(0)
 }
 
@@ -234,7 +234,7 @@ pub unsafe extern "C" fn clowd_hotkeys_abi_version() -> u32 {
 /// # Safety
 /// `out` is null or valid for a write; `err_buf` is null or valid for `err_cap` bytes.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_start(out: *mut *mut Handle, err_buf: *mut u8, err_cap: u32) -> i32 {
+pub unsafe extern "C" fn prisc_hotkeys_start(out: *mut *mut Handle, err_buf: *mut u8, err_cap: u32) -> i32 {
     guard(|| {
         if out.is_null() {
             return CH_ERR_NULL;
@@ -256,9 +256,9 @@ pub unsafe extern "C" fn clowd_hotkeys_start(out: *mut *mut Handle, err_buf: *mu
 /// Registers `key` + `modifiers`; `*out_id` = the HotkeyId on `CH_OK`.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`; `out_id` is null or valid for a write.
+/// `h` is null or a live handle from `prisc_hotkeys_start`; `out_id` is null or valid for a write.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_register(h: *mut Handle, key: i32, modifiers: u32, out_id: *mut u32) -> i32 {
+pub unsafe extern "C" fn prisc_hotkeys_register(h: *mut Handle, key: i32, modifiers: u32, out_id: *mut u32) -> i32 {
     guard(|| {
         let (Some(handle), false) = (h.as_ref(), out_id.is_null()) else {
             return CH_ERR_NULL;
@@ -290,9 +290,9 @@ pub unsafe extern "C" fn clowd_hotkeys_register(h: *mut Handle, key: i32, modifi
 /// Unregisters `id`. A no-op for an unknown id or a stopped hook.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`.
+/// `h` is null or a live handle from `prisc_hotkeys_start`.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_unregister(h: *mut Handle, id: u32) {
+pub unsafe extern "C" fn prisc_hotkeys_unregister(h: *mut Handle, id: u32) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(handle) = h.as_ref() {
             if let Some(hotkeys) = lock(&handle.hotkeys).as_ref() {
@@ -305,9 +305,9 @@ pub unsafe extern "C" fn clowd_hotkeys_unregister(h: *mut Handle, id: u32) {
 /// Turns the observe stream (`CH_EVENT_KEY`) on (nonzero) or off.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`.
+/// `h` is null or a live handle from `prisc_hotkeys_start`.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_set_observe(h: *mut Handle, observe: u32) {
+pub unsafe extern "C" fn prisc_hotkeys_set_observe(h: *mut Handle, observe: u32) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(handle) = h.as_ref() {
             if let Some(hotkeys) = lock(&handle.hotkeys).as_ref() {
@@ -321,9 +321,9 @@ pub unsafe extern "C" fn clowd_hotkeys_set_observe(h: *mut Handle, observe: u32)
 /// or `CH_ERR_NULL`.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`; `out_session` is null or valid for a write.
+/// `h` is null or a live handle from `prisc_hotkeys_start`; `out_session` is null or valid for a write.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_start_recording(h: *mut Handle, out_session: *mut u32) -> i32 {
+pub unsafe extern "C" fn prisc_hotkeys_start_recording(h: *mut Handle, out_session: *mut u32) -> i32 {
     guard(|| {
         let (Some(handle), false) = (h.as_ref(), out_session.is_null()) else {
             return CH_ERR_NULL;
@@ -342,9 +342,9 @@ pub unsafe extern "C" fn clowd_hotkeys_start_recording(h: *mut Handle, out_sessi
 /// Cancels `session` if it is still armed; a no-op otherwise.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`.
+/// `h` is null or a live handle from `prisc_hotkeys_start`.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_stop_recording(h: *mut Handle, session: u32) {
+pub unsafe extern "C" fn prisc_hotkeys_stop_recording(h: *mut Handle, session: u32) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(handle) = h.as_ref() {
             if let Some(hotkeys) = lock(&handle.hotkeys).as_ref() {
@@ -358,9 +358,9 @@ pub unsafe extern "C" fn clowd_hotkeys_stop_recording(h: *mut Handle, session: u
 /// drained). Callers are serialized internally; intended for ONE dedicated thread.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`; `out` is null or valid for a write.
+/// `h` is null or a live handle from `prisc_hotkeys_start`; `out` is null or valid for a write.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_next_event(h: *mut Handle, out: *mut ClowdHotkeysEvent, timeout_ms: u32) -> i32 {
+pub unsafe extern "C" fn prisc_hotkeys_next_event(h: *mut Handle, out: *mut PriscHotkeysEvent, timeout_ms: u32) -> i32 {
     guard(|| {
         let (Some(handle), false) = (h.as_ref(), out.is_null()) else {
             return CH_ERR_NULL;
@@ -384,9 +384,9 @@ pub unsafe extern "C" fn clowd_hotkeys_next_event(h: *mut Handle, out: *mut Clow
 /// excluding the NUL, 0 if there is none.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`; `buf` is null or valid for `cap` bytes.
+/// `h` is null or a live handle from `prisc_hotkeys_start`; `buf` is null or valid for `cap` bytes.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_stop_reason(h: *mut Handle, buf: *mut u8, cap: u32) -> u32 {
+pub unsafe extern "C" fn prisc_hotkeys_stop_reason(h: *mut Handle, buf: *mut u8, cap: u32) -> u32 {
     catch_unwind(AssertUnwindSafe(|| match h.as_ref() {
         Some(handle) => lock(&handle.stop_reason)
             .as_deref()
@@ -400,9 +400,9 @@ pub unsafe extern "C" fn clowd_hotkeys_stop_reason(h: *mut Handle, buf: *mut u8,
 /// returns -1 once drained. Afterwards every other call except free is a safe no-op / `CH_ERR_STOPPED`.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`.
+/// `h` is null or a live handle from `prisc_hotkeys_start`.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_stop(h: *mut Handle) {
+pub unsafe extern "C" fn prisc_hotkeys_stop(h: *mut Handle) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(handle) = h.as_ref() {
             // Dropped outside the lock: the join can take a moment.
@@ -416,9 +416,9 @@ pub unsafe extern "C" fn clowd_hotkeys_stop(h: *mut Handle) {
 /// flight or follow. Kept separate from stop because the pump may be inside next_event.
 ///
 /// # Safety
-/// `h` is null or a live handle from `clowd_hotkeys_start`, with no other call in flight or to follow.
+/// `h` is null or a live handle from `prisc_hotkeys_start`, with no other call in flight or to follow.
 #[no_mangle]
-pub unsafe extern "C" fn clowd_hotkeys_free(h: *mut Handle) {
+pub unsafe extern "C" fn prisc_hotkeys_free(h: *mut Handle) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if !h.is_null() {
             drop(Box::from_raw(h));
@@ -442,16 +442,16 @@ mod tests {
 
     #[test]
     fn event_struct_layout() {
-        assert_eq!(size_of::<ClowdHotkeysEvent>(), 28);
-        assert_eq!(size_of::<ClowdHotkeysEvent>(), EVENT_FIELDS.len() * 4);
+        assert_eq!(size_of::<PriscHotkeysEvent>(), 28);
+        assert_eq!(size_of::<PriscHotkeysEvent>(), EVENT_FIELDS.len() * 4);
         let offsets = [
-            offset_of!(ClowdHotkeysEvent, kind),
-            offset_of!(ClowdHotkeysEvent, id),
-            offset_of!(ClowdHotkeysEvent, key),
-            offset_of!(ClowdHotkeysEvent, modifiers),
-            offset_of!(ClowdHotkeysEvent, raw_code),
-            offset_of!(ClowdHotkeysEvent, ch),
-            offset_of!(ClowdHotkeysEvent, flags),
+            offset_of!(PriscHotkeysEvent, kind),
+            offset_of!(PriscHotkeysEvent, id),
+            offset_of!(PriscHotkeysEvent, key),
+            offset_of!(PriscHotkeysEvent, modifiers),
+            offset_of!(PriscHotkeysEvent, raw_code),
+            offset_of!(PriscHotkeysEvent, ch),
+            offset_of!(PriscHotkeysEvent, flags),
         ];
         assert_eq!(offsets, [0, 4, 8, 12, 16, 20, 24]);
     }
@@ -481,23 +481,23 @@ mod tests {
     fn null_handles_and_out_pointers() {
         let (h, _tx) = handle_without_hook();
         let mut id = 0u32;
-        let mut event = ClowdHotkeysEvent::default();
+        let mut event = PriscHotkeysEvent::default();
         let mut buf = [0u8; 8];
         unsafe {
-            assert_eq!(clowd_hotkeys_start(null_mut(), null_mut(), 0), CH_ERR_NULL);
-            assert_eq!(clowd_hotkeys_register(null_mut(), Key::A as i32, 0, &mut id), CH_ERR_NULL);
-            assert_eq!(clowd_hotkeys_register(h, Key::A as i32, 0, null_mut()), CH_ERR_NULL);
-            assert_eq!(clowd_hotkeys_start_recording(null_mut(), &mut id), CH_ERR_NULL);
-            assert_eq!(clowd_hotkeys_start_recording(h, null_mut()), CH_ERR_NULL);
-            assert_eq!(clowd_hotkeys_next_event(null_mut(), &mut event, 0), CH_ERR_NULL);
-            assert_eq!(clowd_hotkeys_next_event(h, null_mut(), 0), CH_ERR_NULL);
-            assert_eq!(clowd_hotkeys_stop_reason(null_mut(), buf.as_mut_ptr(), 8), 0);
-            clowd_hotkeys_unregister(null_mut(), 1);
-            clowd_hotkeys_set_observe(null_mut(), 1);
-            clowd_hotkeys_stop_recording(null_mut(), 1);
-            clowd_hotkeys_stop(null_mut());
-            clowd_hotkeys_free(null_mut());
-            clowd_hotkeys_free(h);
+            assert_eq!(prisc_hotkeys_start(null_mut(), null_mut(), 0), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_register(null_mut(), Key::A as i32, 0, &mut id), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_register(h, Key::A as i32, 0, null_mut()), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_start_recording(null_mut(), &mut id), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_start_recording(h, null_mut()), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_next_event(null_mut(), &mut event, 0), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_next_event(h, null_mut(), 0), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_stop_reason(null_mut(), buf.as_mut_ptr(), 8), 0);
+            prisc_hotkeys_unregister(null_mut(), 1);
+            prisc_hotkeys_set_observe(null_mut(), 1);
+            prisc_hotkeys_stop_recording(null_mut(), 1);
+            prisc_hotkeys_stop(null_mut());
+            prisc_hotkeys_free(null_mut());
+            prisc_hotkeys_free(h);
         }
     }
 
@@ -507,22 +507,22 @@ mod tests {
         let mut id = 7u32;
         unsafe {
             assert_eq!(
-                clowd_hotkeys_register(h, Key::A as i32, Modifiers::CONTROL.bits() as u32, &mut id),
+                prisc_hotkeys_register(h, Key::A as i32, Modifiers::CONTROL.bits() as u32, &mut id),
                 CH_ERR_STOPPED
             );
             assert_eq!(id, 0);
             // Argument errors come first.
-            assert_eq!(clowd_hotkeys_register(h, 0, 0, &mut id), CH_ERR_NO_KEY);
-            assert_eq!(clowd_hotkeys_register(h, 100004, 0, &mut id), CH_ERR_INVALID_KEY);
-            assert_eq!(clowd_hotkeys_register(h, Key::A as i32, 0x10, &mut id), CH_ERR_INVALID_MODS);
+            assert_eq!(prisc_hotkeys_register(h, 0, 0, &mut id), CH_ERR_NO_KEY);
+            assert_eq!(prisc_hotkeys_register(h, 100004, 0, &mut id), CH_ERR_INVALID_KEY);
+            assert_eq!(prisc_hotkeys_register(h, Key::A as i32, 0x10, &mut id), CH_ERR_INVALID_MODS);
             let mut session = 7u32;
-            assert_eq!(clowd_hotkeys_start_recording(h, &mut session), CH_ERR_STOPPED);
+            assert_eq!(prisc_hotkeys_start_recording(h, &mut session), CH_ERR_STOPPED);
             assert_eq!(session, 0);
-            clowd_hotkeys_unregister(h, 1);
-            clowd_hotkeys_set_observe(h, 1);
-            clowd_hotkeys_stop_recording(h, 1);
-            clowd_hotkeys_stop(h);
-            clowd_hotkeys_stop(h);
+            prisc_hotkeys_unregister(h, 1);
+            prisc_hotkeys_set_observe(h, 1);
+            prisc_hotkeys_stop_recording(h, 1);
+            prisc_hotkeys_stop(h);
+            prisc_hotkeys_stop(h);
 
             // The queue still drains, then reports closed; the Stopped reason is kept.
             tx.send(Event::Hotkey {
@@ -533,37 +533,37 @@ mod tests {
             tx.send(Event::Stopped("the event tap was invalidated".into()))
                 .unwrap();
             drop(tx);
-            let mut event = ClowdHotkeysEvent::default();
+            let mut event = PriscHotkeysEvent::default();
             let mut buf = [0u8; 64];
-            assert_eq!(clowd_hotkeys_stop_reason(h, buf.as_mut_ptr(), 64), 0);
-            assert_eq!(clowd_hotkeys_next_event(h, &mut event, 0), 1);
+            assert_eq!(prisc_hotkeys_stop_reason(h, buf.as_mut_ptr(), 64), 0);
+            assert_eq!(prisc_hotkeys_next_event(h, &mut event, 0), 1);
             assert_eq!(
                 event,
-                ClowdHotkeysEvent {
+                PriscHotkeysEvent {
                     kind: CH_EVENT_HOTKEY,
                     id: 3,
                     flags: FLAG_REPEAT,
                     ..Default::default()
                 }
             );
-            assert_eq!(clowd_hotkeys_next_event(h, &mut event, 0), 1);
+            assert_eq!(prisc_hotkeys_next_event(h, &mut event, 0), 1);
             assert_eq!(event.kind, CH_EVENT_STOPPED);
-            assert_eq!(clowd_hotkeys_next_event(h, &mut event, 0), -1);
-            let n = clowd_hotkeys_stop_reason(h, buf.as_mut_ptr(), 64) as usize;
+            assert_eq!(prisc_hotkeys_next_event(h, &mut event, 0), -1);
+            let n = prisc_hotkeys_stop_reason(h, buf.as_mut_ptr(), 64) as usize;
             assert_eq!(&buf[..=n], b"the event tap was invalidated\0");
-            assert_eq!(clowd_hotkeys_stop_reason(h, buf.as_mut_ptr(), 8), 7);
+            assert_eq!(prisc_hotkeys_stop_reason(h, buf.as_mut_ptr(), 8), 7);
             assert_eq!(&buf[..8], b"the eve\0");
-            clowd_hotkeys_free(h);
+            prisc_hotkeys_free(h);
         }
     }
 
     #[test]
     fn next_event_times_out() {
         let (h, _tx) = handle_without_hook();
-        let mut event = ClowdHotkeysEvent::default();
+        let mut event = PriscHotkeysEvent::default();
         unsafe {
-            assert_eq!(clowd_hotkeys_next_event(h, &mut event, 1), 0);
-            clowd_hotkeys_free(h);
+            assert_eq!(prisc_hotkeys_next_event(h, &mut event, 1), 0);
+            prisc_hotkeys_free(h);
         }
     }
 
@@ -575,7 +575,7 @@ mod tests {
                 id: HotkeyId(9),
                 repeat: false
             }),
-            ClowdHotkeysEvent {
+            PriscHotkeysEvent {
                 kind: 1,
                 id: 9,
                 ..Default::default()
@@ -586,7 +586,7 @@ mod tests {
                 session: 4,
                 modifiers: Modifiers::ALT | Modifiers::META
             }),
-            ClowdHotkeysEvent {
+            PriscHotkeysEvent {
                 kind: 2,
                 id: 4,
                 modifiers: 9,
@@ -598,7 +598,7 @@ mod tests {
                 session: 5,
                 gesture
             }),
-            ClowdHotkeysEvent {
+            PriscHotkeysEvent {
                 kind: 3,
                 id: 5,
                 key: 30,
@@ -616,7 +616,7 @@ mod tests {
         };
         assert_eq!(
             to_native(&Event::Key(key)),
-            ClowdHotkeysEvent {
+            PriscHotkeysEvent {
                 kind: 4,
                 key: 48,
                 modifiers: 4,
@@ -635,7 +635,7 @@ mod tests {
         };
         assert_eq!(
             to_native(&Event::Key(up)),
-            ClowdHotkeysEvent {
+            PriscHotkeysEvent {
                 kind: 4,
                 raw_code: 0x45,
                 modifiers: 4,
@@ -644,7 +644,7 @@ mod tests {
         );
         assert_eq!(
             to_native(&Event::Stopped("x".into())),
-            ClowdHotkeysEvent {
+            PriscHotkeysEvent {
                 kind: 5,
                 ..Default::default()
             }
@@ -654,7 +654,7 @@ mod tests {
     #[test]
     fn abi_version_is_stable_and_exported() {
         assert_eq!(abi_version(), abi_version());
-        assert_eq!(unsafe { clowd_hotkeys_abi_version() }, abi_version());
+        assert_eq!(unsafe { prisc_hotkeys_abi_version() }, abi_version());
         // Error codes the C side switches on.
         assert_eq!(code_of(&Error::Duplicate), CH_ERR_DUPLICATE);
         assert_eq!(code_of(&Error::HookFailed(String::new())), CH_ERR_HOOK_FAILED);

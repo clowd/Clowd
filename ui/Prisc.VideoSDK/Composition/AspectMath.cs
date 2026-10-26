@@ -1,7 +1,7 @@
 using System;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Composition;
+namespace Prisc.VideoSDK.Composition;
 
 /// <summary>
 /// Resolves a <see cref="Transform"/>'s aspect-ratio intent (<see cref="Transform.Aspect"/> /

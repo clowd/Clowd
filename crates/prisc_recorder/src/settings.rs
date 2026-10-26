@@ -244,7 +244,7 @@ mod tests {
     fn load_strips_bom_and_reports_errors() {
         let dir = std::env::temp_dir();
         let path = dir.join(format!(
-            "obs-express-settings-test-{}.json",
+            "prisc-recorder-settings-test-{}.json",
             std::process::id()
         ));
 

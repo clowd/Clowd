@@ -4,12 +4,12 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// What the resolved obs-express binary can be asked for. Clowd spawns whatever recorder it
+    /// What the resolved prisc_recorder binary can be asked for. Prisc spawns whatever recorder it
     /// finds (an env var, a sibling cargo checkout, the bundled copy), so the build being run is
-    /// not knowable from Clowd's own version, and the CLI declares no --version flag to ask. The
+    /// not knowable from Prisc's own version, and the CLI declares no --version flag to ask. The
     /// probe is therefore "does --help list the flag": clap generates that text from the same
     /// derive that defines the arguments, so the flag appears if and only if it is accepted.
     ///
@@ -24,7 +24,7 @@ namespace Clowd.UI
     {
         private const string WindowCaptureFlag = "--window-capture";
         /// <summary>What the <c>--output</c> help line says once the recorder accepts a Matroska
-        /// path (obs-express builds after 0.9.2). Not a flag but the same idea: the text comes from the
+        /// path (prisc_recorder builds after 0.9.2). Not a flag but the same idea: the text comes from the
         /// argument's doc comment, which was changed in the commit that relaxed the check.</summary>
         private const string MkvOutputMention = ".mkv";
         private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
@@ -37,12 +37,12 @@ namespace Clowd.UI
             new Dictionary<string, Task<string>>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Whether <paramref name="binaryPath"/> accepts <c>--window-capture</c>
-        /// (obs-express 0.9.0 and later).</summary>
+        /// (prisc_recorder 0.9.0 and later).</summary>
         public static Task<bool> SupportsWindowCaptureAsync(string binaryPath)
             => HelpMentionsAsync(binaryPath, WindowCaptureFlag);
 
         /// <summary>Whether <paramref name="binaryPath"/> accepts an <c>--output</c> path ending
-        /// in <c>.mkv</c> (obs-express builds after 0.9.2; single-track recordings only). An older
+        /// in <c>.mkv</c> (prisc_recorder builds after 0.9.2; single-track recordings only). An older
         /// recorder rejects the path during CLI validation with exit 2, which like an unknown flag
         /// costs the whole take, so the caller falls back to .mp4 when this says no.</summary>
         public static Task<bool> SupportsMkvOutputAsync(string binaryPath)
@@ -96,7 +96,7 @@ namespace Clowd.UI
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    // obs-express loads the OBS libraries that sit beside it relative to the
+                    // prisc_recorder loads the OBS libraries that sit beside it relative to the
                     // working directory — it cannot start anywhere else.
                     WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(exePath)),
                     RedirectStandardOutput = true,

@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.UI.DrawOnScreen
+namespace Prisc.UI.DrawOnScreen
 {
     /// <summary>
     /// What the draw-on-screen toolbar drives. The session owns the canvases and the history; the

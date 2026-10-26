@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using Avalonia.Media;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     public enum AppTheme
     {
@@ -17,7 +17,7 @@ namespace Clowd.Config
         Dark,
     }
 
-    /// <summary>What a click does — shared by the tray icon and by "launching" Clowd while it is
+    /// <summary>What a click does — shared by the tray icon and by "launching" Prisc while it is
     /// already running (<see cref="SettingsGeneral.TrayClick"/> / <see cref="SettingsGeneral.ShortcutClick"/>).
     /// The member names are what lands in the settings file, so they stay as they were first
     /// written even where the label has since moved on.</summary>
@@ -33,7 +33,7 @@ namespace Clowd.Config
         DoNothing,
     }
 
-    /// <summary>Which of Clowd's own windows are kept out of screen capture (screenshots, recordings,
+    /// <summary>Which of Prisc's own windows are kept out of screen capture (screenshots, recordings,
     /// meeting shares). Each step adds to the one before it, so the order is the point: a window is
     /// hidden when its kind's step is at or below the chosen one (<c>CaptureExclusion</c>). The
     /// member names are what lands in the settings file.</summary>
@@ -52,7 +52,7 @@ namespace Clowd.Config
         AllWindows,
     }
 
-    /// <summary>How often Clowd polls the release feed while running. Values are minutes — the
+    /// <summary>How often Prisc polls the release feed while running. Values are minutes — the
     /// update scheduler converts them straight to a <see cref="System.TimeSpan"/>.</summary>
     public enum UpdateInterval
     {
@@ -336,7 +336,7 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// Which Clowd windows screen capture cannot see, applied live to every open window by
+        /// Which Prisc windows screen capture cannot see, applied live to every open window by
         /// <c>CaptureExclusion</c>. Tooltips by default: the tips and the region border are
         /// transient chrome nobody wants in a recording, while the toolbars stay visible unless asked.
         /// </summary>
@@ -357,7 +357,7 @@ namespace Clowd.Config
         }
 
         private bool _useSystemAccentColor = true;
-        private Color _accentColor = AccentColors.ClowdBlue;
+        private Color _accentColor = AccentColors.PriscBlue;
         private bool _maintainMinimumContrast = true;
         private string _lastSavePath;
         private string _mainWindowBounds;
@@ -381,7 +381,7 @@ namespace Clowd.Config
         private UpdateInterval _updateCheckInterval = UpdateInterval.ThreeHourly;
 
         // on by default: the restart only happens once the machine itself has been idle for ten
-        // minutes (IdleMonitor), so in practice the user finds Clowd already up to date rather than
+        // minutes (IdleMonitor), so in practice the user finds Prisc already up to date rather than
         // ever seeing it happen.
         private bool _autoApplyUpdates = true;
         private bool _includePrereleaseUpdates;

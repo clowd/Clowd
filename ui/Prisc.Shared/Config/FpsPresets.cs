@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text.Json.Serialization;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// The three frame rates the recording strip's FPS tile cycles through. They are settings

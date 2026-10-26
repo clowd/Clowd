@@ -1,7 +1,7 @@
 using System;
 using Avalonia.Input;
 
-namespace Clowd.Drawing;
+namespace Prisc.Drawing;
 
 public partial class CursorResources {
     public static Cursor Default => GetCursor("Default.cur");

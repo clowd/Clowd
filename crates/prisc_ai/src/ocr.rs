@@ -1,7 +1,7 @@
 //! Text recognition — PaddleOCR (PP-OCRv6) on ONNX Runtime, the `ocr`
 //! subcommand.
 //!
-//! By the time this runs the overlay (`clowd_capture`) has already done
+//! By the time this runs the overlay (`prisc_capture`) has already done
 //! its part: the user captured a region, pressed OCR, and the overlay extracted
 //! that region's pixels — compositing a click-locked peek if one is up, so what
 //! is recognized is what the user can actually see. It spawns this process per
@@ -63,8 +63,8 @@ use image::RgbaImage;
 use ort::session::Session;
 use ort::value::Tensor;
 
-use clowd_rust_core::geometry::{RectExt, ScreenRectF};
-use clowd_rust_core::ocr::{OcrError, OcrLine, OcrOutcome, OcrRequest, OcrResponse, RequestHeader};
+use prisc_rust_core::geometry::{RectExt, ScreenRectF};
+use prisc_rust_core::ocr::{OcrError, OcrLine, OcrOutcome, OcrRequest, OcrResponse, RequestHeader};
 
 /// Line cap, applied BEFORE recognition (see module docs) purely to bound
 /// worst-case latency — the render side (bubble rects, glyphon buffers)
@@ -1032,7 +1032,7 @@ fn ctc_decode(probs: &[f32], classes: usize, charset: &[&str]) -> (String, f32) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clowd_rust_core::geometry::ScreenRect;
+    use prisc_rust_core::geometry::ScreenRect;
 
     fn request(bgra: Vec<u8>, w: u32, h: u32) -> OcrRequest {
         OcrRequest {
@@ -1063,7 +1063,7 @@ mod tests {
     /// code 101" with nothing to go on.
     #[test]
     fn panic_reporter_leaves_its_message_in_the_response_file() {
-        let path = std::env::temp_dir().join(format!("clowd_ai_ocr_panic_test_{}.json", std::process::id()));
+        let path = std::env::temp_dir().join(format!("prisc_ai_ocr_panic_test_{}.json", std::process::id()));
         let _ = std::fs::remove_file(&path);
         OUT_PATH
             .set(path.clone())
@@ -1287,11 +1287,11 @@ mod tests {
     /// the same boxes — batched AND solo, so a batching-quality regression
     /// shows up as a batched/solo mismatch — and prints the per-batch timings
     /// the cost model constants are calibrated from. Set
-    /// CLOWD_OCR_BENCH_IMAGE and run with --release --nocapture.
+    /// PRISC_OCR_BENCH_IMAGE and run with --release --nocapture.
     #[test]
     fn env_det_ceiling_probe() {
-        let Ok(path) = std::env::var("CLOWD_OCR_BENCH_IMAGE") else {
-            eprintln!("SKIP {}: CLOWD_OCR_BENCH_IMAGE not set", module_path!());
+        let Ok(path) = std::env::var("PRISC_OCR_BENCH_IMAGE") else {
+            eprintln!("SKIP {}: PRISC_OCR_BENCH_IMAGE not set", module_path!());
             return;
         };
         let (bgra, w, h) = load_bgra(&path);
@@ -1378,14 +1378,14 @@ mod tests {
         }
     }
 
-    /// Opt-in perf probe: set CLOWD_OCR_BENCH_IMAGE to a file path and run
+    /// Opt-in perf probe: set PRISC_OCR_BENCH_IMAGE to a file path and run
     /// with --release --nocapture. Times the real recognize() pipeline so
     /// regressions are diagnosed with numbers, not vibes (the dense-window
     /// cliff was found this way).
     #[test]
     fn env_bench_pipeline() {
-        let Ok(path) = std::env::var("CLOWD_OCR_BENCH_IMAGE") else {
-            eprintln!("SKIP {}: CLOWD_OCR_BENCH_IMAGE not set", module_path!());
+        let Ok(path) = std::env::var("PRISC_OCR_BENCH_IMAGE") else {
+            eprintln!("SKIP {}: PRISC_OCR_BENCH_IMAGE not set", module_path!());
             return;
         };
         let (bgra, w, h) = load_bgra(&path);
@@ -1405,12 +1405,12 @@ mod tests {
     }
 
     /// Opt-in end-to-end check against a real screenshot: set
-    /// CLOWD_OCR_TEST_IMAGE to a file path and CLOWD_OCR_TEST_EXPECT to a
+    /// PRISC_OCR_TEST_IMAGE to a file path and PRISC_OCR_TEST_EXPECT to a
     /// substring the recognized text must contain.
     #[test]
     fn env_image_contains_expected_text() {
-        let (Ok(path), Ok(expect)) = (std::env::var("CLOWD_OCR_TEST_IMAGE"), std::env::var("CLOWD_OCR_TEST_EXPECT")) else {
-            eprintln!("SKIP {}: CLOWD_OCR_TEST_IMAGE/CLOWD_OCR_TEST_EXPECT not set", module_path!());
+        let (Ok(path), Ok(expect)) = (std::env::var("PRISC_OCR_TEST_IMAGE"), std::env::var("PRISC_OCR_TEST_EXPECT")) else {
+            eprintln!("SKIP {}: PRISC_OCR_TEST_IMAGE/PRISC_OCR_TEST_EXPECT not set", module_path!());
             return;
         };
         let (bgra, w, h) = load_bgra(&path);

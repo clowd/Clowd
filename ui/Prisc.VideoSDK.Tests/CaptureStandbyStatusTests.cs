@@ -1,12 +1,12 @@
 using System.Linq;
-using Clowd.UI;
+using Prisc.UI;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// The standby capturer's CLOWD_SETTINGS_STATUS (CAPTURE_PROTOCOL.md §1.2). The shell acts on
-    /// <c>error_code</c>, never on the display text, which clowd_hotkeys is free to reword.
+    /// The standby capturer's PRISC_SETTINGS_STATUS (CAPTURE_PROTOCOL.md §1.2). The shell acts on
+    /// <c>error_code</c>, never on the display text, which prisc_hotkeys is free to reword.
     /// </summary>
     public class CaptureStandbyStatusTests
     {

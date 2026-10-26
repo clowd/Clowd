@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.UI;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI;
+using Prisc.UI.Controls.Tray;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The recording strip's source rules, pinned one by one. Every one of them used to be a line

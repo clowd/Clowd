@@ -9,13 +9,13 @@ using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.Config;
-using Clowd.Drawing;
-using Clowd.Drawing.Graphics;
-using Clowd.UI.Converters;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.Drawing.Graphics;
+using Prisc.UI.Converters;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>A style value a field edits, named apart from where it is stored: the canvas
     /// (whose properties proxy the current tool's settings or the selected graphic) calls the fill

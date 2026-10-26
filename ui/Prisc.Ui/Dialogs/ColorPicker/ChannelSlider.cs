@@ -5,7 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Rendering;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The color dialog's channel slider: a 10px fully rounded track painted with the channel's

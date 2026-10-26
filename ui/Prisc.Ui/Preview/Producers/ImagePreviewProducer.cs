@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using SkiaSharp;
 
-namespace Clowd.UI.Preview.Producers
+namespace Prisc.UI.Preview.Producers
 {
     /// <summary>
     /// Lane A. Decodes a still image down to tile size: a capture's <c>cropped.png</c>, the image

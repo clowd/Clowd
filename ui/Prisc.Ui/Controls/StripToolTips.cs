@@ -8,9 +8,9 @@ using Avalonia.Interactivity;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.UI.Helpers;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// Tooltips for a strip of buttons: the floating tray (FloatingTrayWindow) and the editors' "tipBridge"

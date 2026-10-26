@@ -1,11 +1,11 @@
-//! Launching Clowd.Ui.exe through Explorer instead of from this DLL's host process.
+//! Launching Prisc.Ui.exe through Explorer instead of from this DLL's host process.
 //!
 //! This DLL runs inside a dllhost.exe surrogate that carries the sparse package's
-//! identity (Clowd.ShellExtension). On the Windows 11 builds this was measured on, a
+//! identity (Prisc.ShellExtension). On the Windows 11 builds this was measured on, a
 //! process that a packaged process creates from inside the package's external location —
-//! the whole Clowd install root, so Clowd.Ui.exe included — gets that identity too, and
+//! the whole Prisc install root, so Prisc.Ui.exe included — gets that identity too, and
 //! neither the desktop-app breakaway policy nor which exe the manifest declares changes
-//! that (both were tried and shipped, clowd/Clowd#83). What does work is having an
+//! that (both were tried and shipped, priscapp/Prisc#83). What does work is having an
 //! unpackaged process do the launching: the desktop's shell view lives in explorer.exe,
 //! and its automation object's `IShellDispatch2::ShellExecute` runs the CreateProcess over
 //! there, so the app comes up exactly as it does from a shortcut. Raymond Chen documents

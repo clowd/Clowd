@@ -1,9 +1,9 @@
 //! The `session.json` contract, and the file helpers that go with it.
 //!
 //! Both binaries write this file — the overlay for an ordinary capture
-//! (`clowd_capture/src/session_output.rs`), the driver for a finished
-//! scrolling capture (`clowd_scroll_driver/src/output.rs`) — and
-//! `Clowd.Ui` reads it (`SessionInfo`, MIGRATION.md §2.11). One definition
+//! (`crates/prisc_capture/src/session_output.rs`), the driver for a finished
+//! scrolling capture (`crates/prisc_scroll_driver/src/output.rs`) — and
+//! `Prisc.Ui` reads it (`SessionInfo`). One definition
 //! here means a field added on one side cannot go missing on the other;
 //! the authoritative prose description is CAPTURE_PROTOCOL.md.
 //!
@@ -49,7 +49,7 @@ fn is_zero(v: &f32) -> bool {
     *v <= 0.0
 }
 
-/// Serialized shape of `Clowd.PlatformUtil.ScreenRect` (exact key
+/// Serialized shape of `Prisc.PlatformUtil.ScreenRect` (exact key
 /// casing, §2.11).
 #[derive(Serialize)]
 #[serde(rename_all = "PascalCase")]

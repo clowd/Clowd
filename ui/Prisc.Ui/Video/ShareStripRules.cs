@@ -1,4 +1,4 @@
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The share strip's enable rules and tooltip words, kept pure so they can be pinned by tests

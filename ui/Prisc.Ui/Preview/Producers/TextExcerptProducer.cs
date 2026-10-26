@@ -3,10 +3,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
-using Clowd.UI.Preview.Icons;
+using Prisc.UI.Preview.Icons;
 using SkiaSharp;
 
-namespace Clowd.UI.Preview.Producers
+namespace Prisc.UI.Preview.Producers
 {
     /// <summary>
     /// Lane A. Typesets the first few lines of a text session onto its tile, so a list of pasted

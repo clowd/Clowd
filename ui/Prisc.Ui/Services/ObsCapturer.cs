@@ -6,13 +6,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
-    /// <summary>A 1 Hz progress report from obs-express while recording (DESIGN §1.3).
+    /// <summary>A 1 Hz progress report from prisc_recorder while recording (DESIGN §1.3).
     /// <see cref="Fps"/> is a float on the wire and must be parsed as a double.</summary>
     public sealed record ObsStatus(double Fps, long Dropped, TimeSpan Elapsed);
 
-    /// <summary>Peak audio levels from obs-express, emitted every 100 ms from <c>initialized</c>
+    /// <summary>Peak audio levels from prisc_recorder, emitted every 100 ms from <c>initialized</c>
     /// onward (including the pre-start WAIT phase) whenever audio sources exist: dBFS per source
     /// in CLI order, always finite, floored at -100.</summary>
     public sealed record ObsLevels(double[] Speaker, double[] Mic);
@@ -49,7 +49,7 @@ namespace Clowd.UI
 public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, string Message, bool Fatal);
 
     /// <summary>
-    /// Hosts the obs-express recording process and speaks its protocol (DESIGN §1): plain-text
+    /// Hosts the prisc_recorder recording process and speaks its protocol (DESIGN §1): plain-text
     /// commands on stdin, line-delimited JSON on stdout, free-form libobs chatter on stderr.
     /// Lifecycle: <see cref="InitializeAsync"/> (spawns with <c>--pause</c>, resolves on
     /// <c>initialized</c>) → <see cref="StartAsync"/> (stdin <c>start</c>, resolves on
@@ -58,7 +58,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
     /// spontaneously at any time after recording starts (disk full / encoder error, §1.3) and any
     /// process exit without a preceding <c>stopped_recording</c> is fatal regardless of exit code
     /// (§1.4) — both surface through <see cref="CriticalError"/>. Events are raised on the UI
-    /// thread. obs-express treats stdin EOF as <c>quit</c>, so a crashed Clowd.Ui cannot orphan
+    /// thread. prisc_recorder treats stdin EOF as <c>quit</c>, so a crashed Prisc.Ui cannot orphan
     /// a recording; no watchdog is needed.
     /// </summary>
     internal sealed class ObsCapturer : IDisposable
@@ -68,7 +68,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         // a configure only re-reads a small file and touches the (not yet running) pipeline; if it
         // has not been acked by now the child is wedged and the page respawns it.
         private static readonly TimeSpan ConfigureTimeout = TimeSpan.FromSeconds(10);
-        // comfortably above obs-express's own in-process 30 s stop deadline (§1.4), so the
+        // comfortably above the recorder's own in-process 30 s stop deadline (§1.4), so the
         // synthetic code:-99 stopped_recording normally arrives first and this only fires
         // when the child is wedged hard (blocked kernel I/O, libobs deadlock).
         private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(45);
@@ -109,7 +109,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         private TaskCompletionSource<bool> _pauseTcs;
 
         // libobs is chatty on stderr for the life of the process; an hours-long recording
-        // must not accumulate unboundedly (§4.2). The caps stay obs-express's own numbers even
+        // must not accumulate unboundedly (§4.2). The caps stay the recorder's own numbers even
         // though the buffer itself is now shared code — the other drivers keep theirs.
         private readonly HelperProcessLog _log = new(maxLines: 1000, maxChars: 256 * 1024);
 
@@ -120,7 +120,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         private readonly object _disposeLock = new();
         private Task _shutdownTask;
 
-        /// <summary>Starts the obs-express process and resolves when the pipeline is fully built
+        /// <summary>Starts the prisc_recorder process and resolves when the pipeline is fully built
         /// (<c>{"type":"initialized"}</c>). Throws <see cref="TimeoutException"/> after 30 s
         /// (first-run OBS init can be slow, but not that slow).</summary>
         public async Task InitializeAsync(IReadOnlyList<string> args, string exePath)

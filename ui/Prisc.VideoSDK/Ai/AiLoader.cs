@@ -1,13 +1,13 @@
 using System;
 using System.IO;
 
-namespace Clowd.VideoSDK.Ai
+namespace Prisc.VideoSDK.Ai
 {
     /// <summary>
-    /// Resolves the path to the <c>clowd_ai</c> inference binary. Resolution order: the
+    /// Resolves the path to the <c>prisc_ai</c> inference binary. Resolution order: the
     /// caller-supplied resolver (the app passes the location its bundled binaries ship at), then
-    /// the <c>CLOWD_AI_PATH</c> environment variable. Clowd.VideoSDK deliberately has no
-    /// reference to Clowd.Ui, so the app's knowledge arrives as a delegate — the same seam
+    /// the <c>PRISC_AI_PATH</c> environment variable. Prisc.VideoSDK deliberately has no
+    /// reference to Prisc.Ui, so the app's knowledge arrives as a delegate — the same seam
     /// <see cref="FFmpegLoader"/> uses for the FFmpeg directory.
     ///
     /// <para>Unlike FFmpeg the binary is a child process, not an in-process library, so nothing is
@@ -16,7 +16,7 @@ namespace Clowd.VideoSDK.Ai
     /// </summary>
     public static class AiLoader
     {
-        public const string EnvVarName = "CLOWD_AI_PATH";
+        public const string EnvVarName = "PRISC_AI_PATH";
 
         private static Func<string> _resolver;
 
@@ -24,7 +24,7 @@ namespace Clowd.VideoSDK.Ai
         /// available. Null clears a previously configured resolver.</summary>
         public static void Configure(Func<string> pathResolver) => _resolver = pathResolver;
 
-        /// <summary>The full path of an existing <c>clowd_ai</c> binary, or null when none
+        /// <summary>The full path of an existing <c>prisc_ai</c> binary, or null when none
         /// resolves — the generators skip their work rather than failing.</summary>
         public static string TryGetPath()
         {

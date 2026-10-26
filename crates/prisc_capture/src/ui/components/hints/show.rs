@@ -19,7 +19,7 @@ use crate::ui::components::pill;
 use crate::ui::components::{InputCtx, Local};
 use crate::ui::egui_host::REPAINT_FLOOR;
 use crate::ui::shared::{monitor_index_at, pick_monitor_containing_center, UiMonitor};
-use clowd_rust_core::geometry::{RectExt, ScreenPointF};
+use prisc_rust_core::geometry::{RectExt, ScreenPointF};
 
 /// What a chip hangs off. Resolved to a rect by [`place::place`] once the
 /// label has been measured.
@@ -315,7 +315,7 @@ mod tests {
     use super::*;
     use crate::interaction::{InteractionState, OcrNoticeKind, OcrState};
     use crate::settings::TipsMode;
-    use clowd_rust_core::geometry::{ScreenRect, ScreenRectF};
+    use prisc_rust_core::geometry::{ScreenRect, ScreenRectF};
 
     /// The mixed pair every per-host rule is checked against: the primary
     /// at 100 % and its right-hand neighbour at 150 %.

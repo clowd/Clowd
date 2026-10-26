@@ -31,7 +31,7 @@ use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
 use crate::invoke;
 
 // must match com:Class Id in AppxManifest.template.xml (and desktop5:Verb Clsid)
-const CLSID_CLOWD_EXPLORER_COMMAND: GUID = GUID::from_u128(0x45849d5c_078c_4209_a377_dcf731e5124c);
+const CLSID_PRISC_EXPLORER_COMMAND: GUID = GUID::from_u128(0x51c48f28_f0df_43ab_9815_0541be51dfd8);
 
 // live COM objects plus IClassFactory::LockServer locks; DllCanUnloadNow answers
 // S_OK only when this is zero
@@ -116,8 +116,8 @@ fn collect_fs_paths(items: &IShellItemArray) -> windows::core::Result<Vec<String
 ///
 /// Explorer does the launching (see `broker`): on the builds this was measured on, a
 /// process this surrogate creates inside the install root inherits the package identity
-/// no matter what, and a packaged Clowd.Ui.exe gets the package's AUMID/logo on the
-/// taskbar - a blank button (clowd/Clowd#83). Only when Explorer cannot be *reached* do
+/// no matter what, and a packaged Prisc.Ui.exe gets the package's AUMID/logo on the
+/// taskbar - a blank button (priscapp/Prisc#83). Only when Explorer cannot be *reached* do
 /// we fall back to launching directly: once ShellExecute has been asked, an error may
 /// arrive after Explorer already created the process, and launching again would upload
 /// the same selection twice.
@@ -347,7 +347,7 @@ unsafe extern "system" fn DllGetClassObject(rclsid: *const GUID, riid: *const GU
         }
         unsafe {
             *ppv = std::ptr::null_mut();
-            if *rclsid != CLSID_CLOWD_EXPLORER_COMMAND {
+            if *rclsid != CLSID_PRISC_EXPLORER_COMMAND {
                 return CLASS_E_CLASSNOTAVAILABLE;
             }
             let factory: IClassFactory = ClassFactory::new().into();

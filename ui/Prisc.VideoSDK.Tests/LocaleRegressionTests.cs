@@ -2,11 +2,11 @@ using System;
 using System.Globalization;
 using System.IO;
 using Avalonia.Media;
-using Clowd.UI.Converters;
-using Clowd.Upload;
+using Prisc.UI.Converters;
+using Prisc.Upload;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Text that crosses a machine boundary — CSS on the clipboard, a file name the Rust overlay
@@ -57,7 +57,7 @@ namespace Clowd.VideoSDK.Tests
         [InlineData("de-DE")] // "/" and ":" would become the culture's separators
         public void Capture_file_names_are_rendered_the_way_the_rust_overlay_renders_them(string culture)
         {
-            var dir = Path.Combine(Path.GetTempPath(), "clowd-locale-" + Guid.NewGuid().ToString("N"));
+            var dir = Path.Combine(Path.GetTempPath(), "prisc-locale-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
             try
             {

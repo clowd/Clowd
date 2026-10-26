@@ -8,10 +8,10 @@ using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using Clowd.UI.Preview.Producers;
-using Clowd.VideoSDK.Thumbs;
+using Prisc.UI.Preview.Producers;
+using Prisc.VideoSDK.Thumbs;
 
-namespace Clowd.UI.Preview
+namespace Prisc.UI.Preview
 {
     /// <summary>
     /// One coalesced batch of finished previews. The engine raises a single event for everything it

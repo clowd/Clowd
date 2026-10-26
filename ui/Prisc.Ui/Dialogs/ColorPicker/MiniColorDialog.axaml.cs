@@ -8,10 +8,10 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.UI.Converters;
-using Clowd.Util;
+using Prisc.UI.Converters;
+using Prisc.Util;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     public partial class MiniColorDialog : UserControl
     {

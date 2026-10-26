@@ -5,7 +5,7 @@ using System.IO.Compression;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.Upload
+namespace Prisc.Upload
 {
     internal delegate void ZipProgressHandler(long sourceBytesConsumed, long totalSourceBytes);
 

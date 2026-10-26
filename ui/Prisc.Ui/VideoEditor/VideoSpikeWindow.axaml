@@ -1,8 +1,8 @@
 <ui:SystemThemedWindow
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:ui="using:Clowd.UI"
-    x:Class="Clowd.UI.VideoEditor.VideoSpikeWindow"
+    xmlns:ui="using:Prisc.UI"
+    x:Class="Prisc.UI.VideoEditor.VideoSpikeWindow"
     Title="Prisc Video Spike"
     Width="1280" Height="800">
 

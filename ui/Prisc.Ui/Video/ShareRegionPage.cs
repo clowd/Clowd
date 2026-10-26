@@ -5,16 +5,16 @@ using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Orchestrates a "share region" session: hosts the <see cref="ShareRegionDriver"/> process,
     /// which mirrors a rectangle of the screen into an ordinary top-level window that a meeting app
-    /// (Teams, Zoom, Meet, …) can share, and puts Clowd's own chrome around it — the click-through
+    /// (Teams, Zoom, Meet, …) can share, and puts Prisc's own chrome around it — the click-through
     /// <see cref="BorderWindow"/> so the user can see what is being broadcast, and a four-tile
     /// <see cref="ShareRegionFloatingButtons"/> (Hide / Resize / Options / Stop) so they can obscure
     /// it, change which pixels it covers, or stop.
@@ -22,7 +22,7 @@ namespace Clowd.UI
     /// here and nowhere else. The toolbar only latches a tile and raises an event, and
     /// <see cref="ShareResizeWindow"/> only owns the pending rectangle and the drag; this page owns
     /// the sequencing that makes the mode safe to run over a live meeting — obscuring the region
-    /// BEFORE any of Clowd's chrome is drawn inside it, writing exactly one <c>move</c> on the way
+    /// BEFORE any of Prisc's chrome is drawn inside it, writing exactly one <c>move</c> on the way
     /// out (acks carry no request id, so a second one in flight could not be told from the first),
     /// and restoring afterwards exactly the obscure state the user had before it started.</para>
     /// <para>The border and the overlay are a SWAP, never a stack (spec addendum 8.1): the border
@@ -128,7 +128,7 @@ namespace Clowd.UI
         private ScreenRect _region;
 
         // The handshake settled as "started": the helper is mirroring and the session UI is up.
-        // Until then there is nothing of Clowd's on screen at all.
+        // Until then there is nothing of Prisc's on screen at all.
         private bool _sharing;
 
         // Terminal-state latch: this page owns its own cleanup from here, so the error funnel and
@@ -214,7 +214,7 @@ namespace Clowd.UI
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
                         $"The region sharing binary ({ShareRegionDriver.BinaryFileName}) could not be found. " +
-                        $"Run 'cargo build' in the obs-express-rs repository, or set the {ShareRegionDriver.EnvVarName} " +
+                        $"Run 'cargo rec' in the Prisc repository, or set the {ShareRegionDriver.EnvVarName} " +
                         "environment variable to its location.",
                         "Region sharing unavailable");
                     Close();
@@ -236,7 +236,7 @@ namespace Clowd.UI
                 _mirrorFps = SettingsRoot.Current?.ShareRegion?.Fps ?? _mirrorFps;
                 _mirrorCaptureMethod = SettingsRoot.Current?.ShareRegion?.CaptureMethod ?? _mirrorCaptureMethod;
 
-                // Spawned while Clowd still holds the foreground rights the capture overlay handed
+                // Spawned while Prisc still holds the foreground rights the capture overlay handed
                 // back to it on its way out (--shell-pid, CAPTURE_PROTOCOL.md §2.5). That matters:
                 // the helper's prompt window has to come to the front to be findable, and a process
                 // spawned by a background app is refused the foreground — the prompt would only
@@ -247,9 +247,9 @@ namespace Clowd.UI
                 if (_closing)
                     return;
 
-                // The helper is now showing its OWN "Share this window" prompt, and Clowd shows
+                // The helper is now showing its OWN "Share this window" prompt, and Prisc shows
                 // nothing whatsoever: no border, no toolbar. The user is looking at that dialog and
-                // at their meeting app's share picker, and a Clowd frame drawn around a region
+                // at their meeting app's share picker, and a Prisc frame drawn around a region
                 // nobody is broadcasting yet would only be one more thing to interpret. This wait
                 // has no timeout by design — walking a Teams or Zoom picker can take minutes.
                 var decision = await _driver.WaitForDecisionAsync();
@@ -291,7 +291,7 @@ namespace Clowd.UI
 
         /// <summary>
         /// The user pressed OK on the helper's prompt and their meeting app is now watching the
-        /// mirror window: put Clowd's chrome up around the region.
+        /// mirror window: put Prisc's chrome up around the region.
         /// </summary>
         private void ShowSessionUi()
         {
@@ -306,7 +306,7 @@ namespace Clowd.UI
             _region = ToScreenRect(_driver?.AppliedRegion) ?? _region;
 
             // Title is set here rather than in BorderWindow.axaml so the shared default stays
-            // 'Clowd Recording Frame' for VideoCapturePage: window-list / Alt-Tab / screen-picker
+            // 'Prisc Recording Frame' for VideoCapturePage: window-list / Alt-Tab / screen-picker
             // enumeration must not show a recording frame while this session is only sharing.
             // Presentational only — nothing keys on either string.
             _border = new BorderWindow(_region) { Title = "Prisc Shared Region Frame" };
@@ -323,7 +323,7 @@ namespace Clowd.UI
 
             // OPTIONS, exactly as VideoCapturePage wires it, only pointed at this feature's own page.
             // The settings window is a separate top-level and does not disturb the share: the mirror
-            // is a region of the desktop, not a window, so raising Clowd's own settings over it
+            // is a region of the desktop, not a window, so raising Prisc's own settings over it
             // changes nothing about what the meeting sees.
             _toolbar.SettingsClicked += (s, e) =>
                 PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsShareRegion);
@@ -419,7 +419,7 @@ namespace Clowd.UI
 
         /// <summary>Maps the settings enum onto the protocol one. They are two types on purpose:
         /// <see cref="ShareObscureMode"/> lives in this assembly and the project reference to
-        /// Clowd.Shared is one-way, so the settings side cannot see it. The settings enum has no
+        /// Prisc.Shared is one-way, so the settings side cannot see it. The settings enum has no
         /// <c>None</c> member — "not obscured" is the tile being off, not a configuration — so this
         /// mapping is total and its default arm can never be reached by a valid value.</summary>
         private static ShareObscureMode ToProtocolMode(ShareRegionObscureStyle style) => style switch
@@ -529,7 +529,7 @@ namespace Clowd.UI
         /// <summary>
         /// Enters resize mode: remember the obscure state to put back, obscure the region, and hand
         /// off to <see cref="TryShowResizeChrome"/> once the helper says the region is covered.
-        /// Nothing of Clowd's is drawn inside the mirrored rectangle before that point.
+        /// Nothing of Prisc's is drawn inside the mirrored rectangle before that point.
         /// </summary>
         private void EnterResize()
         {
@@ -754,7 +754,7 @@ namespace Clowd.UI
         /// <para>Order matters here and is the reason this is not folded into
         /// <see cref="FinishResize"/>: the overlay comes out of the mirrored rectangle FIRST, before
         /// the move is written and long before the obscure is lifted, so there is no instant in
-        /// which the meeting sees Clowd's chrome over an unobscured region. The border goes back up
+        /// which the meeting sees Prisc's chrome over an unobscured region. The border goes back up
         /// immediately behind it rather than on the ack, because a move can be in flight for up to
         /// the 2000 ms backstop and a session that spends two seconds with neither window up has
         /// stopped saying which pixels it is broadcasting.</para>
@@ -1191,7 +1191,7 @@ namespace Clowd.UI
 
         /// <summary>
         /// App-exit path, mirroring <see cref="VideoCapturePage.ShutdownAsync"/>. Without it the
-        /// helper would outlive Clowd: stdin EOF does eventually stop it, but only once our process
+        /// helper would outlive Prisc: stdin EOF does eventually stop it, but only once our process
         /// has actually died, so a meeting would keep receiving a frozen (or still-live) mirror of
         /// the user's screen from an app they just closed. Guarded by <see cref="_closing"/> so a
         /// second call is a no-op, and never shows UI — the app is exiting.
@@ -1281,7 +1281,7 @@ namespace Clowd.UI
             }
         }
 
-        /// <summary>Writes the helper's ring-buffer log next to the settings file (%APPDATA%\Clowd),
+        /// <summary>Writes the helper's ring-buffer log next to the settings file (%APPDATA%\Prisc),
         /// falling back to the Desktop — the same place a failed recording leaves its log, and
         /// deliberately not a session directory, because a share never has one. Returns null on
         /// failure, which only costs the "Open Error Log" button.</summary>

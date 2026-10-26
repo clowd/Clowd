@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Media
+namespace Prisc.VideoSDK.Media
 {
     /// <summary>
     /// The FFmpeg configuration of one concrete H.264 encoder for one render: codec name, the
@@ -16,7 +16,7 @@ namespace Clowd.VideoSDK.Media
     /// <c>crf</c> (0 best – 51 worst, x264's scale) is the single quality knob the caller sees;
     /// each encoder maps it onto its own scale so a given crf lands on comparable bytes and
     /// quality whichever encoder ends up selected. The mapping is the one measured for the
-    /// recorder (obs-express <c>encoder_config.rs</c>, branch <c>caesay/multi-track-encoding</c>):
+    /// recorder (crates/prisc_recorder <c>encoder_config.rs</c>):
     /// </para>
     /// <list type="bullet">
     /// <item><b>x264</b>: <c>crf</c> passthrough, preset <c>fast</c> (the project owner's choice,
@@ -51,7 +51,7 @@ namespace Clowd.VideoSDK.Media
         public const string X264Preset = "fast";
 
         /// <summary>Keyframe interval in seconds, every encoder. The recorder keys every 2 s
-        /// (obs-express <c>KEYINT_SEC</c>) for crash resilience, which a finished render does not
+        /// (prisc_recorder <c>KEYINT_SEC</c>) for crash resilience, which a finished render does not
         /// need, and keyframes are the biggest lever on file size for screen content. Measured on
         /// the 3863-frame 60 fps benchmark job at crf 23 (x264 fast): 2 s = 4.88 MB, 4 s = 4.28 MB,
         /// 10 s = 3.89 MB, 20 s = 3.79 MB, 60 s = 3.75 MB. 10 s takes most of the saving and keeps
@@ -139,7 +139,7 @@ namespace Clowd.VideoSDK.Media
         public int GlobalQuality { get; }
 
         /// <summary>Human-readable summary of the effective rate control and quality — the
-        /// counterpart of obs-express's <c>describe_settings</c>, e.g.
+        /// counterpart of the recorder's <c>describe_settings</c>, e.g.
         /// <c>NVENC vbr cq=25 preset=p6 …</c> — for the diagnostic line that names the encoder
         /// a render actually got.</summary>
         public string Description { get; }

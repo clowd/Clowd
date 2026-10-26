@@ -4,14 +4,14 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
-using Clowd.VideoSDK.Render;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
+using Prisc.VideoSDK.Render;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // Preview/render parity for a SpeedWarpExempt clip under a warp, over a real encoded file:
     // the preview's AudioMixWorker and the render's WarpAudioResampler must produce the same
@@ -41,7 +41,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string SineFixture(double freq, float amplitude, int seconds)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-exempt-parity-test-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-exempt-parity-test-{Guid.NewGuid():N}.mp4");
             _tempFiles.Add(path);
 
             using var writer = new Mp4Writer(path, new Mp4WriterOptions

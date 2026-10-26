@@ -1,8 +1,8 @@
 using Avalonia;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The tray grip's press/drag/release machine, pinned rule by rule. <see cref="TrayDragGesture"/>

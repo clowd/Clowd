@@ -3,10 +3,10 @@ using System.Diagnostics;
 using Avalonia.Media;
 using Microsoft.Win32;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
-    /// Clowd's accent color (issue #48): either the color Windows itself is themed with, or one
+    /// Prisc's accent color (issue #48): either the color Windows itself is themed with, or one
     /// the user picked in the Capture settings page. Whichever it is, it is darkened until it has
     /// enough contrast with white — the overlay draws white labels and icons on top of
     /// accent-filled buttons, and a light accent leaves them unreadable.
@@ -17,18 +17,18 @@ namespace Clowd
     /// </summary>
     public static class AccentColors
     {
-        /// <summary>The legacy "clowd blue" the capturer has always been drawn in.</summary>
-        public static readonly Color ClowdBlue = Color.FromRgb(0x3B, 0x97, 0xD2);
+        /// <summary>The legacy "prisc blue" the capturer has always been drawn in.</summary>
+        public static readonly Color PriscBlue = Color.FromRgb(0x3B, 0x97, 0xD2);
 
         /// <summary>WCAG AA for normal text (4.5:1), measured against the white glyphs the overlay
         /// draws on top of the accent.</summary>
         public const double MinimumContrastWithWhite = 4.5;
 
-        /// <summary>Clowd blue taken down to <see cref="MinimumContrastWithWhite"/> (#2F7CAE): the
+        /// <summary>Prisc blue taken down to <see cref="MinimumContrastWithWhite"/> (#2F7CAE): the
         /// corrected default accent, and what the capturer lands on from its own
-        /// <c>--accent-color</c> default (the raw <see cref="ClowdBlue"/>, corrected by
-        /// clowd_capture/src/accent.rs).</summary>
-        public static readonly Color Default = EnsureContrastWithWhite(ClowdBlue);
+        /// <c>--accent-color</c> default (the raw <see cref="PriscBlue"/>, corrected by
+        /// crates/prisc_capture/src/accent.rs).</summary>
+        public static readonly Color Default = EnsureContrastWithWhite(PriscBlue);
 
         /// <summary>Whether this OS exposes an accent color we can follow. Windows only: macOS has
         /// no equivalent we can read without AppKit interop, so the "use system accent" option is
@@ -115,7 +115,7 @@ namespace Clowd
         public const double CometMinLightness = 0.62, CometMaxLightness = 0.72;
 
         /// <summary>
-        /// The two colours of the capture overlay's hint comet (clowd_capture mirrors this in
+        /// The two colours of the capture overlay's hint comet (prisc_capture mirrors this in
         /// <c>hints::trail::comet_colors</c>), derived from the accent as the user
         /// picked it (not the contrast-darkened fill, which reads as muddy once it glows): the body, and
         /// the hot tint its head burns towards.

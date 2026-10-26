@@ -6,7 +6,7 @@ use crate::encoder::ObsEncoder;
 use crate::error::ObsError;
 
 pub struct ObsOutput {
-    pub(crate) ptr: *mut obs_sys::obs_output_t,
+    pub(crate) ptr: *mut prisc_obs_sys::obs_output_t,
 }
 
 impl ObsOutput {
@@ -15,7 +15,7 @@ impl ObsOutput {
         let name_c = CString::new(name).unwrap();
         let settings_ptr = settings.map_or(ptr::null_mut(), |s| s.ptr);
         let ptr = unsafe {
-            obs_sys::obs_output_create(
+            prisc_obs_sys::obs_output_create(
                 id_c.as_ptr(),
                 name_c.as_ptr(),
                 settings_ptr,
@@ -29,7 +29,7 @@ impl ObsOutput {
     }
 
     pub fn set_video_encoder(&self, encoder: &ObsEncoder) {
-        unsafe { obs_sys::obs_output_set_video_encoder(self.ptr, encoder.ptr) };
+        unsafe { prisc_obs_sys::obs_output_set_video_encoder(self.ptr, encoder.ptr) };
     }
 
     /// Assigns (or with `None` clears) the video encoder for track `idx`.
@@ -37,7 +37,7 @@ impl ObsOutput {
     /// `idx > 0` — on others libobs silently ignores the call.
     pub fn set_video_encoder2(&self, encoder: Option<&ObsEncoder>, idx: usize) {
         let enc_ptr = encoder.map_or(ptr::null_mut(), |e| e.ptr);
-        unsafe { obs_sys::obs_output_set_video_encoder2(self.ptr, enc_ptr, idx) };
+        unsafe { prisc_obs_sys::obs_output_set_video_encoder2(self.ptr, enc_ptr, idx) };
     }
 
     /// Assigns (or with `None` clears) the audio encoder for track `idx`.
@@ -48,11 +48,11 @@ impl ObsOutput {
     /// mapping.
     pub fn set_audio_encoder(&self, encoder: Option<&ObsEncoder>, idx: usize) {
         let enc_ptr = encoder.map_or(ptr::null_mut(), |e| e.ptr);
-        unsafe { obs_sys::obs_output_set_audio_encoder(self.ptr, enc_ptr, idx) };
+        unsafe { prisc_obs_sys::obs_output_set_audio_encoder(self.ptr, enc_ptr, idx) };
     }
 
     pub fn start(&self) -> Result<(), ObsError> {
-        let ok = unsafe { obs_sys::obs_output_start(self.ptr) };
+        let ok = unsafe { prisc_obs_sys::obs_output_start(self.ptr) };
         if !ok {
             let err = self
                 .get_last_error()
@@ -63,27 +63,27 @@ impl ObsOutput {
     }
 
     pub fn stop(&self) {
-        unsafe { obs_sys::obs_output_stop(self.ptr) };
+        unsafe { prisc_obs_sys::obs_output_stop(self.ptr) };
     }
 
     pub fn active(&self) -> bool {
-        unsafe { obs_sys::obs_output_active(self.ptr as *const _) }
+        unsafe { prisc_obs_sys::obs_output_active(self.ptr as *const _) }
     }
 
     pub fn pause(&self, pause: bool) -> bool {
-        unsafe { obs_sys::obs_output_pause(self.ptr, pause) }
+        unsafe { prisc_obs_sys::obs_output_pause(self.ptr, pause) }
     }
 
     pub fn get_total_frames(&self) -> i32 {
-        unsafe { obs_sys::obs_output_get_total_frames(self.ptr as *const _) }
+        unsafe { prisc_obs_sys::obs_output_get_total_frames(self.ptr as *const _) }
     }
 
     pub fn get_frames_dropped(&self) -> i32 {
-        unsafe { obs_sys::obs_output_get_frames_dropped(self.ptr as *const _) }
+        unsafe { prisc_obs_sys::obs_output_get_frames_dropped(self.ptr as *const _) }
     }
 
     pub fn get_last_error(&self) -> Option<String> {
-        let ptr = unsafe { obs_sys::obs_output_get_last_error(self.ptr) };
+        let ptr = unsafe { prisc_obs_sys::obs_output_get_last_error(self.ptr) };
         if ptr.is_null() {
             return None;
         }
@@ -94,11 +94,11 @@ impl ObsOutput {
         )
     }
 
-    pub fn signal_handler(&self) -> *mut obs_sys::signal_handler_t {
-        unsafe { obs_sys::obs_output_get_signal_handler(self.ptr as *const _) }
+    pub fn signal_handler(&self) -> *mut prisc_obs_sys::signal_handler_t {
+        unsafe { prisc_obs_sys::obs_output_get_signal_handler(self.ptr as *const _) }
     }
 
-    pub fn as_ptr(&self) -> *mut obs_sys::obs_output_t {
+    pub fn as_ptr(&self) -> *mut prisc_obs_sys::obs_output_t {
         self.ptr
     }
 }
@@ -108,6 +108,6 @@ impl Drop for ObsOutput {
         if self.active() {
             self.stop();
         }
-        unsafe { obs_sys::obs_output_release(self.ptr) };
+        unsafe { prisc_obs_sys::obs_output_release(self.ptr) };
     }
 }

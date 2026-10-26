@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Writes the smallest GIF89a that can carry N frames, for the suites that exercise GIF import:

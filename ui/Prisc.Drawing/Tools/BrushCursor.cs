@@ -6,7 +6,7 @@ using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     /// <summary>
     /// The brush's cursor: a ring the width of an ordinary stroke (see ToolBrush.CursorPressure; in device

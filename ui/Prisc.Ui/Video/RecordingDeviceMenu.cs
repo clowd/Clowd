@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// The device picker behind a source slot's chevron: one radio row per device, captioned with
@@ -114,7 +114,7 @@ namespace Clowd.UI
                 // radio rather than a checkmark: exactly one device is recorded per source, and
                 // the group makes the menu say so on its own.
                 ToggleType = MenuItemToggleType.Radio,
-                GroupName = "clowdToolbarDevice" + source,
+                GroupName = "priscToolbarDevice" + source,
                 IsChecked = deviceId == currentId,
             };
 

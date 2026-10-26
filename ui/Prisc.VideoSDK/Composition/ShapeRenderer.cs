@@ -1,9 +1,9 @@
 using System;
-using Clowd.Geometry2D;
-using Clowd.VideoSDK.Model;
+using Prisc.Geometry2D;
+using Prisc.VideoSDK.Model;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// Draws a <see cref="ShapeContent"/> into a box: the composer calls it for every shape item

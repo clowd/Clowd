@@ -1,8 +1,8 @@
 using Avalonia.Media;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The engaged frame's glow and the glow burst (<see cref="TrayTokens.EngagedGlow"/>,

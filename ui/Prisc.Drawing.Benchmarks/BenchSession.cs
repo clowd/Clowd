@@ -7,10 +7,10 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Threading;
 
-namespace Clowd.Drawing.Benchmarks
+namespace Prisc.Drawing.Benchmarks
 {
     // The headless application the whole run lives inside. Mirrors
-    // Clowd.Drawing.Tests/TestAppBuilder.cs exactly (real Skia — text shaping, geometry, RTB).
+    // Prisc.Drawing.Tests/TestAppBuilder.cs exactly (real Skia — text shaping, geometry, RTB).
     // HeadlessUnitTestSession.StartNew(typeof(BenchApp)) discovers this BuildAvaloniaApp method and
     // uses it to build the AppBuilder; WITHOUT it the session falls back to a bare Application with
     // headless drawing enabled (no Skia RTB / frame capture).
@@ -39,7 +39,7 @@ namespace Clowd.Drawing.Benchmarks
             // startup, so seed a defaults instance (same as the tests).
             Run(() =>
             {
-                Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+                Prisc.Config.SettingsRoot.Current ??= new Prisc.Config.SettingsRoot();
                 return true;
             });
         }

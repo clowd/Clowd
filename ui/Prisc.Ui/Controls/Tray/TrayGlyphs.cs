@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// One icon of the tray set: SVG path data on a 24-unit canvas plus the stroke width it was drawn

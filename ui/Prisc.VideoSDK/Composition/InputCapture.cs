@@ -4,7 +4,7 @@ using System.IO;
 using System.Text.Json;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>The cursor shape a capture frame reports. Mirrors the recorder's classification
     /// of the live HCURSOR against the stock <c>IDC_*</c> cursors; the wire strings are the

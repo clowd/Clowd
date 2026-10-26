@@ -5,7 +5,7 @@ using Avalonia.Controls.Documents;
 using Avalonia.Media;
 using Avalonia.Threading;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// A stroked line icon: a path drawn in a 24-unit box (the color dialog's icons are the mockup's

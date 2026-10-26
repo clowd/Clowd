@@ -41,7 +41,7 @@ use crate::ui::shared::{
     active_panel_set, debug_monitor_visibility, debug_primary_visibility, monitor_index_at, pick_monitor_containing_center, sample_bgra,
     UiMonitor,
 };
-use clowd_rust_core::geometry::{to_screen_point, RectExt, ScreenPointF, ScreenRect, ScreenRectF};
+use prisc_rust_core::geometry::{to_screen_point, RectExt, ScreenPointF, ScreenRect, ScreenRectF};
 
 /// The shortest gap between two scheduled runs of one host. egui asks for
 /// those repaints as "immediately", so without a floor a hover fade would
@@ -742,7 +742,7 @@ impl MonitorHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clowd_rust_core::geometry::ScreenRect;
+    use prisc_rust_core::geometry::ScreenRect;
 
     fn monitor(x: i32, dpi: f32) -> UiMonitor {
         UiMonitor {

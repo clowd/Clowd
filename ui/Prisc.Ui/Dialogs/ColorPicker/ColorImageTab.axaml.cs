@@ -15,10 +15,10 @@ using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.UI.Converters;
-using Clowd.UI.Helpers;
+using Prisc.UI.Converters;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The color dialog's Image tab (brief §7.1): five colors extracted from a picture, each with a

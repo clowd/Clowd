@@ -1,7 +1,7 @@
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The start/centre/end arithmetic behind <c>TrayZonePanel</c>. Pure numbers, so no Avalonia

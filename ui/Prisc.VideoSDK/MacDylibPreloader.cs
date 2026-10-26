@@ -4,19 +4,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace Clowd.VideoSDK
+namespace Prisc.VideoSDK
 {
     /// <summary>
     /// Loads the FFmpeg dylibs and the siblings they link against, by absolute path, before the
     /// bindings go looking for them. macOS only; a no-op everywhere else.
     ///
     /// <para>
-    /// The obs-express payload is linked the way a self-contained app bundle is: every dylib in it
+    /// The recorder payload is linked the way a self-contained app bundle is: every dylib in it
     /// has an <c>@rpath</c> install name and asks for its siblings the same way — libavformat wants
     /// <c>@rpath/libavcodec.dylib</c>, <c>@rpath/libx264.dylib</c>, <c>@rpath/libsrt.dylib</c> and
-    /// so on. The only <c>LC_RPATH</c> in the whole payload is on the <c>obs-express</c> executable
+    /// so on. The only <c>LC_RPATH</c> in the whole payload is on the <c>prisc_recorder</c> executable
     /// itself (<c>@executable_path/Frameworks</c>); not one of the dylibs carries one. That is fine
-    /// for obs-express, and useless to us: when a *different* program dlopens one of those dylibs by
+    /// for prisc_recorder, and useless to us: when a *different* program dlopens one of those dylibs by
     /// absolute path, dyld expands <c>@rpath</c> against the load path of the images doing the
     /// loading, finds no rpath anywhere in that chain, and fails. FFmpeg.AutoGen reports the whole
     /// thing as "Specified method is not supported", which says nothing at all.

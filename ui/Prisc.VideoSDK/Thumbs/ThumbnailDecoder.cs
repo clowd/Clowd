@@ -1,9 +1,9 @@
 using System;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Thumbs
+namespace Prisc.VideoSDK.Thumbs
 {
     /// <summary>
     /// Decodes one video stream into filmstrip-sized BGRA thumbnails. Deliberately separate from

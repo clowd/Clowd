@@ -6,7 +6,7 @@ use crate::ocr::OcrOutcome;
 use crate::selection::{dpi_at_point, hit_test, DragMode, Hittest};
 use crate::settings::TipsMode;
 use crate::system::{MonitorInfo, WindowTarget};
-use clowd_rust_core::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
+use prisc_rust_core::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
 use winit::window::CursorIcon;
 
 pub const ZOOM_MIN: f32 = 1.0;
@@ -501,7 +501,7 @@ impl InteractionController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clowd_rust_core::geometry::RectExt;
+    use prisc_rust_core::geometry::RectExt;
 
     fn monitor() -> MonitorInfo {
         MonitorInfo {
@@ -513,7 +513,7 @@ mod tests {
             adapter_id: None,
             low_vram_adapter: false,
             #[cfg(target_os = "macos")]
-            logical_origin: clowd_rust_core::geometry::LogicalPoint::new(0.0, 0.0),
+            logical_origin: prisc_rust_core::geometry::LogicalPoint::new(0.0, 0.0),
         }
     }
 

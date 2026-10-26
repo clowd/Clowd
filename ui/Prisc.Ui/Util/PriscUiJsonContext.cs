@@ -1,11 +1,11 @@
 using System.Text.Json.Serialization;
 
-namespace Clowd.Util;
+namespace Prisc.Util;
 
 [JsonSerializable(typeof(SessionInfo))]
 [JsonSerializable(typeof(SendArgsRequestModel))]
-[JsonSerializable(typeof(Clowd.UI.Pages.CreditsData))]
-[JsonSerializable(typeof(Clowd.UI.ObsSettingsJson))]
-[JsonSerializable(typeof(Clowd.UI.ScrollDriverEvent))]
-[JsonSerializable(typeof(Clowd.UI.ScrollDriverCommand))]
-internal partial class ClowdUiJsonContext : JsonSerializerContext { }
+[JsonSerializable(typeof(Prisc.UI.Pages.CreditsData))]
+[JsonSerializable(typeof(Prisc.UI.ObsSettingsJson))]
+[JsonSerializable(typeof(Prisc.UI.ScrollDriverEvent))]
+[JsonSerializable(typeof(Prisc.UI.ScrollDriverCommand))]
+internal partial class PriscUiJsonContext : JsonSerializerContext { }

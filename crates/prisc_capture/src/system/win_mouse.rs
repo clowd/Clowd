@@ -3,7 +3,7 @@ use windows::Win32::{
     UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos},
 };
 
-use clowd_rust_core::geometry::ScreenPoint;
+use prisc_rust_core::geometry::ScreenPoint;
 
 pub fn get_position() -> ScreenPoint {
     let mut lppoint = POINT::default();

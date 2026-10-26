@@ -8,11 +8,11 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
-using Clowd.Config;
-using Clowd.UI.Dialogs;
-using Clowd.UI.Dialogs.ColorPicker;
+using Prisc.Config;
+using Prisc.UI.Dialogs;
+using Prisc.UI.Dialogs.ColorPicker;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     public enum NiceDialogIcon
     {
@@ -290,7 +290,7 @@ namespace Clowd.UI.Helpers
         }
 
         /// <summary>Takes the foreground for <paramref name="dialog"/> once it has a handle. A no-op
-        /// when it already has it, and a plain SetForegroundWindow when another Clowd window is in
+        /// when it already has it, and a plain SetForegroundWindow when another Prisc window is in
         /// front; keys are only injected when another app is.</summary>
         private static void ComeForwardWhenOpened(Window dialog)
         {

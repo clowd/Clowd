@@ -14,14 +14,14 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Clowd.Config;
-using Clowd.Drawing;
-using Clowd.UI.Controls;
-using Clowd.UI.Converters;
-using Clowd.UI.Dialogs.ColorPicker;
-using Clowd.UI.Helpers;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.UI.Controls;
+using Prisc.UI.Converters;
+using Prisc.UI.Dialogs.ColorPicker;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Config
+namespace Prisc.UI.Config
 {
     /// <summary>
     /// The image editor's per-tool styles as a settings list: one row per drawing tool, in toolbar

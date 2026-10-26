@@ -1,10 +1,10 @@
 using System;
 using Avalonia;
 using Avalonia.Input;
-using Clowd.Drawing.Graphics;
-using Clowd.Geometry2D;
+using Prisc.Drawing.Graphics;
+using Prisc.Geometry2D;
 
-namespace Clowd.Drawing
+namespace Prisc.Drawing
 {
     internal static class HelperFunctions
     {

@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     /// <summary>
     /// A numbered step badge: a white circle (a capsule once the number is wider than it is tall)

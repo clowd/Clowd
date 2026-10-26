@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.Config;
-using Clowd.Upload;
+using Prisc.Config;
+using Prisc.Upload;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class UploadSettingsTransferTests
     {
         private static SettingsUpload NewSettings()
         {
-            // force the Clowd.Upload assembly into the AppDomain, mirroring App startup
+            // force the Prisc.Upload assembly into the AppDomain, mirroring App startup
             _ = typeof(MimeProvider).Assembly;
 
             var settings = new SettingsUpload();

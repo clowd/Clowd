@@ -18,9 +18,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use obs::data::ObsData;
-use obs::scene::{ObsScene, ObsSceneItem};
-use obs::source::ObsSource;
+use prisc_obs::data::ObsData;
+use prisc_obs::scene::{ObsScene, ObsSceneItem};
+use prisc_obs::source::ObsSource;
 
 use crate::platform::{self, MouseInfo};
 use crate::region::Rect;
@@ -146,8 +146,8 @@ pub fn animation_frame(
 /// Everything the tick callback touches. Boxed and handed to libobs as the
 /// callback's `param`; only the graphics thread ever dereferences it.
 struct TrackerState {
-    filter: *mut obs_sys::obs_source_t,
-    item: *mut obs_sys::obs_sceneitem_t,
+    filter: *mut prisc_obs_sys::obs_source_t,
+    item: *mut prisc_obs_sys::obs_sceneitem_t,
     region: Rect,
     canvas_scale: f64,
     /// Position + press time of the most recent click, if any.
@@ -179,10 +179,10 @@ impl TrackerState {
             y: frame.scale,
         };
         unsafe {
-            obs_sys::obs_sceneitem_set_pos(self.item, &pos as *const Vec2 as *const obs_sys::vec2);
-            obs_sys::obs_sceneitem_set_scale(
+            prisc_obs_sys::obs_sceneitem_set_pos(self.item, &pos as *const Vec2 as *const prisc_obs_sys::vec2);
+            prisc_obs_sys::obs_sceneitem_set_scale(
                 self.item,
-                &scale as *const Vec2 as *const obs_sys::vec2,
+                &scale as *const Vec2 as *const prisc_obs_sys::vec2,
             );
         }
 
@@ -190,7 +190,7 @@ impl TrackerState {
         // settings, so the colour set at creation is preserved.
         let settings = ObsData::new();
         settings.set_int("opacity", frame.opacity as i64);
-        unsafe { obs_sys::obs_source_update(self.filter, settings.as_ptr()) };
+        unsafe { prisc_obs_sys::obs_source_update(self.filter, settings.as_ptr()) };
     }
 }
 
@@ -254,7 +254,7 @@ impl MouseTracker {
         // source for an unknown id, so the highlight would silently never draw.
         for id in [IMAGE_SOURCE_ID, COLOR_FILTER_ID] {
             let id_c = std::ffi::CString::new(id).unwrap();
-            if unsafe { obs_sys::obs_source_get_display_name(id_c.as_ptr()) }.is_null() {
+            if unsafe { prisc_obs_sys::obs_source_get_display_name(id_c.as_ptr()) }.is_null() {
                 return Err(format!(
                     "source type '{id}' is not registered — the plugin providing it (image-source \
                      / obs-filters) failed to load"
@@ -296,7 +296,7 @@ impl MouseTracker {
         state.apply(None);
 
         let param = &mut *state as *mut TrackerState as *mut c_void;
-        unsafe { obs_sys::obs_add_tick_callback(Some(tick), param) };
+        unsafe { prisc_obs_sys::obs_add_tick_callback(Some(tick), param) };
 
         Ok(MouseTracker {
             _image: image,
@@ -318,7 +318,7 @@ impl MouseTracker {
 impl Drop for MouseTracker {
     fn drop(&mut self) {
         let param = &mut *self.state as *mut TrackerState as *mut c_void;
-        unsafe { obs_sys::obs_remove_tick_callback(Some(tick), param) };
+        unsafe { prisc_obs_sys::obs_remove_tick_callback(Some(tick), param) };
         // Detach from the scene so a runtime tracker-off stops rendering the
         // disc; the sources are released by the field drops that follow.
         self.item.remove();
@@ -331,8 +331,8 @@ impl Drop for MouseTracker {
 /// can never read a half-written file.
 fn extract_png() -> Result<PathBuf, String> {
     let dir = std::env::temp_dir();
-    let path = dir.join("obs-express-tracker.png");
-    let staging = dir.join(format!("obs-express-tracker.{}.png", std::process::id()));
+    let path = dir.join("prisc-recorder-tracker.png");
+    let staging = dir.join(format!("prisc-recorder-tracker.{}.png", std::process::id()));
 
     fs::write(&staging, TRACKER_PNG)
         .map_err(|e| format!("failed to write '{}': {e}", staging.display()))?;

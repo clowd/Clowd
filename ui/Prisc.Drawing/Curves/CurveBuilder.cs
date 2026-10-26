@@ -16,7 +16,7 @@
 //    misrepresented as being the original software.
 // 3. This notice may not be removed or altered from any source distribution.
 
-// Modified for Clowd: vector type fixed to Avalonia.Vector / System.Double (the #if vector-type
+// Modified for Prisc: vector type fixed to Avalonia.Vector / System.Double (the #if vector-type
 // ladder from the original source has been removed).
 
 using System;
@@ -28,7 +28,7 @@ using System.Diagnostics;
 using VECTOR = Avalonia.Vector;
 using FLOAT = System.Double;
 
-namespace Clowd.Drawing.Curves
+namespace Prisc.Drawing.Curves
 {
     /// <summary>
     /// This is a version of <see cref="CurveFit"/> that works on partial curves so that a spline can be built in "realtime"

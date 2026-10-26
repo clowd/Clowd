@@ -5,12 +5,12 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Rendering;
 using Avalonia.VisualTree;
-using Clowd.Geometry2D;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.Geometry2D;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// The preview overlay of a selected line, arrow or double arrow, in place of the transform

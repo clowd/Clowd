@@ -16,7 +16,7 @@ use crate::telemetry::startup::{AtomicDuration, StartupTimings, WorkerTimings};
 use crate::ui::gpu::egui_painter::EguiPainter;
 use crate::ui::gpu::UiRenderer;
 use crate::ui::shared::{UiMonitor, UiSharedState};
-use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
+use prisc_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 
 pub mod desktop;
 pub mod frame;

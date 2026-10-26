@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// How screen recording works, if at all. Rendered by the settings page as the mode banner

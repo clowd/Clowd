@@ -20,7 +20,7 @@ using Avalonia.Media.Transformation;
 using Avalonia.Metadata;
 using Avalonia.Threading;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>One choice a <see cref="ModeSelector"/> offers: the value it stands for, its title
     /// (the chip's label, and the banner's headline while it is active), the caption written under
@@ -108,7 +108,7 @@ namespace Clowd.UI.Controls
         /// <summary>Raised whenever <see cref="SelectedValue"/> changes, however it was changed.</summary>
         public event EventHandler SelectionChanged;
 
-        private static readonly Uri _stylesUri = new("avares://Clowd.Ui/Controls/ModeSelector.axaml");
+        private static readonly Uri _stylesUri = new("avares://Prisc.Ui/Controls/ModeSelector.axaml");
 
         // ---- geometry ----
 

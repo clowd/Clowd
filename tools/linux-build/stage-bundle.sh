@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Assembles the self-contained Linux bundle from a cargo profile dir and checks
 # that it is relocatable and portable. Used by the linux job in
-# .github/workflows/build.yml (inside the tools/linux-build image), and
+# .github/workflows/build-recorder.yml (inside the tools/linux-build image), and
 # runnable by hand in that image:
 #
-#   tools/linux-build/stage-bundle.sh target/release dist/obs-express-linux-x64
+#   tools/linux-build/stage-bundle.sh target/release dist/recorder-linux-x64
 #
 # Checks, each fatal:
 #   - every required binary / library / plugin / data file is present;
@@ -24,13 +24,13 @@ rm -rf "$dist"; mkdir -p "$dist"
 # 1. Executables, the shared libraries build.rs staged under their SONAMEs
 #    (libobs.so.30, libobs-opengl.so.30, the FFmpeg set) and the plugin/data
 #    trees. Explicit items only, so cargo's build junk (deps/, build/, *.rlib,
-#    *.d) stays behind. clowd_share_region is not built on Linux (the CI
-#    build excludes it from the workspace), so it is not part of the bundle.
-cp -a "$src/obs-express" "$src/vid2gif" "$src/obs-ffmpeg-mux" "$dist/"
+#    *.d) stays behind. prisc_share_region is not built on Linux (the CI
+#    build does not select it), so it is not part of the bundle.
+cp -a "$src/prisc_recorder" "$src/prisc_vid2gif" "$src/obs-ffmpeg-mux" "$dist/"
 cp -a "$src"/lib*.so.* "$dist/"
 cp -a "$src/obs-plugins" "$src/data" "$dist/"
 
-for required in obs-express vid2gif obs-ffmpeg-mux \
+for required in prisc_recorder prisc_vid2gif obs-ffmpeg-mux \
     libobs.so.30 libobs-opengl.so.30 \
     libavcodec.so.62 libavformat.so.62 libavutil.so.60 libavfilter.so.11 \
     libavdevice.so.62 libswscale.so.9 libswresample.so.6 \
@@ -50,12 +50,12 @@ done
 #    resolve libobs/FFmpeg in place). The shipped copies keep only $ORIGIN.
 #    Everything else was staged by build.rs with a relative RUNPATH already.
 # shellcheck disable=SC2016 # a literal $ORIGIN, for the loader
-for exe in obs-express vid2gif; do
+for exe in prisc_recorder prisc_vid2gif; do
   patchelf --set-rpath '$ORIGIN' "$dist/$exe"
 done
 
 cat > "$dist/README.txt" <<'README'
-obs-express (Linux, self-contained)
+prisc_recorder (Linux, self-contained)
 
 libobs, the OpenGL renderer, the OBS plugins (obs-plugins/), their data
 (data/) and the FFmpeg shared libraries are bundled alongside the binaries;

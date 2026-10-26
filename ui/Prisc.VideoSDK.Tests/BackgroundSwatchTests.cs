@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The mesh cells the timeline paints a wallpaper card with: every catalog row yields a full
@@ -178,7 +178,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(Cells, blue.Length);
             Assert.Equal(new[] { 0x00AFF0u }, blue.Distinct().ToArray());
 
-            // no color, a blank one and an unparseable one all draw Clowd blue
+            // no color, a blank one and an unparseable one all draw Prisc blue
             Assert.Equal(blue, BackgroundSwatch.Grid(BackgroundCatalog.SolidStyle, null));
             Assert.Equal(blue, BackgroundSwatch.Grid(BackgroundCatalog.SolidStyle, null, "not-a-color"));
 

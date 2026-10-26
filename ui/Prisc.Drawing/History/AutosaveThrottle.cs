@@ -1,8 +1,8 @@
 using System;
 using Avalonia.Threading;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.History
+namespace Prisc.Drawing.History
 {
     /// <summary>
     /// The persistence boundary between the history engine and <see cref="DrawingCanvas.StateUpdated"/>

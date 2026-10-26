@@ -1,8 +1,8 @@
 using System;
-using Clowd.UI.Controls.Tray;
+using Prisc.UI.Controls.Tray;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="CubicBezierEasing"/> against CSS's cubic-bezier: the end points are pinned, the

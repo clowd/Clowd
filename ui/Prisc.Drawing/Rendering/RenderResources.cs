@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 
-namespace Clowd.Drawing.Rendering
+namespace Prisc.Drawing.Rendering
 {
     /// <summary>
     /// Process-wide immutable brush/pen cache (final-design §A.5, fixes R6). Draw AND hit-test

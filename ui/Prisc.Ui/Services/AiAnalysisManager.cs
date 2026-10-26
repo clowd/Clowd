@@ -5,11 +5,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>The two sidecar files an edit can require per referenced stream — the denoised
     /// audio wav and the person-matte mp4 (see <see cref="AiSidecars"/>).</summary>
@@ -37,7 +37,7 @@ namespace Clowd.UI.Services
         /// requeueing on every project change would grind the same failure forever.</summary>
         Failed,
 
-        /// <summary>No <c>clowd_ai</c> binary resolves (or there is nowhere to cache — the
+        /// <summary>No <c>prisc_ai</c> binary resolves (or there is nowhere to cache — the
         /// dev harness has no session directory). Re-probed on every structural change, so a
         /// binary appearing mid-session upgrades this to a queued job.</summary>
         Unavailable,

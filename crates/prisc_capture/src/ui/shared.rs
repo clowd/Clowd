@@ -18,7 +18,7 @@ use crate::interaction::OcrState;
 use crate::system::{CapturedDesktop, CursorImage};
 use crate::ui::components::panel::model::PanelButtonSet;
 use crate::ui::egui_frame::EguiFrame;
-use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectF};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectF};
 
 /// Minimal per-monitor info the UI layout rules need.
 ///

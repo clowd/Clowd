@@ -1,9 +1,9 @@
 using System;
 using System.Globalization;
-using Clowd.UI.Controls;
+using Prisc.UI.Controls;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The inspector's reset dots take their default from XAML as a string ("0.5") against a

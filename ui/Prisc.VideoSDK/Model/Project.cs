@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
-namespace Clowd.VideoSDK.Model;
+namespace Prisc.VideoSDK.Model;
 
 /// <summary>
 /// The version-2 composition project: a fixed output canvas, the media files feeding it
@@ -11,7 +11,7 @@ namespace Clowd.VideoSDK.Model;
 /// <see cref="Items"/> keyed by <see cref="Item.TrackId"/> — flat rather than nested in tracks so
 /// selection, undo and the cross-track link operations in <see cref="TimelineOps"/> stay simple.
 ///
-/// This is both the project file and the wire format handed to <c>Clowd.VideoRender</c>. Version 1
+/// This is both the project file and the wire format handed to <c>Prisc.VideoRender</c>. Version 1
 /// is the legacy <c>videoedit.json</c> (<c>VideoEditDocument</c>), migrated one-way into this shape.
 ///
 /// All time fields across the model are in 100ns ticks — the unit of

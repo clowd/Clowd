@@ -8,10 +8,10 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.Util;
+using Prisc.Config;
+using Prisc.Util;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Runs the capturer in its lightweight hotkey-waiting standby mode (CAPTURE_PROTOCOL.md).
@@ -26,11 +26,11 @@ namespace Clowd.UI
     {
         private const int MaxPipeChars = 256 * 1024;
         private const int MaxConsecutiveFailures = 3;
-        private const string ReadyLine = "CLOWD_STANDBY_READY";
-        private const string SessionPrefix = "CLOWD_SESSION ";
-        private const string CaptureFinishedPrefix = "CLOWD_CAPTURE_FINISHED ";
-        private const string SettingsStatusPrefix = "CLOWD_SETTINGS_STATUS ";
-        private const string IpcErrorPrefix = "CLOWD_IPC_ERROR ";
+        private const string ReadyLine = "PRISC_STANDBY_READY";
+        private const string SessionPrefix = "PRISC_SESSION ";
+        private const string CaptureFinishedPrefix = "PRISC_CAPTURE_FINISHED ";
+        private const string SettingsStatusPrefix = "PRISC_SETTINGS_STATUS ";
+        private const string IpcErrorPrefix = "PRISC_IPC_ERROR ";
 
         /// <summary>The status <c>error_code</c> of a gesture the capturer cannot hook because
         /// macOS has not granted Accessibility. The capturer never prompts; the shell does.</summary>
@@ -179,7 +179,7 @@ namespace Clowd.UI
                         CreateNoWindow = true,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
-                        // Keeping this pipe open is the child's parent-lifetime lease. If Clowd.UI
+                        // Keeping this pipe open is the child's parent-lifetime lease. If Prisc.UI
                         // terminates for any reason, EOF tells the standby event loop to exit.
                         RedirectStandardInput = true,
                         // The protocol round-trips filesystem paths through these pipes; .NET
@@ -405,13 +405,13 @@ namespace Clowd.UI
                 Append(buffer, line);
         }
 
-        /// <summary>A parsed CLOWD_SETTINGS_STATUS: each capture action's gesture statuses, and
+        /// <summary>A parsed PRISC_SETTINGS_STATUS: each capture action's gesture statuses, and
         /// whether any of them is down for want of Accessibility.</summary>
         internal readonly record struct StandbyHotkeyStatus(
             (HotkeyId Id, ExternalGestureStatus[] Gestures)[] Actions, bool NeedsAccessibility);
 
         /// <summary>
-        /// Parses a CLOWD_SETTINGS_STATUS payload: <c>"hotkeys"</c> maps each action to an array
+        /// Parses a PRISC_SETTINGS_STATUS payload: <c>"hotkeys"</c> maps each action to an array
         /// with one <c>{"gesture","active","error","error_code"}</c> per <c>--hk-*</c> occurrence
         /// it received, in order, the gesture echoed exactly as sent. <c>error_code</c> is optional,
         /// so a capturer that predates it still parses. Throws on a malformed line.
@@ -449,10 +449,10 @@ namespace Clowd.UI
 
         /// <summary>Asks for Accessibility when the capturer reports a gesture down for want of it —
         /// in warm-capture mode the shell may own no gesture at all, so its own hook never gets to
-        /// ask. The capturer runs inside Clowd.app, so the grant covers it; it retries its hook by
+        /// ask. The capturer runs inside Prisc.app, so the grant covers it; it retries its hook by
         /// itself and reports again once the grant lands. A process macOS already trusts got a stale
         /// grant: the prompt would show nothing yet spend this run's one, which the grant missing
-        /// for real (once the user removes Clowd from the list) still needs.</summary>
+        /// for real (once the user removes Prisc from the list) still needs.</summary>
         /// <param name="isTrusted">AXIsProcessTrusted; never prompts.</param>
         internal static void PromptIfNeeded(StandbyHotkeyStatus status, AccessibilityPrompt prompt, Func<bool> isTrusted)
         {
@@ -461,7 +461,7 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Applies a CLOWD_SETTINGS_STATUS line (see <see cref="ParseHotkeyStatus"/>), which may
+        /// Applies a PRISC_SETTINGS_STATUS line (see <see cref="ParseHotkeyStatus"/>), which may
         /// also arrive unasked when the capturer's hook comes up or goes down. The manager matches
         /// statuses back to its own gestures by the echoed string, so a report for a snapshot that
         /// has since been superseded simply finds nothing to update for the gestures it did not

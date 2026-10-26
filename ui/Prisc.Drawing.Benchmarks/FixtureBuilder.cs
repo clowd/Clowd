@@ -4,10 +4,10 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Clowd.Drawing;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Benchmarks
+namespace Prisc.Drawing.Benchmarks
 {
     /// <summary>
     /// Deterministic, seeded document builders (benchmark-spec.md §2). Positions lie on a grid over a
@@ -181,7 +181,7 @@ namespace Clowd.Drawing.Benchmarks
                     }
                 }
 
-                string dir = Path.Combine(Path.GetTempPath(), "clowd_bench_" + Environment.ProcessId);
+                string dir = Path.Combine(Path.GetTempPath(), "prisc_bench_" + Environment.ProcessId);
                 Directory.CreateDirectory(dir);
                 string path = Path.Combine(dir, "testimage.png");
                 wb.Save(path);

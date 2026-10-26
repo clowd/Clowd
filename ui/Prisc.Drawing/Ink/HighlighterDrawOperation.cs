@@ -6,7 +6,7 @@ using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using SkiaSharp;
 
-namespace Clowd.Drawing.Ink
+namespace Prisc.Drawing.Ink
 {
     /// <summary>
     /// Paints a highlighter stroke the way a marker inks paper: multiplied into what is under it,

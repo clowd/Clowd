@@ -1,6 +1,6 @@
 //! `--input-capture`: a JSONL sidecar recording cursor position/shape, mouse
 //! buttons and keys per rendered frame, plus sub-frame-precise input edges
-//! (DESIGN §1 — the file format is a wire contract consumed by the Clowd
+//! (DESIGN §1 — the file format is a wire contract consumed by the Prisc
 //! editor).
 //!
 //! Threading: a libobs tick callback (graphics thread, `tracker.rs` pattern)
@@ -205,9 +205,9 @@ pub fn map_t(event_ns: u64, t0_ns: u64, pause_offset_ns: u64) -> Option<f64> {
 /// `output` must be a live output pointer. Callers must not race a pre-start
 /// encoder swap (`handle_configure`): only call once the recording has
 /// started (armed tick / nonzero `t0`) — encoder swaps are pre-start only.
-unsafe fn pause_offset_ns(output: *mut obs_sys::obs_output_t) -> u64 {
-    let encoder = obs_sys::obs_output_get_video_encoder(output);
-    obs_sys::obs_encoder_get_pause_offset(encoder)
+unsafe fn pause_offset_ns(output: *mut prisc_obs_sys::obs_output_t) -> u64 {
+    let encoder = prisc_obs_sys::obs_output_get_video_encoder(output);
+    prisc_obs_sys::obs_encoder_get_pause_offset(encoder)
 }
 
 // ---------------------------------------------------------------------------
@@ -435,7 +435,7 @@ fn writer_loop(
     output_addr: usize,
     canvas_scale: f64,
 ) {
-    let output = output_addr as *mut obs_sys::obs_output_t;
+    let output = output_addr as *mut prisc_obs_sys::obs_output_t;
     let mut w = BufWriter::new(file);
     let mut sprites = SpriteCache::new();
     let mut pending = VecDeque::new();
@@ -486,7 +486,7 @@ fn handle_msg(
     sprites: &mut SpriteCache,
     armed: &AtomicBool,
     clock: &FrameClock,
-    output: *mut obs_sys::obs_output_t,
+    output: *mut prisc_obs_sys::obs_output_t,
     canvas_scale: f64,
     pending: &mut VecDeque<PendingRow>,
 ) {
@@ -508,7 +508,7 @@ fn handle_msg(
         WriterMsg::Event(event) => {
             // Evaluate once, before startup buffering. Rechecking on drain
             // would drop pre-pause edges or apply a later pause's offset.
-            if !armed.load(Ordering::Acquire) || unsafe { obs_sys::obs_output_paused(output) } {
+            if !armed.load(Ordering::Acquire) || unsafe { prisc_obs_sys::obs_output_paused(output) } {
                 return;
             }
             Some(PendingRow::Event {
@@ -570,9 +570,9 @@ unsafe fn sample_tick(param: *mut c_void) {
     if !state.armed.load(Ordering::Acquire) {
         return;
     }
-    let frame_ns = obs_sys::obs_get_video_frame_time();
-    let output = state.output as *mut obs_sys::obs_output_t;
-    if obs_sys::obs_output_paused(output) {
+    let frame_ns = prisc_obs_sys::obs_get_video_frame_time();
+    let output = state.output as *mut prisc_obs_sys::obs_output_t;
+    if prisc_obs_sys::obs_output_paused(output) {
         return;
     }
     let offset = pause_offset_ns(output);
@@ -640,7 +640,7 @@ impl InputCapture {
         monitors: &[MonitorInfo],
         canvas_scale: f64,
         canvas: (u32, u32),
-        output: *mut obs_sys::obs_output_t,
+        output: *mut prisc_obs_sys::obs_output_t,
         clock: std::sync::Arc<FrameClock>,
     ) -> Result<InputCapture, String> {
         // Prime the cursor classifier from the calling (main) thread. The first
@@ -694,7 +694,7 @@ impl InputCapture {
             hook,
         });
         let param = &*state as *const TickState as *mut c_void;
-        unsafe { obs_sys::obs_add_tick_callback(Some(tick), param) };
+        unsafe { prisc_obs_sys::obs_add_tick_callback(Some(tick), param) };
 
         Ok(InputCapture {
             tx,
@@ -746,7 +746,7 @@ impl InputCapture {
         self.state.armed.store(false, Ordering::Release);
         if self.state.registered.swap(false, Ordering::AcqRel) {
             let param = &*self.state as *const TickState as *mut c_void;
-            unsafe { obs_sys::obs_remove_tick_callback(Some(tick), param) };
+            unsafe { prisc_obs_sys::obs_remove_tick_callback(Some(tick), param) };
         }
         self.flush();
     }

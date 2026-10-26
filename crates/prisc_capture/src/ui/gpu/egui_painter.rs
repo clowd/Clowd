@@ -128,7 +128,7 @@ pub fn pack(prims: &[ClippedPrimitive], ppp: f32, target: (u32, u32)) -> Packed 
     let (mut vbase, mut ibase) = (0u32, 0u32);
     for p in prims {
         let Primitive::Mesh(mesh) = &p.primitive else {
-            unreachable!("clowd never emits egui paint callbacks")
+            unreachable!("prisc never emits egui paint callbacks")
         };
         let scissor = ScissorRect::new(p.clip_rect, ppp, target);
         if mesh.is_empty() || scissor.is_empty() {

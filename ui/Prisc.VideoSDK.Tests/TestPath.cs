@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Rewrites the Windows-shaped absolute paths these tests were written with into the running

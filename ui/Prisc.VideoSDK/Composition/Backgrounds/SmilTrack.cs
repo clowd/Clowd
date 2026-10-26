@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Xml.Linq;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// One SMIL animation as a pure function of loop phase: a monotonic <c>keyTimes</c> list and

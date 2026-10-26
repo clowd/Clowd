@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Geometry2D
+namespace Prisc.Geometry2D
 {
     /// <summary>
     /// The quadratic bezier maths behind a bowed line or arrow: evaluation, arc length by sampling,

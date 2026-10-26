@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Linq;
-using Clowd.UI;
+using Prisc.UI;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The FPS tile's cycle, pinned per monitor. The list is easy to get subtly wrong in exactly the
@@ -101,7 +101,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Presets_setting_clamps_and_orders_what_the_cycle_reads()
         {
-            var presets = new Clowd.Config.FpsPresets { First = 60, Second = -5, Third = 9999 };
+            var presets = new Prisc.Config.FpsPresets { First = 60, Second = -5, Third = 9999 };
 
             Assert.Equal(0, presets.Second);
             Assert.Equal(999, presets.Third);
@@ -111,7 +111,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Presets_above_the_cycle_ceiling_are_dropped()
         {
-            var presets = new Clowd.Config.FpsPresets { First = 60, Second = 360, Third = 500 };
+            var presets = new Prisc.Config.FpsPresets { First = 60, Second = 360, Third = 500 };
 
             Assert.Equal(500, presets.Third);
             Assert.Equal(new[] { 60, 360 }, FpsCycleRules.Options(0, presets.Values).ToArray());
@@ -121,7 +121,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void A_cleared_preset_box_shortens_the_cycle()
         {
-            var presets = new Clowd.Config.FpsPresets { First = 30, Second = 60, Third = 0 };
+            var presets = new Prisc.Config.FpsPresets { First = 30, Second = 60, Third = 0 };
 
             Assert.Equal(new[] { 30, 60, 144 }, FpsCycleRules.Options(144, presets.Values).ToArray());
         }
@@ -129,7 +129,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Clearing_every_preset_leaves_the_native_rate_as_the_only_stop()
         {
-            var presets = new Clowd.Config.FpsPresets { First = 0, Second = 0, Third = 0 };
+            var presets = new Prisc.Config.FpsPresets { First = 0, Second = 0, Third = 0 };
 
             Assert.Equal(new[] { 144 }, FpsCycleRules.Options(144, presets.Values).ToArray());
 
@@ -140,13 +140,13 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Presets_setting_defaults_to_the_built_in_cycle()
         {
-            Assert.Equal(FpsCycleRules.Presets, new Clowd.Config.FpsPresets().Values);
+            Assert.Equal(FpsCycleRules.Presets, new Prisc.Config.FpsPresets().Values);
         }
 
         [Fact]
         public void Duplicate_presets_shorten_the_cycle_rather_than_breaking_it()
         {
-            var presets = new Clowd.Config.FpsPresets { First = 60, Second = 60, Third = 60 };
+            var presets = new Prisc.Config.FpsPresets { First = 60, Second = 60, Third = 60 };
             Assert.Equal(new[] { 60 }, presets.Values.ToArray());
             Assert.Equal(60, FpsCycleRules.Next(60, FpsCycleRules.Options(60, presets.Values)));
         }

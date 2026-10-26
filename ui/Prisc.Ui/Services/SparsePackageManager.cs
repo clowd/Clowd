@@ -5,25 +5,25 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using Velopack.Locators;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
-    /// Backs the Windows 11 half of "Add 'Upload with Clowd' to the Explorer context menu"
-    /// (<see cref="Clowd.Config.SettingsGeneral.RegisterExplorerContextMenu"/>, gated on uploads
-    /// being on at all — see <see cref="Clowd.Config.SettingsRoot.ShouldRegisterExplorerContextMenu"/>).
+    /// Backs the Windows 11 half of "Add 'Upload with Prisc' to the Explorer context menu"
+    /// (<see cref="Prisc.Config.SettingsGeneral.RegisterExplorerContextMenu"/>, gated on uploads
+    /// being on at all — see <see cref="Prisc.Config.SettingsRoot.ShouldRegisterExplorerContextMenu"/>).
     ///
     /// Windows 11 only shows packaged apps in its compact right-click menu, so alongside the
     /// legacy registry verb (<see cref="ExplorerContextMenuManager"/>, which Win11 files under
     /// "Show more options") this registers a sparse MSIX package: an unpackaged manifest-only
     /// package whose ExternalLocation points at the Velopack install root, declaring the
-    /// IExplorerCommand COM server in <c>clowd_shell_ext.dll</c>. Both registrations are driven by
+    /// IExplorerCommand COM server in <c>prisc_shell_ext.dll</c>. Both registrations are driven by
     /// the same setting; on Windows 10 and in dev builds this manager is simply unsupported and
     /// every operation is a quiet no-op.
     ///
     /// Registration goes through <c>powershell.exe</c> (Add-AppxPackage/Get-AppxPackage): the
     /// plain net10.0 TFM has no WinRT projection for the PackageManager API, and shelling out
     /// keeps it that way. The DLL ships named for the extension crate's own version
-    /// (<c>ClowdShellExt_1.0.0.dll</c>, independent of the app version) and is copied out of
+    /// (<c>PriscShellExt_1.0.0.dll</c>, independent of the app version) and is copied out of
     /// <c>current\</c> to the install root under that same name: Explorer's file lock can never
     /// block Velopack's directory swap, an unchanged extension needs no copy at all across app
     /// updates, and a changed one arrives under a fresh filename that a lock on the old copy
@@ -31,13 +31,19 @@ namespace Clowd.UI
     /// </summary>
     internal static class SparsePackageManager
     {
-        private const string PackageName = "Clowd.ShellExtension";
-        private const string MsixFileName = "ClowdShellExt.msix";
+        private const string PackageName = "Prisc.ShellExtension";
+        private const string MsixFileName = "PriscShellExt.msix";
 
-        // CI names the shipped dll ClowdShellExt_<crate version>.dll and stamps the same name
+        // CI names the shipped dll PriscShellExt_<crate version>.dll and stamps the same name
         // into the manifest's com:Class Path; this pattern must match both (it also catches the
         // unversioned name from pre-1.0 development builds, so those get swept too).
-        private const string DllSearchPattern = "ClowdShellExt*.dll";
+        private const string DllSearchPattern = "PriscShellExt*.dll";
+
+        // the manifest's Application Executable, resolved against ExternalLocation (the install
+        // root): Velopack's root stub for the main exe. Velopack runs the --veloapp-updated hook
+        // before it extracts the new root stub, so on a root upgraded from the old name the stub
+        // does not exist yet during that hook; registration then waits for the next startup.
+        private const string RootStubFileName = "Prisc.Ui.exe";
 
         // Velopack fast-callback hooks are killed after 15s, but the interactive paths (settings
         // checkbox, startup sync) can afford to wait out a slow deployment service.
@@ -65,11 +71,11 @@ namespace Clowd.UI
         /// <summary>
         /// Records this process's package identity (Sentry tag <c>package_identity</c> plus a
         /// debug line): "none" for a normal launch, the sparse package's full name when the
-        /// process was created as that package's application. The latter is the clowd/Clowd#83
+        /// process was created as that package's application. The latter is the priscapp/Prisc#83
         /// failure — the shell extension's surrogate carries the package identity, and Windows
         /// hands it to any child a packaged process creates inside the package's external
         /// location (the install root) regardless of the breakaway attribute, which is why the
-        /// extension launches the app through Explorer instead (clowd_shell_ext broker.rs).
+        /// extension launches the app through Explorer instead (prisc_shell_ext broker.rs).
         /// Never throws.
         /// </summary>
         [SupportedOSPlatform("windows")]
@@ -164,14 +170,16 @@ namespace Clowd.UI
                 // publish the request before queueing so a caller that overtakes us in the lock
                 // can see it, and re-read it inside: an older request must not undo a newer one.
                 _requestedEnabled = enabled;
-                bool applied;
+                bool applied, completed;
                 lock (_packageLock)
                 {
                     applied = _requestedEnabled;
-                    SetEnabledWindows(applied);
+                    completed = SetEnabledWindows(applied);
                 }
 
-                UpdateLastKnown(applied);
+                // a deferred registration leaves the state as it was; the next Sync retries it
+                if (completed)
+                    UpdateLastKnown(applied);
                 LastError = null;
                 return true;
             }
@@ -216,8 +224,10 @@ namespace Clowd.UI
             }
         }
 
+        /// <summary>Applies the requested state. Returns false when a registration was deferred
+        /// because the install root has no <see cref="RootStubFileName"/> yet.</summary>
         [SupportedOSPlatform("windows")]
-        private static void SetEnabledWindows(bool enabled)
+        private static bool SetEnabledWindows(bool enabled)
         {
             var root = VelopackLocator.Current.RootAppDir;
 
@@ -228,7 +238,14 @@ namespace Clowd.UI
                 // best-effort: Explorer/dllhost may still have the extension loaded; a leftover
                 // DLL is inert once the package is gone and is swept again on the next apply.
                 SweepStaleDllsWindows(root, null);
-                return;
+                return true;
+            }
+
+            if (!File.Exists(Path.Combine(root, RootStubFileName)))
+            {
+                Debug.WriteLine("SparsePackageManager: " + RootStubFileName + " is not in " + root
+                                + " yet; registration deferred to the next startup");
+                return false;
             }
 
             var sourceDll = FindShippedDllWindows();
@@ -266,10 +283,11 @@ namespace Clowd.UI
             // only sweep once the fresh registration is in force, so a failed apply never
             // deletes the copy an older still-active registration is pointing at
             SweepStaleDllsWindows(root, Path.GetFileName(installedDll));
+            return true;
         }
 
         /// <summary>The version-named extension DLL shipped in <c>current\</c> next to the app
-        /// (e.g. <c>ClowdShellExt_1.0.0.dll</c>). Its filename doubles as the install-root target
+        /// (e.g. <c>PriscShellExt_1.0.0.dll</c>). Its filename doubles as the install-root target
         /// name and matches the manifest's <c>com:Class Path</c>, both stamped by CI from the
         /// crate version.</summary>
         [SupportedOSPlatform("windows")]
@@ -373,13 +391,14 @@ namespace Clowd.UI
 
         /// <summary>Escapes a value for embedding in a single-quoted PowerShell string literal
         /// (user profile paths can contain apostrophes).</summary>
-        private static string EscapePowerShellLiteral(string value) => value.Replace("'", "''");
+        internal static string EscapePowerShellLiteral(string value) => value.Replace("'", "''");
 
         /// <summary>Runs a script via <c>powershell.exe</c> and returns its stdout. Throws on a
         /// non-zero exit or timeout, with the process output in the message. Errors are promoted
-        /// to terminating so a failed cmdlet cannot exit 0.</summary>
+        /// to terminating so a failed cmdlet cannot exit 0. Also used by
+        /// <see cref="Legacy.LegacyClowdShellCleanup.RunPackageCleanup"/>.</summary>
         [SupportedOSPlatform("windows")]
-        private static string RunPowerShell(string script)
+        internal static string RunPowerShell(string script)
         {
             var psi = new ProcessStartInfo("powershell.exe")
             {

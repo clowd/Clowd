@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Clowd;
-using Clowd.Config;
-using Clowd.UI;
+using Prisc;
+using Prisc.Config;
+using Prisc.UI;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Every action holds an ordered list of gestures, each registered on its own. A gesture
@@ -288,7 +288,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void A_capturer_permission_failure_under_a_trusted_grant_shows_the_shells_stale_grant_text()
         {
-            // the capturer's tap shares the shell's TCC answer: macOS lists Clowd as allowed, yet the
+            // the capturer's tap shares the shell's TCC answer: macOS lists Prisc as allowed, yet the
             // tap lost its key events, so asking for the grant (which the System page shows) is wrong
             var (manager, _, _) = Create(wireActions: false);
             manager.AccessibilityTrustedProbe = () => true;

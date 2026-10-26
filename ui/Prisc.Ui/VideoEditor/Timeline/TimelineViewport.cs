@@ -1,7 +1,7 @@
 using System;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The timeline's shared horizontal view state — zoom (<see cref="TicksPerPixel"/>), scroll

@@ -22,7 +22,7 @@ fn main() {
     // Route every libobs log line to stderr before anything else can touch
     // libobs — stdout is reserved for the JSON protocol (§1.3). Also installs
     // the crash handler (stderr + exit 1 instead of libobs's silent exit 0).
-    obs::log::install_handlers();
+    prisc_obs::log::install_handlers();
 
     // clap itself exits 2 on invalid arguments; mirror that for the §1.1
     // validations it cannot express (including a bad --settings file).

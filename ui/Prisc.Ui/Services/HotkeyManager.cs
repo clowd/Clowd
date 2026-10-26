@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>Identifies one of the application's global hotkey actions.</summary>
     public enum HotkeyId
@@ -247,7 +247,7 @@ namespace Clowd.UI
         /// ends. Read-only, never prompts; false off macOS. Replaced by tests.</summary>
         internal Func<bool> SecureInputProbe { get; set; } = SecureInput.IsEnabled;
 
-        /// <summary>Whether macOS lists Clowd as trusted for Accessibility (AXIsProcessTrusted),
+        /// <summary>Whether macOS lists Prisc as trusted for Accessibility (AXIsProcessTrusted),
         /// which tells a stale grant from a missing one; false off macOS. Never prompts. Replaced
         /// by tests.</summary>
         internal Func<bool> AccessibilityTrustedProbe { get; set; } =
@@ -404,7 +404,7 @@ namespace Clowd.UI
         /// snapshot's own report follows. Ignored while this manager owns the action itself. A
         /// missing Accessibility grant (keyed off <see cref="ExternalGestureStatus.ErrorCode"/>)
         /// shows <see cref="NativeHotkeyHost.PermissionMessage"/>, or
-        /// <see cref="NativeHotkeyHost.StaleGrantMessage"/> while macOS lists Clowd as trusted (the
+        /// <see cref="NativeHotkeyHost.StaleGrantMessage"/> while macOS lists Prisc as trusted (the
         /// shell's own host chooses the same way); any other error, the text as sent.
         /// </summary>
         public void ApplyExternalStatus(HotkeyId id, IReadOnlyList<ExternalGestureStatus> statuses)

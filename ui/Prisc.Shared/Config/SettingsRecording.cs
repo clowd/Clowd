@@ -4,13 +4,13 @@ using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Text.Json.Serialization;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Marks a string settings property as an audio device id so the settings factory renders it
     /// as a device dropdown (fed by AudioDeviceManager) instead of a free-text box. The stored
     /// value stays a plain string ("default" or a platform device id), so persistence and the
-    /// obs-express CLI mapping are unchanged.
+    /// prisc_recorder CLI mapping are unchanged.
     /// </summary>
     [AttributeUsage(AttributeTargets.Property)]
     public class AudioDeviceSelectorAttribute : Attribute
@@ -28,7 +28,7 @@ namespace Clowd.Config
     /// Marks a string settings property as a camera device id so the settings factory renders it
     /// as a device dropdown (fed by CameraDeviceManager) instead of a free-text box. The stored
     /// value stays a plain string (a platform device id, or empty for "no camera"), so persistence
-    /// and the obs-express settings mapping are unchanged. Unlike audio there is no device *type*
+    /// and the prisc_recorder settings mapping are unchanged. Unlike audio there is no device *type*
     /// to distinguish and no "default" pseudo-device: a webcam is only ever captured when the user
     /// has picked one.
     /// </summary>
@@ -39,7 +39,7 @@ namespace Clowd.Config
 
     /// <summary>
     /// Recording quality preset. The numeric value is the encoder CRF/CQP passed straight through
-    /// to obs-express via <c>--crf</c> (lower = higher quality). Persisted by name (no converter
+    /// to prisc_recorder via <c>--crf</c> (lower = higher quality). Persisted by name (no converter
     /// required); <c>(int)VideoQuality</c> yields the CRF.
     /// </summary>
     public enum VideoQuality
@@ -56,7 +56,7 @@ namespace Clowd.Config
     }
 
     /// <summary>
-    /// GIF conversion preset, passed straight through to vid2gif via <c>--quality</c> (the lowercase
+    /// GIF conversion preset, passed straight through to prisc_vid2gif via <c>--quality</c> (the lowercase
     /// member name is the CLI value). It trades frame rate and dithering fidelity against file size;
     /// GIFs are palette-limited, so this moves the size far more than a video quality preset does.
     /// </summary>
@@ -73,7 +73,7 @@ namespace Clowd.Config
     }
 
     /// <summary>
-    /// The container an Instant recording is written in. obs-express picks the container from the
+    /// The container an Instant recording is written in. prisc_recorder picks the container from the
     /// extension of its <c>--output</c> path, so this decides nothing but that extension. Instant
     /// only: a Studio recording is the hybrid MP4 output (one track per stream), which is MP4
     /// whatever the file is called, and the recorder rejects an .mkv path with --multi-track.
@@ -108,7 +108,7 @@ namespace Clowd.Config
         }
     }
 
-    /// <summary>What Clowd shows the user once a recording has been saved. Declaration order is
+    /// <summary>What Prisc shows the user once a recording has been saved. Declaration order is
     /// the order the settings dropdown offers them in, so the default comes first.</summary>
     public enum RecordingFinishAction
     {
@@ -128,7 +128,7 @@ namespace Clowd.Config
     }
 
     /// <summary>
-    /// Screen-recording settings, mirrored into the obs-express CLI at recording start
+    /// Screen-recording settings, mirrored into the prisc_recorder CLI at recording start
     /// (see the video-recording design, §4.2). A settings snapshot is taken when a recording is
     /// initialized, so changes apply to the next recording only. Device ids are plain strings
     /// ("default" = system default device) rendered as dropdowns via [AudioDeviceSelector].

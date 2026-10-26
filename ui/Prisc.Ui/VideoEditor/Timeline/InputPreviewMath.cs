@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.UI.VideoEditor.Timeline
+namespace Prisc.UI.VideoEditor.Timeline
 {
     /// <summary>One mark on an input-overlay item, in item-local pixels: a click (or held drag)
     /// on the cursor row, a keystroke run — or several close together — on the keys row.</summary>

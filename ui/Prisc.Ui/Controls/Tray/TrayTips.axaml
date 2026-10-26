@@ -1,7 +1,7 @@
 ﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:tray="using:Clowd.UI.Controls.Tray"
-                    xmlns:helpers="using:Clowd.UI.Helpers">
+                    xmlns:tray="using:Prisc.UI.Controls.Tray"
+                    xmlns:helpers="using:Prisc.UI.Helpers">
 
         <!-- Spec §10. One look, two users: the hover tooltip and the 6 s status blip are the same little
              dark chip, so they are the same theme; a blip that looked different would read as a second

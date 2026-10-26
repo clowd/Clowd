@@ -1,7 +1,7 @@
 using System;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>One slot's pixels after <see cref="IReadbackRing.Wait"/>: BGRA8888 premultiplied,
     /// top-down rows of <see cref="RowBytes"/> bytes (a GPU readback heap pads rows to the

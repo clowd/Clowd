@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Clowd.VideoSDK.Thumbs
+namespace Prisc.VideoSDK.Thumbs
 {
     /// <summary>
     /// The bands <see cref="ThumbWorkScheduler"/> orders work by, lowest value first — named for
@@ -274,7 +274,7 @@ namespace Clowd.VideoSDK.Thumbs
 
             _thread = new Thread(WorkLoop)
             {
-                Name = "clowd-thumbs",
+                Name = "prisc-thumbs",
                 IsBackground = true,
                 Priority = ThreadPriority.BelowNormal,
             };

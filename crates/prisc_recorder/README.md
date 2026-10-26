@@ -1,8 +1,8 @@
-# obs-express
+# prisc_recorder
 
 A minimal, headless screen recorder backed by [libobs](https://github.com/obsproject/obs-studio) (the OBS Studio core). It records a screen region or a whole monitor straight to an MP4, driven entirely by command-line flags (plus an optional JSON settings file) and a small line-oriented stdin/stdout protocol — no GUI, no OBS install required.
 
-This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-express) (originally C++). libobs 32.2.2 is built from source from the pinned `obs-studio` submodule and bundled next to the binary, so a release is self-contained.
+Prisc spawns it for every screen recording and ships it, with the OBS runtime it needs, in the app's `recorder/` folder. It began as a Rust rewrite of the C++ obs-express (github.com/clowd/obs-express). libobs 32.2.2 is built from source from the pinned `obs-studio` submodule at the repository root; see [BUILDING.md](../../BUILDING.md) for the toolchain and `cargo rec`.
 
 ## Features
 
@@ -18,30 +18,6 @@ This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-expre
 - **Cursor toggle** and a **paused-start** mode for building the pipeline ahead of time and starting instantly on command.
 - **Cross-platform** — Windows (x64 / ARM64), macOS (x64 / arm64) and Linux (x64; X11 and Wayland, see [Linux](#linux) for what differs).
 
-## Installation
-
-### Prebuilt releases
-
-Each release publishes a zipped, self-contained bundle for every supported target on the [Releases](https://github.com/clowd/obs-express/releases) page:
-
-- `obs-express-windows-x64`, `obs-express-windows-arm64`
-- `obs-express-macos-x64`, `obs-express-macos-arm64`
-- `obs-express-linux-x64`, `obs-express-linux-arm64` (a `.tar.gz`: `tar -xzf` keeps the execute bits)
-
-Unzip and run `obs-express` in place — the bundled OBS runtime (plugins, data, and the FFmpeg/x264 libraries) lives alongside the executable and is fully relocatable.
-
-The bundled FFmpeg/x264 libraries are also usable on their own (e.g. by a host that uses the FFmpeg C API in-process): on Windows they are ordinary DLLs next to the executable (load them from that directory, e.g. via `AddDllDirectory`/`LOAD_WITH_ALTERED_SEARCH_PATH`), and on macOS the dylibs in `Frameworks/` carry an `@loader_path` rpath so they can be `dlopen`ed directly by any program as long as they stay together. On macOS, unzip with a tool that restores symlinks and modes (`unzip`, `ditto -x -k`, `tar`): the versioned aliases (`libavcodec.62.dylib`) are symlinks and the executables rely on their execute bits.
-
-On macOS the binaries are ad-hoc signed but not notarized, so the first launch may need:
-
-```sh
-xattr -dr com.apple.quarantine <unzipped-directory>
-```
-
-### Build from source
-
-See [Building](#building) below.
-
 ## Linux
 
 Linux (x64 and arm64) is supported on **X11** and **Wayland**. The session type is detected at startup (`XDG_SESSION_TYPE=wayland` or `WAYLAND_DISPLAY` means Wayland, otherwise `DISPLAY` / X11). An X11 session is never used from inside a Wayland session: XWayland only captures black.
@@ -52,40 +28,40 @@ Linux (x64 and arm64) is supported on **X11** and **Wayland**. The session type 
 - **Webcam** — V4L2 (`v4l2_input`). `--list-cameras` prints `/dev/videoN` paths as ids.
 - **Encoding** — x264 only. `--hw-accel` falls back to x264 with the usual message (no NVENC/VAAPI selection yet). `--capture-method` is ignored, as on macOS.
 - **Not supported** — `--input-capture`, `--window-capture` and `--tracker` fail at startup with a clear error (exit 2) rather than misbehaving.
-- **No `clowd_share_region`** — the share-region binary is not built on Linux and is not in the Linux bundle. Cargo cannot leave a workspace member out for one target, so a plain `cargo build` on Linux fails on that crate. Build the rest of the workspace instead:
+- **No `prisc_share_region`** — the share-region binary is not built on Linux and is not in the Linux bundle. Build and test the Linux crates by name instead of with `--workspace`:
 
   ```sh
-  cargo build --release --workspace --exclude clowd_share_region
-  cargo test --release --workspace --exclude clowd_share_region
+  cargo build --release -p prisc_recorder -p prisc_vid2gif
+  cargo test --release -p prisc_recorder -p prisc_vid2gif
   ```
 
 **Runtime requirements.** The bundle carries libobs, the OBS plugins and FFmpeg, with x264 and Mbed TLS linked statically into the plugins that use them. Everything else comes from the system, through libraries whose SONAMEs are stable across distributions:
 
 - **glibc ≥ 2.34**: Ubuntu 22.04 or newer, Debian 12 or newer, Fedora, RHEL / AlmaLinux / Rocky 9 or newer. The release is built in a manylinux_2_34 (AlmaLinux 9) image, and CI runs it on stock Ubuntu 22.04 and 24.04.
-- **Desktop libraries**: EGL/OpenGL (Mesa or a vendor driver), X11/xcb, xkbcommon, Wayland client, GLib ≥ 2.68, PipeWire, the PulseAudio client library, libv4l2, udev, libuuid, jansson, zlib, and libva/libpci/libdrm. OBS's FFmpeg plugin links the VAAPI libraries even though obs-express does not use them. On Debian/Ubuntu, `tools/linux-build/install-runtime-deps.sh` installs exactly this set; desktop installs already have it.
+- **Desktop libraries**: EGL/OpenGL (Mesa or a vendor driver), X11/xcb, xkbcommon, Wayland client, GLib ≥ 2.68, PipeWire, the PulseAudio client library, libv4l2, udev, libuuid, jansson, zlib, and libva/libpci/libdrm. OBS's FFmpeg plugin links the VAAPI libraries even though prisc_recorder does not use them. On Debian/Ubuntu, `tools/linux-build/install-runtime-deps.sh` installs exactly this set; desktop installs already have it.
 - **Audio**: a PulseAudio server, or PipeWire with `pipewire-pulse`.
 - **Wayland capture**: a running `xdg-desktop-portal` with a backend for your desktop (GNOME, KDE, wlroots, ...) and PipeWire.
 
 ## Usage
 
 ```
-obs-express --output <FILE.mp4|FILE.mkv> [capture target] [options]
+prisc_recorder --output <FILE.mp4|FILE.mkv> [capture target] [options]
 ```
 
 `--output` is required and must end in `.mp4` or `.mkv` (its parent directory must already exist); the extension picks the container, and `.mkv` is only accepted without `--multi-track`. If neither `--region` nor `--monitor` is given, the **primary monitor** is recorded.
 
 ```sh
 # Record the primary monitor to recording.mp4
-obs-express --output recording.mp4
+prisc_recorder --output recording.mp4
 
 # Record a 1280x720 region at the top-left, 60 fps, higher quality
-obs-express --output clip.mp4 --region 0,0,1280,720 --fps 60 --crf 20
+prisc_recorder --output clip.mp4 --region 0,0,1280,720 --fps 60 --crf 20
 
 # Record monitor 0 with system audio and the default mic, hardware-encoded
-obs-express --output clip.mp4 --monitor 0 --hw-accel --speaker default --microphone default
+prisc_recorder --output clip.mp4 --monitor 0 --hw-accel --speaker default --microphone default
 
 # Four separate tracks: screen, webcam, speaker, microphone
-obs-express --output clip.mp4 --multi-track --webcam "$(obs-express --list-cameras | jq -r .cameras[0].id)" \
+prisc_recorder --output clip.mp4 --multi-track --webcam "$(prisc_recorder --list-cameras | jq -r .cameras[0].id)" \
             --speaker default --microphone default
 ```
 
@@ -166,12 +142,12 @@ A `--monitor` value is matched, in order, against the monitor's stable device id
 Its size adapts to the display the click happened on: on Windows it scales with that monitor's DPI, and on macOS it is sized in points (already density-independent) and mapped onto a Retina canvas along with everything else.
 
 ```sh
-obs-express --output demo.mp4 --tracker --tracker-color 0,128,255
+prisc_recorder --output demo.mp4 --tracker --tracker-color 0,128,255
 ```
 
 ## Controlling a running recording
 
-`obs-express` reads newline-delimited commands on **stdin**. The first whitespace-separated token is matched case-insensitively; unknown lines are logged to stderr and ignored.
+`prisc_recorder` reads newline-delimited commands on **stdin**. The first whitespace-separated token is matched case-insensitively; unknown lines are logged to stderr and ignored.
 
 | Command | Effect |
 | --- | --- |
@@ -257,91 +233,6 @@ quit                      ->
 - **Webcam track** — with `--webcam` (or the `webcam_device` settings key), video track 1 carries the camera at its native size, downscaled aspect-preserving to fit 1280x720, always encoded with x264 (CRF from `--crf`/settings, `veryfast`, high profile) at the recording fps. The camera renders into its own private `obs_view` mix, so the screen track never sees it. Windows uses the DirectShow source (`dshow_input`), macOS AVFoundation (`macos-avcapture`).
 - **Audio** — AAC at 192 kbps (`CoreAudio_AAC` on macOS when available, otherwise `ffmpeg_aac`), 48 kHz, one encoder per audio track. 48 kHz is the shared-mode rate of nearly every Windows and macOS device, so capture is normally a straight copy; libobs resamples any device that runs at another rate (44.1 kHz USB audio, for example), so mixed-rate device sets still work.
 
-## vid2gif
+## License
 
-A companion CLI (`vid2gif`, built from `crates/vid2gif`) that converts a recording (or any video FFmpeg can decode) into an optimized palette-based GIF. It links the FFmpeg libraries already bundled next to `obs-express` (`avformat`/`avcodec`/`avfilter`/`avutil`, via the bindgen-based `crates/ffmpeg-sys`) and runs the classic two-pass palette pipeline in process — no subprocesses, no separate ffmpeg binary, on **every** supported platform. Bindings are generated from the obs-deps headers at build time, so an FFmpeg version bump that changes the ABI fails the build instead of the runtime. The test suite is self-contained (committed fixtures, generated raw-video inputs, and a GIF byte-stream validator) and the release staging fails hard if `vid2gif` or its libraries are missing from the bundle.
-
-```sh
-vid2gif input.mkv                          # writes input.gif
-vid2gif input.mp4 out.gif --quality best   # quality: best | good | fair (default good)
-vid2gif input.mkv --max-width 480 --fps 12 # aspect-preserving clamps; never upscales
-```
-
-- `--quality` sets frame rate and dithering: `best` (20 fps, sierra2_4a), `good` (15 fps, bayer), `fair` (10 fps, coarse bayer). `--fps` overrides the preset.
-- `--max-width` / `--max-height` cap the output size like obs-express's recording clamps: aspect preserved, the more restrictive wins, never upscales.
-- Stdout is a line protocol for a parent process: `progress <0-100>` lines (monotonic), then `done <path> <bytes>`, or `error <message>` with exit code 1.
-- Writing `quit\n` to stdin cancels the conversion: the in-flight ffmpeg is killed, temp files and any partial output are removed, and vid2gif prints `cancelled` and exits 0.
-
-The conversion is two in-process passes (fps/scale + `palettegen`, then `paletteuse` into the GIF encoder) with the palette kept in memory — no temp files. Progress derives from input frame timestamps, so it streams smoothly through both passes.
-
-## Building
-
-### Requirements
-
-libobs is compiled from the `obs-studio` submodule (pinned to **32.2.2**), so a full native toolchain is needed:
-
-- `git`, `cmake` (≥ 3.28), and a recent **Rust** toolchain (`cargo`)
-- **Windows** — Visual Studio 2022 or 2026 (the newest installed one picks the CMake generator; set `OBS_CMAKE_GENERATOR` to override) and LLVM/`libclang` (for `bindgen`; point `LIBCLANG_PATH` at it if not on `PATH`)
-- **macOS** — full **Xcode 26.5+** (not just the Command Line Tools — the Metal renderer and Swift are required)
-- **Linux** (x86_64 and aarch64) — build in the reference image, `tools/linux-build/Dockerfile`. It is a manylinux_2_34 (AlmaLinux 9, glibc 2.34) base with clang/`libclang` (for `bindgen`), `ninja`, `nasm`, `patchelf`, Rust, and the development packages of the system libraries the bundle links. CI builds in the same image, and building there is what keeps the result portable to every glibc 2.34+ distribution:
-
-  ```sh
-  docker build -t obs-express-linux tools/linux-build
-  tools/linux-build/run-in-image.sh cargo build --release --workspace --exclude clowd_share_region
-  ```
-
-  A native build on another distribution also works, given the same tools and `-dev` packages; the Dockerfile is the list. Its output then needs that distribution's glibc or newer. Do **not** install the system FFmpeg development packages (`libav*-dev`). The build downloads a pinned FFmpeg 8.1 shared build (BtbN FFmpeg-Builds, SHA-256 verified), builds pinned x264 and Mbed TLS from source, and fetches a pinned SIMDe, all into `obs-studio/.deps`. The first build therefore needs access to github.com. libobs, every plugin and `vid2gif` share that one FFmpeg.
-
-### Steps
-
-```sh
-git clone --recursive https://github.com/clowd/obs-express.git
-cd obs-express
-./build.sh          # inits submodules, then `cargo build --release`
-```
-
-`build.sh` is a thin wrapper for macOS; you can also run the steps directly. On Linux, use the `--workspace --exclude clowd_share_region` commands from the requirements above instead.
-
-```sh
-git submodule update --init --recursive
-cargo build --release
-```
-
-The build script stages the runtime next to the binary:
-
-- **Windows** — `obs-express.exe` plus `obs.dll`, the graphics/plugin DLLs, the FFmpeg & x264 runtime DLLs, `obs-plugins/`, and `data/` are copied into `target/release/`.
-- **Linux** — like Windows: `libobs.so.30`, `libobs-opengl.so.30`, the FFmpeg `.so` files, `obs-ffmpeg-mux`, `obs-plugins/*.so` and `data/` are copied into `target/release/`, each with an `$ORIGIN`-relative RUNPATH. The executables also carry absolute RUNPATHs into the build tree, so cargo's test binaries resolve. `tools/linux-build/stage-bundle.sh` removes those for the release bundle and checks it, and `tools/linux-build/verify-bundle.sh` runs it end to end under Xvfb; CI runs both. Running the smoke tests needs an X server, e.g. `xvfb-run -a -s "-screen 0 1280x720x24 +extension RANDR" cargo test --release -p obs-express --test smoke -- --ignored` (on a blank Xvfb screen the recordings compress below the tests' size threshold, so put something moving on it, such as `glxgears`).
-- **macOS** — the binary links `libobs.framework`, the graphics modules, and the plugins straight out of the OBS build tree (absolute rpaths), and the FFmpeg/x264 dependency dylibs are copied into `target/release/` (symlinked aliases preserved, each given an `@loader_path` rpath and ad-hoc re-signed) so that, as on Windows, the profile dir holds a loadable FFmpeg runtime. The self-contained, relocatable bundle (framework + graphics modules + those dylibs + `.plugin` bundles, with `@executable_path/Frameworks` rpaths) is assembled by the CI Stage step in `.github/workflows/build.yml`.
-
-The resulting binary is `target/release/obs-express` (`.exe` on Windows).
-
-### Tests
-
-```sh
-cargo test -p obs-express            # unit tests (region math, CLI, encoder selection, ...)
-cargo test -p obs-express --test smoke -- --ignored   # end-to-end: records ~3s and validates the MP4
-```
-
-The smoke test is `--ignored` by default because it needs a real display and the assembled OBS runtime next to the binary.
-
-### Environment overrides
-
-The bundled layout is discovered automatically, but paths can be overridden: `OBS_PLUGIN_PATH`, `OBS_PLUGIN_DATA_PATH`, and `OBS_DATA_PATH` point libobs at plugin binaries, plugin data, and core data respectively; `OBS_VERSION_OVERRIDE` changes the version stamped into the OBS build.
-
-## Project layout
-
-The workspace is three crates:
-
-| Crate | Role |
-| --- | --- |
-| `crates/obs-sys` | Raw FFI bindings to libobs (via `bindgen`); its build script compiles OBS from the submodule with CMake. |
-| `crates/obs` | Safe, RAII Rust wrappers over the libobs FFI (context, sources, scenes, encoders, output, signals). |
-| `crates/obs-express` | The recorder binary: CLI, region planning, encoder configuration, the command run loop, and platform (Windows/macOS) capture back-ends. |
-
-## Releases & CI
-
-Every push and pull request builds all five variants (Windows x64/ARM64, macOS x64/arm64, Linux x64) through a reusable GitHub Actions workflow; each build job archives its bundle itself (macOS with `ditto`, Linux as a `.tar.gz`, so symlinks and execute bits survive — the artifact store would strip both) and uploads the archive as its artifact. The Linux job builds inside the manylinux_2_34 image from `tools/linux-build`. It checks that no file needs a glibc newer than 2.34, then moves the bundle out of the checkout, proves every library and symbol resolves there (`ldd -r`), records under Xvfb and runs `vid2gif` on the result. A portability job repeats those checks on stock Ubuntu 22.04 and 24.04 runners that have only the runtime packages installed. The manually-dispatched release workflow bumps the version, rebuilds every variant, and attaches those archives unchanged as assets on a GitHub Release.
-
-## License & credits
-
-Licensed under the [GNU General Public License v2.0](LICENSE), matching [clowd/obs-express](https://github.com/clowd/obs-express) (the C++ original this is a rewrite of) and [OBS Studio](https://github.com/obsproject/obs-studio) / libobs, which this project links and is therefore bound by.
+Licensed under the GNU General Public License, version 2 or (at your option) any later version (`GPL-2.0-or-later`; the text is in [LICENSE](LICENSE)), as are the other recorder crates (`prisc_obs_sys`, `prisc_obs`, `prisc_obs_platform`, `prisc_ffmpeg_sys`, `prisc_build_support`, `prisc_share_region`, `prisc_vid2gif`). That matches [OBS Studio](https://github.com/obsproject/obs-studio) / libobs, which these crates link and are therefore bound by. The rest of Prisc talks to the recorder over pipes as a separate process.

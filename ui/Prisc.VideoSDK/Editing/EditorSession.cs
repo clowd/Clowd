@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 
-namespace Clowd.VideoSDK.Editing
+namespace Prisc.VideoSDK.Editing
 {
     /// <summary>How far a change to the session's project reaches — the player and the window key
     /// their reactions off this, so the classification is part of the editing contract.</summary>

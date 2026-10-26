@@ -1,7 +1,7 @@
 using System;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>Which highlight a <see cref="CursorContent.ClickAnimation"/> wire name selects.
     /// <see cref="None"/> covers null, <c>none</c> and every unknown value — a project written by

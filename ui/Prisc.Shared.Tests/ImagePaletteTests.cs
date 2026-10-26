@@ -3,7 +3,7 @@ using System.Linq;
 using Avalonia.Media;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     public class ImagePaletteTests
     {

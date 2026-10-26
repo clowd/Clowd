@@ -5,7 +5,7 @@ using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 
-namespace Clowd.UI.Converters
+namespace Prisc.UI.Converters
 {
     public class ColorToBrushConverter : IValueConverter
     {

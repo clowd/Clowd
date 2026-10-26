@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>A monitor, in the same shapes Avalonia's <see cref="Screens"/> exposes: physical
     /// pixel rectangles on Windows, CG points (logical units) on macOS.</summary>
@@ -27,7 +27,7 @@ namespace Clowd.UI.Helpers
     /// Avalonia caches its screen list process-wide and, on Windows, invalidates it only from a
     /// window procedure: each live window's WM_DISPLAYCHANGE, or the hidden message window's
     /// WM_SETTINGCHANGE(SPI_SETWORKAREA) — the message window ignores WM_DISPLAYCHANGE itself.
-    /// Clowd runs tray-only for long stretches with no Avalonia window alive, so a display change
+    /// Prisc runs tray-only for long stretches with no Avalonia window alive, so a display change
     /// in that state is never observed and the cache goes stale for the rest of the process. In
     /// the worst case the cache holds the 1024x768 fallback monitor Windows reports while the
     /// real display is still handshaking at logon, and every subsequent placement clamps into the

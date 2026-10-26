@@ -1,5 +1,5 @@
 //! The text-recognition contract between the capture overlay and the
-//! `clowd_ai` binary (its `ocr` subcommand) that does the recognizing.
+//! `prisc_ai` binary (its `ocr` subcommand) that does the recognizing.
 //!
 //! Recognition runs out-of-process for one reason: the engine underneath it
 //! is a large native library (ONNX Runtime, via `ort`). A Rust panic in it
@@ -8,12 +8,12 @@
 //! running in — and in-process that is the overlay, mid-capture, with the
 //! user's selection already framed. Out-of-process the same failure is an
 //! exit code the capturer reports as [`OcrError::Failed`]. (It also keeps the
-//! GPL-licensed `clowd_ai` binary, and its tens of MB of model weights, out
+//! GPL-licensed `prisc_ai` binary, and its tens of MB of model weights, out
 //! of the overlay.)
 //!
 //! # Wire format
 //!
-//! The capturer spawns `clowd_ai ocr --out <path>` per request and speaks to
+//! The capturer spawns `prisc_ai ocr --out <path>` per request and speaks to
 //! it exactly once:
 //!
 //! * **stdin** — one [`RequestHeader`] as a single JSON line, then the raw
@@ -98,7 +98,7 @@ pub struct OcrLine {
     /// The line's approximate glyph-ink rect, in virtual-desktop screen
     /// coordinates — the bubble renderer sizes and places its pill from
     /// this, so it must track the SOURCE text's visual extent, not the
-    /// detector's padded box (see `UNCLIP_TIGHTEN` in `clowd_ai`'s `ocr.rs`). Already
+    /// detector's padded box (see `UNCLIP_TIGHTEN` in `prisc_ai`'s `ocr.rs`). Already
     /// offset by the crop origin the extractor actually used.
     #[serde(with = "rect_f32")]
     pub rect: ScreenRectF,

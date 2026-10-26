@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// Writes the smallest yuv4mpeg file that declares a pixel aspect ratio, for the suites that

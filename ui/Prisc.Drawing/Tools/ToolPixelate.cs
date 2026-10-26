@@ -1,8 +1,8 @@
 using System.Linq;
 using Avalonia;
-using Clowd.Drawing.Graphics;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     internal class ToolPixelate : ToolSelection
     {

@@ -1,14 +1,14 @@
 using System;
 using System.Linq;
 using System.Text.RegularExpressions;
-using Clowd.UI.VideoEditor;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="ObscureContent"/> outside the pixels (those are <see cref="ObscureComposeTests"/>):

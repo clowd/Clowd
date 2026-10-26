@@ -3,9 +3,9 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Ai
+namespace Prisc.VideoSDK.Ai
 {
     /// <summary>The companion metadata written beside every AI sidecar file — the validity check
     /// that ties the sidecar to the exact source file it was generated from, the same

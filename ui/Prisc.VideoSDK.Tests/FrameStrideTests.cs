@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Thumbs;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Thumbs;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The stride and the slack a pooled BGRA frame is built with, both of which exist for
@@ -59,7 +59,7 @@ namespace Clowd.VideoSDK.Tests
             const int Height = 64;
             const byte Green = 0xC0;
 
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-stride-{width}-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-stride-{width}-{Guid.NewGuid():N}.mp4");
             try
             {
                 WriteSolid(path, width, Height, Green);
@@ -105,7 +105,7 @@ namespace Clowd.VideoSDK.Tests
             int height = ThumbnailDecoder.DefaultThumbHeightPx; // source height == thumb height: 1:1
             const byte Green = 0xC0;
 
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-thumbstride-{width}-{Guid.NewGuid():N}.mp4");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-thumbstride-{width}-{Guid.NewGuid():N}.mp4");
             try
             {
                 WriteSolid(path, width, height, Green);
@@ -137,7 +137,7 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipUnless(TestFFmpeg.Available, TestFFmpeg.SkipReason);
 
-            string dir = Path.Combine(Path.GetTempPath(), "clowd-thumbwrap-" + Guid.NewGuid().ToString("N"));
+            string dir = Path.Combine(Path.GetTempPath(), "prisc-thumbwrap-" + Guid.NewGuid().ToString("N"));
             try
             {
                 string path = TestY4m.Write(Path.Combine(dir, "wide.y4m"), frames: 2,

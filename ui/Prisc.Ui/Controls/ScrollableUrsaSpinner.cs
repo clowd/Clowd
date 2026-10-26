@@ -7,7 +7,7 @@ using Avalonia.Interactivity;
 using Ursa.Controls;
 using UrsaNumericUpDown = Ursa.Controls.NumericUpDown;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>
     /// Ursa's <see cref="NumericDoubleUpDown"/> with a mouse wheel.

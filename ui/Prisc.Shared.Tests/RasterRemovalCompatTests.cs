@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Clowd.Config;
+using Prisc.Config;
 using Xunit;
 
-namespace Clowd.Shared.Tests
+namespace Prisc.Shared.Tests
 {
     /// <summary>
     /// A settings file written by the (never-released, since removed) raster-v1 build may still
@@ -19,7 +19,7 @@ namespace Clowd.Shared.Tests
     /// </summary>
     public class RasterRemovalCompatTests : IDisposable
     {
-        private readonly string _path = Path.Combine(Path.GetTempPath(), "ClowdRasterCompatTests", Guid.NewGuid() + ".json");
+        private readonly string _path = Path.Combine(Path.GetTempPath(), "PriscRasterCompatTests", Guid.NewGuid() + ".json");
 
         public void Dispose()
         {

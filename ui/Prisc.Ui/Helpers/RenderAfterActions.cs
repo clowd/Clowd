@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Clowd.UI.VideoEditor;
+using Prisc.UI.VideoEditor;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>
     /// What happens to a rendered video once it is on disk: the "Copy file to clipboard" and

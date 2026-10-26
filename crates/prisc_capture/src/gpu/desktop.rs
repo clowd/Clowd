@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::gxi::{self, TexFormat, TextureDesc};
 use crate::system::{CapturedCursor, CapturedDesktop, CursorImage};
-use clowd_rust_core::geometry::{RectExt, ScreenPoint};
+use prisc_rust_core::geometry::{RectExt, ScreenPoint};
 
 /// Uniforms for the desktop background pass (desktop.wgsl): snapshot UV
 /// mapping, opening fade, selection interior + OCR treatment, and the

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Avalonia.Media;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Which chrome the image and video editors wear. Not a theme (that is light/dark, and this
@@ -229,10 +229,10 @@ namespace Clowd.Config
         [Category("Sessions")]
         [DisplayName("Restore sessions on startup")]
         [Description("Reopen editors left open when Prisc restarts or the computer shuts down.")]
-        public bool RestoreSessionsOnClowdStart
+        public bool RestoreSessionsOnPriscStart
         {
-            get => _restoreSessionsOnClowdStart;
-            set => Set(ref _restoreSessionsOnClowdStart, value);
+            get => _restoreSessionsOnPriscStart;
+            set => Set(ref _restoreSessionsOnPriscStart, value);
         }
 
         /// <summary>
@@ -363,7 +363,7 @@ namespace Clowd.Config
         private int _startupPadding = 30;
         private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
         private Dictionary<ToolType, SavedToolSettings> _tools = new Dictionary<ToolType, SavedToolSettings>();
-        private bool _restoreSessionsOnClowdStart = true;
+        private bool _restoreSessionsOnPriscStart = true;
         private double _sidebarWidth = 230;
         private List<string> _toolbarOrder;
         private List<string> _hiddenTools;

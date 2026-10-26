@@ -1,8 +1,8 @@
 using System;
-using Clowd.VideoSDK.Composition;
+using Prisc.VideoSDK.Composition;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The click-highlight clocks in the abstract: mode parsing and the ring/press press-and-release
     // curves the compositor and the inspector tiles both animate from.

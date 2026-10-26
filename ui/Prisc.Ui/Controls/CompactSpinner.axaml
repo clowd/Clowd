@@ -1,10 +1,10 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:controls="using:Clowd.UI.Controls">
+                    xmlns:controls="using:Prisc.UI.Controls">
 
     <!-- Minimal chrome-free TextBox theme for the spinner entry (replaces the WPF
          "SimpleTextBox" template: a bare content host with Margin 0,2,0,0). -->
-    <ControlTheme x:Key="ClowdCompactSpinnerEntry" TargetType="TextBox">
+    <ControlTheme x:Key="PriscCompactSpinnerEntry" TargetType="TextBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="White" />
@@ -37,7 +37,7 @@
 
     <!-- The 16px-wide up/down buttons (replaces the WPF "SimpleButton" template:
          #33FFFFFF background fading to #66FFFFFF on hover over 0.1s). -->
-    <ControlTheme x:Key="ClowdSpinnerSpinButton" TargetType="Button">
+    <ControlTheme x:Key="PriscSpinnerSpinButton" TargetType="Button">
         <!-- Pointer-only affordance: the keyboard spins the value with Up/Down/PageUp/PageDown
              from the text box, so a tab stop on each arrow would add two useless stops per
              field. -->
@@ -83,19 +83,19 @@
                             CornerRadius="0" />
                     <TextBox Name="PART_TextBox"
                              Grid.RowSpan="2"
-                             Theme="{StaticResource ClowdCompactSpinnerEntry}"
+                             Theme="{StaticResource PriscCompactSpinnerEntry}"
                              TextAlignment="Center" />
                     <Button Name="PART_SpinUp"
                             Grid.Column="1"
                             Margin="0,2,2,1"
                             Content="&#x25B2;"
-                            Theme="{StaticResource ClowdSpinnerSpinButton}" />
+                            Theme="{StaticResource PriscSpinnerSpinButton}" />
                     <Button Name="PART_SpinDown"
                             Grid.Row="1"
                             Grid.Column="1"
                             Margin="0,1,2,2"
                             Content="&#x25BC;"
-                            Theme="{StaticResource ClowdSpinnerSpinButton}" />
+                            Theme="{StaticResource PriscSpinnerSpinButton}" />
                 </Grid>
             </ControlTemplate>
         </Setter>

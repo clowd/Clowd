@@ -1,14 +1,14 @@
 using System;
 using System.Linq;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // TimelineViewMath / TimelineViewport are the pure zoom-scroll math behind the multi-track
-    // timeline (Clowd.Ui exposes its internals to this project via InternalsVisibleTo). No Avalonia
+    // timeline (Prisc.Ui exposes its internals to this project via InternalsVisibleTo). No Avalonia
     // runtime is needed: neither class touches a UI type.
     public class TimelineViewMathTests
     {

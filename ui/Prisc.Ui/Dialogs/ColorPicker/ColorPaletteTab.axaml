@@ -1,7 +1,7 @@
 <cp:ColorDialogTab xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                   xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
-                   x:Class="Clowd.UI.Dialogs.ColorPicker.ColorPaletteTab">
+                   xmlns:cp="using:Prisc.UI.Dialogs.ColorPicker"
+                   x:Class="Prisc.UI.Dialogs.ColorPicker.ColorPaletteTab">
 
     <cp:ColorDialogTab.Resources>
         <!--  A harmony preset: a 50px circle (one outer ring, no inner one) with the preset's glyph
@@ -94,7 +94,7 @@
             </cp:PaletteBars.BottomContent>
         </cp:PaletteBars>
 
-        <!--  The mini color flyout a bar's hex opens: Clowd's own mini picker (eyedropper and
+        <!--  The mini color flyout a bar's hex opens: Prisc's own mini picker (eyedropper and
               all, but not its "open in full color picker", since this is that picker; and it
               leaves the recent colors to this dialog's OK), under a
               caret that points up at the hex. The popup is anchored to the hex in code. Its

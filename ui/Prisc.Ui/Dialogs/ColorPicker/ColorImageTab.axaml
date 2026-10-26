@@ -1,8 +1,8 @@
 <cp:ColorDialogTab xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                   xmlns:clowd="using:Clowd"
-                   xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
-                   x:Class="Clowd.UI.Dialogs.ColorPicker.ColorImageTab"
+                   xmlns:prisc="using:Prisc"
+                   xmlns:cp="using:Prisc.UI.Dialogs.ColorPicker"
+                   x:Class="Prisc.UI.Dialogs.ColorPicker.ColorImageTab"
                    DragDrop.AllowDrop="True">
 
     <cp:ColorDialogTab.Styles>
@@ -225,23 +225,23 @@
                     <RadioButton Content="Colorful"
                                  GroupName="ColorImageMood"
                                  IsChecked="True"
-                                 Tag="{x:Static clowd:PaletteMood.Colorful}"
+                                 Tag="{x:Static prisc:PaletteMood.Colorful}"
                                  Theme="{StaticResource ColorImageMoodChip}" />
                     <RadioButton Content="Bright"
                                  GroupName="ColorImageMood"
-                                 Tag="{x:Static clowd:PaletteMood.Bright}"
+                                 Tag="{x:Static prisc:PaletteMood.Bright}"
                                  Theme="{StaticResource ColorImageMoodChip}" />
                     <RadioButton Content="Muted"
                                  GroupName="ColorImageMood"
-                                 Tag="{x:Static clowd:PaletteMood.Muted}"
+                                 Tag="{x:Static prisc:PaletteMood.Muted}"
                                  Theme="{StaticResource ColorImageMoodChip}" />
                     <RadioButton Content="Deep"
                                  GroupName="ColorImageMood"
-                                 Tag="{x:Static clowd:PaletteMood.Deep}"
+                                 Tag="{x:Static prisc:PaletteMood.Deep}"
                                  Theme="{StaticResource ColorImageMoodChip}" />
                     <RadioButton Content="Dark"
                                  GroupName="ColorImageMood"
-                                 Tag="{x:Static clowd:PaletteMood.Dark}"
+                                 Tag="{x:Static prisc:PaletteMood.Dark}"
                                  Theme="{StaticResource ColorImageMoodChip}" />
                 </WrapPanel>
             </StackPanel>

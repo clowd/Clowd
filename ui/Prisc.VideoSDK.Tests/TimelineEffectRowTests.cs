@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Clowd.UI.VideoEditor.Timeline;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor.Timeline;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // The timeline's effect rows: how the layout classifies and stacks them (speed pinned first,
     // zoom inside the video block) and how the reorder math keeps the speed row pinned while zoom
     // rows move with the video rows — against the same EditorSession index space the drop lands
-    // in. Pure model math, no Avalonia runtime — Clowd.Ui exposes its internals to this project
+    // in. Pure model math, no Avalonia runtime — Prisc.Ui exposes its internals to this project
     // via InternalsVisibleTo.
     public class TimelineEffectRowTests
     {

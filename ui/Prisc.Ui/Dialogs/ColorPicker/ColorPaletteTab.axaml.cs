@@ -9,10 +9,10 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.VisualTree;
-using Clowd.UI.Converters;
-using Clowd.Util;
+using Prisc.UI.Converters;
+using Prisc.Util;
 
-namespace Clowd.UI.Dialogs.ColorPicker
+namespace Prisc.UI.Dialogs.ColorPicker
 {
     /// <summary>
     /// The color dialog's Palette tab (brief §7.2): a <see cref="HarmonyPalette"/>, a preset and a

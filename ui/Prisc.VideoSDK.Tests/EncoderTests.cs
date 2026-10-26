@@ -2,12 +2,12 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Playback;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Playback;
 using FFmpeg.AutoGen.Abstractions;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     // Real-encode round trips: Mp4Writer -> temp mp4 -> probe back. These need the FFmpeg
     // natives; when they cannot be located the tests skip (compile coverage remains).
@@ -16,10 +16,10 @@ namespace Clowd.VideoSDK.Tests
         // ------------------------------------------------------------------ FFmpeg availability
 
         /// <summary>
-        /// Initializes FFmpeg exactly the way production does (FFmpegLoader: CLOWD_FFMPEG_PATH
-        /// first, then a fallback resolver pointing at the obs-express build output — the DLLs
-        /// ship alongside that binary). The test resolver walks up from the test assembly to any
-        /// ancestor with an obs-express-rs sibling checkout, probing target/release then
+        /// Initializes FFmpeg exactly the way production does (FFmpegLoader: PRISC_FFMPEG_PATH
+        /// first, then a fallback resolver pointing at the recorder build output — the DLLs
+        /// ship alongside that binary). The test resolver walks up from the test assembly to the
+        /// cargo workspace root (the Prisc repository), probing target/release then
         /// target/debug, mirroring ObsBinaryLocator's dev layout.
         /// </summary>
         private static bool FFmpegAvailable => TestFFmpeg.Available;
@@ -85,7 +85,7 @@ namespace Clowd.VideoSDK.Tests
         // ---------------------------------------------------------------------------- helpers
 
         private static string TempMp4() =>
-            Path.Combine(Path.GetTempPath(), $"clowd-encoder-test-{Guid.NewGuid():N}.mp4");
+            Path.Combine(Path.GetTempPath(), $"prisc-encoder-test-{Guid.NewGuid():N}.mp4");
 
         /// <summary>Submits <paramref name="frames"/> solid-color BGRA frames (color varies per
         /// frame so x264 actually encodes motion).</summary>

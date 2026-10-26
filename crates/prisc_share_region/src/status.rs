@@ -2,7 +2,7 @@
 //!
 //! stdout is the protocol channel and carries nothing but one JSON object per
 //! line; every free-form byte this process produces (libobs chatter, warnings,
-//! panics) goes to stderr instead. The parent — the Clowd shell — reads stdout
+//! panics) goes to stderr instead. The parent — the Prisc shell — reads stdout
 //! line by line, so every emitter here writes exactly one line and flushes it:
 //! a status line still sitting in a buffer is a status line the shell will not
 //! act on until something else happens to push it out.
@@ -16,7 +16,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use obs_platform::region::Rect;
+use prisc_obs_platform::region::Rect;
 
 use crate::obscure;
 
@@ -193,7 +193,7 @@ impl FpsWindow {
 }
 
 /// Starts the 1 Hz status thread. It runs for the life of the process (there
-/// is no stop flag: every exit is `obs_platform::exit_process`, which takes the
+/// is no stop flag: every exit is `prisc_obs_platform::exit_process`, which takes the
 /// whole process down without unwinding) and is silent until
 /// [`set_sharing`]`(true)`.
 ///

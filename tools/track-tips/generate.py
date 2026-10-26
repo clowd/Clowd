@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generates the add-track demo GIFs shown in the video editor's tool-strip flyouts.
 
-Each GIF is a faithful miniature of the Clowd video editor: the preview on top, the timeline
+Each GIF is a faithful miniature of the Prisc video editor: the preview on top, the timeline
 below, and the new row/item popping in at the playhead while the preview plays the effect.
-They are embedded as Avalonia resources from clowd_ui/Clowd.Ui/Assets/TrackTips/ and shown by
+They are embedded as Avalonia resources from ui/Prisc.Ui/Assets/TrackTips/ and shown by
 VideoEditor/TrackTip.axaml (played through Controls/AnimatedGifImage.cs). See README.md next to
 this script for the storyboard contract, style rules and how to add a demo for a new tool.
 
@@ -18,7 +18,7 @@ Colours come from TimelinePalette.cs (dark variant).
 Usage:
   python3 tools/track-tips/generate.py [--out DIR] [--sheet PNG] [name-filter ...]
 
-  --out DIR     output folder (default: clowd_ui/Clowd.Ui/Assets/TrackTips, relative to the repo)
+  --out DIR     output folder (default: ui/Prisc.Ui/Assets/TrackTips, relative to the repo)
   --sheet PNG   also write a review contact sheet (5 frames per GIF) to this path
   name-filter   only regenerate GIFs whose file name contains one of these (e.g. "speed")
 
@@ -1611,7 +1611,7 @@ def contact_sheet(all_frames, path, per=5):
 
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-DEFAULT_OUT = os.path.join(REPO_ROOT, "clowd_ui", "Clowd.Ui", "Assets", "TrackTips")
+DEFAULT_OUT = os.path.join(REPO_ROOT, "ui", "Prisc.Ui", "Assets", "TrackTips")
 
 
 def main(argv):

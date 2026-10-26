@@ -1,5 +1,5 @@
 //! Linux platform implementation (DESIGN §2.2), for x86_64 and aarch64 (the
-//! OBS build in obs-sys refuses other architectures).
+//! OBS build in prisc_obs_sys refuses other architectures).
 //!
 //! Linux is two platforms in one: an X11 session and a Wayland session need
 //! different libobs setup and a different display-capture source, and which
@@ -27,7 +27,7 @@ use std::ffi::{c_char, c_int, c_ulong, c_void, CStr};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use obs::data::ObsData;
+use prisc_obs::data::ObsData;
 
 use super::region::{Rect, RegionPlan};
 use super::{CaptureMethod, DisplayCaptureMode, MonitorInfo, ObsPaths};
@@ -223,16 +223,16 @@ pub fn init_process() {
             };
             if display.is_null() {
                 fatal(&format!(
-                    "cannot connect to the X server (DISPLAY={}); obs-express needs a \
+                    "cannot connect to the X server (DISPLAY={}); prisc_recorder needs a \
                      graphical X11 or Wayland session",
                     env::var("DISPLAY").unwrap_or_else(|_| "<unset>".to_string())
                 ));
             }
             unsafe {
-                obs_sys::obs_set_nix_platform(
-                    obs_sys::obs_nix_platform_type_OBS_NIX_PLATFORM_X11_EGL,
+                prisc_obs_sys::obs_set_nix_platform(
+                    prisc_obs_sys::obs_nix_platform_type_OBS_NIX_PLATFORM_X11_EGL,
                 );
-                obs_sys::obs_set_nix_platform_display(display.cast());
+                prisc_obs_sys::obs_set_nix_platform_display(display.cast());
             }
             display as usize
         }
@@ -245,10 +245,10 @@ pub fn init_process() {
                 ));
             }
             unsafe {
-                obs_sys::obs_set_nix_platform(
-                    obs_sys::obs_nix_platform_type_OBS_NIX_PLATFORM_WAYLAND,
+                prisc_obs_sys::obs_set_nix_platform(
+                    prisc_obs_sys::obs_nix_platform_type_OBS_NIX_PLATFORM_WAYLAND,
                 );
-                obs_sys::obs_set_nix_platform_display(display);
+                prisc_obs_sys::obs_set_nix_platform_display(display);
             }
             spawn_glib_main_loop();
             display as usize
@@ -263,7 +263,7 @@ pub fn init_process() {
 /// `Start` → `OpenPipeWireRemote`, plugins/linux-pipewire/screencast-portal.c
 /// and portal.c). GLib delivers their replies on the main context that was
 /// thread-default when each call was made — the global default context, as
-/// nothing in obs-express pushes another — and only while some thread
+/// nothing in prisc_recorder pushes another — and only while some thread
 /// iterates it. OBS Studio gets that for free from Qt's GLib event
 /// dispatcher; libobs and linux-pipewire never iterate a context themselves.
 /// Without this thread the picker never gets past `CreateSession` and the
@@ -468,7 +468,7 @@ pub fn cursor_update_settings(show_cursor: bool) -> ObsData {
     settings
 }
 
-/// The self-contained bundle layout obs-express's build script stages (and
+/// The self-contained bundle layout prisc_recorder's build script stages (and
 /// the release zip ships), mirroring Windows minus its `64bit` level:
 ///
 /// ```text
@@ -540,20 +540,20 @@ mod tests {
     fn default_paths_follow_the_bundle_layout() {
         // Only meaningful without the env overrides; skip the assertions a
         // developer's override would legitimately change.
-        let paths = default_obs_paths(Path::new("/opt/obs-express"));
+        let paths = default_obs_paths(Path::new("/opt/prisc-recorder"));
         if env::var("OBS_PLUGIN_PATH").is_err() {
-            assert_eq!(paths.module_bin, "/opt/obs-express/obs-plugins");
+            assert_eq!(paths.module_bin, "/opt/prisc-recorder/obs-plugins");
         }
         if env::var("OBS_PLUGIN_DATA_PATH").is_err() {
             assert_eq!(
                 paths.module_data,
-                "/opt/obs-express/data/obs-plugins/%module%"
+                "/opt/prisc-recorder/data/obs-plugins/%module%"
             );
         }
         if env::var("OBS_DATA_PATH").is_err() {
             assert_eq!(
                 paths.libobs_data.as_deref(),
-                Some(Path::new("/opt/obs-express/data/libobs"))
+                Some(Path::new("/opt/prisc-recorder/data/libobs"))
             );
         }
     }

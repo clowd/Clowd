@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Clowd.VideoSDK.Media;
+using Prisc.VideoSDK.Media;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// Per video stream timing facts, in the exact form the composition model wants them: rational

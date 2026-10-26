@@ -1,8 +1,8 @@
 using System;
-using Clowd.Geometry2D;
-using Clowd.VideoSDK.Model;
+using Prisc.Geometry2D;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// A line kind's geometry on one canvas, in canvas pixels: the two endpoints and the bow,

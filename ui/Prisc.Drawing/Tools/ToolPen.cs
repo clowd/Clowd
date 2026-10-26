@@ -1,10 +1,10 @@
 using System;
 using Avalonia;
 using Avalonia.Input;
-using Clowd.Config;
-using Clowd.Drawing.Graphics;
+using Prisc.Config;
+using Prisc.Drawing.Graphics;
 
-namespace Clowd.Drawing.Tools
+namespace Prisc.Drawing.Tools
 {
     /// <summary>
     /// The pen: click to place a corner anchor, press-and-drag to pull mirrored handles out of the

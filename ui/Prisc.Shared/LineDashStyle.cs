@@ -1,4 +1,4 @@
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// Stroke dash pattern shared by every stroked graphic and by the per-tool saved settings.

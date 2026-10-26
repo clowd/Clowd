@@ -1,10 +1,10 @@
 using System;
 using System.Runtime.Versioning;
 using System.Threading;
-using Clowd.VideoSDK.Audio;
+using Prisc.VideoSDK.Audio;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The macOS output against a real device — there is no seam to fake here, since what these

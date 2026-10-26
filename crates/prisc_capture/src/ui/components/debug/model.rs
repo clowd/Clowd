@@ -10,7 +10,7 @@ use egui::Color32;
 
 use crate::telemetry::perf::{PerfSnapshot, PerfStats, Series};
 use crate::telemetry::startup::StartupTimings;
-use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
+use prisc_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 pub const COLOR_WHITE: Color32 = Color32::WHITE;
 
@@ -429,7 +429,7 @@ impl<'a> std::fmt::Display for TruncatedTitle<'a> {
 mod tests {
     use super::*;
     use crate::telemetry::perf::{PerfSnapshot, PerfTracker};
-    use clowd_rust_core::geometry::ScreenRect;
+    use prisc_rust_core::geometry::ScreenRect;
     use std::sync::Arc;
 
     fn snapshot() -> PerfSnapshot {

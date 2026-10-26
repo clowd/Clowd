@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Sentry;
 
-namespace Clowd
+namespace Prisc
 {
     /// <summary>
     /// Sentry (crash/error reporting) setup for the shell. <see cref="Init"/> runs at the very top
@@ -21,8 +21,8 @@ namespace Clowd
     /// local crashes belong in the debugger, not in the issue tracker.</para>
     /// <para>Exceptions only — there is deliberately no logging bridge on this side. The Rust
     /// capturer additionally routes its <c>error!</c> log calls to Sentry
-    /// (clowd_rust_core/src/telemetry.rs); the shell does not.</para>
-    /// <para>Lives in the root <c>Clowd</c> namespace so every call site resolves it without a
+    /// (crates/prisc_rust_core/src/telemetry.rs); the shell does not.</para>
+    /// <para>Lives in the root <c>Prisc</c> namespace so every call site resolves it without a
     /// using directive, the same way <see cref="Constants"/> does.</para>
     /// </remarks>
     internal static class SentryConfig
@@ -33,11 +33,11 @@ namespace Clowd
 
         /// <summary>Set to any non-empty value to turn reporting off. The capturer honors the same
         /// variable, so clearing it once in the environment covers both processes.</summary>
-        public const string OptOutVariable = "CLOWD_DISABLE_TELEMETRY";
+        public const string OptOutVariable = "PRISC_DISABLE_TELEMETRY";
 
-        /// <summary>Sentry release identifier, <c>clowd@&lt;version&gt;</c>. Kept in the same shape as
+        /// <summary>Sentry release identifier, <c>prisc@&lt;version&gt;</c>. Kept in the same shape as
         /// the capturer's so both processes report against one release.</summary>
-        public static string Release { get; } = "clowd@" + GetVersion();
+        public static string Release { get; } = "prisc@" + GetVersion();
 
         /// <summary>Key under which an exception carries the recent output of the child process it
         /// relates to (a string in <see cref="Exception.Data"/>). <see cref="CaptureHandled"/>
@@ -45,7 +45,7 @@ namespace Clowd
         /// log reaches Sentry no matter how many layers up the exception is finally reported —
         /// "exited unexpectedly" / "timed out" events are undiagnosable without it (CLOWD-Z,
         /// CLOWD-C).</summary>
-        public const string ProcessLogKey = "clowd.process-log";
+        public const string ProcessLogKey = "prisc.process-log";
 
         /// <summary>Sets a tag on every event this process reports from now on. No-op in debug
         /// builds and when telemetry is opted out, like <see cref="Init"/>.</summary>
@@ -90,7 +90,7 @@ namespace Clowd
                 // no usernames, file paths from the machine, or clipboard/capture contents
                 o.SendDefaultPii = false;
 
-                o.DefaultTags["app"] = "clowd_ui";
+                o.DefaultTags["app"] = "prisc_ui";
             });
 #endif
         }
@@ -117,7 +117,7 @@ namespace Clowd
             if (ex is null || ex is OperationCanceledException)
                 return;
 
-            ex.SetSentryMechanism("Clowd.Handled", handled: true);
+            ex.SetSentryMechanism("Prisc.Handled", handled: true);
             var processLog = TakeProcessLog(ex);
 
             SentrySdk.CaptureException(ex, scope =>
@@ -253,7 +253,7 @@ namespace Clowd
         }
 
         /// <summary>
-        /// True when <paramref name="ex"/> is a network fault that says nothing about Clowd: DNS
+        /// True when <paramref name="ex"/> is a network fault that says nothing about Prisc: DNS
         /// failure, refused or reset connection, a captive portal or corporate proxy interposing
         /// itself, a TLS handshake that didn't complete.
         /// </summary>

@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace Clowd.Drawing.Benchmarks
+namespace Prisc.Drawing.Benchmarks
 {
     /// <summary>One measured scenario row. Metric keys are stable strings (§4).</summary>
     public sealed class ScenarioResult

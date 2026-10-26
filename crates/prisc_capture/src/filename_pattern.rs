@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn literals_survive_quoting_and_escaping() {
         let t = sample();
-        assert_eq!(render(t, "'clowd' yyyy"), "clowd 2025");
+        assert_eq!(render(t, "'prisc' yyyy"), "prisc 2025");
         assert_eq!(render(t, "\"shot\"-dd"), "shot-05");
         assert_eq!(render(t, "\\d\\d dd"), "dd 05");
         assert_eq!(render(t, "%d"), "5");
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn collisions_take_a_numbered_suffix() {
-        let dir = std::env::temp_dir().join("clowd_filename_pattern_test");
+        let dir = std::env::temp_dir().join("prisc_filename_pattern_test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -464,7 +464,7 @@ mod tests {
     /// A folder that cannot be read costs the collision check, not the dialog.
     #[test]
     fn missing_directory_still_yields_a_name() {
-        let dir = std::env::temp_dir().join("clowd_filename_pattern_absent");
+        let dir = std::env::temp_dir().join("prisc_filename_pattern_absent");
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
             suggested_file_name_at(sample(), Some(&dir), DEFAULT_FILENAME_PATTERN),

@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
-using Clowd.Config;
+using Prisc.Config;
 
-namespace Clowd.Util
+namespace Prisc.Util
 {
     /// <summary>
     /// Repaints the Semi theme's blue ramp — and everything the theme paints out of it — with the
@@ -136,12 +136,12 @@ namespace Clowd.Util
             // ground all but disappears. The light tint reads on both, so dark borrows it.
             dark["AdornerLayerBorderBrush"] = new SolidColorBrush(lightRamp[2]);
 
-            // The accent as *text or a line* on the window ground, for Clowd's own controls (the
+            // The accent as *text or a line* on the window ground, for Prisc's own controls (the
             // theme's tokens get the same treatment by name, above): the accent itself in the light
             // theme, and the text ramp's base in the dark one, where the darkened accent that the
             // fills need would sink into the ground.
-            light["ClowdAccentTextBrush"] = new SolidColorBrush(lightRamp[5]);
-            dark["ClowdAccentTextBrush"] = new SolidColorBrush(darkText[5]);
+            light["PriscAccentTextBrush"] = new SolidColorBrush(lightRamp[5]);
+            dark["PriscAccentTextBrush"] = new SolidColorBrush(darkText[5]);
 
             // Selected text in text boxes: Semi hard-codes a blue here (#0041C5 at 0.8) rather
             // than drawing it from the ramp, so the walk cannot find it. The selection foreground
@@ -153,8 +153,8 @@ namespace Clowd.Util
             // is the palest tint in the light theme, next to invisible on the window; one step up
             // reads. In the dark theme it is the accent itself, which as a solid block competes
             // with the primary button above the menu — so a wash of it over the ground instead.
-            light["ClowdNavSelectedBrush"] = new SolidColorBrush(lightRamp[1]);
-            dark["ClowdNavSelectedBrush"] = new SolidColorBrush(darkRamp[5], 0.4);
+            light["PriscNavSelectedBrush"] = new SolidColorBrush(lightRamp[1]);
+            dark["PriscNavSelectedBrush"] = new SolidColorBrush(darkRamp[5], 0.4);
 
             app.Resources.ThemeDictionaries[ThemeVariant.Light] = light;
             app.Resources.ThemeDictionaries[ThemeVariant.Dark] = dark;
@@ -210,7 +210,7 @@ namespace Clowd.Util
 
                 foreach (var entry in dict.ThemeDictionaries)
                 {
-                    // Aquatic/Desert/Dusk/NightSky are Semi's extra variants — Clowd only ever
+                    // Aquatic/Desert/Dusk/NightSky are Semi's extra variants — Prisc only ever
                     // resolves Light or Dark. Default carries the light values.
                     var variant = entry.Key;
                     if (variant == ThemeVariant.Dark)

@@ -539,6 +539,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
+name = "bindgen"
+version = "0.72.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+dependencies = [
+ "bitflags 2.13.1",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.3",
+ "shlex 1.3.0",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -684,7 +704,16 @@ dependencies = [
  "find-msvc-tools",
  "jobserver",
  "libc",
- "shlex",
+ "shlex 2.0.1",
+]
+
+[[package]]
+name = "cexpr"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
+dependencies = [
+ "nom",
 ]
 
 [[package]]
@@ -708,6 +737,17 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "rand_core 0.10.1",
+]
+
+[[package]]
+name = "clang-sys"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "157a8ba7b480713b56f4c09fd13fc3e0a22a5dfab8097ba61cbc5feef950788a"
+dependencies = [
+ "glob",
+ "libc",
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -757,116 +797,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bde03770d3df201d4fb868f2c9c59e66a3e4e2bd06692a0fe701e7103c7e84d4"
 dependencies = [
  "error-code",
-]
-
-[[package]]
-name = "clowd_ai"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "clowd_rust_core",
- "image",
- "libc",
- "log",
- "ort",
- "realfft",
- "serde_json",
- "simplelog",
-]
-
-[[package]]
-name = "clowd_capture"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "arboard",
- "block2 0.6.2",
- "bytemuck",
- "clap",
- "clowd_hotkeys",
- "clowd_rust_core",
- "core-foundation 0.10.1",
- "core-graphics 0.25.0",
- "egui",
- "egui_extras",
- "egui_plot",
- "euclid",
- "fontdb",
- "foreign-types 0.5.0",
- "image",
- "libblur",
- "libc",
- "libloading 0.9.0",
- "log",
- "naga",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-graphics",
- "objc2-foundation 0.3.2",
- "objc2-metal 0.3.2",
- "objc2-quartz-core 0.3.2",
- "rfd",
- "sentry",
- "serde",
- "serde_json",
- "simplelog",
- "skrifa 0.44.0",
- "windows",
- "winit",
- "xdialog",
-]
-
-[[package]]
-name = "clowd_hotkeys"
-version = "1.0.0"
-dependencies = [
- "block2 0.6.2",
- "dispatch2",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "clowd_rust_core"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "euclid",
- "image",
- "log",
- "sentry",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "clowd_scroll_driver"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "clowd_rust_core",
- "core-foundation 0.10.1",
- "core-graphics 0.25.0",
- "log",
- "objc2-app-kit 0.3.2",
- "serde",
- "serde_json",
- "simplelog",
- "windows",
-]
-
-[[package]]
-name = "clowd_shell_ext"
-version = "1.0.3"
-dependencies = [
- "windows",
- "windows-core",
 ]
 
 [[package]]
@@ -1107,6 +1037,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctrlc"
+version = "3.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0b1fab2ae45819af2d0731d60f2afe17227ebb1a1538a236da84c93e9a60162"
+dependencies = [
+ "dispatch2",
+ "nix",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "cursor-icon"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1296,7 +1237,7 @@ dependencies = [
  "bitflags 2.13.1",
  "emath",
  "epaint",
- "itertools",
+ "itertools 0.15.0",
  "log",
  "nohash-hasher",
  "profiling",
@@ -1314,7 +1255,7 @@ dependencies = [
  "ahash",
  "egui",
  "enum-map",
- "itertools",
+ "itertools 0.15.0",
  "log",
  "profiling",
  "resvg",
@@ -1783,6 +1724,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glob"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
+
+[[package]]
 name = "guillotiere"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2162,6 +2109,15 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
@@ -2495,6 +2451,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "minimal-lexical"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2674,6 +2636,16 @@ name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
+
+[[package]]
+name = "nom"
+version = "7.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
+dependencies = [
+ "memchr",
+ "minimal-lexical",
+]
 
 [[package]]
 name = "novtb"
@@ -3514,12 +3486,226 @@ dependencies = [
 ]
 
 [[package]]
+name = "prettyplease"
+version = "0.2.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "primal-check"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08"
 dependencies = [
  "num-integer",
+]
+
+[[package]]
+name = "prisc_ai"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "image",
+ "libc",
+ "log",
+ "ort",
+ "prisc_rust_core",
+ "realfft",
+ "serde_json",
+ "simplelog",
+]
+
+[[package]]
+name = "prisc_build_support"
+version = "0.1.0"
+
+[[package]]
+name = "prisc_capture"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "block2 0.6.2",
+ "bytemuck",
+ "clap",
+ "core-foundation 0.10.1",
+ "core-graphics 0.25.0",
+ "egui",
+ "egui_extras",
+ "egui_plot",
+ "euclid",
+ "fontdb",
+ "foreign-types 0.5.0",
+ "image",
+ "libblur",
+ "libc",
+ "libloading 0.9.0",
+ "log",
+ "naga",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "objc2-metal 0.3.2",
+ "objc2-quartz-core 0.3.2",
+ "prisc_hotkeys",
+ "prisc_rust_core",
+ "rfd",
+ "sentry",
+ "serde",
+ "serde_json",
+ "simplelog",
+ "skrifa 0.44.0",
+ "windows",
+ "winit",
+ "xdialog",
+]
+
+[[package]]
+name = "prisc_ffmpeg_sys"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+ "libc",
+ "prisc_build_support",
+]
+
+[[package]]
+name = "prisc_hotkeys"
+version = "1.0.0"
+dependencies = [
+ "block2 0.6.2",
+ "dispatch2",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "prisc_obs"
+version = "0.1.0"
+dependencies = [
+ "prisc_build_support",
+ "prisc_obs_sys",
+]
+
+[[package]]
+name = "prisc_obs_platform"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "prisc_build_support",
+ "prisc_obs",
+ "prisc_obs_sys",
+ "windows",
+]
+
+[[package]]
+name = "prisc_obs_sys"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+ "prisc_build_support",
+]
+
+[[package]]
+name = "prisc_recorder"
+version = "0.11.0"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
+ "clap",
+ "ctrlc",
+ "libc",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "png 0.18.1",
+ "prisc_build_support",
+ "prisc_obs",
+ "prisc_obs_platform",
+ "prisc_obs_sys",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "prisc_rust_core"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "euclid",
+ "image",
+ "log",
+ "sentry",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "prisc_scroll_driver"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "core-foundation 0.10.1",
+ "core-graphics 0.25.0",
+ "log",
+ "objc2-app-kit 0.3.2",
+ "prisc_rust_core",
+ "serde",
+ "serde_json",
+ "simplelog",
+ "windows",
+]
+
+[[package]]
+name = "prisc_share_region"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "ctrlc",
+ "libc",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "prisc_build_support",
+ "prisc_obs",
+ "prisc_obs_platform",
+ "prisc_obs_sys",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "prisc_shell_ext"
+version = "1.0.4"
+dependencies = [
+ "windows",
+ "windows-core",
+]
+
+[[package]]
+name = "prisc_vid2gif"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "prisc_build_support",
+ "prisc_ffmpeg_sys",
 ]
 
 [[package]]
@@ -4382,6 +4568,12 @@ dependencies = [
  "ryu",
  "serde",
 ]
+
+[[package]]
+name = "shlex"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shlex"

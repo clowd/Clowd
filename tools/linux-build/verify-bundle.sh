@@ -6,7 +6,7 @@
 #
 #   tools/linux-build/verify-bundle.sh <bundle dir> <ffprobe> [work dir]
 #
-# <ffprobe> is the BtbN ffprobe from the FFmpeg archive obs-sys pinned; it is
+# <ffprobe> is the BtbN ffprobe from the FFmpeg archive prisc_obs_sys pinned; it is
 # run against the bundle's own FFmpeg libraries (LD_LIBRARY_PATH), so the
 # machine needs no FFmpeg of its own. Needs xvfb-run, and Mesa's llvmpipe
 # (EGL + DRI) for libobs's OpenGL renderer under Xvfb.
@@ -16,7 +16,7 @@ bundle=${1:?usage: verify-bundle.sh <bundle dir> <ffprobe> [work dir]}
 ffprobe_bin=${2:?usage: verify-bundle.sh <bundle dir> <ffprobe> [work dir]}
 work=${3:-$(mktemp -d)}
 
-moved="$work/obs-express-relocated"
+moved="$work/prisc-recorder-relocated"
 out="$work/smoke"
 rm -rf "$moved" "$out"; mkdir -p "$out"
 cp -a "$bundle" "$moved"
@@ -55,7 +55,7 @@ record() {
   local fifo="$out/$name.stdin" pid w
   rm -f "$fifo"; mkfifo "$fifo"
   xvfb-run -a -s "-screen 0 1280x720x24 +extension RANDR" \
-    sh -c "'$moved/obs-express' $* < '$fifo' > '$out/$name.out' 2> '$out/$name.err'" &
+    sh -c "'$moved/prisc_recorder' $* < '$fifo' > '$out/$name.out' 2> '$out/$name.err'" &
   pid=$!
   # Read-write open: never blocks, and keeps the pipe open until `quit`.
   exec {w}<> "$fifo"
@@ -95,16 +95,16 @@ s=$(streams "$out/multi.mp4"); echo "multi.mp4:"; echo "$s"
 [ "$(grep -c '^aac' <<< "$s")" -eq 2 ]  || { echo "::error::multi.mp4: expected 2 audio tracks"; exit 1; }
 grep -q '^h264,640,480,' <<< "$s" || { echo "::error::multi.mp4: screen track is not 640x480"; exit 1; }
 
-# 3. vid2gif on the recording, from the relocated bundle.
-"$moved/vid2gif" "$out/single.mp4" "$out/single.gif" --quality fair | tail -1
-[ "$(head -c 6 "$out/single.gif")" = "GIF89a" ] || { echo "::error::vid2gif did not produce a GIF"; exit 1; }
+# 3. prisc_vid2gif on the recording, from the relocated bundle.
+"$moved/prisc_vid2gif" "$out/single.mp4" "$out/single.gif" --quality fair | tail -1
+[ "$(head -c 6 "$out/single.gif")" = "GIF89a" ] || { echo "::error::prisc_vid2gif did not produce a GIF"; exit 1; }
 
 # 4. Out-of-scope features fail fast instead of misbehaving, and the
 #    share-region binary (not built on Linux) is not shipped.
-if [ -e "$moved/clowd_share_region" ]; then
-  echo "::error::clowd_share_region is not built on Linux and must not be in the bundle"; exit 1
+if [ -e "$moved/prisc_share_region" ]; then
+  echo "::error::prisc_share_region is not built on Linux and must not be in the bundle"; exit 1
 fi
-code=0; "$moved/obs-express" --output "$out/x.mp4" --tracker 2> "$out/tracker.err" || code=$?
+code=0; "$moved/prisc_recorder" --output "$out/x.mp4" --tracker 2> "$out/tracker.err" || code=$?
 [ "$code" -eq 2 ] || { echo "::error::--tracker should exit 2 on Linux, got $code"; exit 1; }
 # shellcheck disable=SC1091 # the running system's os-release
 echo "Smoke OK ($(. /etc/os-release && echo "$PRETTY_NAME"), $(ldd --version | sed -n 1p))"

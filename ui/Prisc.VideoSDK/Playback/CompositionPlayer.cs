@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.VideoSDK.Ai;
-using Clowd.VideoSDK.Audio;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Model;
+using Prisc.VideoSDK.Ai;
+using Prisc.VideoSDK.Audio;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Model;
 
-namespace Clowd.VideoSDK.Playback
+namespace Prisc.VideoSDK.Playback
 {
     /// <summary>
     /// Plays a <see cref="Project"/> for preview: the generalization of
@@ -27,7 +27,7 @@ namespace Clowd.VideoSDK.Playback
     /// <see cref="PlaybackFrameSource"/> the preview's draw operation composes from
     /// (<see cref="TryGetFrameSource"/>). Audio never rides the demuxers: every unmuted audio
     /// stream is mixed in timeline time by one <see cref="AudioMixWorker"/> running the literal
-    /// render mixer (<see cref="Clowd.VideoSDK.Audio.AudioMixer"/>) over its own per-stream
+    /// render mixer (<see cref="Prisc.VideoSDK.Audio.AudioMixer"/>) over its own per-stream
     /// decoders — gaps are silence, per-item volume and transition ramps are per-sample, and
     /// preview therefore sounds like the render by construction. The player's own
     /// <see cref="Volume"/> is a pure master gain on the sink.
@@ -342,7 +342,7 @@ namespace Clowd.VideoSDK.Playback
                 _ = SeekAsync(TimeSpan.Zero, SeekMode.Exact);
             }
 
-            _tickThread = new Thread(TickLoop) { Name = "clowd-transport", IsBackground = true };
+            _tickThread = new Thread(TickLoop) { Name = "prisc-transport", IsBackground = true };
             _tickThread.Start();
         }
 

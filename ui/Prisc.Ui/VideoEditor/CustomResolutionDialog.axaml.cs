@@ -1,10 +1,10 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using Clowd.UI.Helpers;
-using Clowd.VideoSDK.Editing;
+using Prisc.UI.Helpers;
+using Prisc.VideoSDK.Editing;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// The resolution picker's "Custom…" row: two spinners over the current canvas size. The value

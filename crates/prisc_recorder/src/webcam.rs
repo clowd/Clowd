@@ -19,12 +19,12 @@
 
 use std::time::{Duration, Instant};
 
-use obs::data::ObsData;
-use obs::encoder::ObsEncoder;
-use obs::scene::{ObsScene, ObsSceneItem};
-use obs::source::ObsSource;
-use obs::video::VideoInfo;
-use obs::view::ObsView;
+use prisc_obs::data::ObsData;
+use prisc_obs::encoder::ObsEncoder;
+use prisc_obs::scene::{ObsScene, ObsSceneItem};
+use prisc_obs::source::ObsSource;
+use prisc_obs::video::VideoInfo;
+use prisc_obs::view::ObsView;
 
 use crate::platform;
 use crate::region;
@@ -122,7 +122,7 @@ pub fn create(device_id: &str, settings: &Settings) -> Result<Webcam, String> {
     // correct both when the canvas was derived from the native size (exact
     // fit) and in the unknown-size fallback (letterboxed).
     item.set_pos(0.0, 0.0);
-    item.set_bounds_type(obs_sys::obs_bounds_type_OBS_BOUNDS_SCALE_INNER);
+    item.set_bounds_type(prisc_obs_sys::obs_bounds_type_OBS_BOUNDS_SCALE_INNER);
     item.set_bounds_alignment(0);
     item.set_bounds(canvas.0 as f32, canvas.1 as f32);
 

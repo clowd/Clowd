@@ -6,15 +6,15 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls.Notifications;
 using Avalonia.Threading;
-using Clowd.Config;
-using Clowd.UI.Controls.Tray;
-using Clowd.UI.Helpers;
-using Clowd.UI.Services;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
+using Prisc.Config;
+using Prisc.UI.Controls.Tray;
+using Prisc.UI.Helpers;
+using Prisc.UI.Services;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
 using Path = System.IO.Path;
 
-namespace Clowd.UI.VideoEditor
+namespace Prisc.UI.VideoEditor
 {
     /// <summary>
     /// The voice-over recorder half of the editor window: the mic tool button toggles the

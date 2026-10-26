@@ -1,6 +1,6 @@
 using Avalonia.Layout;
 
-namespace Clowd.UI.Controls.Tray
+namespace Prisc.UI.Controls.Tray
 {
     /// <summary>
     /// A tray child whose own layout changes when the strip rotates. The tray is the single writer of

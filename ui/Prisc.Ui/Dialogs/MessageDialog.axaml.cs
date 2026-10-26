@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
-using Clowd.UI.Helpers;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Dialogs
+namespace Prisc.UI.Dialogs
 {
     /// <summary>Which button of a <see cref="MessageDialog"/> the user pressed.</summary>
     public enum MessageDialogChoice

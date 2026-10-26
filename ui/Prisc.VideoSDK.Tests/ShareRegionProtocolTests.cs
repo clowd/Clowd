@@ -2,19 +2,19 @@
 using System.Collections.Generic;
 using System.Globalization;
 using Avalonia.Media;
-using Clowd.Config;
-using Clowd.PlatformUtil;
-using Clowd.UI;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.UI;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// The clowd_share_region wire contract, pinned line by line. <see cref="ShareRegionProtocol"/>
+    /// The prisc_share_region wire contract, pinned line by line. <see cref="ShareRegionProtocol"/>
     /// is deliberately free of <c>Process</c>, <c>Dispatcher</c>, threads and timers precisely so
     /// that this file can exist: the whole risk surface of the share feature — the one-decision
     /// handshake, the permanence of a blur failure, the "an exit is not a failure" rule that
-    /// obs-express gets the other way round — is exercised here without libobs, without a meeting
+    /// prisc_recorder gets the other way round — is exercised here without libobs, without a meeting
     /// app, and without Avalonia.
     ///
     /// <para>
@@ -216,7 +216,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(ShareHandshake.Failed, protocol.Handshake);
         }
 
-        /// <summary>Pins the difference from obs-express: there is NO terminal message at the end of
+        /// <summary>Pins the difference from prisc_recorder: there is NO terminal message at the end of
         /// a share. Once mirroring has started the helper simply exits 0 and the pipe closes, so
         /// "an exit without a terminal message is fatal" must not be copied here.</summary>
         [Fact]
@@ -248,7 +248,7 @@ namespace Clowd.VideoSDK.Tests
 
         // ------------------------------------------------------------------ status
 
-        /// <summary>Pins: <c>status</c> carries fps and NOTHING else. Unlike obs-express there is no
+        /// <summary>Pins: <c>status</c> carries fps and NOTHING else. Unlike prisc_recorder there is no
         /// <c>timeMs</c>, no <c>dropped</c>, no <c>droppedPerc</c> — a reader that required any of
         /// them would drop every status line this helper sends.</summary>
         [Fact]
@@ -627,15 +627,15 @@ namespace Clowd.VideoSDK.Tests
 
         // ------------------------------------------------------------------ the binary
 
-        /// <summary>The helper is spawned by name out of the obs-express payload, so the name has to
+        /// <summary>The helper is spawned by name out of the recorder payload, so the name has to
         /// carry the platform's executable extension — asserted without spawning anything, because
         /// the one-HWND invariant means a real spawn is never something a test may do.</summary>
         [Fact]
         public void The_helper_binary_is_named_for_the_platform()
         {
-            Assert.Equal(OperatingSystem.IsWindows() ? "clowd_share_region.exe" : "clowd_share_region",
+            Assert.Equal(OperatingSystem.IsWindows() ? "prisc_share_region.exe" : "prisc_share_region",
                 ShareRegionDriver.BinaryFileName);
-            Assert.Equal("CLOWD_SHARE_REGION_PATH", ShareRegionDriver.EnvVarName);
+            Assert.Equal("PRISC_SHARE_REGION_PATH", ShareRegionDriver.EnvVarName);
         }
 
         /// <summary>The capture API is a spawn-time argument and always emitted, so the helper's own

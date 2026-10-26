@@ -1,18 +1,18 @@
-//! `clowd_share_region`: mirrors a rectangular screen region into an ordinary
+//! `prisc_share_region`: mirrors a rectangular screen region into an ordinary
 //! window, so meeting apps that can only share "a whole screen" or "one window"
 //! can be pointed at that window and effectively share a region.
 //!
-//! This binary is a headless helper driven by the Clowd shell over pipes, the
-//! same way `obs-express` is: line-oriented commands in on stdin, JSON status
+//! This binary is a headless helper driven by the Prisc shell over pipes, the
+//! same way `prisc_recorder` is: line-oriented commands in on stdin, JSON status
 //! lines out on stdout, free-form chatter on stderr. It owns no appearance —
-//! the border around the live region and the floating controls are Clowd's
-//! windows (Clowd.Ui/Video/BorderWindow and FloatingToolbarWindow), and drawing
+//! the border around the live region and the floating controls are Prisc's
+//! windows (Prisc.Ui/Video/BorderWindow and FloatingToolbarWindow), and drawing
 //! anything here would put a second border on top of theirs.
 //!
 //! # The one window
 //!
 //! The only user interface this process has is a prompt: a small ordinary
-//! titled window, dark-chromed to match the Clowd shell and opened on the
+//! titled window, dark-chromed to match the Prisc shell and opened on the
 //! region the user just drew, whose client area says "Share this window" over
 //! an OK button.
 //! The user points their meeting app's share picker at it, then presses OK.
@@ -70,9 +70,9 @@
 //! negative; macOS: CG points) — and both are what was actually applied after
 //! clamping, never what was asked for.
 //!
-//! Exit codes match obs-express: 0 user quit, 1 runtime/obs error, 2 argument
-//! validation. Every exit routes through `obs_platform::exit_process` — libobs
-//! is never shut down (known OBS teardown crashes; see crates/obs/src/context.rs).
+//! Exit codes match prisc_recorder: 0 user quit, 1 runtime/obs error, 2 argument
+//! validation. Every exit routes through `prisc_obs_platform::exit_process` — libobs
+//! is never shut down (known OBS teardown crashes; see crates/prisc_obs/src/context.rs).
 
 // Release Windows builds link as a GUI-subsystem binary. The shell spawns this
 // process with pipes for all three standard streams and shows the user only the
@@ -91,8 +91,8 @@ mod status;
 mod ui;
 
 use clap::Parser;
-use obs_platform::region::{self, Rect};
-use obs_platform::CaptureMethod;
+use prisc_obs_platform::region::{self, Rect};
+use prisc_obs_platform::CaptureMethod;
 
 use crate::mirror::Mirror;
 use crate::ui::{AppEvents, UiConfig};
@@ -105,7 +105,7 @@ use crate::ui::{AppEvents, UiConfig};
 struct Cli {
     /// Region to mirror: X,Y,W,H in the platform capture coordinate space
     /// (Windows: physical px on the virtual desktop; macOS: CG points).
-    /// X/Y may be negative; same space and parser as obs-express --region and
+    /// X/Y may be negative; same space and parser as prisc_recorder --region and
     /// as the `move` command on stdin.
     #[arg(long, allow_hyphen_values = true)]
     region: String,
@@ -118,7 +118,7 @@ struct Cli {
     /// window picker, so callers should set something recognisable. It stays
     /// the window's title after the caption is dropped, because pickers list
     /// the title rather than the caption bar.
-    #[arg(long, default_value = "Clowd Shared Region")]
+    #[arg(long, default_value = "Prisc Shared Region")]
     title: String,
 
     /// Do not capture the cursor (passed through to the display capture source).
@@ -127,7 +127,7 @@ struct Cli {
 
     /// Which OS API backs display capture: `auto`, `dxgi` or `wgc`. Windows
     /// only — ignored on macOS. Same flag, same values and same default as
-    /// obs-express, so a shell that pins one can pin both.
+    /// prisc_recorder, so a shell that pins one can pin both.
     ///
     /// `auto` (the default) takes WGC on Windows 11 and newer, and leaves the
     /// choice to win-capture's own heuristic on Windows 10. Pin `dxgi` on
@@ -168,7 +168,7 @@ struct App {
     mirror: Mirror,
     /// The region currently being mirrored, i.e. the last one `Mirror` actually
     /// applied. Tracked here only so `sharing_started` can report the truth:
-    /// the shell is free to send `move` while the prompt is still up (Clowd
+    /// the shell is free to send `move` while the prompt is still up (Prisc
     /// repositions its border before the user has pressed anything), and the
     /// region at that point is no longer the one from `--region`.
     region: Rect,
@@ -231,27 +231,27 @@ impl AppEvents for App {
         if !status::sharing() {
             status::emit_cancelled();
         }
-        obs_platform::exit_process(0)
+        prisc_obs_platform::exit_process(0)
     }
 }
 
 fn main() {
     // Route every libobs log line to stderr (and install the crash handler)
     // before anything else can touch libobs.
-    obs::log::install_handlers();
+    prisc_obs::log::install_handlers();
 
     let cli = Cli::parse();
     let region = match region::parse_region(&cli.region) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Error: {e}");
-            obs_platform::exit_process(2);
+            prisc_obs_platform::exit_process(2);
         }
     };
 
     // DPI awareness (Windows) must be set before any window is created or
     // monitor is enumerated; no-op on macOS.
-    obs_platform::init_process();
+    prisc_obs_platform::init_process();
 
     // macOS: the NSApplication must exist, with its activation policy set,
     // BEFORE the obs bootstrap brings up Metal graphics. Accessory = no Dock
@@ -265,7 +265,7 @@ fn main() {
         use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
         let Some(mtm) = MainThreadMarker::new() else {
             eprintln!("Fatal: main() is not on the main thread");
-            obs_platform::exit_process(1);
+            prisc_obs_platform::exit_process(1);
         };
         let app = NSApplication::sharedApplication(mtm);
         let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
@@ -275,7 +275,7 @@ fn main() {
     // is `_exit`, which is async-signal-safe.
     #[cfg(unix)]
     {
-        if let Err(e) = ctrlc::set_handler(|| obs_platform::exit_process(0)) {
+        if let Err(e) = ctrlc::set_handler(|| prisc_obs_platform::exit_process(0)) {
             eprintln!("Warning: failed to install console signal handler: {e}");
         }
     }

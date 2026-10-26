@@ -4,11 +4,11 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>
     /// Windows camera enumeration via DirectShow, the camera counterpart of the WASAPI path in
-    /// <see cref="AudioDeviceManager"/>. Unlike audio — where the endpoint id obs-express takes is
+    /// <see cref="AudioDeviceManager"/>. Unlike audio — where the endpoint id prisc_recorder takes is
     /// the system's own MMDevice id — a DirectShow camera id is OBS's invention, so this has to
     /// reproduce it rather than pass a system value through.
     ///

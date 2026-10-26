@@ -1,8 +1,8 @@
 <Window
-    x:Class="Clowd.UI.VideoEditor.RenderOptionsDialog"
+    x:Class="Prisc.UI.VideoEditor.RenderOptionsDialog"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Clowd.UI.Controls"
+    xmlns:controls="using:Prisc.UI.Controls"
     Title="Render video"
     Width="520"
     Background="{DynamicResource ApplicationBackgroundBrush}"

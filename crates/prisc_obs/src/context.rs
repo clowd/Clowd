@@ -25,7 +25,7 @@ impl ObsContext {
             return Err(ObsError::AlreadyInitialized);
         }
         let locale_c = CString::new(locale).unwrap();
-        let ok = unsafe { obs_sys::obs_startup(locale_c.as_ptr(), ptr::null(), ptr::null_mut()) };
+        let ok = unsafe { prisc_obs_sys::obs_startup(locale_c.as_ptr(), ptr::null(), ptr::null_mut()) };
         if !ok {
             INITIALIZED.store(false, Ordering::SeqCst);
             return Err(ObsError::Startup);
@@ -37,7 +37,7 @@ impl ObsContext {
 
     pub fn reset_video(&self, info: &VideoInfo) -> Result<(), ObsError> {
         let mut raw = info.to_raw();
-        let ret = unsafe { obs_sys::obs_reset_video(&mut raw) };
+        let ret = unsafe { prisc_obs_sys::obs_reset_video(&mut raw) };
         if ret != 0 {
             return Err(ObsError::VideoReset(ret as i32));
         }
@@ -55,16 +55,16 @@ impl ObsContext {
         // (and reading the levels) by the time obs_reset_video returns, so
         // take the graphics context around the plain float stores.
         unsafe {
-            obs_sys::obs_enter_graphics();
-            obs_sys::obs_set_video_levels(300.0, 1000.0);
-            obs_sys::obs_leave_graphics();
+            prisc_obs_sys::obs_enter_graphics();
+            prisc_obs_sys::obs_set_video_levels(300.0, 1000.0);
+            prisc_obs_sys::obs_leave_graphics();
         }
         Ok(())
     }
 
     pub fn reset_audio(&self, info: &AudioInfo) -> Result<(), ObsError> {
         let raw = info.to_raw();
-        let ok = unsafe { obs_sys::obs_reset_audio(&raw) };
+        let ok = unsafe { prisc_obs_sys::obs_reset_audio(&raw) };
         if !ok {
             return Err(ObsError::AudioReset(false));
         }
@@ -80,13 +80,13 @@ impl ObsContext {
             s.push('/');
         }
         let c = CString::new(s.replace('\0', "")).unwrap();
-        unsafe { obs_sys::obs_add_data_path(c.as_ptr()) };
+        unsafe { prisc_obs_sys::obs_add_data_path(c.as_ptr()) };
     }
 
     pub fn add_module_path(&self, bin: &str, data: &str) {
         let bin_c = CString::new(bin).unwrap();
         let data_c = CString::new(data).unwrap();
-        unsafe { obs_sys::obs_add_module_path(bin_c.as_ptr(), data_c.as_ptr()) };
+        unsafe { prisc_obs_sys::obs_add_module_path(bin_c.as_ptr(), data_c.as_ptr()) };
         #[cfg(target_os = "linux")]
         linux_modules::register_dir(bin);
     }
@@ -94,31 +94,31 @@ impl ObsContext {
     pub fn load_all_modules(&self) {
         unsafe {
             #[cfg(not(target_os = "linux"))]
-            obs_sys::obs_load_all_modules();
+            prisc_obs_sys::obs_load_all_modules();
             #[cfg(target_os = "linux")]
             linux_modules::load_registered();
-            obs_sys::obs_post_load_modules();
+            prisc_obs_sys::obs_post_load_modules();
         }
     }
 
     pub fn set_output_source(&self, channel: u32, source: Option<&ObsSource>) {
         let ptr = source.map_or(ptr::null_mut(), |s| s.as_ptr());
-        unsafe { obs_sys::obs_set_output_source(channel, ptr) };
+        unsafe { prisc_obs_sys::obs_set_output_source(channel, ptr) };
     }
 
     /// Raw-pointer variant, used for the scene's source on channel 0.
     /// (Pointer is passed straight to libobs, never dereferenced here.)
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn set_output_source_raw(&self, channel: u32, source: *mut obs_sys::obs_source_t) {
-        unsafe { obs_sys::obs_set_output_source(channel, source) };
+    pub fn set_output_source_raw(&self, channel: u32, source: *mut prisc_obs_sys::obs_source_t) {
+        unsafe { prisc_obs_sys::obs_set_output_source(channel, source) };
     }
 
-    pub fn get_video(&self) -> *mut obs_sys::video_t {
-        unsafe { obs_sys::obs_get_video() }
+    pub fn get_video(&self) -> *mut prisc_obs_sys::video_t {
+        unsafe { prisc_obs_sys::obs_get_video() }
     }
 
-    pub fn get_audio(&self) -> *mut obs_sys::audio_t {
-        unsafe { obs_sys::obs_get_audio() }
+    pub fn get_audio(&self) -> *mut prisc_obs_sys::audio_t {
+        unsafe { prisc_obs_sys::obs_get_audio() }
     }
 }
 
@@ -128,10 +128,10 @@ impl ObsContext {
 /// `obs_startup` calls `add_default_module_paths()` (libobs/obs-nix.c), which
 /// registers, ahead of anything we add:
 ///   - `<exe dir>/../lib/obs-plugins` (exe-relative; e.g. a bundle unpacked to
-///     `/usr/local/obs-express` would pick up `/usr/local/lib/obs-plugins`),
+///     `/usr/local/prisc-recorder` would pick up `/usr/local/lib/obs-plugins`),
 ///   - the CWD-relative `../../obs-plugins/64bit`,
 ///   - `OBS_INSTALL_PREFIX/lib/obs-plugins` and the Flatpak plugin dir.
-/// The bogus install prefix obs-sys compiles in neutralises only the third.
+/// The bogus install prefix prisc_obs_sys compiles in neutralises only the third.
 /// `obs_load_all_modules` dlopens every `.so` found on any of those paths and
 /// has no duplicate-name check (obs-module.c load_all_callback), so a system
 /// OBS's `obs-ffmpeg.so` would load beside ours - dragging a second, system
@@ -157,7 +157,7 @@ mod linux_modules {
 
     pub(super) fn register_dir(bin: &str) {
         // A `%module%` pattern (per-module subdirectories) is not something
-        // obs-express uses on Linux; take the part before it so the check
+        // prisc_recorder uses on Linux; take the part before it so the check
         // below would still accept those modules' parent tree.
         let base = bin.split("%module%").next().unwrap_or(bin);
         let mut dirs = DIRS.lock().unwrap_or_else(|e| e.into_inner());
@@ -169,7 +169,7 @@ mod linux_modules {
         seen: HashSet<String>,
     }
 
-    unsafe extern "C" fn on_module(param: *mut c_void, info: *const obs_sys::obs_module_info2) {
+    unsafe extern "C" fn on_module(param: *mut c_void, info: *const prisc_obs_sys::obs_module_info2) {
         let walk = &mut *(param as *mut Walk);
         let info = &*info;
         if info.bin_path.is_null() || info.name.is_null() {
@@ -190,10 +190,10 @@ mod linux_modules {
         if !walk.seen.insert(name) {
             return;
         }
-        let mut module: *mut obs_sys::obs_module_t = std::ptr::null_mut();
+        let mut module: *mut prisc_obs_sys::obs_module_t = std::ptr::null_mut();
         // obs_open_module logs its own warning on dlopen / version failures;
         // a non-zero code here just means "skip", as in load_all_callback.
-        if obs_sys::obs_open_module(&mut module, info.bin_path, info.data_path) != 0
+        if prisc_obs_sys::obs_open_module(&mut module, info.bin_path, info.data_path) != 0
             || module.is_null()
         {
             return;
@@ -201,7 +201,7 @@ mod linux_modules {
         // On failure libobs logs "Failed to initialize module" and leaves the
         // module on its loaded list; load_all_callback frees it, but
         // free_module is not exported and an inert entry is harmless.
-        obs_sys::obs_init_module(module);
+        prisc_obs_sys::obs_init_module(module);
     }
 
     pub(super) unsafe fn load_registered() {
@@ -210,6 +210,6 @@ mod linux_modules {
             dirs,
             seen: HashSet::new(),
         };
-        obs_sys::obs_find_modules2(Some(on_module), &mut walk as *mut Walk as *mut c_void);
+        prisc_obs_sys::obs_find_modules2(Some(on_module), &mut walk as *mut Walk as *mut c_void);
     }
 }

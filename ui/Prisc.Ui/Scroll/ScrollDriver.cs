@@ -7,10 +7,10 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.PlatformUtil;
-using Clowd.Util;
+using Prisc.PlatformUtil;
+using Prisc.Util;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
     /// <summary>Progress from the driver, one per phase change of every scroll step.
     /// <paramref name="ResumeInS"/> is meaningful only while <paramref name="State"/> is
@@ -25,7 +25,7 @@ namespace Clowd.UI
     internal sealed record ScrollDriverOutcome(string Result, string Message, int Frames, int HeightPx, int? ExitCode);
 
     /// <summary>
-    /// Hosts one run of the <c>clowd_scroll_driver</c> process and speaks its NDJSON protocol
+    /// Hosts one run of the <c>prisc_scroll_driver</c> process and speaks its NDJSON protocol
     /// (CAPTURE_PROTOCOL.md): JSON commands in on stdin, JSON events out on stdout, log chatter on
     /// stderr. Only lines that start with '{' and end with '}' are protocol — the same rule the
     /// recording protocol uses; everything else goes to the bounded log buffer a
@@ -194,7 +194,7 @@ namespace Clowd.UI
 
             try
             {
-                proc.StandardInput.WriteLine(JsonSerializer.Serialize(command, ClowdUiJsonContext.Default.ScrollDriverCommand));
+                proc.StandardInput.WriteLine(JsonSerializer.Serialize(command, PriscUiJsonContext.Default.ScrollDriverCommand));
             }
             catch (Exception ex)
             {
@@ -310,7 +310,7 @@ namespace Clowd.UI
 
             try
             {
-                var evt = JsonSerializer.Deserialize(trimmed, ClowdUiJsonContext.Default.ScrollDriverEvent);
+                var evt = JsonSerializer.Deserialize(trimmed, PriscUiJsonContext.Default.ScrollDriverEvent);
                 switch (evt?.Type)
                 {
                     case ScrollDriverEventType.Ready:

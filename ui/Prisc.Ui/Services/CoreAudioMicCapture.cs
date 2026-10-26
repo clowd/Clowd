@@ -7,7 +7,7 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>
     /// The macOS <see cref="MicCapture"/>: an AudioToolbox input queue
@@ -452,7 +452,7 @@ namespace Clowd.UI.Services
 
         // -------------------------------------------------------------------------- permission
 
-        /// <summary>Fails the open when the user has already refused Clowd the microphone, so the
+        /// <summary>Fails the open when the user has already refused Prisc the microphone, so the
         /// recorder reports no device rather than metering silence.</summary>
         private static void ThrowIfMicrophoneDenied()
         {

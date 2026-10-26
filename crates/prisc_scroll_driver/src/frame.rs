@@ -24,7 +24,7 @@
 
 use anyhow::Result;
 
-use clowd_rust_core::geometry::ScreenRect;
+use prisc_rust_core::geometry::ScreenRect;
 
 #[cfg(target_os = "macos")]
 mod mac;

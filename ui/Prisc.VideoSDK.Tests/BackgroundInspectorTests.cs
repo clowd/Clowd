@@ -1,12 +1,12 @@
 using System;
 using System.Linq;
-using Clowd.UI.VideoEditor.Inspector;
-using Clowd.VideoSDK.Composition;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Model;
+using Prisc.UI.VideoEditor.Inspector;
+using Prisc.VideoSDK.Composition;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Model;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The inspector over a wallpaper item: which sections it lights, and the two-level style then
@@ -484,7 +484,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.True(vm.ShowBackgroundColor);
             Assert.False(vm.BackgroundThemesVisible);
             Assert.Empty(vm.BackgroundThemeOptions);
-            // a fresh background carries Clowd blue, so the well opens on what is drawn
+            // a fresh background carries Prisc blue, so the well opens on what is drawn
             Assert.Equal(BackgroundContent.DefaultColor, vm.BackgroundColorHex);
 
             vm.BackgroundColorHex = "#FF112233";

@@ -1,14 +1,14 @@
 using Avalonia;
 using Avalonia.Headless;
-using Clowd.VideoSDK.Tests;
+using Prisc.VideoSDK.Tests;
 using Xunit;
 
 [assembly: AvaloniaTestApplication(typeof(HeadlessApp))]
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// The headless Avalonia app the [AvaloniaFact] tests run in, themed as Clowd is (Semi), so a
+    /// The headless Avalonia app the [AvaloniaFact] tests run in, themed as Prisc is (Semi), so a
     /// control behaves as it does in the app: templated, focusable, with tooltips that open. Only
     /// those tests start it, one app per test (the default PerTest isolation), but while one runs
     /// its app and its <c>AvaloniaLocator</c> scope are the whole process's: a plain [Fact] running

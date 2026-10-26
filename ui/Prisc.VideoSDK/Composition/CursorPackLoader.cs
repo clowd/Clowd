@@ -7,7 +7,7 @@ using System.Reflection;
 using System.Xml.Linq;
 using SkiaSharp;
 
-namespace Clowd.VideoSDK.Composition
+namespace Prisc.VideoSDK.Composition
 {
     /// <summary>
     /// One theme of a cursor pack, as the recoloring it performs: which of the stored artwork's
@@ -96,7 +96,7 @@ namespace Clowd.VideoSDK.Composition
     /// </remarks>
     internal static class CursorPackLoader
     {
-        private const string ResourceRoot = "Clowd.VideoSDK.Composition.CursorPacks.";
+        private const string ResourceRoot = "Prisc.VideoSDK.Composition.CursorPacks.";
 
         /// <summary>The pack's authored stroke width doubled, since a halo only shows its outer
         /// half; see the class remarks.</summary>

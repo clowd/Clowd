@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Media;
-using Clowd.Drawing.Curves;
-using Clowd.Drawing.Rendering;
+using Prisc.Drawing.Curves;
+using Prisc.Drawing.Rendering;
 
-namespace Clowd.Drawing.Graphics
+namespace Prisc.Drawing.Graphics
 {
     [GraphicDesc("PolyLine", Skills = Skill.Angle | Skill.Color | Skill.Stroke | Skill.DashStyle)]
     public class GraphicPolyLine : GraphicRectangle

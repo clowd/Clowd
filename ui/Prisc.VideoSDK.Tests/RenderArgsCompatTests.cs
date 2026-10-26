@@ -6,19 +6,19 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using Clowd.VideoSDK.Editing;
-using Clowd.VideoSDK.Media;
-using Clowd.VideoSDK.Model;
-using Clowd.VideoSDK.Playback;
-using Clowd.VideoSDK.Render;
+using Prisc.VideoSDK.Editing;
+using Prisc.VideoSDK.Media;
+using Prisc.VideoSDK.Model;
+using Prisc.VideoSDK.Playback;
+using Prisc.VideoSDK.Render;
 using SkiaSharp;
 using Xunit;
 
-namespace Clowd.VideoSDK.Tests
+namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
     /// The v1 render-args → v2 project mapping (<see cref="RenderArgsCompat"/>), plus a protocol
-    /// smoke test that runs the real Clowd.VideoRender executable end to end.
+    /// smoke test that runs the real Prisc.VideoRender executable end to end.
     ///
     /// The mapping tests hand <see cref="RenderArgsCompat.Build"/> a synthetic
     /// <see cref="MediaProbeResult"/>, so every rule is checked without the FFmpeg natives — the
@@ -50,7 +50,7 @@ namespace Clowd.VideoSDK.Tests
 
         private string TempPath(string extension)
         {
-            string path = Path.Combine(Path.GetTempPath(), $"clowd-compat-test-{Guid.NewGuid():N}{extension}");
+            string path = Path.Combine(Path.GetTempPath(), $"prisc-compat-test-{Guid.NewGuid():N}{extension}");
             _tempPaths.Add(path);
             return path;
         }
@@ -657,7 +657,7 @@ namespace Clowd.VideoSDK.Tests
         private static bool FFmpegAvailable => TestFFmpeg.Available;
 
 
-        /// <summary>The built Clowd.VideoRender.dll (run through <c>dotnet exec</c>, which needs no
+        /// <summary>The built Prisc.VideoRender.dll (run through <c>dotnet exec</c>, which needs no
         /// apphost and works on every RID). The exe project is a build-only reference of this test
         /// project, so it is up to date whenever the tests are.</summary>
         private static string FindRenderDll()
@@ -665,13 +665,13 @@ namespace Clowd.VideoSDK.Tests
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
-                var project = Path.Combine(dir.FullName, "Clowd.VideoRender");
+                var project = Path.Combine(dir.FullName, "Prisc.VideoRender");
                 if (Directory.Exists(project))
                 {
                     // A sibling runtimeconfig.json is what makes a dll runnable: it filters out the
                     // intermediate and reference-assembly copies under obj/, which are frequently the
                     // newest matches and would fail host startup rather than the protocol under test.
-                    var hit = Directory.GetFiles(project, "Clowd.VideoRender.dll", SearchOption.AllDirectories)
+                    var hit = Directory.GetFiles(project, "Prisc.VideoRender.dll", SearchOption.AllDirectories)
                                        .Where(p => File.Exists(Path.ChangeExtension(p, ".runtimeconfig.json")))
                                        .OrderByDescending(File.GetLastWriteTimeUtc)
                                        .FirstOrDefault();
@@ -688,7 +688,7 @@ namespace Clowd.VideoSDK.Tests
         private static ToolRun RunTool(string argsPath, string ffmpegDirectory)
         {
             string dll = FindRenderDll();
-            Assert.SkipWhen(dll == null, "Clowd.VideoRender.dll not found — build the exe project.");
+            Assert.SkipWhen(dll == null, "Prisc.VideoRender.dll not found — build the exe project.");
 
             var psi = new ProcessStartInfo("dotnet")
             {
@@ -1016,7 +1016,7 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.Equal(1, run.ExitCode);
             string line = Assert.Single(run.Stdout);
-            Assert.StartsWith("error usage: Clowd.VideoRender", line, StringComparison.Ordinal);
+            Assert.StartsWith("error usage: Prisc.VideoRender", line, StringComparison.Ordinal);
         }
     }
 }

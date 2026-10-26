@@ -7,9 +7,9 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
-    /// <summary>How a vid2gif run ended.</summary>
+    /// <summary>How a prisc_vid2gif run ended.</summary>
     internal enum Vid2GifOutcome
     {
         Success,
@@ -17,7 +17,7 @@ namespace Clowd.UI.Services
         Error,
     }
 
-    /// <summary>The terminal state of a vid2gif run: exactly one of the tool's <c>done</c>,
+    /// <summary>The terminal state of a prisc_vid2gif run: exactly one of the tool's <c>done</c>,
     /// <c>canceled</c> or <c>error</c> messages (or a synthesized error when the process died
     /// without sending one). <see cref="Message"/> is user-facing; <see cref="Diagnostics"/> is the
     /// captured stderr / unrecognized-stdout tail, for the crash report only.</summary>
@@ -34,7 +34,7 @@ namespace Clowd.UI.Services
     }
 
     /// <summary>
-    /// Hosts one vid2gif conversion and speaks its protocol: line-delimited plain text on stdout
+    /// Hosts one prisc_vid2gif conversion and speaks its protocol: line-delimited plain text on stdout
     /// (<c>progress &lt;0-100&gt;</c> repeatedly, then exactly one of <c>done &lt;path&gt; &lt;bytes&gt;</c> /
     /// <c>canceled</c> / <c>error &lt;message&gt;</c>), free-form FFmpeg chatter on stderr, and
     /// <c>quit</c> on stdin to cancel. Unlike the recorder there is no init handshake — the process
@@ -44,9 +44,9 @@ namespace Clowd.UI.Services
     /// </summary>
     internal sealed class Vid2GifRunner : IDisposable
     {
-        public const string EnvVarName = "CLOWD_VID2GIF_PATH";
+        public const string EnvVarName = "PRISC_VID2GIF_PATH";
 
-        // vid2gif honors a quit almost immediately (it polls the cancel token between frames), so
+        // prisc_vid2gif honors a quit almost immediately (it polls the cancel token between frames), so
         // anything past this is a wedged child, not a slow one.
         private static readonly TimeSpan CancelGracePeriod = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan PumpDrainTimeout = TimeSpan.FromSeconds(5);
@@ -74,10 +74,10 @@ namespace Clowd.UI.Services
         private Task _shutdownTask;
 
         public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "vid2gif.exe" : "vid2gif";
+            OperatingSystem.IsWindows() ? "prisc_vid2gif.exe" : "prisc_vid2gif";
 
-        /// <summary>Locates vid2gif: the <c>CLOWD_VID2GIF_PATH</c> override first, otherwise the
-        /// directory obs-express was found in — the two binaries ship side by side in every layout
+        /// <summary>Locates prisc_vid2gif: the <c>PRISC_VID2GIF_PATH</c> override first, otherwise the
+        /// directory prisc_recorder was found in — the two binaries ship side by side in every layout
         /// (release bundle and cargo target dir alike). Returns null when it cannot be found.</summary>
         public static string ResolveBinaryPath()
         {
@@ -94,9 +94,9 @@ namespace Clowd.UI.Services
         }
 
         /// <summary>
-        /// Spawns vid2gif and resolves once it has exited, with whichever terminal message it sent.
+        /// Spawns prisc_vid2gif and resolves once it has exited, with whichever terminal message it sent.
         /// May only be called once. <paramref name="maxWidth"/>/<paramref name="maxHeight"/> of 0
-        /// mean "no cap" and omit the flag entirely — vid2gif's parser rejects 0 as a value.
+        /// mean "no cap" and omit the flag entirely — prisc_vid2gif's parser rejects 0 as a value.
         /// Throws <see cref="FileNotFoundException"/> when the binary is missing and
         /// <see cref="InvalidOperationException"/> when the process cannot be started; every other
         /// failure comes back as an <see cref="Vid2GifOutcome.Error"/> result.
@@ -112,12 +112,12 @@ namespace Clowd.UI.Services
                     $"Could not find {BinaryFileName}. It ships alongside the recorder; set {EnvVarName} to its full path to override.",
                     BinaryFileName);
 
-            var utf8 = new UTF8Encoding(false); // no BOM: vid2gif reads stdin as lines of text
+            var utf8 = new UTF8Encoding(false); // no BOM: prisc_vid2gif reads stdin as lines of text
             var psi = new ProcessStartInfo(exePath)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                // vid2gif links the FFmpeg DLLs that sit beside it and loads them relative to the
+                // prisc_vid2gif links the FFmpeg DLLs that sit beside it and loads them relative to the
                 // working directory — it cannot start anywhere else.
                 WorkingDirectory = Path.GetDirectoryName(exePath),
                 RedirectStandardInput = true,
@@ -242,7 +242,7 @@ namespace Clowd.UI.Services
             try
             {
                 // no clean-exit courtesy here: an abandoned conversion has nothing to flush, and
-                // vid2gif removes its own partial output when it is asked to quit rather than shot.
+                // prisc_vid2gif removes its own partial output when it is asked to quit rather than shot.
                 if (!proc.HasExited)
                     proc.Kill(entireProcessTree: true);
             }

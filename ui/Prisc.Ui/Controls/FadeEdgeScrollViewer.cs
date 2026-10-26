@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace Clowd.UI.Controls
+namespace Prisc.UI.Controls
 {
     /// <summary>ScrollViewer that dissolves content at whichever vertical edge has more content
     /// scrolled out of view, instead of ending in a hard clip line. Implemented as an opacity

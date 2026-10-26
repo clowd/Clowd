@@ -3,10 +3,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace Clowd.UI.Helpers
+namespace Prisc.UI.Helpers
 {
     /// <summary>
-    /// A window nobody sees, to own a native file picker that has no Clowd window to belong to —
+    /// A window nobody sees, to own a native file picker that has no Prisc window to belong to —
     /// the Upload File hotkey or tray item in a tray-only session. A picker needs a top level's
     /// StorageProvider, and comes up in front only over a foreground owner, so this one takes the
     /// foreground as it opens (<see cref="WindowNativeExtensions.ForceForeground"/>). It is shown

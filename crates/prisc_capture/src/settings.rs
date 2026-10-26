@@ -156,12 +156,12 @@ pub struct CapturerSettings {
 impl Default for CapturerSettings {
     fn default() -> Self {
         Self {
-            // #2F7CAE — the legacy "clowd blue" (#3B97D2) darkened to a 4.5:1 contrast ratio
+            // #2F7CAE — the legacy "prisc blue" (#3B97D2) darkened to a 4.5:1 contrast ratio
             // against the white labels drawn on accent-filled buttons (issue #48). The shell
             // always passes `--accent-color` (the OS accent, or the user's pick), which goes
             // through the same correction in `into_settings`, so this is the standalone default only.
-            accent_color: contrast_corrected(CLOWD_BLUE_RGBA),
-            picked_accent_color: CLOWD_BLUE_RGBA,
+            accent_color: contrast_corrected(PRISC_BLUE_RGBA),
+            picked_accent_color: PRISC_BLUE_RGBA,
             tips_mode_at_startup: TipsMode::default(),
             obscured_window_peek_enabled: true,
             obscured_window_detection_threshold: 0.80,
@@ -184,7 +184,7 @@ impl Default for CapturerSettings {
 /// defaults mirror `CapturerSettings::default()` exactly.
 ///
 /// The second half of a scrolling capture has its own binary and its own
-/// command line — see `clowd_scroll_driver` and CAPTURE_PROTOCOL.md §2.
+/// command line — see `prisc_scroll_driver` and CAPTURE_PROTOCOL.md §2.
 /// Nothing about it belongs here: the overlay's part ends when it writes
 /// the `scroll` action marker.
 #[derive(Debug, Clone, Parser)]
@@ -206,7 +206,7 @@ pub struct CliArgs {
     pub session_root: Option<PathBuf>,
 
     /// Global hotkey for a region capture, in the settings gesture form
-    /// (`Control+Shift+PrintScreen`), parsed by clowd_hotkeys. Repeatable: one
+    /// (`Control+Shift+PrintScreen`), parsed by prisc_hotkeys. Repeatable: one
     /// occurrence per gesture, in the shell's list order, which is also the
     /// order the per-gesture statuses come back in. No occurrence = no hotkey.
     #[arg(long, value_name = "GESTURE", requires = "standby", action = ArgAction::Append)]
@@ -400,11 +400,11 @@ impl CliArgs {
     }
 }
 
-/// [`crate::accent::CLOWD_BLUE`] as the floats the settings carry.
-const CLOWD_BLUE_RGBA: [f32; 4] = [
-    crate::accent::CLOWD_BLUE[0] as f32 / 255.0,
-    crate::accent::CLOWD_BLUE[1] as f32 / 255.0,
-    crate::accent::CLOWD_BLUE[2] as f32 / 255.0,
+/// [`crate::accent::PRISC_BLUE`] as the floats the settings carry.
+const PRISC_BLUE_RGBA: [f32; 4] = [
+    crate::accent::PRISC_BLUE[0] as f32 / 255.0,
+    crate::accent::PRISC_BLUE[1] as f32 / 255.0,
+    crate::accent::PRISC_BLUE[2] as f32 / 255.0,
     1.0,
 ];
 
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn cli_defaults_mirror_settings_default() {
-        let cli = CliArgs::parse_from(["clowd_capture"]);
+        let cli = CliArgs::parse_from(["prisc_capture"]);
         let from_cli = cli.into_settings();
         let default = CapturerSettings::default();
         assert_eq!(from_cli.accent_color, default.accent_color);
@@ -474,29 +474,29 @@ mod tests {
     /// mirror region.
     #[test]
     fn video_and_share_modes_are_mutually_exclusive() {
-        let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
+        let bare = CliArgs::parse_from(["prisc_capture"]).into_settings();
         assert!(!bare.video_mode && !bare.share_mode);
 
-        let video = CliArgs::parse_from(["clowd_capture", "--video"]).into_settings();
+        let video = CliArgs::parse_from(["prisc_capture", "--video"]).into_settings();
         assert!(video.video_mode && !video.share_mode);
 
-        let share = CliArgs::parse_from(["clowd_capture", "--share"]).into_settings();
+        let share = CliArgs::parse_from(["prisc_capture", "--share"]).into_settings();
         assert!(share.share_mode && !share.video_mode);
 
-        assert!(CliArgs::try_parse_from(["clowd_capture", "--video", "--share"]).is_err());
+        assert!(CliArgs::try_parse_from(["prisc_capture", "--video", "--share"]).is_err());
         // Order must not matter — clap reports the conflict either way.
-        assert!(CliArgs::try_parse_from(["clowd_capture", "--share", "--video"]).is_err());
+        assert!(CliArgs::try_parse_from(["prisc_capture", "--share", "--video"]).is_err());
     }
 
     /// The optional-button flags are opt-OUT: a bare command line shows
     /// the full strip, and each flag removes exactly its own button.
     #[test]
     fn panel_feature_flags_are_opt_out() {
-        let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
+        let bare = CliArgs::parse_from(["prisc_capture"]).into_settings();
         assert_eq!(bare.panel_features, PanelFeatures::ALL);
 
         let none = CliArgs::parse_from([
-            "clowd_capture",
+            "prisc_capture",
             "--no-upload",
             "--no-share",
             "--no-scroll-capture",
@@ -517,33 +517,33 @@ mod tests {
             }
         );
 
-        let no_ocr = CliArgs::parse_from(["clowd_capture", "--no-ocr"]).into_settings();
+        let no_ocr = CliArgs::parse_from(["prisc_capture", "--no-ocr"]).into_settings();
         assert!(!no_ocr.panel_features.ocr);
         assert!(no_ocr.panel_features.upload && no_ocr.panel_features.scroll_capture && no_ocr.panel_features.share);
 
-        let no_image_search = CliArgs::parse_from(["clowd_capture", "--no-image-search"]).into_settings();
+        let no_image_search = CliArgs::parse_from(["prisc_capture", "--no-image-search"]).into_settings();
         assert!(!no_image_search.panel_features.image_search);
         assert!(no_image_search.panel_features.upload && no_image_search.panel_features.ocr && no_image_search.panel_features.share);
 
-        let no_share = CliArgs::parse_from(["clowd_capture", "--no-share"]).into_settings();
+        let no_share = CliArgs::parse_from(["prisc_capture", "--no-share"]).into_settings();
         assert!(!no_share.panel_features.share);
         assert!(no_share.panel_features.upload && no_share.panel_features.scroll_capture && no_share.panel_features.ocr);
 
-        let no_video = CliArgs::parse_from(["clowd_capture", "--no-video"]).into_settings();
+        let no_video = CliArgs::parse_from(["prisc_capture", "--no-video"]).into_settings();
         assert!(!no_video.panel_features.video);
         assert!(no_video.panel_features.upload && no_video.panel_features.share && no_video.panel_features.ocr);
 
         // `--no-video` hides the button; `--video` is a mode that never shows the strip.
         // The shell never sends both (recording off means it never launches video mode),
         // but they must not conflict either.
-        let both = CliArgs::parse_from(["clowd_capture", "--video", "--no-video"]).into_settings();
+        let both = CliArgs::parse_from(["prisc_capture", "--video", "--no-video"]).into_settings();
         assert!(both.video_mode);
         assert!(!both.panel_features.video);
 
         // `--no-share` hides the button; `--share` is a mode that never shows the
         // strip. The shell sends both when a trimmed-away button meets a tray or
         // hotkey invocation, so they must coexist rather than conflict.
-        let both = CliArgs::parse_from(["clowd_capture", "--share", "--no-share"]).into_settings();
+        let both = CliArgs::parse_from(["prisc_capture", "--share", "--no-share"]).into_settings();
         assert!(both.share_mode);
         assert!(!both.panel_features.share);
     }
@@ -553,12 +553,12 @@ mod tests {
     #[test]
     fn rounded_corners_flag_is_opt_out() {
         assert!(
-            CliArgs::parse_from(["clowd_capture"])
+            CliArgs::parse_from(["prisc_capture"])
                 .into_settings()
                 .rounded_window_corners
         );
         assert!(
-            !CliArgs::parse_from(["clowd_capture", "--no-rounded-corners"])
+            !CliArgs::parse_from(["prisc_capture", "--no-rounded-corners"])
                 .into_settings()
                 .rounded_window_corners
         );
@@ -568,30 +568,30 @@ mod tests {
     fn shell_pid_parses_and_is_absent_by_default() {
         // Standalone runs have no shell, and nothing to hand foreground
         // rights back to.
-        assert_eq!(CliArgs::parse_from(["clowd_capture"]).shell_pid, None);
-        assert_eq!(CliArgs::parse_from(["clowd_capture", "--shell-pid", "4321"]).shell_pid, Some(4321));
+        assert_eq!(CliArgs::parse_from(["prisc_capture"]).shell_pid, None);
+        assert_eq!(CliArgs::parse_from(["prisc_capture", "--shell-pid", "4321"]).shell_pid, Some(4321));
         // Both spawn paths use the two-token form; the `=` form is what a
         // human types, and clap accepts either.
-        assert_eq!(CliArgs::parse_from(["clowd_capture", "--shell-pid=4321"]).shell_pid, Some(4321));
+        assert_eq!(CliArgs::parse_from(["prisc_capture", "--shell-pid=4321"]).shell_pid, Some(4321));
     }
 
     /// The save-dialog naming flags: a bare command line keeps the shell's own
     /// default pattern and lets the dialog pick its folder.
     #[test]
     fn filename_pattern_and_save_dir_parse() {
-        let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
+        let bare = CliArgs::parse_from(["prisc_capture"]).into_settings();
         assert_eq!(bare.filename_pattern, DEFAULT_FILENAME_PATTERN);
         assert_eq!(bare.save_directory, None);
 
         let set = CliArgs::parse_from([
-            "clowd_capture",
+            "prisc_capture",
             "--filename-pattern",
-            "'clowd' yyyy-MM-dd",
+            "'prisc' yyyy-MM-dd",
             "--save-dir",
             "/tmp/shots",
         ])
         .into_settings();
-        assert_eq!(set.filename_pattern, "'clowd' yyyy-MM-dd");
+        assert_eq!(set.filename_pattern, "'prisc' yyyy-MM-dd");
         assert_eq!(set.save_directory, Some(PathBuf::from("/tmp/shots")));
     }
 
@@ -599,26 +599,26 @@ mod tests {
     /// is the style the user sees.
     #[test]
     fn panel_buttons_default_to_key_and_parse_below() {
-        let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
+        let bare = CliArgs::parse_from(["prisc_capture"]).into_settings();
         assert_eq!(bare.panel_buttons, ButtonStyle::KeyHint);
-        let key = CliArgs::parse_from(["clowd_capture", "--panel-buttons", "key"]).into_settings();
+        let key = CliArgs::parse_from(["prisc_capture", "--panel-buttons", "key"]).into_settings();
         assert_eq!(key.panel_buttons, ButtonStyle::KeyHint);
-        let below = CliArgs::parse_from(["clowd_capture", "--panel-buttons=below"]).into_settings();
+        let below = CliArgs::parse_from(["prisc_capture", "--panel-buttons=below"]).into_settings();
         assert_eq!(below.panel_buttons, ButtonStyle::Below);
-        assert!(CliArgs::try_parse_from(["clowd_capture", "--panel-buttons", "key-hint"]).is_err());
+        assert!(CliArgs::try_parse_from(["prisc_capture", "--panel-buttons", "key-hint"]).is_err());
     }
 
     #[test]
     fn capture_mode_defaults_to_region_and_parses_variants() {
-        let default = CliArgs::parse_from(["clowd_capture"]);
+        let default = CliArgs::parse_from(["prisc_capture"]);
         assert_eq!(default.capture_mode, CaptureMode::Region);
         assert!(!default.capture_mode.is_preselect());
 
-        let window = CliArgs::parse_from(["clowd_capture", "--capture-mode", "window"]);
+        let window = CliArgs::parse_from(["prisc_capture", "--capture-mode", "window"]);
         assert_eq!(window.capture_mode, CaptureMode::Window);
         assert!(window.capture_mode.is_preselect());
 
-        let screen = CliArgs::parse_from(["clowd_capture", "--capture-mode", "screen"]);
+        let screen = CliArgs::parse_from(["prisc_capture", "--capture-mode", "screen"]);
         assert_eq!(screen.capture_mode, CaptureMode::Screen);
     }
 
@@ -641,11 +641,11 @@ mod tests {
     #[test]
     fn accent_is_contrast_corrected_unless_asked_not_to() {
         let hex = |c: [f32; 4]| c.map(|v| (v * 255.0).round() as u8);
-        let fixed = CliArgs::parse_from(["clowd_capture", "--accent-color", "#FFFF00"]).into_settings();
+        let fixed = CliArgs::parse_from(["prisc_capture", "--accent-color", "#FFFF00"]).into_settings();
         assert_eq!(hex(fixed.picked_accent_color), [0xFF, 0xFF, 0x00, 0xFF]);
         assert!(crate::accent::contrast_with_white([0, 1, 2].map(|i| hex(fixed.accent_color)[i])) >= 4.5);
 
-        let exact = CliArgs::parse_from(["clowd_capture", "--accent-color", "#FFFF00", "--no-accent-contrast"]).into_settings();
+        let exact = CliArgs::parse_from(["prisc_capture", "--accent-color", "#FFFF00", "--no-accent-contrast"]).into_settings();
         assert_eq!(exact.accent_color, exact.picked_accent_color);
     }
 }

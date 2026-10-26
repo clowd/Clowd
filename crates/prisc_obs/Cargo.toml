@@ -1,10 +1,11 @@
 [package]
-name = "obs"
+name = "prisc_obs"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-2.0-or-later"
 
 [dependencies]
-obs-sys = { workspace = true }
+prisc_obs_sys = { workspace = true }
 
 [build-dependencies]
-obs-build-support = { workspace = true }
+prisc_build_support = { workspace = true }

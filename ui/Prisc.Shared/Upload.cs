@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd
+namespace Prisc
 {
     public delegate void UploadProgressHandler(long bytesUploaded);
 
@@ -66,7 +66,7 @@ namespace Clowd
         Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken);
     }
 
-    /// <summary>Implemented by providers native to Clowd (hosted on clwd.app). These sort to the
+    /// <summary>Implemented by providers native to Prisc (hosted on clwd.app). These sort to the
     /// top of the provider list, are enabled by default, and claim the default slot for each of
     /// their supported upload types when nothing else has claimed it yet.</summary>
     public interface IBuiltInProvider

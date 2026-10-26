@@ -2,9 +2,9 @@ using System;
 using System.Globalization;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
-using Clowd.Drawing;
+using Prisc.Drawing;
 
-namespace Clowd.UI.Converters
+namespace Prisc.UI.Converters
 {
     /// <summary>
     /// string → FontFamily for runtime bindings. The XAML compiler converts literal strings to

@@ -6,20 +6,20 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace Clowd.UI
+namespace Prisc.UI
 {
-    /// <summary>An enumerated camera. DeviceId is what obs-express consumes verbatim (Windows:
+    /// <summary>An enumerated camera. DeviceId is what prisc_recorder consumes verbatim (Windows:
     /// DirectShow device path; macOS: AVFoundation unique id).</summary>
     public sealed record CameraDeviceInfo(string DeviceId, string FriendlyName);
 
     /// <summary>
     /// Camera enumeration (same API shape as <see cref="AudioDeviceManager"/>). Asks the platform
     /// directly — AVFoundation on macOS, DirectShow on Windows — reproducing what OBS's own
-    /// enumerators do so the ids are the ids obs-express can open. See
+    /// enumerators do so the ids are the ids prisc_recorder can open. See
     /// <see cref="AvCaptureInterop"/> and <see cref="DirectShowInterop"/> for how each id is
     /// derived, which is the part that has to stay faithful.
     ///
-    /// The fallback, and what this used to do exclusively, is spawning obs-express with
+    /// The fallback, and what this used to do exclusively, is spawning prisc_recorder with
     /// <c>--list-cameras</c>: authoritative, but measured at 5.2 s on macOS — not the process
     /// spawn (libobs is up in 0.16 s) but something inside mac-avcapture's property callback,
     /// while an AVFoundation discovery session answers the same question in under 0.1 s. It is
@@ -128,7 +128,7 @@ namespace Clowd.UI
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    // obs-express loads the OBS libraries that sit beside it relative to the
+                    // prisc_recorder loads the OBS libraries that sit beside it relative to the
                     // working directory — it cannot start anywhere else.
                     WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(exePath)),
                     RedirectStandardOutput = true,

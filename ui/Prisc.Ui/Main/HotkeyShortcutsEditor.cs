@@ -11,9 +11,9 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using Clowd.UI.Helpers;
+using Prisc.UI.Helpers;
 
-namespace Clowd.UI.Config
+namespace Prisc.UI.Config
 {
     /// <summary>
     /// The editor column of one Hotkeys page row: a <see cref="GestureField"/> per gesture of the

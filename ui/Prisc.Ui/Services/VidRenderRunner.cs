@@ -6,7 +6,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 
-namespace Clowd.UI.Services
+namespace Prisc.UI.Services
 {
     /// <summary>How a vid-render run ended.</summary>
     internal enum VidRenderOutcome
@@ -33,12 +33,12 @@ namespace Clowd.UI.Services
     }
 
     /// <summary>
-    /// Hosts one vid-render job and speaks its protocol, which is the vid2gif one verbatim:
+    /// Hosts one vid-render job and speaks its protocol, which is the prisc_vid2gif one verbatim:
     /// line-delimited plain text on stdout (<c>progress &lt;0-100&gt;</c> repeatedly, then exactly one
     /// of <c>done &lt;path&gt; &lt;bytes&gt;</c> / <c>canceled</c> / <c>error &lt;message&gt;</c>),
     /// free-form FFmpeg chatter on stderr, and <c>quit</c> on stdin to cancel. The whole job is
-    /// described by a render-args JSON file (a serialized <see cref="Clowd.VideoSDK.Model.Project"/> plus
-    /// sibling output/crf properties, written by <see cref="Clowd.VideoSDK.Editing.ProjectFileWriter"/>,
+    /// described by a render-args JSON file (a serialized <see cref="Prisc.VideoSDK.Model.Project"/> plus
+    /// sibling output/crf properties, written by <see cref="Prisc.VideoSDK.Editing.ProjectFileWriter"/>,
     /// which the tool dispatches on by version), which is the
     /// tool's single argument — there is no init handshake, the process starts rendering the moment
     /// it is spawned, so the whole lifecycle is one <see cref="RunAsync"/> call that resolves when
@@ -47,7 +47,7 @@ namespace Clowd.UI.Services
     /// </summary>
     internal sealed class VidRenderRunner : IDisposable
     {
-        public const string EnvVarName = "CLOWD_VID_RENDER_PATH";
+        public const string EnvVarName = "PRISC_VID_RENDER_PATH";
 
         // vid-render honors a quit almost immediately (it polls the cancel token between frames),
         // so anything past this is a wedged child, not a slow one.
@@ -77,11 +77,11 @@ namespace Clowd.UI.Services
         private Task _shutdownTask;
 
         public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "Clowd.VideoRender.exe" : "Clowd.VideoRender";
+            OperatingSystem.IsWindows() ? "Prisc.VideoRender.exe" : "Prisc.VideoRender";
 
-        /// <summary>Locates the render tool: the <c>CLOWD_VID_RENDER_PATH</c> override first, then
-        /// beside the app executable (Clowd.VideoRender publishes into the same directory as
-        /// Clowd.Ui — see ci.yml), then the dev-build output next to this repo's csproj. Returns
+        /// <summary>Locates the render tool: the <c>PRISC_VID_RENDER_PATH</c> override first, then
+        /// beside the app executable (Prisc.VideoRender publishes into the same directory as
+        /// Prisc.Ui — see ci.yml), then the dev-build output next to this repo's csproj. Returns
         /// null when it cannot be found.</summary>
         public static string ResolveBinaryPath()
         {
@@ -94,11 +94,11 @@ namespace Clowd.UI.Services
                 return Path.GetFullPath(local);
 
             // dev layout: walk up from the app's bin directory to the repo root and probe the
-            // Clowd.VideoRender build output (mirrors ObsBinaryLocator's dev probe).
+            // Prisc.VideoRender build output (mirrors ObsBinaryLocator's dev probe).
             var dir = new DirectoryInfo(Path.GetFullPath(AppContext.BaseDirectory));
             while (dir != null)
             {
-                var project = Path.Combine(dir.FullName, "clowd_ui", "Clowd.VideoRender");
+                var project = Path.Combine(dir.FullName, "ui", "Prisc.VideoRender");
                 if (Directory.Exists(project))
                 {
                     foreach (var configuration in new[] { "Debug", "Release" })
@@ -150,12 +150,12 @@ namespace Clowd.UI.Services
             };
 
             // The render tool self-locates FFmpeg (beside itself, then the dev walk-up), but in
-            // the release layout the DLLs live in the obs-express/ subdirectory — hand it the
-            // exact directory we already resolved obs-express from so the layouts can never
-            // disagree. Harmless when obs-express is missing (the tool's own probing runs).
+            // the release layout the DLLs live in the recorder/ subdirectory — hand it the
+            // exact directory we already resolved prisc_recorder from so the layouts can never
+            // disagree. Harmless when prisc_recorder is missing (the tool's own probing runs).
             var ffmpegDir = ObsBinaryLocator.ResolveFFmpegDirectory();
             if (!String.IsNullOrEmpty(ffmpegDir))
-                psi.Environment["CLOWD_FFMPEG_PATH"] = ffmpegDir;
+                psi.Environment["PRISC_FFMPEG_PATH"] = ffmpegDir;
 
             // the whole job description is the file; nothing else is on the command line.
             psi.ArgumentList.Add(renderArgsPath);

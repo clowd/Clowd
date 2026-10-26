@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <RootNamespace>Clowd.Drawing</RootNamespace>
+    <RootNamespace>Prisc.Drawing</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />
@@ -11,12 +11,12 @@
     <PackageReference Include="Avalonia.Skia" Version="12.1.2" />
   </ItemGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="Clowd.Drawing.Tests" />
-    <InternalsVisibleTo Include="Clowd.Drawing.Benchmarks" />
+    <InternalsVisibleTo Include="Prisc.Drawing.Tests" />
+    <InternalsVisibleTo Include="Prisc.Drawing.Benchmarks" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Geometry\Clowd.Geometry.csproj" />
-    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
+    <ProjectReference Include="..\Prisc.Geometry\Prisc.Geometry.csproj" />
+    <ProjectReference Include="..\Prisc.Shared\Prisc.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Cursors\*.cur" />

@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Config
+namespace Prisc.Config
 {
     /// <summary>
     /// Renders an enum settings property as the full-width status banner at the top of its
@@ -39,8 +39,8 @@ namespace Clowd.Config
 
     /// <summary>
     /// The glyph an enum member wears in a <see cref="ModeSelectorAttribute"/> banner's icon disc:
-    /// the key of a geometry in Clowd.Ui's VectorIcons.axaml ("IconLayers"). A string rather than
-    /// the geometry because this assembly holds no UI resources — Clowd.Ui looks the key up when it
+    /// the key of a geometry in Prisc.Ui's VectorIcons.axaml ("IconLayers"). A string rather than
+    /// the geometry because this assembly holds no UI resources — Prisc.Ui looks the key up when it
     /// builds the banner. A member without one, or one naming a key that does not resolve, shows
     /// its title's initial in the disc instead.
     /// </summary>
