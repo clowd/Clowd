@@ -46,6 +46,10 @@ namespace Prisc
         [STAThread]
         public static void Main(string[] args)
         {
+            // the legacy migrations (settings copy-forward in the Velopack update hook, sessions at
+            // startup) log what they did or skipped to a log that survives a Release build.
+            LegacyClowd.LogSink = AppLog.Info;
+
             // a telemetry opt-out set under the old variable name keeps working; set at process
             // level before anything reads it, so child processes inherit the new name too.
             LegacyClowd.BridgeTelemetryOptOut(SentryConfig.OptOutVariable);

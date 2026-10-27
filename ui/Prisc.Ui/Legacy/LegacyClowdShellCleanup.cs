@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
@@ -251,5 +250,5 @@ public static class LegacyClowdShellCleanup
         }
     }
 
-    private static void Log(string message) => Debug.WriteLine("LegacyClowdShellCleanup: " + message);
+    private static void Log(string message) => AppLog.Info("LegacyClowdShellCleanup: " + message);
 }

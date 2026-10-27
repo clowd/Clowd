@@ -798,5 +798,30 @@ public static class LegacyClowd
         }
     }
 
-    private static void Log(string message) => Debug.WriteLine("LegacyClowd: " + message);
+    /// <summary>Where the migration's log lines go besides the debugger. Prisc.Shared has no
+    /// persistent log of its own and cannot reference the app, so the app sets this at the top of
+    /// <c>Program.Main</c> (to its Release-surviving log); unset (tests, tools) the lines only
+    /// reach <c>Debug.WriteLine</c>, which compiles away in Release builds.</summary>
+    public static Action<string>? LogSink { get; set; }
+
+    private static void Log(string message)
+    {
+        message = "LegacyClowd: " + message;
+
+        var sink = LogSink;
+        if (sink == null)
+        {
+            Debug.WriteLine(message);
+            return;
+        }
+
+        try
+        {
+            sink(message);
+        }
+        catch (Exception)
+        {
+            // a broken sink must never break a migration
+        }
+    }
 }
