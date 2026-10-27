@@ -71,16 +71,25 @@ jobs:
           echo "FROM_SHA=$FROM" >> "$GITHUB_ENV"
           echo "TO_SHA=$TO" >> "$GITHUB_ENV"
 
-          # The recorder's own history (its archived standalone repo, merged in whole by 55219c8e with
-          # this commit as its tip) already shipped to users inside the downloaded recorder, so it
-          # never belongs in a release. Excluding its ancestors drops only that history: they
-          # share no commits with the app's own, so this is safe for every range.
-          IMPORTED=e1d62b21f3a9876422aa7cebbed6bc4220eaffa3
+          # The recorder's own history (its archived standalone repo, merged in whole as the second
+          # parent of the import merge) already shipped to users inside the downloaded recorder, so
+          # it never belongs in a release. Excluding its ancestors drops only that history: they
+          # share no commits with the app's own, so this is safe for every range. The merge is
+          # found by its subject rather than a pinned sha, which a history rewrite would orphan;
+          # a range whose end predates the import has none of that history and excludes nothing.
+          IMPORT_MERGE=$(git rev-list -1 --merges \
+            --grep='^Import obs-express-rs .* history into crates/$' "$TO")
           EXCLUDE=""
-          if git cat-file -e "$IMPORTED^{commit}" 2>/dev/null; then
-            EXCLUDE="^$IMPORTED"
+          if [ -n "$IMPORT_MERGE" ]; then
+            EXCLUDE="^$(git rev-parse --verify "$IMPORT_MERGE^2")"
           fi
           echo "EXCLUDE=$EXCLUDE" >> "$GITHUB_ENV"
+
+          # The release that ships the rename to Prisc gets a section announcing it. Found by
+          # subject for the same reason as above; empty unless the rename is inside the range.
+          RENAME=$(git rev-list -1 --no-merges \
+            --grep='^Rename Clowd to Prisc in code and build the recorder in-repo$' "$TO" "^$FROM")
+          echo "RENAME_SHA=$RENAME" >> "$GITHUB_ENV"
 
           # EXCLUDE stays unquoted so that an empty value adds no argument
           COUNT=$(git rev-list --no-merges --count "$FROM..$TO" $EXCLUDE)
@@ -138,6 +147,9 @@ jobs:
               echo "Ignore every commit reachable from ${EXCLUDE#^}: that is the recorder's imported"
               echo "history, which already shipped. \`commits.txt\` is the authoritative list; when you"
               echo "run \`git log\` over the range yourself, append \`$EXCLUDE\` so those commits stay out."
+            fi
+            if [ -n "$RENAME_SHA" ]; then
+              echo "This range ships the rename from Clowd to Prisc (commit $RENAME_SHA)."
             fi
             echo
             cat "$RUNNER_TEMP/prompt-instructions.md"
