@@ -218,8 +218,9 @@ public static class LegacyClowdShellCleanup
         }
     }
 
-    /// <summary>macOS: deletes the legacy LaunchAgent plist, if present. Call it before
-    /// <see cref="AutoStartManager.Sync"/>. A no-op on other platforms.</summary>
+    /// <summary>macOS: deletes the legacy LaunchAgent plist, if present, and moves the update
+    /// cache out of the legacy app's Velopack folder (<see cref="LegacyClowd.MigrateMacUpdatePackages"/>).
+    /// Call it before <see cref="AutoStartManager.Sync"/>. A no-op on other platforms.</summary>
     public static void RunMacCleanup()
     {
         if (!OperatingSystem.IsMacOS())
@@ -229,24 +230,51 @@ public static class LegacyClowdShellCleanup
         {
             var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Library", "LaunchAgents", LegacyLaunchAgentLabel + ".plist");
+            var packagesDir = GetLegacyMacPackagesDir();
 
-            if (!File.Exists(path))
+            if (!File.Exists(path) && packagesDir == null)
                 return;
 
-            // the plist of a still-installed, not-upgraded copy of the old app is its autostart
+            // the plist and update cache of a still-installed, not-upgraded copy of the old app are
+            // still that app's
             if (HasSeparateLegacyInstall())
             {
-                Log("a separate legacy install is present; its LaunchAgent is left alone");
+                Log("a separate legacy install is present; its LaunchAgent and update cache are left alone");
                 return;
             }
 
-            File.Delete(path);
-            Log("deleted " + path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+                Log("deleted " + path);
+            }
+
+            if (packagesDir != null)
+                LegacyClowd.MigrateMacUpdatePackages(packagesDir, VelopackLocator.Current.PackagesDir, Constants.PriscAppName);
         }
         catch (Exception ex)
         {
-            Log("LaunchAgent cleanup failed: " + ex);
+            Log("macOS cleanup failed: " + ex);
         }
+    }
+
+    /// <summary>The legacy app's Velopack packages folder beside ours
+    /// (<c>~/Library/Caches/velopack/Clowd/packages</c>) when it exists and this is an installed
+    /// build; null otherwise.</summary>
+    private static string GetLegacyMacPackagesDir()
+    {
+        if (OwnInstallRoot == null)
+            return null;
+
+        // <cache>/velopack/<packId>/packages: only rebase a folder of that shape onto the old id
+        var packages = VelopackLocator.Current.PackagesDir;
+        var appCache = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(packages ?? ""));
+        var velopackCache = Path.GetDirectoryName(appCache ?? "");
+        if (String.IsNullOrEmpty(velopackCache) || !String.Equals(Path.GetFileName(appCache), Constants.PriscAppName, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var legacy = Path.Combine(velopackCache, LegacyClowd.FolderName, Path.GetFileName(packages.TrimEnd('/')));
+        return Directory.Exists(legacy) ? legacy : null;
     }
 
     private static void Log(string message) => Debug.WriteLine("LegacyClowdShellCleanup: " + message);

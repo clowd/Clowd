@@ -742,6 +742,68 @@ public static class LegacyClowd
     }
 
     // ------------------------------------------------------------------------------------------
+    // macOS update cache
+    // ------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Carries Velopack's macOS update cache across the package id change. The cache lives in
+    /// <c>~/Library/Caches/velopack/&lt;packId&gt;/packages</c>, so the update to the first renamed
+    /// release downloads its full package into the old app's folder, where nothing looks for it:
+    /// the next update finds no base and downloads the full package again instead of a delta, and
+    /// the stranded copy lingers. Moves every <c>&lt;newPackageId&gt;-*-full.nupkg</c> from
+    /// <paramref name="legacyPackagesDir"/> into <paramref name="newPackagesDir"/> (skipping one
+    /// already there) and then deletes the legacy app's cache folder (the parent of
+    /// <paramref name="legacyPackagesDir"/>, which only ever held Velopack's own files) unless a
+    /// package could not be moved. Callers skip this while a separate legacy install exists, whose
+    /// cache it is. Idempotent; never throws.
+    /// </summary>
+    public static void MigrateMacUpdatePackages(string legacyPackagesDir, string newPackagesDir, string newPackageId)
+    {
+        try
+        {
+            if (String.IsNullOrEmpty(legacyPackagesDir) || String.IsNullOrEmpty(newPackagesDir) || String.IsNullOrEmpty(newPackageId))
+                return;
+
+            if (PathsEqual(legacyPackagesDir, newPackagesDir) || !Directory.Exists(legacyPackagesDir))
+                return;
+
+            var allMoved = true;
+            foreach (var source in Directory.GetFiles(legacyPackagesDir, newPackageId + "-*-full.nupkg"))
+            {
+                var target = Path.Combine(newPackagesDir, Path.GetFileName(source));
+                if (File.Exists(target))
+                    continue;
+
+                try
+                {
+                    Directory.CreateDirectory(newPackagesDir);
+                    File.Move(source, target);
+                    Log("moved " + source + " to " + target);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    allMoved = false;
+                    Log("could not move " + source + " (retried next start): " + ex.Message);
+                }
+            }
+
+            if (!allMoved)
+                return;
+
+            var legacyAppCache = Path.GetDirectoryName(NormalizePath(legacyPackagesDir));
+            if (!String.IsNullOrEmpty(legacyAppCache) && Directory.Exists(legacyAppCache))
+            {
+                Directory.Delete(legacyAppCache, true);
+                Log("deleted " + legacyAppCache);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log("could not migrate the update cache: " + ex.Message);
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------------------------------
 

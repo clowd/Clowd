@@ -458,6 +458,45 @@ namespace Prisc.Shared.Tests
         }
 
         // ------------------------------------------------------------------------------------
+        // macOS update cache
+        // ------------------------------------------------------------------------------------
+
+        private string VelopackCache => Path.Combine(_root, "Caches", "velopack");
+        private string LegacyPackages => Path.Combine(VelopackCache, "Clowd", "packages");
+        private string NewPackages => Path.Combine(VelopackCache, "Prisc", "packages");
+
+        [Fact]
+        public void UpdatePackages_AreMovedToTheNewCache_AndTheLegacyCacheDeleted()
+        {
+            WriteFile(Path.Combine(LegacyPackages, "Prisc-5.0.0-osx-arm64-full.nupkg"), "full");
+            WriteFile(Path.Combine(LegacyPackages, "Clowd-4.10.9-osx-arm64-full.nupkg"), "old");
+            WriteFile(Path.Combine(LegacyPackages, ".betaId"), "id");
+            Directory.CreateDirectory(Path.Combine(LegacyPackages, "VelopackTemp"));
+
+            LegacyClowd.MigrateMacUpdatePackages(LegacyPackages, NewPackages, "Prisc");
+
+            Assert.Equal("full", File.ReadAllText(Path.Combine(NewPackages, "Prisc-5.0.0-osx-arm64-full.nupkg")));
+            Assert.False(File.Exists(Path.Combine(NewPackages, "Clowd-4.10.9-osx-arm64-full.nupkg")));
+            Assert.False(Directory.Exists(Path.Combine(VelopackCache, "Clowd")));
+
+            // idempotent once the legacy cache is gone
+            LegacyClowd.MigrateMacUpdatePackages(LegacyPackages, NewPackages, "Prisc");
+            Assert.True(File.Exists(Path.Combine(NewPackages, "Prisc-5.0.0-osx-arm64-full.nupkg")));
+        }
+
+        [Fact]
+        public void UpdatePackages_KeepAPackageTheNewCacheAlreadyHas()
+        {
+            WriteFile(Path.Combine(LegacyPackages, "Prisc-5.0.0-osx-arm64-full.nupkg"), "stranded");
+            WriteFile(Path.Combine(NewPackages, "Prisc-5.0.0-osx-arm64-full.nupkg"), "current");
+
+            LegacyClowd.MigrateMacUpdatePackages(LegacyPackages, NewPackages, "Prisc");
+
+            Assert.Equal("current", File.ReadAllText(Path.Combine(NewPackages, "Prisc-5.0.0-osx-arm64-full.nupkg")));
+            Assert.False(Directory.Exists(Path.Combine(VelopackCache, "Clowd")));
+        }
+
+        // ------------------------------------------------------------------------------------
         // Data folder (sessions)
         // ------------------------------------------------------------------------------------
 
