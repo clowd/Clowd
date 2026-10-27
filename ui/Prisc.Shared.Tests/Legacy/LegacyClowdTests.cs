@@ -458,8 +458,34 @@ namespace Prisc.Shared.Tests
         }
 
         // ------------------------------------------------------------------------------------
-        // macOS update cache
+        // macOS bundle rename and update cache
         // ------------------------------------------------------------------------------------
+
+        [Fact]
+        public void BundleRename_TargetsTheSiblingPriscApp_ForAnUpgradedBundle()
+        {
+            var applications = Path.Combine(_root, "Applications");
+            var bundle = Path.Combine(applications, "Clowd.app");
+            Touch(Path.Combine(bundle, "Contents", "MacOS", "Prisc.Ui"));
+
+            Assert.Equal(Path.Combine(applications, "Prisc.app"), LegacyClowd.GetMacBundleRenameTarget(bundle, "Prisc.app"));
+            Assert.Equal(Path.Combine(applications, "Prisc.app"), LegacyClowd.GetMacBundleRenameTarget(bundle + Path.DirectorySeparatorChar, "Prisc.app"));
+        }
+
+        [Fact]
+        public void BundleRename_IsNull_WhenPriscAppExists_OrTheBundleHasAnotherName()
+        {
+            var applications = Path.Combine(_root, "Applications");
+            var bundle = Path.Combine(applications, "Clowd.app");
+            Touch(Path.Combine(bundle, "Contents", "MacOS", "Prisc.Ui"));
+            Touch(Path.Combine(applications, "Prisc.app", "Contents", "MacOS", "Prisc.Ui"));
+
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget(bundle, "Prisc.app"));
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget(Path.Combine(applications, "Prisc.app"), "Prisc.app"));
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget(Path.Combine(applications, "My Clowd.app"), "Prisc.app"));
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget(null, "Prisc.app"));
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget("Clowd.app", "Prisc.app"));
+        }
 
         private string VelopackCache => Path.Combine(_root, "Caches", "velopack");
         private string LegacyPackages => Path.Combine(VelopackCache, "Clowd", "packages");

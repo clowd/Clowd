@@ -742,8 +742,40 @@ public static class LegacyClowd
     }
 
     // ------------------------------------------------------------------------------------------
-    // macOS update cache
+    // macOS bundle and update cache
     // ------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Where an upgraded macOS bundle should move: Velopack updates a bundle in place, so an
+    /// install upgraded across the rename still lives at <c>Clowd.app</c>, which Finder, Spotlight
+    /// and Launchpad keep showing as "Clowd". Returns the sibling <paramref name="newBundleName"/>
+    /// when <paramref name="ownBundle"/> is named <see cref="MacBundleName"/> and nothing exists at
+    /// the sibling path yet; null otherwise (including a null or relative bundle). Never throws.
+    /// </summary>
+    public static string? GetMacBundleRenameTarget(string? ownBundle, string newBundleName)
+    {
+        try
+        {
+            if (String.IsNullOrEmpty(ownBundle) || !Path.IsPathRooted(ownBundle))
+                return null;
+
+            var bundle = NormalizePath(ownBundle);
+            if (!String.Equals(Path.GetFileName(bundle), MacBundleName, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var parent = Path.GetDirectoryName(bundle);
+            if (String.IsNullOrEmpty(parent))
+                return null;
+
+            var target = Path.Combine(parent, newBundleName);
+            return Directory.Exists(target) || File.Exists(target) ? null : target;
+        }
+        catch (Exception ex)
+        {
+            Log("could not work out the bundle rename: " + ex.Message);
+            return null;
+        }
+    }
 
     /// <summary>
     /// Carries Velopack's macOS update cache across the package id change. The cache lives in

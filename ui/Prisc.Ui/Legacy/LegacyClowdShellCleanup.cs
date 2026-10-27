@@ -277,5 +277,93 @@ public static class LegacyClowdShellCleanup
         return Directory.Exists(legacy) ? legacy : null;
     }
 
+    /// <summary>
+    /// macOS: moves an install upgraded across the rename from <c>Clowd.app</c> to a sibling
+    /// <c>Prisc.app</c> (see <see cref="LegacyClowd.GetMacBundleRenameTarget"/>). A running app
+    /// cannot move its own bundle, as later loads resolve against the old path, so this hands off
+    /// to a <c>/bin/sh</c> that waits for this process to exit, renames the bundle and relaunches it
+    /// with the same arguments (the old path if the rename failed). Returns true when that handoff
+    /// is under way and the caller must exit at once, before taking the single-instance mutex.
+    ///
+    /// Attempted once per install (a marker in <see cref="PathConstants.AppDataRoot"/>), so a
+    /// rename macOS refuses costs one extra relaunch rather than one on every start; and only while
+    /// nothing else runs out of the bundle (a second launch next to a running Prisc, the standby
+    /// capturer), since every such process would lose its own files. Never throws.
+    /// </summary>
+    public static bool TryRelaunchFromRenamedBundle(string[] args)
+    {
+        if (!OperatingSystem.IsMacOS())
+            return false;
+
+        try
+        {
+            var bundle = OwnInstallRoot;
+            var target = LegacyClowd.GetMacBundleRenameTarget(bundle, Constants.PriscAppName + ".app");
+            if (target == null)
+                return false;
+
+            var marker = Path.Combine(PathConstants.AppDataRoot, BundleRenameMarkerFileName);
+            if (File.Exists(marker))
+                return false;
+
+            if (IsAnyPriscProcessRunning())
+            {
+                Log("another Prisc process runs out of " + bundle + "; the bundle rename waits for a later start");
+                return false;
+            }
+
+            Directory.CreateDirectory(PathConstants.AppDataRoot);
+            File.WriteAllText(marker, "");
+
+            // $1 pid, $2 bundle, $3 target, the rest are the app's own arguments
+            const string script =
+                "pid=$1; old=$2; new=$3; shift 3; " +
+                "while kill -0 \"$pid\" 2>/dev/null; do sleep 0.1; done; " +
+                "app=$old; if [ ! -e \"$new\" ] && /bin/mv \"$old\" \"$new\"; then app=$new; fi; " +
+                "exec /usr/bin/open -n \"$app\" --args \"$@\"";
+
+            var psi = new ProcessStartInfo("/bin/sh") { UseShellExecute = false };
+            foreach (var a in new[] { "-c", script, "sh", Environment.ProcessId.ToString(), bundle, target })
+                psi.ArgumentList.Add(a);
+            foreach (var a in args ?? Array.Empty<string>())
+                psi.ArgumentList.Add(a);
+
+            using var _ = Process.Start(psi);
+            Log("relaunching from " + target);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log("bundle rename failed: " + ex);
+            return false;
+        }
+    }
+
+    private const string BundleRenameMarkerFileName = ".legacy-bundle-rename-attempted";
+
+    /// <summary>The executables Prisc runs out of its bundle, other than this process.</summary>
+    private static bool IsAnyPriscProcessRunning()
+    {
+        string[] names = { "Prisc.Ui", "Prisc.VideoRender", "prisc_capture", "prisc_scroll_driver", "prisc_ai", "prisc_recorder", "prisc_share_region", "prisc_vid2gif" };
+        var self = Environment.ProcessId;
+
+        foreach (var name in names)
+        {
+            var processes = Process.GetProcessesByName(name);
+            try
+            {
+                if (processes.Any(p => p.Id != self))
+                    return true;
+            }
+            finally
+            {
+                foreach (var p in processes)
+                    p.Dispose();
+            }
+        }
+
+        return false;
+    }
+
     private static void Log(string message) => Debug.WriteLine("LegacyClowdShellCleanup: " + message);
 }
