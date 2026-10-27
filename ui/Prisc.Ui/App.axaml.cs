@@ -185,9 +185,9 @@ namespace Prisc
 
                 // only the primary instance gets here. Moves the pre-rename sessions over before
                 // anything (SessionManager, the preview cache, the capture standby) opens the
-                // sessions folder; a no-op once there is nothing left to move, and always on a
-                // Windows install upgraded in place (its data root is still its own install root,
-                // see PathConstants.AppDataRoot).
+                // sessions folder; a no-op once there is nothing left to move, always on a Windows
+                // install upgraded in place (its data root is still its own install root, see
+                // PathConstants.AppDataRoot), and beside such an install, whose data that is.
                 await Task.Run(() => LegacyClowd.MigrateDataFolder(PathConstants.DataDirectory, PathConstants.AppDataRoot,
                     LegacyClowdShellCleanup.HasSeparateLegacyInstall()));
 

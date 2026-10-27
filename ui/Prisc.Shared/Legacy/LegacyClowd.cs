@@ -51,6 +51,11 @@ public static class LegacyClowd
     public const string MainProcessName = "Clowd.Ui";
     public const string MainExeFileName = "Clowd.Ui.exe";
 
+    /// <summary>The main executable of a Windows install upgraded in place: Velopack keeps the
+    /// old root (<c>%LOCALAPPDATA%\Clowd</c>) and puts the renamed app in its <c>current\</c>.
+    /// Spelled out because Prisc.Shared cannot see the app's own executable name.</summary>
+    public const string UpgradedMainExeFileName = "Prisc.Ui.exe";
+
     public const string TelemetryOptOutVariable = "CLOWD_DISABLE_TELEMETRY";
 
     /// <summary>Owner names of the legacy share-region helper's windows, as window-capture
@@ -313,7 +318,10 @@ public static class LegacyClowd
     // ------------------------------------------------------------------------------------------
 
     /// <summary>True when a process of the legacy main executable is running. A failure to
-    /// enumerate processes counts as running, so the migration that asks waits for a later start.</summary>
+    /// enumerate processes counts as running, so the migration that asks waits for a later start.
+    /// A running <c>Prisc.Ui</c> of another install needs no check here: every Prisc build holds
+    /// the same single-instance mutex, so the migration (primary instance only) never runs beside
+    /// one, and an install upgraded in place is covered by <see cref="HasSeparateLegacyInstall"/>.</summary>
     public static bool IsLegacyProcessRunning()
     {
         try
@@ -331,12 +339,20 @@ public static class LegacyClowd
     }
 
     /// <summary>
-    /// True when a not-upgraded Clowd install exists beside us. Pure over its inputs:
-    /// on Windows <c>&lt;localAppData&gt;/Clowd/current/Clowd.Ui.exe</c> exists and
-    /// <c>&lt;localAppData&gt;/Clowd</c> is not <paramref name="ownInstallRoot"/>; on macOS any
-    /// <c>&lt;applicationsDir&gt;/Clowd.app/Contents/MacOS/Clowd.Ui</c> exists and that bundle is
-    /// not <paramref name="ownInstallRoot"/>. An upgraded install never matches: Velopack replaced
-    /// <c>current\</c> (Windows) or the bundle contents (macOS), so the legacy executable is gone.
+    /// True when another live install of the app exists beside us under the old name. Pure over
+    /// its inputs:
+    /// <list type="bullet">
+    /// <item>Windows: <c>&lt;localAppData&gt;/Clowd</c> is not <paramref name="ownInstallRoot"/> and
+    /// its <c>current\</c> holds either the legacy <c>Clowd.Ui.exe</c> (a never-updated install) or
+    /// <c>Prisc.Ui.exe</c> (an install upgraded in place, whose data still lives in that root, see
+    /// <c>PathConstants.AppDataRoot</c>). Either way the sessions and registrations there are that
+    /// install's, not ours to take: a fresh Prisc install or a dev build (no install root) beside
+    /// it must leave them alone.</item>
+    /// <item>macOS: any <c>&lt;applicationsDir&gt;/Clowd.app/Contents/MacOS/Clowd.Ui</c> exists and
+    /// that bundle is not <paramref name="ownInstallRoot"/>. An upgraded bundle (Velopack replaced
+    /// its contents, so the legacy executable is gone) does not match: macOS data lives in the
+    /// shared <c>&lt;DataDirectory&gt;/Prisc</c>, which the upgraded app migrated into itself.</item>
+    /// </list>
     /// Callers pass the real LocalAppData, <c>["/Applications", "~/Applications"]</c> (macOS)
     /// and the Velopack root (null for a dev build). Errs on the side of true; never throws.
     /// </summary>
@@ -347,7 +363,9 @@ public static class LegacyClowd
             if (!String.IsNullOrEmpty(localAppData))
             {
                 var root = Path.Combine(localAppData, FolderName);
-                if (File.Exists(Path.Combine(root, "current", MainExeFileName)) && !PathsEqual(root, ownInstallRoot))
+                var current = Path.Combine(root, "current");
+                if ((File.Exists(Path.Combine(current, MainExeFileName)) || File.Exists(Path.Combine(current, UpgradedMainExeFileName)))
+                    && !PathsEqual(root, ownInstallRoot))
                     return true;
             }
 

@@ -16,8 +16,9 @@ namespace Prisc.UI.Legacy;
 /// from <see cref="LegacyClowd"/>. Release builds touch only the release names and Debug builds
 /// only the <c>.DEBUG</c> ones, the same split as <see cref="AutoStartManager"/>.
 ///
-/// Nothing here runs while a separate, not-upgraded install still exists beside this one
-/// (<see cref="HasSeparateLegacyInstall"/>): those registrations are still that app's. Every
+/// Nothing here runs while another install still lives under the old name beside this one, not
+/// yet updated or upgraded in place (<see cref="HasSeparateLegacyInstall"/>): the legacy
+/// registrations are that app's to keep or (once upgraded, which it already did) to clean up. Every
 /// method is safe to call on any OS (a no-op elsewhere), never throws, and is idempotent.
 /// </summary>
 public static class LegacyClowdShellCleanup
@@ -42,8 +43,9 @@ public static class LegacyClowdShellCleanup
 
     /// <summary><see cref="LegacyClowd.HasSeparateLegacyInstall"/> for this machine: LocalAppData
     /// on Windows, <c>/Applications</c> and <c>~/Applications</c> on macOS, and
-    /// <see cref="OwnInstallRoot"/>. A dev build (no install root) beside an installed copy of the
-    /// old app always answers true, so it never migrates or cleans up the real install.</summary>
+    /// <see cref="OwnInstallRoot"/>. A dev build (no install root) beside an install under the old
+    /// name (a Clowd install, or one upgraded in place to Prisc) always answers true, so it never
+    /// migrates or cleans up the real install.</summary>
     public static bool HasSeparateLegacyInstall()
     {
         string localAppData = null;

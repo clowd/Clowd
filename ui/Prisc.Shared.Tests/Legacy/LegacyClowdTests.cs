@@ -419,10 +419,25 @@ namespace Prisc.Shared.Tests
         }
 
         [Fact]
-        public void SeparateInstall_IsFalse_ForAnUpgradedWindowsTree()
+        public void SeparateInstall_UpgradedWindowsTree_IsSeparate_UnlessItIsOurRoot()
         {
+            // an install upgraded in place keeps its root, and its data, under the old name
             var localAppData = Path.Combine(_root, "Local");
             Touch(Path.Combine(localAppData, "Clowd", "current", "Prisc.Ui.exe"));
+
+            // a fresh install beside it, and a dev build (no install root), must leave it alone
+            Assert.True(LegacyClowd.HasSeparateLegacyInstall(localAppData, Array.Empty<string>(), Path.Combine(localAppData, "Prisc")));
+            Assert.True(LegacyClowd.HasSeparateLegacyInstall(localAppData, Array.Empty<string>(), null));
+            // the upgraded install itself
+            Assert.False(LegacyClowd.HasSeparateLegacyInstall(localAppData, Array.Empty<string>(), Path.Combine(localAppData, "Clowd")));
+        }
+
+        [Fact]
+        public void SeparateInstall_IsFalse_ForADataOnlyWindowsTree()
+        {
+            // what old dev builds left behind: sessions, but no install
+            var localAppData = Path.Combine(_root, "Local");
+            Touch(Path.Combine(localAppData, "Clowd", "sessions", "A", "session.json"));
 
             Assert.False(LegacyClowd.HasSeparateLegacyInstall(localAppData, Array.Empty<string>(), null));
         }
@@ -711,6 +726,35 @@ namespace Prisc.Shared.Tests
 
             Assert.True(Directory.Exists(Path.Combine(LegacySessions, "A")));
             Assert.True(Directory.Exists(Path.Combine(LegacyRoot, "previews")));
+            Assert.False(Directory.Exists(NewRoot));
+        }
+
+        [Fact]
+        public void MigrateDataFolder_LeavesAnUpgradedInstallsSessions()
+        {
+            // %LOCALAPPDATA%\Clowd upgraded in place: Prisc runs from it and keeps its data there
+            CreateLegacySession("A");
+            WriteFile(Path.Combine(LegacyRoot, "previews", "a.webp"), "x");
+            Touch(Path.Combine(LegacyRoot, "current", "Prisc.Ui.exe"));
+
+            // a fresh install (own root %LOCALAPPDATA%\Prisc), then a dev build (no own root),
+            // asking exactly what App does at startup
+            foreach (var ownRoot in new[] { NewRoot, null })
+            {
+                LegacyClowd.MigrateDataFolder(DataDirectory, NewRoot,
+                    LegacyClowd.HasSeparateLegacyInstall(DataDirectory, Array.Empty<string>(), ownRoot), () => false);
+
+                Assert.True(File.Exists(Path.Combine(LegacySessions, "A", "session.json")));
+                Assert.True(File.Exists(Path.Combine(LegacyRoot, "previews", "a.webp")));
+                Assert.False(Directory.Exists(NewRoot));
+            }
+
+            // the upgraded install itself: its data root is the legacy root, so nothing moves either
+            LegacyClowd.MigrateDataFolder(DataDirectory, LegacyRoot,
+                LegacyClowd.HasSeparateLegacyInstall(DataDirectory, Array.Empty<string>(), LegacyRoot), () => false);
+
+            Assert.True(File.Exists(Path.Combine(LegacySessions, "A", "session.json")));
+            Assert.True(File.Exists(Path.Combine(LegacyRoot, "previews", "a.webp")));
             Assert.False(Directory.Exists(NewRoot));
         }
 
