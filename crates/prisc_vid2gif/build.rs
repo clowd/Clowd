@@ -93,7 +93,8 @@ fn linux() {
     // start.
     let root = env::var_os("DEP_FFMPEG_DEPS_ROOT").map(PathBuf::from).unwrap_or_else(|| {
         panic!(
-            "prisc_vid2gif: DEP_FFMPEG_DEPS_ROOT not set — prisc_ffmpeg_sys did not export the FFmpeg              bundle path (is its `links = \"ffmpeg\"` key still present?)"
+            "prisc_vid2gif: DEP_FFMPEG_DEPS_ROOT not set: prisc_ffmpeg_sys did not export the FFmpeg \
+             bundle path (is its `links = \"ffmpeg\"` key still present?)"
         )
     });
     let bundle = prisc_build_support::linux::FfmpegBundle { root };
