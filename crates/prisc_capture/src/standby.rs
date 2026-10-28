@@ -38,7 +38,7 @@ pub struct Standby {
     parent_gone: Arc<AtomicBool>,
     capture_active: Arc<AtomicBool>,
     hotkeys: StandbyHotkeys,
-    last_statuses: serde_json::Map<String, serde_json::Value>,
+    last_statuses: Option<capture::Hotkeys>,
 }
 
 impl Standby {
@@ -121,7 +121,7 @@ impl Standby {
             parent_gone,
             capture_active,
             hotkeys,
-            last_statuses: serde_json::Map::new(),
+            last_statuses: None,
         })
     }
 
@@ -201,7 +201,7 @@ impl Standby {
 struct StandbyApp<'a> {
     args: &'a mut CliArgs,
     hotkeys: &'a mut StandbyHotkeys,
-    last_statuses: &'a mut serde_json::Map<String, serde_json::Value>,
+    last_statuses: &'a mut Option<capture::Hotkeys>,
     input_rx: &'a mpsc::Receiver<Input>,
     parent_gone: &'a AtomicBool,
     selected: Option<CaptureMode>,
@@ -215,7 +215,7 @@ impl StandbyApp<'_> {
             Ok(next) if next.standby => {
                 let statuses = self.hotkeys.apply(&next);
                 *self.args = next;
-                *self.last_statuses = statuses.clone();
+                *self.last_statuses = Some(statuses.clone());
                 report_settings_status(statuses);
                 return;
             }
@@ -226,8 +226,8 @@ impl StandbyApp<'_> {
         // so replay their last reported state (exact, error text included)
         // rather than pretending they broke.
         out().error(ErrorCode::Rejected, format!("rejected settings snapshot: {rejection}"), false);
-        if !self.last_statuses.is_empty() {
-            report_settings_status(self.last_statuses.clone());
+        if let Some(statuses) = self.last_statuses.clone() {
+            report_settings_status(statuses);
         }
     }
 
@@ -262,7 +262,7 @@ impl StandbyApp<'_> {
         match self.hotkeys.poll(Instant::now()) {
             Poll::Unchanged => {}
             Poll::Statuses(statuses) => {
-                *self.last_statuses = statuses.clone();
+                *self.last_statuses = Some(statuses.clone());
                 report_settings_status(statuses);
             }
             Poll::Fatal(reason) => {
@@ -317,18 +317,10 @@ impl ApplicationHandler for StandbyApp<'_> {
     fn window_event(&mut self, _event_loop: &ActiveEventLoop, _window_id: winit::window::WindowId, _event: winit::event::WindowEvent) {}
 }
 
-/// `settings_status`. The statuses come from standby_hotkeys as JSON objects in
-/// exactly the record's shape (`{gesture, active, error, error_code}` per
-/// gesture, under `main`, `window` and `monitor`).
-fn report_settings_status(hotkeys: serde_json::Map<String, serde_json::Value>) {
-    match serde_json::from_value::<capture::Hotkeys>(serde_json::Value::Object(hotkeys)) {
-        Ok(hotkeys) => {
-            out().emit(&Event::SettingsStatus {
-                hotkeys,
-            });
-        }
-        Err(err) => log::error!("hotkey statuses do not match the protocol's shape: {err}"),
-    }
+fn report_settings_status(hotkeys: capture::Hotkeys) {
+    out().emit(&Event::SettingsStatus {
+        hotkeys,
+    });
 }
 
 fn create_session_dir(root: &Path) -> anyhow::Result<PathBuf> {
