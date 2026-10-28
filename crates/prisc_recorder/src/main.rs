@@ -6,9 +6,7 @@ mod encoder_config;
 mod frame_clock;
 mod input_capture;
 mod input_hook;
-mod platform;
 mod recorder;
-mod region;
 mod settings;
 mod status;
 mod tracker;
@@ -21,6 +19,11 @@ use std::sync::mpsc;
 
 use clap::Parser;
 use prisc_ipc::catalog::{recorder as wire, ErrorCode};
+// The platform layer and the region math live in prisc_obs_platform, shared with
+// prisc_share_region; every module here reaches them as `crate::platform` and
+// `crate::region`.
+use prisc_obs_platform as platform;
+use prisc_obs_platform::region;
 
 use commands::Command;
 
@@ -31,8 +34,13 @@ fn main() {
     status::init(prisc_ipc::open::<wire::Event>("prisc_recorder"));
     // Every exit goes through prisc_ipc::lifetime::exit, never a drop of this
     // guard, so the session is ended and the queue flushed by the exit hook.
-    let _sentry = prisc_rust_core::telemetry::init("prisc_recorder");
-    prisc_ipc::lifetime::on_exit(prisc_rust_core::telemetry::shutdown_hook);
+    // No Sentry on Linux (HELPER_PROTOCOL.md §3.4).
+    #[cfg(not(target_os = "linux"))]
+    let _sentry = {
+        let guard = prisc_rust_core::telemetry::init("prisc_recorder");
+        prisc_ipc::lifetime::on_exit(prisc_rust_core::telemetry::shutdown_hook);
+        guard
+    };
     // `_exit` / `ExitProcess`: libobs teardown is intentionally skipped (known
     // OBS shutdown crashes; the C++ original calls ExitProcess for the same
     // reason).

@@ -2,7 +2,7 @@
 # Runs a command inside the Linux build image (tools/linux-build/Dockerfile)
 # with the current checkout bind-mounted at the same path, so paths printed by
 # the build match the host's. The cargo registry/git caches are mounted from
-# the host's ~/.cargo, so CI's actions/cache of those dirs applies. Build
+# the host's ~/.cargo, so CI's host-side cache of those dirs applies. Build
 # outputs (target/, crates/obs-studio/.deps) land in the checkout as usual.
 #
 #   docker build -t prisc-recorder-linux tools/linux-build

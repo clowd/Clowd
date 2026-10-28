@@ -107,8 +107,14 @@ s=$(streams "$out/multi.mp4"); echo "multi.mp4:"; echo "$s"
 grep -q '^h264,640,480,' <<< "$s" || { echo "::error::multi.mp4: screen track is not 640x480"; exit 1; }
 
 # 3. prisc_vid2gif on the recording, from the relocated bundle. stdin is held
-#    open: EOF on it cancels the conversion.
-"$moved/prisc_vid2gif" "$out/single.mp4" "$out/single.gif" --quality fair < <(sleep 600 2> /dev/null) | tail -1
+#    open, since EOF on it cancels the conversion, by a writer that is stopped
+#    right after (as in tools/staging/stage-recorder.sh, where a process
+#    substitution's sleep was seen keeping a piped stdout open).
+mkfifo "$out/vid2gif-stdin"
+sleep 600 > "$out/vid2gif-stdin" 2> /dev/null &
+holder=$!
+"$moved/prisc_vid2gif" "$out/single.mp4" "$out/single.gif" --quality fair < "$out/vid2gif-stdin" | tail -1
+kill "$holder" 2> /dev/null || true
 [ "$(head -c 6 "$out/single.gif")" = "GIF89a" ] || { echo "::error::prisc_vid2gif did not produce a GIF"; exit 1; }
 
 # 4. Out-of-scope features fail fast instead of misbehaving, and the

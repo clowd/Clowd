@@ -151,3 +151,83 @@ pub fn window_to_screen(monitor_bounds: ScreenRect, pt: WindowPoint) -> ScreenPo
     let b = monitor_bounds.to_f32();
     ScreenPointF::new(pt.x + b.left(), pt.y + b.top())
 }
+
+// ── Command-line parsing ───────────────────────────────────────────
+
+/// `X,Y,W,H`, the region format every Prisc command line shares (the
+/// scrolling driver's `--region`, the recorder's `--region`, the share-region
+/// `move` command). Negative origins are legal (a monitor left of or above the
+/// primary); a non-positive width or height is not, since it fails later with
+/// an OS error that says nothing about where the bad rect came from.
+pub fn parse_rect(s: &str) -> Result<ScreenRect, String> {
+    let n = parse_i32_list::<4>(s)?;
+    if n[2] <= 0 || n[3] <= 0 {
+        return Err(format!("'{s}' has a non-positive width or height"));
+    }
+    Ok(ScreenRect::from_xy_size(n[0], n[1], n[2], n[3]))
+}
+
+/// `X,Y`. Negative coordinates are legal and common.
+pub fn parse_point(s: &str) -> Result<ScreenPoint, String> {
+    let n = parse_i32_list::<2>(s)?;
+    Ok(ScreenPoint::new(n[0], n[1]))
+}
+
+/// Exactly `N` comma-separated decimal integers, no more and no fewer.
+fn parse_i32_list<const N: usize>(s: &str) -> Result<[i32; N], String> {
+    let mut out = [0i32; N];
+    let mut parts = s.split(',');
+    for slot in out.iter_mut() {
+        let part = parts
+            .next()
+            .ok_or_else(|| format!("'{s}' needs {N} comma-separated integers"))?
+            .trim();
+        *slot = part
+            .parse()
+            .map_err(|_| format!("'{part}' is not an integer"))?;
+    }
+    if parts.next().is_some() {
+        return Err(format!("'{s}' needs exactly {N} comma-separated integers"));
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rects_parse_and_reject_degenerate() {
+        assert_eq!(parse_rect("10,20,300,400").unwrap(), ScreenRect::from_xy_size(10, 20, 300, 400));
+        // Secondary monitor left of the primary: negative origin, positive size.
+        assert_eq!(
+            parse_rect("-1920,0,1920,1080").unwrap(),
+            ScreenRect::from_xy_size(-1920, 0, 1920, 1080)
+        );
+        assert_eq!(parse_rect(" 1 , 2 , 3 , 4 ").unwrap(), ScreenRect::from_xy_size(1, 2, 3, 4));
+        assert!(parse_rect("10,20,0,400").is_err());
+        assert!(parse_rect("10,20,300,-1").is_err());
+        assert!(parse_rect("10,20,300").is_err());
+        assert!(parse_rect("10,20,300,400,500").is_err());
+        assert!(parse_rect("10,20,300,x").is_err());
+        assert!(parse_rect("").is_err());
+    }
+
+    #[test]
+    fn points_parse_negative_coordinates() {
+        assert_eq!(parse_point("40,50").unwrap(), ScreenPoint::new(40, 50));
+        assert_eq!(parse_point("-40,-50").unwrap(), ScreenPoint::new(-40, -50));
+        assert!(parse_point("40").is_err());
+        assert!(parse_point("40,50,60").is_err());
+    }
+
+    #[test]
+    fn parse_errors_name_the_offending_input() {
+        assert_eq!(parse_rect("1,2,3").unwrap_err(), "'1,2,3' needs 4 comma-separated integers");
+        assert_eq!(parse_rect("1,2,3,x").unwrap_err(), "'x' is not an integer");
+        assert_eq!(
+            parse_rect("1,2,3,4,5").unwrap_err(),
+            "'1,2,3,4,5' needs exactly 4 comma-separated integers"
+        );
+    }
+}

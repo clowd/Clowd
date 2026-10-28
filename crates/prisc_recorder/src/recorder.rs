@@ -7,7 +7,6 @@
 //! ack with `configure_error` and let the parent decide.
 
 use std::collections::VecDeque;
-use std::ffi::CString;
 use std::fmt::Display;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -21,7 +20,7 @@ use prisc_obs::encoder::ObsEncoder;
 use prisc_obs::output::ObsOutput;
 use prisc_obs::scene::{ObsScene, ObsSceneItem};
 use prisc_obs::signal::SignalConnection;
-use prisc_obs::source::ObsSource;
+use prisc_obs::source::{self, ObsSource};
 use prisc_obs::video::VideoInfo;
 use prisc_obs::volmeter::ObsVolmeter;
 use prisc_ipc::catalog::{recorder as wire, ErrorCode};
@@ -373,7 +372,9 @@ impl Recorder {
 
         // 1. Log/crash handlers were installed first thing in main (stdout must
         //    stay protocol-only from the first libobs line).
-        platform::init_process();
+        if let Err(e) = platform::init_process() {
+            fail(e);
+        }
         let context = match ObsContext::new("en-US") {
             Ok(c) => c,
             Err(e) => fail(format_args!("Failed to initialize OBS: {e}")),
@@ -499,12 +500,8 @@ impl Recorder {
                                bin:  {}\n  module data: {}",
                               paths.module_bin, paths.module_data));
         }
-        // NOT obs_source_create != null: libobs creates a placeholder source for
-        // unknown ids; get_display_name returns null exactly when unregistered.
-        let display_capture_c = CString::new(platform::display_capture_id()).unwrap();
-        let display_name =
-            unsafe { prisc_obs_sys::obs_source_get_display_name(display_capture_c.as_ptr()) };
-        if display_name.is_null() && picker {
+        let display_capture_registered = source::is_registered(platform::display_capture_id());
+        if !display_capture_registered && picker {
             // linux-pipewire registers the portal source only after asking
             // xdg-desktop-portal which capture types it offers; no answer (no
             // session bus, no portal, no ScreenCast backend) means no source.
@@ -519,7 +516,7 @@ impl Recorder {
                 paths.module_data
             ));
         }
-        if display_name.is_null() {
+        if !display_capture_registered {
             fail(format_args!(
                 "Display capture source '{}' is not registered — the capture plugin failed to \
                                load.\n  module bin:  {}\n  module data: {}",
@@ -530,17 +527,16 @@ impl Recorder {
         }
         // Same registration check for the webcam source, only when requested
         // (the "test" pseudo-device uses color_source from image-source).
-        if matches!(webcam_device.as_deref(), Some(id) if id != webcam::TEST_DEVICE_ID) {
-            let webcam_c = CString::new(platform::WEBCAM_SOURCE_ID).unwrap();
-            if unsafe { prisc_obs_sys::obs_source_get_display_name(webcam_c.as_ptr()) }.is_null() {
-                fail(format_args!(
-                    "Webcam source '{}' is not registered — the camera capture plugin failed \
-                     to load.\n  module bin:  {}\n  module data: {}",
-                    platform::WEBCAM_SOURCE_ID,
-                    paths.module_bin,
-                    paths.module_data
-                ));
-            }
+        if matches!(webcam_device.as_deref(), Some(id) if id != webcam::TEST_DEVICE_ID)
+            && !source::is_registered(platform::WEBCAM_SOURCE_ID)
+        {
+            fail(format_args!(
+                "Webcam source '{}' is not registered: the camera capture plugin failed \
+                 to load.\n  module bin:  {}\n  module data: {}",
+                platform::WEBCAM_SOURCE_ID,
+                paths.module_bin,
+                paths.module_data
+            ));
         }
 
         // 7. Scene: one display-capture item per intersected monitor, offset
@@ -800,7 +796,10 @@ impl Recorder {
                     &monitors,
                     plan.canvas_scale,
                     plan.canvas,
-                    output.as_ptr(),
+                    // SAFETY: `Recorder` declares `input_capture` above
+                    // `output`, so the sidecar (and its tick callback and
+                    // writer, which hold this handle) drops first.
+                    unsafe { output.handle() },
                     frame_clock.clone(),
                 ) {
                     Ok(ic) => Some(ic),
@@ -820,7 +819,10 @@ impl Recorder {
                     capture_region,
                     plan.canvas_scale,
                     plan.canvas,
-                    output.as_ptr(),
+                    // SAFETY: as for the input capture: `window_capture` is
+                    // declared above `output` and joins its poll thread on
+                    // drop.
+                    unsafe { output.handle() },
                     frame_clock.clone(),
                 ) {
                     Ok(wc) => Some(wc),

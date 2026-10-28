@@ -16,9 +16,9 @@ use windows::Win32::{
         HiDpi::{GetAwarenessFromDpiAwarenessContext, GetThreadDpiAwarenessContext, DPI_AWARENESS_PER_MONITOR_AWARE},
         Input::KeyboardAndMouse::{GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_WHEEL, MOUSEINPUT, VK_ESCAPE},
         WindowsAndMessaging::{
-            ChildWindowFromPointEx, GetAncestor, GetCursorPos, GetWindowRect, IsWindow, SendMessageTimeoutW, SetCursorPos,
-            SetForegroundWindow, SetWindowPos, WindowFromPoint, CWP_SKIPINVISIBLE, CWP_SKIPTRANSPARENT, GA_ROOT, GA_ROOTOWNER, HWND_TOP,
-            SMTO_ABORTIFHUNG, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WM_MOUSEWHEEL,
+            ChildWindowFromPointEx, GetAncestor, GetWindowRect, IsWindow, SendMessageTimeoutW, SetForegroundWindow, SetWindowPos,
+            WindowFromPoint, CWP_SKIPINVISIBLE, CWP_SKIPTRANSPARENT, GA_ROOT, GA_ROOTOWNER, HWND_TOP, SMTO_ABORTIFHUNG, SWP_NOACTIVATE,
+            SWP_NOMOVE, SWP_NOSIZE, WM_MOUSEWHEEL,
         },
     },
 };
@@ -26,6 +26,7 @@ use windows::Win32::{
 use windows::Win32::Foundation::HWND;
 
 use super::{WheelDir, RAISE_POLL, RAISE_TIMEOUT};
+use prisc_rust_core::desktop;
 use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// The window the driver is scrolling. A top-level `HWND` — the marker's
@@ -215,7 +216,7 @@ pub fn describe_window_at(point: ScreenPoint) -> String {
 /// cursor is a question about what the *user* is doing, and re-parking it
 /// would erase the answer.
 pub fn park_cursor(point: ScreenPoint) {
-    if unsafe { SetCursorPos(point.x, point.y) }.is_err() {
+    if !desktop::set_cursor_position(point) {
         warn!("SetCursorPos({}, {}) failed; wheel events may land elsewhere", point.x, point.y);
     }
 }
@@ -224,9 +225,7 @@ pub fn park_cursor(point: ScreenPoint) {
 /// desktop, a secure-desktop transition). Callers treat that as "no news",
 /// never as "it moved".
 pub fn cursor_pos() -> Option<ScreenPoint> {
-    let mut pt = POINT::default();
-    unsafe { GetCursorPos(&mut pt) }.ok()?;
-    Some(ScreenPoint::new(pt.x, pt.y))
+    desktop::cursor_position()
 }
 
 /// Is Escape physically down right now?

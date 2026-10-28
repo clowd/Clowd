@@ -7,11 +7,14 @@ license = "GPL-2.0-or-later"
 [dependencies]
 # The helper protocol (crates/prisc_capture/HELPER_PROTOCOL.md): stdio channel, the `job` catalog, lifetime.
 prisc_ipc = { workspace = true }
-# Sentry: panics only (init_job), one project with the rest of Prisc.
-prisc_rust_core = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
 prisc_ffmpeg_sys = { workspace = true }
+
+# Sentry: panics only (init_job), one project with the rest of Prisc. Not on Linux, where
+# vid2gif is built in the manylinux image without the sentry/TLS tree (HELPER_PROTOCOL.md §3.4).
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+prisc_rust_core = { workspace = true, features = ["telemetry"] }
 
 [dev-dependencies]
 # tests/cli.rs parses the protocol lines.

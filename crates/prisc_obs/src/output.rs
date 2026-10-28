@@ -5,8 +5,50 @@ use crate::data::ObsData;
 use crate::encoder::ObsEncoder;
 use crate::error::ObsError;
 
+/// libobs's per-output track limits (`MAX_AUDIO_MIXES` and friends), for
+/// callers that size their own track tables against them.
+pub use prisc_obs_sys::{MAX_AUDIO_MIXES, MAX_OUTPUT_AUDIO_ENCODERS, MAX_OUTPUT_VIDEO_ENCODERS};
+
 pub struct ObsOutput {
     pub(crate) ptr: *mut prisc_obs_sys::obs_output_t,
+}
+
+/// A borrowed, copyable view of an [`ObsOutput`] for threads that only read
+/// its pause state: the graphics thread's tick callbacks and the sidecar
+/// writers. It holds no reference of its own; see [`ObsOutput::handle`].
+#[derive(Debug, Clone, Copy)]
+pub struct OutputHandle {
+    ptr: *mut prisc_obs_sys::obs_output_t,
+}
+
+// SAFETY: the pause queries are thread-safe in libobs (they read the
+// output's and encoders' pause state under their own locks), and the handle's
+// validity is the caller's promise, made when it was created.
+unsafe impl Send for OutputHandle {}
+unsafe impl Sync for OutputHandle {}
+
+impl OutputHandle {
+    /// Whether the output is paused right now.
+    pub fn paused(&self) -> bool {
+        unsafe { prisc_obs_sys::obs_output_paused(self.ptr) }
+    }
+
+    /// Accumulated pause time (ns), read off the track-0 video encoder: the
+    /// outputs used here are OBS_OUTPUT_ENCODED, whose pause path
+    /// (`obs_encoded_output_pause`) updates only the per-encoder pause
+    /// structs, so `obs_output_get_pause_offset` would always return 0. All of
+    /// the output's encoders pause at the same `closest_v_ts`, so track 0
+    /// speaks for the recording. 0 when there is no encoder
+    /// (`obs_encoder_get_pause_offset(NULL)` is 0).
+    ///
+    /// Must not race a video encoder swap; the recorder only swaps encoders
+    /// before the output starts.
+    pub fn pause_offset_ns(&self) -> u64 {
+        unsafe {
+            let encoder = prisc_obs_sys::obs_output_get_video_encoder(self.ptr);
+            prisc_obs_sys::obs_encoder_get_pause_offset(encoder)
+        }
+    }
 }
 
 impl ObsOutput {
@@ -96,6 +138,15 @@ impl ObsOutput {
 
     pub fn signal_handler(&self) -> *mut prisc_obs_sys::signal_handler_t {
         unsafe { prisc_obs_sys::obs_output_get_signal_handler(self.ptr as *const _) }
+    }
+
+    /// A [`OutputHandle`] onto this output.
+    ///
+    /// # Safety
+    /// The handle holds no reference: it must not be used once this
+    /// `ObsOutput` has been dropped.
+    pub unsafe fn handle(&self) -> OutputHandle {
+        OutputHandle { ptr: self.ptr }
     }
 
     pub fn as_ptr(&self) -> *mut prisc_obs_sys::obs_output_t {

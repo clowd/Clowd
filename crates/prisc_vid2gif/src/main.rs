@@ -67,8 +67,13 @@ fn main() {
     // `hello` first, before FFmpeg is initialised or called, with stdout
     // claimed so nothing FFmpeg prints can reach the protocol pipe.
     let out = prisc_ipc::open::<Event>("prisc_vid2gif");
-    let _sentry = prisc_rust_core::telemetry::init_job("prisc_vid2gif");
-    prisc_ipc::lifetime::on_exit(prisc_rust_core::telemetry::shutdown_hook);
+    // No Sentry on Linux (HELPER_PROTOCOL.md §3.4).
+    #[cfg(not(target_os = "linux"))]
+    let _sentry = {
+        let guard = prisc_rust_core::telemetry::init_job("prisc_vid2gif");
+        prisc_ipc::lifetime::on_exit(prisc_rust_core::telemetry::shutdown_hook);
+        guard
+    };
 
     let args = Args::parse();
     convert::silence_info_logging();

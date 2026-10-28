@@ -8,10 +8,22 @@ edition.workspace = true
 rust-version.workspace = true
 
 # Only what the Rust binaries genuinely share: the coordinate space, the session.json
-# contract, the exit codes the shell reads (re-exported from prisc_ipc), and the Sentry setup
-# that puts them all in one project under one release.
+# contract, the exit codes the shell reads (re-exported from prisc_ipc), the Sentry setup that
+# puts them all in one project under one release, and the desktop queries (windows, monitors,
+# cursor) that the overlay, the scrolling driver and the recorder must answer the same way.
 # app.manifest sits here for the same reason — it is what makes a process per-monitor DPI
 # aware, and a drifted copy would silently make one binary photograph the wrong pixels.
+
+# Each consumer names the modules it uses (the workspace entry turns default
+# features off), so the Linux recorder stack, which does not report to Sentry,
+# does not build the sentry/TLS tree, and prisc_ai, which reads no windows or
+# monitors, does not link the desktop module's frameworks.
+[features]
+default = ["desktop", "telemetry"]
+# The window list, monitors, DXGI outputs and the cursor.
+desktop = ["dep:windows", "dep:objc2-core-foundation", "dep:objc2-core-graphics"]
+# The shared Sentry setup.
+telemetry = ["dep:sentry"]
 
 [dependencies]
 prisc_ipc.workspace = true
@@ -19,8 +31,42 @@ anyhow.workspace = true
 euclid.workspace = true
 image = { workspace = true, features = ["png"] }
 log.workspace = true
-sentry.workspace = true
+sentry = { workspace = true, optional = true }
 serde.workspace = true
+
+# The desktop module: window list, monitors, DXGI outputs and the cursor.
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, optional = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    # IVirtualDesktopManager for the overlay's current-desktop filter.
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    # OpenProcess + QueryFullProcessImageNameW for window owner names.
+    "Win32_System_Threading",
+    "Win32_UI_HiDpi",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-core-foundation = { workspace = true, optional = true, features = ["CFArray", "CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString", "CFUUID"] }
+objc2-core-graphics = { workspace = true, optional = true, features = [
+    "CGDataProvider",
+    "CGDirectDisplay",
+    "CGError",
+    "CGEvent",
+    "CGEventSource",
+    "CGEventTypes",
+    "CGImage",
+    # CGWarpMouseCursorPosition / CGAssociateMouseAndMouseCursorPosition; the
+    # latter's binding also needs `libc` (boolean_t argument).
+    "CGRemoteOperation",
+    "CGWindow",
+    "libc",
+] }
 
 [dev-dependencies]
 serde_json.workspace = true

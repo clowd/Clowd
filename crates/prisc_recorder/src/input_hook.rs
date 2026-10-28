@@ -182,7 +182,7 @@ static CTX: OnceLock<HookCtx> = OnceLock::new();
 
 fn send(kind: RawEventKind) {
     if let Some(ctx) = CTX.get() {
-        let t_ns = unsafe { prisc_obs_sys::os_gettime_ns() };
+        let t_ns = prisc_obs::time::now_ns();
         (ctx.sink)(RawEvent { t_ns, kind });
     }
 }

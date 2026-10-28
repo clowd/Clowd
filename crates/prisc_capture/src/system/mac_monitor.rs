@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
-use core_graphics::display::{CGDisplay, CGMainDisplayID};
 
 use crate::system::MonitorInfo;
+use prisc_rust_core::desktop;
 use prisc_rust_core::geometry::{LogicalPoint, RectExt, ScreenRect};
 
 struct RawMonitor {
@@ -20,21 +20,16 @@ struct RawMonitor {
 }
 
 pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
-    let display_ids = CGDisplay::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
+    let displays = desktop::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
 
-    let main_id = unsafe { CGMainDisplayID() };
-
-    let mut raw: Vec<RawMonitor> = Vec::with_capacity(display_ids.len());
-    for (i, &id) in display_ids.iter().enumerate() {
-        let display = CGDisplay::new(id);
-        let cg_bounds = display.bounds();
-
-        let mode = display.display_mode();
-        let (phys_w, phys_h, refresh_hz) = if let Some(ref mode) = mode {
-            (mode.pixel_width() as u32, mode.pixel_height() as u32, mode.refresh_rate() as f32)
-        } else {
-            (display.pixels_wide() as u32, display.pixels_high() as u32, 0.0)
-        };
+    let mut raw: Vec<RawMonitor> = Vec::with_capacity(displays.len());
+    for (i, display) in displays.iter().enumerate() {
+        let cg_bounds = display.bounds;
+        let (phys_w, phys_h) = display.pixel_size();
+        let (phys_w, phys_h) = (phys_w as u32, phys_h as u32);
+        let refresh_hz = display
+            .mode
+            .map_or(0.0, |m| m.refresh_hz as f32);
 
         let scale = if cg_bounds.size.width > 0.0 {
             phys_w as f32 / cg_bounds.size.width as f32
@@ -52,7 +47,7 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
             phys_w,
             phys_h,
             scale,
-            is_primary: id == main_id,
+            is_primary: display.is_main,
             refresh_hz,
             name: format!("Display {}", i + 1),
         });

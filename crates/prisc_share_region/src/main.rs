@@ -255,7 +255,9 @@ fn main() {
 
     // DPI awareness (Windows) must be set before any window is created or
     // monitor is enumerated; no-op on macOS.
-    prisc_obs_platform::init_process();
+    if let Err(e) = prisc_obs_platform::init_process() {
+        status::out().fatal(ErrorCode::InitFailed, e);
+    }
 
     // macOS: the NSApplication must exist, with its activation policy set,
     // BEFORE the obs bootstrap brings up Metal graphics. Accessory = no Dock

@@ -31,13 +31,14 @@
 //! `done`, exactly as it does for the input-capture sidecar.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::ffi::c_void;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
+use prisc_obs::output::OutputHandle;
+use prisc_obs::tick::TickCallback;
 use serde::Serialize;
 
 use crate::frame_clock::FrameClock;
@@ -379,42 +380,23 @@ struct Snapshot {
 struct Shared {
     armed: AtomicBool,
     closed: AtomicBool,
-    registered: AtomicBool,
     clock: Arc<FrameClock>,
     tx: mpsc::Sender<WorkerMsg>,
-    /// `*mut obs_output_t` as usize; output outlives callback and worker.
-    output: usize,
+    /// The output outlives the tick callback and the worker.
+    output: OutputHandle,
     file: Mutex<BufWriter<std::fs::File>>,
 }
 
-/// Only clock/pause reads and a channel send on the graphics thread.
-unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let shared = &*(param as *const Shared);
-        if !shared.armed.load(Ordering::Acquire) {
-            return;
-        }
-        let output = shared.output as *mut prisc_obs_sys::obs_output_t;
-        if prisc_obs_sys::obs_output_paused(output) {
-            return;
-        }
-        let frame_ns = prisc_obs_sys::obs_get_video_frame_time();
-        let offset = pause_offset_ns(output);
-        let _ = shared.tx.send(WorkerMsg::Tick(frame_ns, offset));
-    }));
-}
-
-/// Accumulated pause time (ns) for this recorder's output, read off the
-/// track-0 video encoder for the same reason `input_capture` does: the outputs
-/// here are OBS_OUTPUT_ENCODED, whose pause bookkeeping lives on the encoders,
-/// so `obs_output_get_pause_offset` would always be 0.
-///
-/// # Safety
-/// `output` must be a live output pointer, and the caller must be past the
-/// arm gate — encoder swaps (`handle_configure`) are pre-start only.
-unsafe fn pause_offset_ns(output: *mut prisc_obs_sys::obs_output_t) -> u64 {
-    let encoder = prisc_obs_sys::obs_output_get_video_encoder(output);
-    prisc_obs_sys::obs_encoder_get_pause_offset(encoder)
+/// The tick callback body: only clock/pause reads and a channel send on the
+/// graphics thread. The pause offset is read past the arm gate, after which
+/// encoder swaps (`handle_configure`, pre-start only) cannot happen.
+fn tick(shared: &Shared) {
+    if !shared.armed.load(Ordering::Acquire) || shared.output.paused() {
+        return;
+    }
+    let frame_ns = prisc_obs::time::video_frame_time_ns();
+    let offset = shared.output.pause_offset_ns();
+    let _ = shared.tx.send(WorkerMsg::Tick(frame_ns, offset));
 }
 
 /// Apply only surviving snapshots. A pre-origin snapshot must not update the
@@ -571,9 +553,8 @@ fn worker_loop(
             }
         }
         if let Some((frame_ns, pause_offset)) = latest {
-            let output = shared.output as *mut prisc_obs_sys::obs_output_t;
             // A pause can arrive while a trigger waits behind a disk write.
-            if !unsafe { prisc_obs_sys::obs_output_paused(output) } {
+            if !shared.output.paused() {
                 pending.push_back(Snapshot {
                     frame_ns,
                     pause_offset,
@@ -621,10 +602,10 @@ pub struct WindowCapture {
     /// `w`/`h` (taken from the region plan, not recomputed — the planner
     /// rounds the canvas down to an even size).
     canvas: (u32, u32),
-    /// The address handed to libobs is the `Arc`'s heap allocation, so it
-    /// stays valid when `self` moves — no extra boxing needed.
     shared: Arc<Shared>,
-    /// Joined by `Drop`. The poll thread dereferences the raw output pointer,
+    /// Holds its own `Arc<Shared>`; deregistered by `close`.
+    tick: TickCallback,
+    /// Joined by `Drop`. The poll thread reads the output through its handle,
     /// so it must be stopped while that output is still alive — which is why
     /// `Recorder` declares its `window_capture` field ABOVE `output` (drop
     /// order is declaration order). The join is what makes that ordering
@@ -642,7 +623,7 @@ impl WindowCapture {
         region: Rect,
         canvas_scale: f64,
         canvas: (u32, u32),
-        output: *mut prisc_obs_sys::obs_output_t,
+        output: OutputHandle,
         clock: Arc<FrameClock>,
     ) -> Result<WindowCapture, String> {
         let file = std::fs::File::create(path)
@@ -652,10 +633,9 @@ impl WindowCapture {
         let shared = Arc::new(Shared {
             armed: AtomicBool::new(false),
             closed: AtomicBool::new(false),
-            registered: AtomicBool::new(true),
             clock,
             tx,
-            output: output as usize,
+            output,
             file: Mutex::new(BufWriter::new(file)),
         });
 
@@ -665,8 +645,10 @@ impl WindowCapture {
             .spawn(move || worker_loop(poll_shared, rx, region, canvas_scale))
             .map_err(|e| format!("failed to spawn the window-capture writer: {e}"))?;
 
-        let param = Arc::as_ptr(&shared) as *mut c_void;
-        unsafe { prisc_obs_sys::obs_add_tick_callback(Some(tick), param) };
+        let tick_shared = shared.clone();
+        let tick = TickCallback::add(move |_seconds| {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tick(&tick_shared)));
+        });
 
         Ok(WindowCapture {
             path: path.to_path_buf(),
@@ -676,6 +658,7 @@ impl WindowCapture {
             ),
             canvas,
             shared,
+            tick,
             poll: Some(poll),
         })
     }
@@ -722,10 +705,7 @@ impl WindowCapture {
     /// its startup snapshots and flushes before acknowledging it.
     pub fn close(&self) {
         self.shared.armed.store(false, Ordering::Release);
-        if self.shared.registered.swap(false, Ordering::AcqRel) {
-            let param = Arc::as_ptr(&self.shared) as *mut c_void;
-            unsafe { prisc_obs_sys::obs_remove_tick_callback(Some(tick), param) };
-        }
+        self.tick.remove();
         if self.shared.closed.swap(true, Ordering::AcqRel) {
             return;
         }

@@ -26,11 +26,11 @@ pub const MAX_AUDIO_TRACKS: usize = 6;
 // devices past the new limit would silently share a track instead of failing
 // validation. Both limits are checked — a mask needs a mixer AND an encoder
 // slot.
-const _: () = assert!(MAX_AUDIO_TRACKS <= prisc_obs_sys::MAX_AUDIO_MIXES as usize);
-const _: () = assert!(MAX_AUDIO_TRACKS <= prisc_obs_sys::MAX_OUTPUT_AUDIO_ENCODERS as usize);
+const _: () = assert!(MAX_AUDIO_TRACKS <= prisc_obs::output::MAX_AUDIO_MIXES as usize);
+const _: () = assert!(MAX_AUDIO_TRACKS <= prisc_obs::output::MAX_OUTPUT_AUDIO_ENCODERS as usize);
 // The webcam occupies video track 1 (`webcam::create` / `Recorder::new`), so
 // a screen + webcam recording needs two video encoder slots.
-const _: () = assert!(prisc_obs_sys::MAX_OUTPUT_VIDEO_ENCODERS >= 2);
+const _: () = assert!(prisc_obs::output::MAX_OUTPUT_VIDEO_ENCODERS >= 2);
 
 /// What feeds an audio track: one speaker (output/system audio) device, one
 /// microphone (input) device, or every configured device mixed together

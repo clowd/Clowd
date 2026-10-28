@@ -25,9 +25,6 @@ include!("src/shader_bindings.rs");
 fn main() {
     println!("cargo:rerun-if-changed={SHARED_MANIFEST}");
     println!("cargo:rerun-if-changed=src/shader_bindings.rs");
-    // baked into the Sentry release name via option_env! (prisc_rust_core's
-    // telemetry::release), so a version bump has to invalidate the cached build
-    println!("cargo:rerun-if-env-changed=PRISC_VERSION");
 
     #[cfg(windows)]
     {

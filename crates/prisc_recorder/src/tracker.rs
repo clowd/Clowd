@@ -13,14 +13,14 @@
 //! The animation constants are the original's verbatim: 400 ms, 85% peak
 //! opacity, radius 10 → 40 density-independent units.
 
-use std::ffi::c_void;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use prisc_obs::data::ObsData;
 use prisc_obs::scene::{ObsScene, ObsSceneItem};
-use prisc_obs::source::ObsSource;
+use prisc_obs::source::{self, ObsSource};
+use prisc_obs::tick::TickCallback;
 
 use crate::platform::{self, MouseInfo};
 use crate::region::Rect;
@@ -143,11 +143,11 @@ pub fn animation_frame(
 // OBS wiring
 // ---------------------------------------------------------------------------
 
-/// Everything the tick callback touches. Boxed and handed to libobs as the
-/// callback's `param`; only the graphics thread ever dereferences it.
+/// Everything the tick callback touches. Owned by the callback, so only the
+/// graphics thread ever touches it.
 struct TrackerState {
-    filter: *mut prisc_obs_sys::obs_source_t,
-    item: *mut prisc_obs_sys::obs_sceneitem_t,
+    filter: ObsSource,
+    item: ObsSceneItem,
     region: Rect,
     canvas_scale: f64,
     /// Position + press time of the most recent click, if any.
@@ -165,39 +165,19 @@ impl TrackerState {
             opacity: 0,
         });
 
-        #[repr(C)]
-        struct Vec2 {
-            x: f32,
-            y: f32,
-        }
-        let pos = Vec2 {
-            x: frame.pos.0,
-            y: frame.pos.1,
-        };
-        let scale = Vec2 {
-            x: frame.scale,
-            y: frame.scale,
-        };
-        unsafe {
-            prisc_obs_sys::obs_sceneitem_set_pos(self.item, &pos as *const Vec2 as *const prisc_obs_sys::vec2);
-            prisc_obs_sys::obs_sceneitem_set_scale(
-                self.item,
-                &scale as *const Vec2 as *const prisc_obs_sys::vec2,
-            );
-        }
+        self.item.set_pos(frame.pos.0, frame.pos.1);
+        self.item.set_scale(frame.scale, frame.scale);
 
         // Only "opacity" is sent: obs_source_update merges into the existing
         // settings, so the colour set at creation is preserved.
         let settings = ObsData::new();
         settings.set_int("opacity", frame.opacity as i64);
-        unsafe { prisc_obs_sys::obs_source_update(self.filter, settings.as_ptr()) };
+        self.filter.update(&settings);
     }
 }
 
-/// libobs tick callback — runs on the graphics thread once per frame.
-unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
-    let state = &mut *(param as *mut TrackerState);
-
+/// The tick callback body: runs on the graphics thread once per frame.
+fn tick(state: &mut TrackerState) {
     let mouse = platform::get_mouse_info();
     // Sampled while held, not on the press edge: a held button keeps refreshing
     // the anchor, so a drag pins the highlight to the pointer and the fade
@@ -236,8 +216,8 @@ pub struct MouseTracker {
     _image: ObsSource,
     filter: ObsSource,
     item: ObsSceneItem,
-    /// Boxed so the address handed to libobs stays valid when `self` moves.
-    state: Box<TrackerState>,
+    /// Owns the animation state.
+    tick: TickCallback,
 }
 
 impl MouseTracker {
@@ -253,8 +233,7 @@ impl MouseTracker {
         // NOT obs_source_create != null: libobs happily creates a placeholder
         // source for an unknown id, so the highlight would silently never draw.
         for id in [IMAGE_SOURCE_ID, COLOR_FILTER_ID] {
-            let id_c = std::ffi::CString::new(id).unwrap();
-            if unsafe { prisc_obs_sys::obs_source_get_display_name(id_c.as_ptr()) }.is_null() {
+            if !source::is_registered(id) {
                 return Err(format!(
                     "source type '{id}' is not registered — the plugin providing it (image-source \
                      / obs-filters) failed to load"
@@ -284,25 +263,23 @@ impl MouseTracker {
         image.add_filter(&filter);
         let item = scene.add(&image);
 
-        let mut state = Box::new(TrackerState {
-            filter: filter.as_ptr(),
-            item: item.as_ptr(),
+        let mut state = TrackerState {
+            filter: filter.clone(),
+            item: item.clone(),
             region,
             canvas_scale,
             last_click: None,
             visible: false,
-        });
+        };
         // Fully transparent until the first click lands.
         state.apply(None);
-
-        let param = &mut *state as *mut TrackerState as *mut c_void;
-        unsafe { prisc_obs_sys::obs_add_tick_callback(Some(tick), param) };
+        let tick = TickCallback::add(move |_seconds| tick(&mut state));
 
         Ok(MouseTracker {
             _image: image,
             filter,
             item,
-            state,
+            tick,
         })
     }
 
@@ -317,8 +294,7 @@ impl MouseTracker {
 
 impl Drop for MouseTracker {
     fn drop(&mut self) {
-        let param = &mut *self.state as *mut TrackerState as *mut c_void;
-        unsafe { prisc_obs_sys::obs_remove_tick_callback(Some(tick), param) };
+        self.tick.remove();
         // Detach from the scene so a runtime tracker-off stops rendering the
         // disc; the sources are released by the field drops that follow.
         self.item.remove();

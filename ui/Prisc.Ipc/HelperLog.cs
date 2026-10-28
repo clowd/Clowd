@@ -8,7 +8,7 @@ namespace Prisc.Ipc
     /// protocol), kept by every <see cref="HelperClient{TEvent, TCommand}"/>. libobs and friends are chatty on
     /// stderr for the life of the process, and an hours-long session must not accumulate output
     /// unboundedly, but the last few hundred lines are also the only thing that makes a bare
-    /// "the process exited unexpectedly" diagnosable, so they are worth keeping (CLOWD-Z, CLOWD-C).
+    /// "the process exited unexpectedly" diagnosable, so they are worth keeping.
     /// <para>
     /// Storage only: this class never looks at what a line says. The caps are constructor arguments
     /// (<see cref="HelperStartOptions.StderrLines"/>, <see cref="HelperStartOptions.StderrChars"/>).

@@ -18,10 +18,11 @@
 
 use anyhow::Result;
 
-use core_graphics::geometry::{CGPoint, CGRect, CGSize};
-use core_graphics::window::{self, kCGNullWindowID, kCGWindowImageBestResolution, kCGWindowListOptionOnScreenOnly};
+#[allow(deprecated)]
+use objc2_core_graphics::{CGWindowImageOption, CGWindowListCreateImage, CGWindowListOption};
 
 use super::Frame;
+use prisc_rust_core::desktop::{CGPoint, CGRect, CGSize, ImageBytes};
 use prisc_rust_core::geometry::ScreenRect;
 
 /// Capture `rect` (CG points). Dimensions are already known to be positive —
@@ -29,22 +30,25 @@ use prisc_rust_core::geometry::ScreenRect;
 /// this runs.
 pub fn capture_region(rect: ScreenRect) -> Result<Frame> {
     let bounds = CGRect::new(
-        &CGPoint::new(rect.min_x() as f64, rect.min_y() as f64),
-        &CGSize::new(rect.width() as f64, rect.height() as f64),
+        CGPoint::new(rect.min_x() as f64, rect.min_y() as f64),
+        CGSize::new(rect.width() as f64, rect.height() as f64),
     );
 
-    // On-screen windows only, and no window id: that combination is "give me
-    // whatever is visible in this rect", which is the screenshot we want.
-    let image = window::create_image(
+    // On-screen windows only, and no window id (0 = kCGNullWindowID): that
+    // combination is "give me whatever is visible in this rect", which is the
+    // screenshot we want.
+    #[allow(deprecated)]
+    let image = CGWindowListCreateImage(
         bounds,
-        kCGWindowListOptionOnScreenOnly,
-        kCGNullWindowID,
-        kCGWindowImageBestResolution,
+        CGWindowListOption::OptionOnScreenOnly,
+        0,
+        CGWindowImageOption::BestResolution,
     )
     .ok_or_else(|| anyhow!("CGWindowListCreateImage returned null for {rect:?}; Screen Recording may have been revoked"))?;
+    let pixels = ImageBytes::of(&image).ok_or_else(|| anyhow!("the captured image for {rect:?} has no readable pixels"))?;
 
-    let (width, height) = (image.width(), image.height());
-    let bits_per_pixel = image.bits_per_pixel();
+    let (width, height) = (pixels.width, pixels.height);
+    let bits_per_pixel = pixels.bits_per_pixel;
     if bits_per_pixel != 32 {
         bail!("captured region is {bits_per_pixel} bits per pixel; expected 32");
     }
@@ -58,9 +62,8 @@ pub fn capture_region(rect: ScreenRect) -> Result<Frame> {
     let stride = width
         .checked_mul(4)
         .ok_or_else(|| anyhow!("capture dimensions overflow: {width}x{height}"))?;
-    let bytes_per_row = image.bytes_per_row();
-    let data = image.data();
-    let src = data.bytes();
+    let bytes_per_row = pixels.bytes_per_row;
+    let src = pixels.bytes();
 
     let mut bgra = vec![0u8; stride * height];
     for row in 0..height {

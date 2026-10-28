@@ -337,6 +337,15 @@ events are lost. The fix is the single exit path:
   is then called only as the registered exit fn. A grep for `exit_process(` outside that
   registration is part of the review checklist.
 
+Not on Linux. `prisc_rust_core`'s `telemetry` feature (sentry with rustls, so aws-lc-sys) is off
+by default, and `prisc_recorder` and `prisc_vid2gif` enable it only under
+`cfg(not(target_os = "linux"))`, with the `init` / `on_exit` calls behind the same cfg. The Linux
+recorder is built in the manylinux image (`tools/linux-build`) whose glibc floor and toolchain the
+bundle check enforces, and keeping the sentry/TLS tree out of that graph is why audit/platform
+made the feature optional. Linux has no Prisc.Ui to share a release with yet; when it does,
+enabling the feature there is a Cargo.toml change plus a manylinux build. `prisc_share_region` is
+never built on Linux and takes the feature unconditionally.
+
 Limitation, stated so nobody expects more: the recorder and share_region log with `eprintln!`,
 not `log`, so the Sentry log integration sees nothing from them. Sentry receives panics and
 session health only. Converting them to `log` is out of scope.
@@ -1049,15 +1058,10 @@ Not yet run on Windows: the `ci.yml` Rust gate on `windows-latest`, which runs
 `guard::tests::private_stdout_is_not_inherited_and_fd1_goes_to_stderr` and so checks the
 Windows stdout guard of §3.2 for the first time. Linux is unbuilt for the same change.
 
-Left to other branches:
+Closed by the audit/platform-build merge, which had been left to other branches:
 
-- audit/platform: `fatal()` in `crates/prisc_obs_platform/src/linux.rs` still calls
-  `exit_process(1)` directly, which skips the shutdown hook and writes no fatal `error`, so the
-  parent sees `Crashed` instead of `FatalError`. Route it through
-  `prisc_ipc::lifetime::exit(exit::FAILED)`, or return an error so the recorder emits
-  `error{init_failed}`.
-- audit/build: workflow comments still name deleted types. `build-rust.yml` (the
-  `HotkeysLibraryLocator` and `AiLoader` comments) → `HelperLocator.FindLibrary` /
-  `HelperLocator.Find`; `build-ui.yml` (`VidRenderRunner`) → `JobRunner.ForVideoRender`;
-  the `build-recorder.yml` and `ci.yml` header comments (`ObsBinaryLocator`) →
-  `HelperLocator`.
+- `prisc_obs_platform::init_process` returns the Linux display connection failure instead of
+  calling `exit_process(1)` from `fatal()`, so the recorder and share_region report it as a
+  fatal `error{init_failed}` and exit through `lifetime::exit`.
+- The stale workflow and staging comments (`ObsBinaryLocator`, `VidRenderRunner`,
+  `HotkeysLibraryLocator`) now name `HelperLocator` and `JobRunner.ForVideoRender`.

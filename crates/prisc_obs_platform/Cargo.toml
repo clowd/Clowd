@@ -5,6 +5,10 @@ edition = "2021"
 license = "GPL-2.0-or-later"
 
 [dependencies]
+# The window list, monitors and cursor (prisc_rust_core::desktop), shared with the
+# overlay and the scrolling driver. Not `telemetry`: the helper binaries enable it
+# themselves, off Linux only (HELPER_PROTOCOL.md §3.4).
+prisc_rust_core = { workspace = true, features = ["desktop"] }
 prisc_obs = { workspace = true }
 prisc_obs_sys = { workspace = true }
 
@@ -12,41 +16,27 @@ prisc_obs_sys = { workspace = true }
 libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-# The imported recorder workspace's unified `windows` feature list, copied whole into each
-# recorder crate that uses `windows`.
+# The window list, monitors, DXGI outputs and cursor reads come through
+# prisc_rust_core::desktop, which declares its own features.
 windows = { workspace = true, features = [
     "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    # Antialiased rounded shapes and text for the share-region prompt's own
-    # painting (ui/win32.rs): plain GDI has neither.
-    "Win32_Graphics_GdiPlus",
-    # DwmSetWindowAttribute: dark window chrome, the Win11 Mica backdrop and the
-    # caption/border colours that stand in for it elsewhere.
-    "Win32_Graphics_Dwm",
-    # CreateDXGIFactory1 + IDXGIAdapter1::EnumOutputs: mapping a monitor to the
-    # graphics adapter that drives it, so obs_video_info.adapter can be set to
-    # the GPU that owns the captured region (prisc_obs_platform region_adapter_index).
-    "Win32_Graphics_Dxgi",
-    # DXGI_OUTPUT_DESC (and the DXGI_MODE_DESC it embeds) sit behind the
-    # _Common gate in the generated bindings.
-    "Win32_Graphics_Dxgi_Common",
+    # Stock cursor handles (LoadCursorW) for the cursor classifier.
     "Win32_UI_WindowsAndMessaging",
+    # SetProcessDpiAwarenessContext (init_process).
     "Win32_UI_HiDpi",
+    # GetAsyncKeyState: mouse button state for the input-capture frame rows.
     "Win32_UI_Input_KeyboardAndMouse",
-    # WM_MOUSELEAVE: the prompt's own hover tracking for its OK button.
-    "Win32_UI_Controls",
-    # GetModuleHandleW: the HINSTANCE for RegisterClassW/CreateWindowExW.
+    # GetModuleHandleW + GetProcAddress: user32's undocumented
+    # GetCursorFrameInfo, the animated-cursor step probe.
     "Win32_System_LibraryLoader",
-    # ExitProcess / GetCurrentThreadId (prisc_obs_platform exit_process, input hooks).
+    # ExitProcess (exit_process).
     "Win32_System_Threading",
     # RtlGetVersion + OSVERSIONINFOW: the real OS build number, used to resolve
-    # --capture-method auto to WGC on Windows 11+ (prisc_obs_platform
-    # resolve_capture_method). GetVersionExW/VerifyVersionInfoW report a
-    # manifest-shimmed version instead, so ntdll's is the only usable one.
+    # --capture-method auto to WGC on Windows 11+ (resolve_capture_method).
+    # GetVersionExW/VerifyVersionInfoW report a manifest-shimmed version
+    # instead, so ntdll's is the only usable one.
     "Wdk_System_SystemServices",
     "Win32_System_SystemInformation",
-    # SetConsoleCtrlHandler (recorder.rs CTRL_CLOSE grace handling).
-    "Win32_System_Console",
     # CoInitializeEx / CoCreateInstance + IMMDeviceEnumerator/IAudioEndpointVolume:
     # --speaker-volume-compensation endpoint-volume query (replaces the
     # hand-rolled COM vtables that windows-sys required).
@@ -60,36 +50,30 @@ windows = { workspace = true, features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-core-foundation = { workspace = true, features = [
-    "CFCGTypes",
-    "CFString",
-    "CFUUID",
-    # Window capture (platform/macos.rs): CGWindowListCopyWindowInfo hands back
-    # a CFArray of CFDictionary window descriptions whose values are CFNumbers.
-    "CFArray",
-    "CFDictionary",
-    "CFNumber",
-    # Input hook (input_hook.rs): the event tap's CFMachPort + run-loop plumbing;
-    # CFDate gates CFRunLoopRunInMode (CFTimeInterval lives in CFDate.h).
-    "CFMachPort",
-    "CFRunLoop",
-    "CFDate",
+objc2 = { workspace = true }
+# Cursor classification and sprite capture (macos.rs cursor_shape): the stock
+# NSCursor set, the representation ladder, and the PNG encode via
+# representationUsingType:properties:. NSApplication is bootstrapped because
+# +[NSCursor arrowCursor] returns nil without one.
+objc2-app-kit = { workspace = true, features = [
+    "NSApplication",
+    "NSResponder",
+    "NSCursor",
+    "NSImage",
+    "NSImageRep",
+    "NSBitmapImageRep",
+    # Methods taking CGFloat / NSSize are cfg-gated on this in the generated
+    # bindings.
+    "objc2-core-foundation",
 ] }
-objc2-core-graphics = { workspace = true, features = [
-    "CGDirectDisplay",
-    "CGDisplayConfiguration",
-    "CGError",
-    "CGEvent",
-    "CGEventSource",
-    "CGEventTypes",
-    # CGCursorIsVisible (cursor sampling): deprecated since 10.9 but still the
-    # only public answer; the binding also needs `libc` (boolean_t return).
-    "CGRemoteOperation",
-    # CGWindowListCopyWindowInfo + the kCGWindow* description keys: the
-    # --window-capture enumerator (platform/macos.rs).
-    "CGWindow",
-    "libc",
-] }
+# Mouse button state (CGEventSourceButtonState) and CGCursorIsVisible:
+# deprecated since 10.9 but still the only public answer; its binding needs
+# `libc` (boolean_t return).
+objc2-core-graphics = { workspace = true, features = ["CGEventSource", "CGEventTypes", "CGRemoteOperation", "libc"] }
+# The cursor hash (TIFF NSData bytes) and the sprite PNG encode (NSData plus the
+# empty properties NSDictionary it takes; the representation list is an
+# NSArray).
+objc2-foundation = { workspace = true, features = ["NSArray", "NSData", "NSDictionary", "NSGeometry", "NSString"] }
 
 [build-dependencies]
 prisc_build_support = { workspace = true }

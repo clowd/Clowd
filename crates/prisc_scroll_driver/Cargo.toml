@@ -10,7 +10,7 @@ edition = "2021"
 # image, euclid and sentry all reach this crate through prisc_rust_core and are not named directly.
 [dependencies]
 prisc_ipc.workspace = true
-prisc_rust_core.workspace = true
+prisc_rust_core = { workspace = true, features = ["desktop", "telemetry"] }
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 log.workspace = true
@@ -29,12 +29,10 @@ windows = { workspace = true, features = [
     "Win32_Graphics_Gdi",
 ] }
 
-# The macOS half of the same two modules: core-graphics carries the window list, scroll
-# events, cursor warp and CGWindowListCreateImage, core-foundation reads the window-list
-# dictionaries, and objc2-app-kit provides NSRunningApplication for activation.
-# The feature flags are OS-version gates on bindings the driver cannot do without, all long
-# past our minimum.
+# The macOS half of the same two modules: objc2-core-graphics carries the scroll events, the
+# Esc poll and CGWindowListCreateImage (the window list and cursor warp come through
+# prisc_rust_core::desktop), and objc2-app-kit provides NSRunningApplication for activation.
 [target.'cfg(target_os = "macos")'.dependencies]
-core-graphics = { workspace = true, features = ["highsierra", "elcapitan"] }
-core-foundation.workspace = true
+objc2-core-foundation.workspace = true
+objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventSource", "CGEventTypes", "CGImage", "CGWindow", "libc"] }
 objc2-app-kit = { workspace = true, features = ["libc"] }

@@ -1,23 +1,36 @@
 #!/usr/bin/env bash
-# Release build pipeline for Prisc.
+# Local release build of a Prisc package for the host platform, the same
+# directory layout CI's package job assembles (ci.yml).
 #
 # Usage: ./build.sh <version>
 #
-# 1. dotnet publish Prisc.Ui (Release, self-contained, host RID) to build/<version>/<rid>
-# 2. cargo build --release of the app crates (prisc_capture, the scrolling
-#    capture driver, the prisc_hotkeys global hotkey library Prisc.Ui
-#    P/Invokes, and the prisc_ai inference binary the overlay spawns for OCR
-#    and Prisc.VideoSDK spawns for the AI effects)
-# 3. copy those binaries next to the published Prisc.Ui executable, where
-#    release binary discovery expects them
-# 4. cargo build --release of the recorder stack (prisc_recorder,
+# 1. dotnet publish Prisc.Ui and Prisc.VideoRender (Release, self-contained,
+#    host RID, multi-file like build-ui.yml: vpk pack needs that) into
+#    build/<version>/<rid>
+# 2. cargo build --release of the app crates and stage them beside Prisc.Ui
+#    (tools/staging/stage-app.sh, the same script build-rust.yml runs)
+# 3. cargo build --release of the recorder stack (prisc_recorder,
 #    prisc_share_region, prisc_vid2gif, plus libobs via CMake: 20-40 min cold,
-#    see BUILDING.md for its prerequisites) and copy its runtime tree into
-#    recorder/ beside Prisc.Ui
+#    see BUILDING.md for its prerequisites) and stage its runtime into
+#    recorder/ (tools/staging/stage-recorder.sh, as build-recorder.yml does)
+# 4. check the result with tools/staging/verify-package.sh, as CI does
 #
-# Works on macOS/Linux and on Windows under git bash.
+# The shell extension's sparse MSIX and the macOS apphost SDK stamp are CI
+# only (build-rust.yml, build-ui.yml).
+#
+# Works on macOS (arm64, x64), Linux (x64, arm64) and on Windows (x64, ARM64)
+# under git bash. On Linux the recorder is staged by stage-bundle.sh with CI's
+# bundle rules (only the glibc ceiling is relaxed to this machine's), so it
+# needs patchelf and binutils, and a build that links libstdc++ or a system
+# FFmpeg / x264 / Mbed TLS fails there; see BUILDING.md.
 set -euo pipefail
 
+case "${1:-}" in
+    -h|--help)
+        sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+        exit 0
+        ;;
+esac
 if [ $# -ne 1 ] || [ -z "$1" ]; then
     echo "Usage: $0 <version>" >&2
     echo "Example: $0 1.2.3" >&2
@@ -26,9 +39,11 @@ fi
 VERSION="$1"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+STAGING="$ROOT/tools/staging"
+# shellcheck source=tools/staging/shipped.sh
+. "$STAGING/shipped.sh"
 
-# Host detection -> .NET RID + exe suffix
-EXE=""
+# Host detection -> .NET RID
 case "$(uname -s)" in
     Darwin)
         case "$(uname -m)" in
@@ -37,163 +52,82 @@ case "$(uname -s)" in
         esac
         ;;
     Linux)
-        RID="linux-x64"
+        case "$(uname -m)" in
+            aarch64|arm64) RID="linux-arm64" ;;
+            *)             RID="linux-x64" ;;
+        esac
         ;;
     MINGW*|MSYS*)
-        RID="win-x64"
-        EXE=".exe"
+        # An x64 git bash on an ARM64 machine reports the emulated arch in
+        # PROCESSOR_ARCHITECTURE and the real one in PROCESSOR_ARCHITEW6432.
+        case "${PROCESSOR_ARCHITEW6432:-${PROCESSOR_ARCHITECTURE:-AMD64}}" in
+            ARM64) RID="win-arm64" ;;
+            *)     RID="win-x64" ;;
+        esac
         ;;
     *)
         echo "error: unsupported platform: $(uname -s)" >&2
         exit 1
         ;;
 esac
-
+TRIPLE="$(rid_triple "$RID")"
+# Both halves land in one profile dir whatever the host toolchain's default
+# target is. --target only when the RID differs from that default: with it,
+# cargo builds into target/<triple>/, and on macOS (where libobs builds in
+# prisc_obs_sys's OUT_DIR) that would cost a second cold libobs build beside
+# the one `cargo recr` keeps in target/release.
+if [ "$TRIPLE" = "$(rustc -vV | sed -n 's/^host: //p')" ]; then
+    TARGET_ARGS=()
+    PROFILE="$ROOT/target/release"
+else
+    TARGET_ARGS=(--target "$TRIPLE")
+    PROFILE="$ROOT/target/$TRIPLE/release"
+fi
 OUT="$ROOT/build/$VERSION/$RID"
 
-echo "==> Publishing Prisc.Ui ($RID, version $VERSION)"
-dotnet publish "$ROOT/ui/Prisc.Ui/Prisc.Ui.csproj" \
-    -c Release -r "$RID" --self-contained true \
-    -p:PublishSingleFile="true" \
-    -p:Version="$VERSION" \
-    -o "$OUT"
+echo "==> Publishing Prisc.Ui and Prisc.VideoRender ($RID, version $VERSION)"
+rm -rf "$OUT"
+for proj in Prisc.Ui Prisc.VideoRender; do
+    dotnet publish "$ROOT/ui/$proj/$proj.csproj" \
+        -c Release -r "$RID" --self-contained true \
+        -p:Version="$VERSION" \
+        -o "$OUT"
+done
 
 echo "==> Building the Rust binaries (release)"
 # An explicit package list, never the whole workspace: the workspace also holds
 # the recorder stack, which builds libobs and is built separately below.
-# prisc_scroll_driver is a compile_error! on Linux (no backend there).
-CARGO_PKGS=(-p prisc_capture -p prisc_hotkeys)
-if [ "$RID" != "linux-x64" ]; then
-    CARGO_PKGS+=(-p prisc_scroll_driver)
-fi
-# prisc_ai only builds where ONNX Runtime still exists: upstream
-# dropped macOS x86_64, so Intel macs skip it (the app grays the AI
-# effects out there and OCR reports as unavailable) — matches build-rust.yml's
-# `ai: false` on the osx-x64 leg.
-if [ "$RID" != "osx-x64" ]; then
-    CARGO_PKGS+=(-p prisc_ai)
-fi
-# The shell extension is built for parity with the CI package (it is not copied
-# into the output below; the MSIX packaging lives in CI).
-case "$RID" in
-    win-*) CARGO_PKGS+=(-p prisc_shell_ext) ;;
-esac
-# stamps the Sentry release name so the capturer and the scrolling capture driver
-# report against the same release as the shell (crates/prisc_rust_core/src/telemetry.rs)
-PRISC_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml" "${CARGO_PKGS[@]}"
+# PRISC_VERSION stamps the Sentry release name so the Rust binaries report
+# against the same release as the shell (crates/prisc_rust_core/src/telemetry.rs).
+# shellcheck disable=SC2046 # word-split `-p <crate>` pairs
+PRISC_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml" ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} \
+    $("$STAGING/stage-app.sh" packages "$RID")
 
-echo "==> Copying capture binaries into publish output"
-cp "$ROOT/target/release/prisc_capture$EXE" "$OUT/"
-# Beside the overlay and Prisc.Ui, where HelperLocator looks for it.
-if [ "$RID" != "linux-x64" ]; then
-    cp "$ROOT/target/release/prisc_scroll_driver$EXE" "$OUT/"
-fi
-# The global hotkey library, beside Prisc.Ui where HelperLocator looks for it.
-# Linux has no hotkey backend yet and Prisc.Ui never loads the library there, so
-# nothing ships for it.
-case "$RID" in
-    win-*) cp "$ROOT/target/release/prisc_hotkeys.dll" "$OUT/" ;;
-    osx-*) cp "$ROOT/target/release/libprisc_hotkeys.dylib" "$OUT/" ;;
-esac
-if [ "$RID" != "osx-x64" ]; then
-    # The AI inference binary, beside Prisc.Ui where HelperLocator looks for it
-    # and beside the overlay, which spawns it for OCR. ONNX Runtime is
-    # statically linked by the ort crate;
-    # on Windows the hardware execution providers still need dylibs beside the
-    # exe (ort's copy-dylibs staged them into target/release during the build).
-    cp "$ROOT/target/release/prisc_ai$EXE" "$OUT/"
-    if [[ "$RID" == win-* ]]; then
-        cp "$ROOT/target/release/DirectML.dll" "$OUT/"
-        # prisc_ai is /MD (see its build.rs) and imports
-        # msvcp140/vcruntime140 — app-local like CI ships them. Best
-        # effort here: a dev machine runs fine on its system-wide redist.
-        CRT_DIR=$(find "/c/Program Files/Microsoft Visual Studio" -type d \
-            -path "*/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" 2>/dev/null | sort | tail -1)
-        if [ -n "$CRT_DIR" ]; then
-            for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do
-                if [ -f "$CRT_DIR/$f" ]; then cp "$CRT_DIR/$f" "$OUT/"; fi
-            done
-        else
-            echo "warning: VC redist not found; prisc_ai needs msvcp140/vcruntime140 at runtime" >&2
-        fi
-    fi
-    # GPL-3.0 license text + notice must travel with every distributed copy of
-    # the AI inference binary (GPL sections 4/6).
-    cp "$ROOT/crates/prisc_ai/LICENSE" "$OUT/prisc_ai.LICENSE.txt"
-    cp "$ROOT/crates/prisc_ai/NOTICE.txt" "$OUT/prisc_ai.NOTICE.txt"
-fi
+echo "==> Staging the Rust binaries beside Prisc.Ui"
+# Best effort on the VC++ runtime here: a dev machine runs fine on its
+# system-wide redist.
+VCRT_OPTIONAL=1 "$STAGING/stage-app.sh" stage "$RID" "$PROFILE" "$OUT"
 
 echo "==> Building the recorder stack (release; libobs via CMake, 20-40 min cold)"
-# Same packages as `cargo recr`, minus prisc_share_region on Linux (no Linux UI;
-# it is not built there). Needs the obs-studio submodule, cmake >= 3.28 and
-# LLVM/libclang (LIBCLANG_PATH on Windows); see BUILDING.md.
-REC_PKGS=(-p prisc_recorder -p prisc_vid2gif)
-if [ "$RID" != "linux-x64" ]; then
-    REC_PKGS+=(-p prisc_share_region)
-fi
-cargo build --release --manifest-path "$ROOT/Cargo.toml" "${REC_PKGS[@]}"
+# Needs the obs-studio submodule, cmake >= 3.28 and LLVM/libclang
+# (LIBCLANG_PATH on Windows); see BUILDING.md.
+# shellcheck disable=SC2046 # word-split `-p <crate>` pairs
+cargo build --release --manifest-path "$ROOT/Cargo.toml" ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} \
+    $(recorder_packages "$RID" | as_cargo_args)
 
-echo "==> Copying the recorder runtime into publish output (recorder/)"
-REC="$OUT/recorder"
-SRC="$ROOT/target/release"
-rm -rf "$REC"
-mkdir -p "$REC"
-# GPL-2.0 license text travels with the GPL'd recorder binaries.
-cp "$ROOT/crates/prisc_recorder/LICENSE" "$REC/LICENSE.txt"
+echo "==> Staging the recorder runtime into recorder/"
 case "$RID" in
-    win-*)
-        # The runtime tree the recorder's build.rs assembled in target/release
-        # (mirrors the Windows stage step in .github/workflows/build-recorder.yml).
-        # An explicit list, not *.exe/*.dll: target/release also holds the app
-        # binaries built above.
-        for f in prisc_recorder.exe prisc_share_region.exe prisc_vid2gif.exe obs-ffmpeg-mux.exe; do
-            cp "$SRC/$f" "$REC/"
-        done
-        for f in "$SRC"/obs-*-test.exe; do
-            if [ -f "$f" ]; then cp "$f" "$REC/"; fi
-        done
-        # libobs, its graphics modules and the FFmpeg/x264 runtime DLLs. The app
-        # crates' DLLs (prisc_hotkeys, prisc_shell_ext, DirectML) stay out.
-        for f in "$SRC"/*.dll; do
-            case "$(basename "$f")" in
-                prisc_*.dll|DirectML.dll) ;;
-                *) cp "$f" "$REC/" ;;
-            esac
-        done
-        cp -R "$SRC/obs-plugins" "$SRC/data" "$REC/"
-        # obs.dll and the plugins are built /MD by CMake, so the recorder ships
-        # the VC++ CRT app-local as CI does. Best effort, as above.
-        CRT_DIR=$(find "/c/Program Files/Microsoft Visual Studio" -type d \
-            -path "*/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" 2>/dev/null | sort | tail -1)
-        if [ -n "$CRT_DIR" ]; then
-            for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do
-                if [ -f "$CRT_DIR/$f" ]; then cp "$CRT_DIR/$f" "$REC/"; fi
-            done
-        else
-            echo "warning: VC redist not found; the recorder needs msvcp140/vcruntime140 at runtime" >&2
-        fi
-        ;;
     linux-*)
-        # The same items tools/linux-build/stage-bundle.sh copies. That script
-        # also rewrites the RUNPATHs to $ORIGIN and enforces the portability
-        # rules of the manylinux build image, so a portable bundle comes from
-        # running it inside that image (see BUILDING.md); this copy runs on the
-        # build machine.
-        cp -a "$SRC/prisc_recorder" "$SRC/prisc_vid2gif" "$SRC/obs-ffmpeg-mux" "$REC/"
-        cp -a "$SRC"/lib*.so.* "$REC/"
-        cp -a "$SRC/obs-plugins" "$SRC/data" "$REC/"
-        ;;
-    osx-*)
-        # The macOS recorder bundle (libobs.framework, graphics modules, FFmpeg
-        # dylibs, plugins, rpath rewrites and ad-hoc re-signing) is assembled by
-        # the stage step in .github/workflows/build-recorder.yml, which is too
-        # involved to duplicate here. Only the executables are copied; use a CI
-        # recorder-osx-* artifact for a runnable recorder/ folder.
-        for f in prisc_recorder prisc_share_region prisc_vid2gif obs-ffmpeg-mux; do
-            if [ -f "$SRC/$f" ]; then cp "$SRC/$f" "$REC/"; fi
-        done
-        echo "warning: recorder/ holds only the executables on macOS; see build-recorder.yml for the full stage" >&2
+        # stage-bundle.sh enforces the glibc floor of the manylinux build image
+        # (tools/linux-build/Dockerfile). Built on this machine, the bundle can
+        # only promise this machine's glibc; a portable one comes from running
+        # the build inside that image (see BUILDING.md).
+        GLIBC_MAX="$(ldd --version | sed -n '1s/.* \([0-9][0-9.]*\)$/\1/p')"
+        export GLIBC_MAX
         ;;
 esac
+VCRT_OPTIONAL=1 "$STAGING/stage-recorder.sh" "$RID" "$PROFILE" "$OUT/recorder"
+
+"$STAGING/verify-package.sh" "$RID" "$OUT" --local
 
 echo "Build complete: $OUT"

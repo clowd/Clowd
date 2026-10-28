@@ -19,8 +19,7 @@
 //!
 //! The X11, Xrandr, wayland-client and glib-2.0 libraries are linked by this
 //! crate's build script; the handful of entry points used are declared by hand
-//! below (the same approach as the macOS module's CoreGraphics externs), which
-//! is far smaller than pulling in bindgen for eight functions.
+//! below, which is far smaller than pulling in bindgen for eight functions.
 
 use std::env;
 use std::ffi::{c_char, c_int, c_ulong, c_void, CStr};
@@ -29,8 +28,9 @@ use std::sync::OnceLock;
 
 use prisc_obs::data::ObsData;
 
+use super::cursor_sprite::SpriteEvent;
 use super::region::{Rect, RegionPlan};
-use super::{CaptureMethod, DisplayCaptureMode, MonitorInfo, ObsPaths};
+use super::{CaptureMethod, CursorState, DisplayCaptureMode, MonitorInfo, MouseInfo, ObsPaths, WindowInfo};
 
 /// `platform` field of the input-capture header (wire contract). The sidecars
 /// are rejected on Linux, but the constant is part of the shared surface.
@@ -189,7 +189,7 @@ extern "C" {
 /// Handles libobs was given, as integers so the static is `Sync`. Kept only
 /// to make [`init_process`] idempotent; the connections themselves are leaked
 /// on purpose (see there).
-static PLATFORM_DISPLAY: OnceLock<usize> = OnceLock::new();
+static PLATFORM_DISPLAY: OnceLock<Result<usize, String>> = OnceLock::new();
 
 /// Must run before `obs_startup` (every binary calls it right before
 /// `ObsContext::new`): tells libobs which windowing platform it is on and
@@ -210,19 +210,28 @@ static PLATFORM_DISPLAY: OnceLock<usize> = OnceLock::new();
 /// until `obs_shutdown`, and every exit path here is `_exit` without libobs
 /// teardown (§1.4), so the process end is its only safe lifetime.
 ///
-/// Failure to connect is fatal and reported here (stderr, exit 1): the shared
-/// signature returns nothing, and `obs_startup` would otherwise fail later
-/// with a far less useful message (its X11 hotkey init opens `$DISPLAY`
-/// itself) or crash (Wayland, NULL display).
-pub fn init_process() {
-    PLATFORM_DISPLAY.get_or_init(|| match session() {
+/// Failure to connect is returned for the caller to report as a fatal
+/// `error{init_failed}` and exit through `prisc_ipc::lifetime::exit`
+/// (HELPER_PROTOCOL.md §3.4): `obs_startup` would otherwise fail later with a
+/// far less useful message (its X11 hotkey init opens `$DISPLAY` itself) or
+/// crash (Wayland, NULL display).
+pub fn init_process() -> Result<(), String> {
+    PLATFORM_DISPLAY
+        .get_or_init(connect_display)
+        .as_ref()
+        .map(|_| ())
+        .map_err(Clone::clone)
+}
+
+fn connect_display() -> Result<usize, String> {
+    match session() {
         Session::X11 => {
             let display = unsafe {
                 XInitThreads();
                 XOpenDisplay(std::ptr::null())
             };
             if display.is_null() {
-                fatal(&format!(
+                return Err(format!(
                     "cannot connect to the X server (DISPLAY={}); prisc_recorder needs a \
                      graphical X11 or Wayland session",
                     env::var("DISPLAY").unwrap_or_else(|_| "<unset>".to_string())
@@ -234,12 +243,12 @@ pub fn init_process() {
                 );
                 prisc_obs_sys::obs_set_nix_platform_display(display.cast());
             }
-            display as usize
+            Ok(display as usize)
         }
         Session::Wayland => {
             let display = unsafe { wl_display_connect(std::ptr::null()) };
             if display.is_null() {
-                fatal(&format!(
+                return Err(format!(
                     "cannot connect to the Wayland compositor (WAYLAND_DISPLAY={})",
                     env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "<unset>".to_string())
                 ));
@@ -250,10 +259,10 @@ pub fn init_process() {
                 );
                 prisc_obs_sys::obs_set_nix_platform_display(display);
             }
-            spawn_glib_main_loop();
-            display as usize
+            spawn_glib_main_loop()?;
+            Ok(display as usize)
         }
-    });
+    }
 }
 
 /// Runs GLib's global default main context on a dedicated thread, forever.
@@ -272,21 +281,15 @@ pub fn init_process() {
 /// `g_main_loop_run` acquires the default context for this thread; nothing
 /// else in the process iterates it, so there is no contention. PipeWire's own
 /// stream I/O runs on its separate `pw_thread_loop`.
-fn spawn_glib_main_loop() {
-    let spawned = std::thread::Builder::new()
+fn spawn_glib_main_loop() -> Result<(), String> {
+    std::thread::Builder::new()
         .name("glib-main-loop".to_string())
         .spawn(|| unsafe {
             let main_loop = g_main_loop_new(std::ptr::null_mut(), 0);
             g_main_loop_run(main_loop);
-        });
-    if let Err(e) = spawned {
-        fatal(&format!("cannot start the GLib main loop thread: {e}"));
-    }
-}
-
-fn fatal(msg: &str) -> ! {
-    eprintln!("Fatal: {msg}");
-    exit_process(1)
+        })
+        .map(drop)
+        .map_err(|e| format!("cannot start the GLib main loop thread: {e}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -502,6 +505,91 @@ pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {
 
 pub fn exit_process(code: i32) -> ! {
     unsafe { libc::_exit(code) }
+}
+
+// ---------------------------------------------------------------------------
+// Recorder sources and sidecar sampling
+// ---------------------------------------------------------------------------
+//
+// What is out of scope on Linux, and how it stays out:
+//
+// - The input-capture and window-capture sidecars and the click tracker all
+//   need global pointer/button/keyboard state or a window list. X11 could
+//   provide some of it; Wayland deliberately provides none of it to a
+//   non-focused client. They are rejected up front (`Cli::validate` for the
+//   sidecar flags, `Settings::validate` for the tracker, which also arrives
+//   through `--settings` and stdin `configure`), so the functions below that
+//   only those features call are unreachable and say so loudly if that
+//   invariant is ever broken, rather than feeding the editor made-up data.
+// - `--speaker-volume-compensation` is a Windows software-volume workaround
+//   that has no Linux counterpart here: the gain is always unity, so the flag
+//   is accepted and has no effect.
+
+/// Microphone capture (plugins/linux-pulseaudio). Works unchanged on PipeWire
+/// desktops through pipewire-pulse. Its device key is `device_id` (the same
+/// key the recorder sets for every platform), and `"default"` resolves to the
+/// server's default source when capture starts.
+pub const AUDIO_INPUT_CAPTURE_ID: &str = "pulse_input_capture";
+/// Speaker capture: records a sink's monitor source.
+const AUDIO_OUTPUT_CAPTURE_ID: &str = "pulse_output_capture";
+/// Webcam capture source (`--webcam` / `--list-cameras`): Video4Linux2.
+pub const WEBCAM_SOURCE_ID: &str = "v4l2_input";
+/// The `WEBCAM_SOURCE_ID` settings key (and property) holding the device: a
+/// `/dev/videoN` path, exactly as `--list-cameras` prints it.
+pub const WEBCAM_DEVICE_KEY: &str = "device_id";
+
+/// Unreachable on Linux: only the click tracker samples the pointer, and the
+/// tracker is rejected by `Settings::validate` here.
+pub fn get_mouse_info() -> MouseInfo {
+    unreachable!("the click tracker is rejected on Linux (Settings::validate)")
+}
+
+/// Unreachable on Linux: only the input-capture sidecar samples the cursor,
+/// and `--input-capture` is rejected by `Cli::validate` here.
+pub fn get_cursor_state() -> CursorState {
+    unreachable!("--input-capture is rejected on Linux (Cli::validate)")
+}
+
+/// Unreachable on Linux, for the same reason as [`get_cursor_state`].
+pub fn take_cursor_sprite(_state: &CursorState) -> SpriteEvent {
+    unreachable!("--input-capture is rejected on Linux (Cli::validate)")
+}
+
+/// Unreachable on Linux: only the window-capture sidecar lists windows, and
+/// `--window-capture` is rejected by `Cli::validate` here.
+pub fn enumerate_windows() -> Vec<WindowInfo> {
+    unreachable!("--window-capture is rejected on Linux (Cli::validate)")
+}
+
+/// Source id + settings for a speaker (output) capture source.
+/// `pulse_output_capture` records a *monitor source*: `"default"` resolves to
+/// `<default sink>.monitor` when capture starts, and every other value is a
+/// monitor source name, which is what the plugin's own device list offers as
+/// values, so ids a client discovered through OBS pass straight through.
+pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
+    let settings = ObsData::new();
+    settings.set_string("device_id", device_id);
+    (AUDIO_OUTPUT_CAPTURE_ID, settings)
+}
+
+/// Settings for a `WEBCAM_SOURCE_ID` instance capturing `device_id` (a
+/// `/dev/videoN` path). Everything else stays at the plugin defaults, which
+/// keep the device's current input, pixel format, resolution and frame rate
+/// (all -1 = "leave as configured"); the recorder downscales the mix itself.
+/// linux-v4l2 carries no audio, so there is nothing to disable.
+pub fn webcam_settings(device_id: &str) -> ObsData {
+    let settings = ObsData::new();
+    settings.set_string(WEBCAM_DEVICE_KEY, device_id);
+    settings
+}
+
+/// Always unity. The compensation undoes Windows endpoints that apply the
+/// master volume in software inside the loopback stream; whether a Linux sink
+/// monitor carries the sink volume depends on the server and the sink's
+/// volume mode, and reading that is out of scope, so no correction is
+/// attempted (the flag is accepted and is a no-op, as on macOS).
+pub fn speaker_compensation_gain(_device_id: &str) -> f32 {
+    1.0
 }
 
 #[cfg(test)]

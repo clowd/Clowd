@@ -40,7 +40,7 @@ license = "GPL-3.0-only"
 [dependencies]
 # claim_stdout (the payload-channel guard), the signal handler and the exit codes.
 prisc_ipc.workspace = true
-prisc_rust_core.workspace = true
+prisc_rust_core = { workspace = true, features = ["telemetry"] }
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 log.workspace = true
