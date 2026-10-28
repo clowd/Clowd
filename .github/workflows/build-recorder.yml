@@ -384,6 +384,12 @@ jobs:
       # build dir) and .deps (FFmpeg bundle, x264 / Mbed TLS prefixes, SIMDe)
       # are cached together. The build runs as root in the image; the cache
       # steps run on the host and only need to read those files.
+      # rust-cache (in setup-obs-build) keys on and prunes with the host's
+      # cargo, which nothing else in this job uses, so install it explicitly
+      # rather than rely on the runner image shipping one.
+      - name: Install host Rust toolchain (for the cargo cache)
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Set up the OBS build caches
         uses: ./.github/actions/setup-obs-build
         with:
