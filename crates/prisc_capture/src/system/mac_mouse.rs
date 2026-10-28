@@ -1,22 +1,9 @@
-use core_graphics::display::{CGDisplay, CGPoint};
-
 use crate::system::MonitorInfo;
+use prisc_rust_core::desktop::{self, CGPoint};
 use prisc_rust_core::geometry::{LogicalPoint, ScreenPoint};
 
-extern "C" {
-    fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn CGEventGetLocation(event: *const std::ffi::c_void) -> CGPoint;
-    fn CFRelease(cf: *const std::ffi::c_void);
-    fn CGAssociateMouseAndMouseCursorPosition(connected: i32) -> i32;
-}
-
 pub fn get_position(monitors: &[MonitorInfo]) -> ScreenPoint {
-    let cg_pt = unsafe {
-        let event = CGEventCreate(std::ptr::null());
-        let pt = CGEventGetLocation(event);
-        CFRelease(event);
-        pt
-    };
+    let cg_pt = desktop::cursor_location().unwrap_or(CGPoint::new(0.0, 0.0));
     let logical_pt = LogicalPoint::new(cg_pt.x, cg_pt.y);
 
     if let Some(m) = find_monitor_for_logical_point(logical_pt, monitors) {
@@ -36,10 +23,7 @@ pub fn set_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
         CGPoint::new(pos.x as f64 / s, pos.y as f64 / s)
     };
 
-    let _ = CGDisplay::warp_mouse_cursor_position(logical_pt);
-    unsafe {
-        CGAssociateMouseAndMouseCursorPosition(1);
-    }
+    let _ = desktop::warp_cursor(logical_pt);
 }
 
 fn find_monitor_for_logical_point(pt: LogicalPoint, monitors: &[MonitorInfo]) -> Option<&MonitorInfo> {

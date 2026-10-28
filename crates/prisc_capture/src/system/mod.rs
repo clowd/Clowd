@@ -16,9 +16,6 @@ mod win_cursor;
 mod win_foreground;
 
 #[cfg(windows)]
-mod win_mouse;
-
-#[cfg(windows)]
 mod win_walker;
 
 #[cfg(windows)]
@@ -45,7 +42,6 @@ mod mac_mouse;
 #[cfg(target_os = "macos")]
 mod mac_walker;
 
-#[cfg(windows)]
 use prisc_rust_core::desktop;
 #[cfg(target_os = "macos")]
 use prisc_rust_core::geometry::{LogicalPoint, LogicalSize};
@@ -249,6 +245,67 @@ pub enum CursorImage {
     },
 }
 
+impl CursorImage {
+    /// The overlay's form of a cursor bitmap read off Windows
+    /// (`desktop::read_cursor`). `None` for an empty bitmap and for the
+    /// `DrawIconEx` fallback, which the overlay does not composite.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn from_icon(width: u32, height: u32, pixels: desktop::IconPixels) -> Option<Self> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let (w, h) = (width as usize, height as usize);
+        let stride = desktop::mono_stride(width);
+        match pixels {
+            desktop::IconPixels::Color {
+                mut bgra,
+                and_mask,
+            } => {
+                // A legacy masked cursor's color plane carries no alpha: its
+                // AND mask decides which pixels are opaque (bit set =
+                // transparent).
+                if let Some(and) = and_mask {
+                    for y in 0..h {
+                        for x in 0..w {
+                            bgra[(y * w + x) * 4 + 3] = if desktop::mono_bit(&and, stride, x, y) { 0 } else { 0xFF };
+                        }
+                    }
+                }
+                Some(CursorImage::AlphaBlended {
+                    bgra,
+                    width,
+                    height,
+                })
+            }
+            desktop::IconPixels::Mono {
+                and,
+                xor,
+            } => {
+                let fill = |plane: &[u8]| -> Vec<u8> {
+                    let mut out = vec![0u8; w * h * 4];
+                    for y in 0..h {
+                        for x in 0..w {
+                            if desktop::mono_bit(plane, stride, x, y) {
+                                out[(y * w + x) * 4..][..4].fill(0xFF);
+                            }
+                        }
+                    }
+                    out
+                };
+                Some(CursorImage::Masked {
+                    and_mask_bgra: fill(&and),
+                    xor_color_bgra: fill(&xor),
+                    width,
+                    height,
+                })
+            }
+            desktop::IconPixels::Rendered {
+                ..
+            } => None,
+        }
+    }
+}
+
 /// OS cursor snapshot captured at screenshot time. Always captured
 /// regardless of user toggle — the toggle only controls rendering
 /// and inclusion in saved/copied output.
@@ -307,11 +364,11 @@ impl SystemInterop {
     }
 
     pub fn get_mouse_position(_monitors: &[MonitorInfo]) -> ScreenPoint {
-        win_mouse::get_position()
+        desktop::cursor_position().unwrap_or_default()
     }
 
     pub fn set_mouse_position(pos: ScreenPoint, _monitors: &[MonitorInfo]) {
-        win_mouse::set_position(pos)
+        desktop::set_cursor_position(pos);
     }
 
     /// Record the shell's pid (`--shell-pid`) for
@@ -757,5 +814,100 @@ pub fn raise_render_thread_priority() {
     #[cfg(target_os = "macos")]
     unsafe {
         let _ = libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pixels(image: &CursorImage) -> (&[u8], Option<&[u8]>) {
+        match image {
+            CursorImage::AlphaBlended {
+                bgra,
+                ..
+            } => (bgra, None),
+            CursorImage::Masked {
+                and_mask_bgra,
+                xor_color_bgra,
+                ..
+            } => (and_mask_bgra, Some(xor_color_bgra)),
+        }
+    }
+
+    #[test]
+    fn an_alpha_cursor_is_blended_as_read() {
+        let bgra = vec![1, 2, 3, 200, 4, 5, 6, 0];
+        let image = CursorImage::from_icon(
+            2,
+            1,
+            desktop::IconPixels::Color {
+                bgra: bgra.clone(),
+                and_mask: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(pixels(&image), (&bgra[..], None));
+    }
+
+    #[test]
+    fn a_masked_color_cursor_takes_its_alpha_from_the_and_mask() {
+        // Two pixels: AND=0 (opaque), AND=1 (transparent).
+        let mut and = vec![0u8; desktop::mono_stride(2)];
+        and[0] = 0b0100_0000;
+        let image = CursorImage::from_icon(
+            2,
+            1,
+            desktop::IconPixels::Color {
+                bgra: vec![1, 2, 3, 0, 4, 5, 6, 0],
+                and_mask: Some(and),
+            },
+        )
+        .unwrap();
+        assert_eq!(pixels(&image).0, &[1, 2, 3, 0xFF, 4, 5, 6, 0][..]);
+    }
+
+    #[test]
+    fn a_mono_cursor_keeps_its_and_and_xor_planes() {
+        // 33 px wide, so the DWORD-aligned stride (8 bytes) differs from the
+        // packed row (5 bytes); pixel 32 sits in the fifth byte.
+        let stride = desktop::mono_stride(33);
+        let mut and = vec![0u8; stride];
+        let mut xor = vec![0u8; stride];
+        and[4] = 0x80;
+        xor[0] = 0x80;
+        let image = CursorImage::from_icon(
+            33,
+            1,
+            desktop::IconPixels::Mono {
+                and,
+                xor,
+            },
+        )
+        .unwrap();
+        let (and, xor) = pixels(&image);
+        let xor = xor.unwrap();
+        assert_eq!(&and[32 * 4..33 * 4], &[0xFF; 4]);
+        assert_eq!(&and[..4], &[0; 4]);
+        assert_eq!(&xor[..4], &[0xFF; 4]);
+        assert_eq!(&xor[32 * 4..33 * 4], &[0; 4]);
+    }
+
+    #[test]
+    fn the_rendered_fallback_and_empty_bitmaps_are_not_composited() {
+        let rendered = desktop::IconPixels::Rendered {
+            over_black: vec![0; 4],
+            over_white: vec![0; 4],
+        };
+        assert!(CursorImage::from_icon(1, 1, rendered).is_none());
+        assert!(CursorImage::from_icon(
+            0,
+            1,
+            desktop::IconPixels::Mono {
+                and: vec![],
+                xor: vec![]
+            }
+        )
+        .is_none());
     }
 }

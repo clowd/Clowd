@@ -25,6 +25,8 @@
 /// A rasterized cursor, straight off the platform capture. Pixel planes are
 /// raw and unencoded (except where noted on [`SpritePixels`]); the writer
 /// thread turns a deduped sprite into its wire row.
+use prisc_rust_core::desktop::{mono_bit, mono_stride, IconBitmap, IconPixels};
+
 pub struct RawSprite {
     /// The CursorKind wire string classified at capture time — the same value
     /// the frame row's `c` carries (kind is an attribute of the shape).
@@ -122,30 +124,41 @@ pub fn fnv1a64(state: u64, bytes: &[u8]) -> u64 {
 }
 
 // ---------------------------------------------------------------------------
-// Plane decomposition (pure — the Windows rasterizer feeds GetDIBits output
-// straight in here)
+// Plane decomposition (pure: the Windows rasterizer feeds the cursor bitmap
+// `prisc_rust_core::desktop::read_cursor` returned straight in here)
 // ---------------------------------------------------------------------------
 
-// Only the Windows rasterizer calls into this section (the tests below cover
-// it on every host), so off Windows each item here is dead but deliberately
-// kept — hence the `cfg_attr`s.
-
-/// Scanline stride in bytes of a 1bpp DIB: rows are DWORD-aligned.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub fn mono_stride(w: u32) -> usize {
-    (w as usize).div_ceil(32) * 4
-}
-
-/// Splits a mono cursor's double-height mask bitmap (AND plane stacked on top
-/// of the XOR plane) into its two planes. `h` is the cursor height, i.e. half
-/// the bitmap height; `None` if the buffer is too short.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub fn split_mono_planes(data: &[u8], h: u32, stride: usize) -> Option<(&[u8], &[u8])> {
-    let half = h as usize * stride;
-    if data.len() < half * 2 {
-        return None;
+/// The sprite for a cursor bitmap read off Windows, classified as `kind`.
+pub fn from_icon(icon: IconBitmap, kind: &'static str) -> RawSprite {
+    let (w, h) = (icon.width, icon.height);
+    let stride = mono_stride(w);
+    let (bmp, mask) = match icon.pixels {
+        // Modern alpha cursor: the color plane is the sprite.
+        IconPixels::Color { bgra, and_mask: None } => (bgra, None),
+        // Legacy masked color cursor: the AND mask decides pixel ownership
+        // (and carries any XOR region).
+        IconPixels::Color {
+            bgra,
+            and_mask: Some(and),
+        } => decompose_masked_color(&bgra, &and, w, h, stride),
+        IconPixels::Mono { and, xor } => {
+            let (bmp, mask) = decompose_mono(&and, &xor, w, h, stride);
+            (bmp, Some(mask))
+        }
+        IconPixels::Rendered {
+            over_black,
+            over_white,
+        } => decompose_rendered(&over_black, &over_white),
+    };
+    RawSprite {
+        kind,
+        w,
+        h,
+        hotx: icon.hotspot_x,
+        hoty: icon.hotspot_y,
+        bmp: SpritePixels::Bgra(bmp),
+        mask,
     }
-    Some((&data[..half], &data[half..half * 2]))
 }
 
 /// Decomposes a monochrome cursor's AND/XOR planes (1bpp, MSB-first,
@@ -158,17 +171,14 @@ pub fn split_mono_planes(data: &[u8], h: u32, stride: usize) -> Option<(&[u8], &
 /// | 0   | 1   | bmp opaque white, mask transparent                      |
 /// | 1   | 0   | bmp transparent, mask opaque black (no-op, fidelity)    |
 /// | 1   | 1   | bmp transparent, mask opaque white (screen invert)      |
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub fn decompose_mono(and: &[u8], xor: &[u8], w: u32, h: u32, stride: usize) -> (Vec<u8>, Vec<u8>) {
+fn decompose_mono(and: &[u8], xor: &[u8], w: u32, h: u32, stride: usize) -> (Vec<u8>, Vec<u8>) {
     let px = (w as usize) * (h as usize) * 4;
     let mut bmp = vec![0u8; px];
     let mut mask = vec![0u8; px];
     for y in 0..h as usize {
         for x in 0..w as usize {
-            let byte = y * stride + x / 8;
-            let bit = 0x80u8 >> (x % 8);
-            let a = and[byte] & bit != 0;
-            let m = xor[byte] & bit != 0;
+            let a = mono_bit(and, stride, x, y);
+            let m = mono_bit(xor, stride, x, y);
             let i = (y * w as usize + x) * 4;
             let (dst, value) = match (a, m) {
                 (false, false) => (&mut bmp, [0, 0, 0, 255]),
@@ -191,8 +201,7 @@ pub fn decompose_mono(and: &[u8], xor: &[u8], w: u32, h: u32, stride: usize) -> 
 /// 0xC0 — is a screen invert (mask white), anything else is approximated as
 /// an opaque `bmp` pixel (see the module docs). The mask is `None` when no
 /// pixel needed it.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub fn decompose_masked_color(
+fn decompose_masked_color(
     color: &[u8],
     and: &[u8],
     w: u32,
@@ -205,7 +214,7 @@ pub fn decompose_masked_color(
     let mut any_mask = false;
     for y in 0..h as usize {
         for x in 0..w as usize {
-            let a = and[y * stride + x / 8] & (0x80u8 >> (x % 8)) != 0;
+            let a = mono_bit(and, stride, x, y);
             let i = (y * w as usize + x) * 4;
             let (b, g, r) = (color[i], color[i + 1], color[i + 2]);
             if !a {
@@ -224,12 +233,32 @@ pub fn decompose_masked_color(
     (bmp, any_mask.then_some(mask))
 }
 
-/// Whether a BGRA buffer carries any alpha at all — distinguishes a modern
-/// alpha cursor (whose AND mask is vestigial) from a legacy masked one whose
-/// 32bpp plane leaves the alpha channel at zero everywhere.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub fn has_alpha(bgra: &[u8]) -> bool {
-    bgra.chunks_exact(4).any(|p| p[3] != 0)
+/// Recovers a sprite from the `DrawIconEx` fallback's two renders (over
+/// black and over white): per pixel `alpha = 255 - (W - B)`, `color = B`. A
+/// channel where `W < B` means the icon inverted the background, so the pixel
+/// goes to the mask (white) instead of being dropped.
+fn decompose_rendered(black: &[u8], white: &[u8]) -> (Vec<u8>, Option<Vec<u8>>) {
+    let px = black.len().min(white.len());
+    let mut bmp = vec![0u8; px];
+    let mut mask = vec![0u8; px];
+    let mut any_mask = false;
+    for i in (0..px - px % 4).step_by(4) {
+        let db = white[i] as i32 - black[i] as i32;
+        let dg = white[i + 1] as i32 - black[i + 1] as i32;
+        let dr = white[i + 2] as i32 - black[i + 2] as i32;
+        // A clearly darker render over white = background inversion. The
+        // threshold tolerates DrawIconEx rounding on ordinary pixels.
+        if db < -16 || dg < -16 || dr < -16 {
+            mask[i..i + 4].copy_from_slice(&[255, 255, 255, 255]);
+            any_mask = true;
+            continue;
+        }
+        let alpha = 255 - ((db + dg + dr) / 3).clamp(0, 255);
+        if alpha > 0 {
+            bmp[i..i + 4].copy_from_slice(&[black[i], black[i + 1], black[i + 2], alpha as u8]);
+        }
+    }
+    (bmp, any_mask.then_some(mask))
 }
 
 #[cfg(test)]
@@ -297,27 +326,6 @@ mod tests {
         assert_eq!(px(&mask, w, 0, 1), TRANSPARENT);
     }
 
-    #[test]
-    fn double_height_mask_splits_into_and_over_xor() {
-        // A 8x2 mono cursor: the GetDIBits buffer is 8x4 (AND on top).
-        let stride = mono_stride(8);
-        let buf = [
-            0xFFu8, 0, 0, 0, // AND row 0: all masked
-            0x00, 0, 0, 0, // AND row 1: all opaque
-            0xFF, 0, 0, 0, // XOR row 0: invert
-            0xFF, 0, 0, 0, // XOR row 1: white
-        ];
-        let (and, xor) = split_mono_planes(&buf, 2, stride).unwrap();
-        let (bmp, mask) = decompose_mono(and, xor, 8, 2, stride);
-        assert_eq!(px(&mask, 8, 3, 0), WHITE); // AND=1 XOR=1
-        assert_eq!(px(&bmp, 8, 3, 0), TRANSPARENT);
-        assert_eq!(px(&bmp, 8, 3, 1), WHITE); // AND=0 XOR=1
-        assert_eq!(px(&mask, 8, 3, 1), TRANSPARENT);
-
-        // A short buffer must refuse rather than mis-split.
-        assert!(split_mono_planes(&buf[..12], 2, stride).is_none());
-    }
-
     // -- decompose_masked_color ----------------------------------------------
 
     #[test]
@@ -364,14 +372,7 @@ mod tests {
         assert_eq!(px(&bmp, 2, 1, 0), [4, 5, 6, 255]);
     }
 
-    // -- has_alpha / fnv1a64 -------------------------------------------------
-
-    #[test]
-    fn has_alpha_detects_any_nonzero_alpha() {
-        assert!(!has_alpha(&[10, 20, 30, 0, 40, 50, 60, 0]));
-        assert!(has_alpha(&[10, 20, 30, 0, 40, 50, 60, 1]));
-        assert!(!has_alpha(&[]));
-    }
+    // -- fnv1a64 -------------------------------------------------------------
 
     #[test]
     fn fnv1a64_is_consistent_and_chains() {
@@ -408,5 +409,66 @@ mod tests {
         assert_ne!(base.content_hash(), masked.content_hash());
         assert_eq!(base.byte_len(), 4);
         assert_eq!(masked.byte_len(), 8);
+    }
+
+    // -- from_icon / decompose_rendered ----------------------------------------
+
+    fn icon(w: u32, h: u32, pixels: IconPixels) -> IconBitmap {
+        IconBitmap {
+            width: w,
+            height: h,
+            hotspot_x: 3,
+            hotspot_y: 4,
+            pixels,
+        }
+    }
+
+    #[test]
+    fn an_alpha_cursor_passes_through_unmasked() {
+        let bgra = vec![1, 2, 3, 200];
+        let s = from_icon(icon(1, 1, IconPixels::Color { bgra: bgra.clone(), and_mask: None }), "arrow");
+        assert_eq!(s.bmp.bytes(), &bgra[..]);
+        assert!(s.mask.is_none());
+        assert_eq!((s.kind, s.w, s.h, s.hotx, s.hoty), ("arrow", 1, 1, 3, 4));
+    }
+
+    #[test]
+    fn a_mono_cursor_always_carries_its_mask() {
+        // One pixel, AND=1 XOR=1: the I-beam's screen invert.
+        let stride = mono_stride(1);
+        let mut and = vec![0u8; stride];
+        let mut xor = vec![0u8; stride];
+        and[0] = 0x80;
+        xor[0] = 0x80;
+        let s = from_icon(icon(1, 1, IconPixels::Mono { and, xor }), "ibeam");
+        assert_eq!(px(s.bmp.bytes(), 1, 0, 0), TRANSPARENT);
+        assert_eq!(px(&s.mask.unwrap(), 1, 0, 0), WHITE);
+    }
+
+    #[test]
+    fn a_masked_color_cursor_decomposes_through_its_and_plane() {
+        let and = vec![0u8; mono_stride(1)];
+        let s = from_icon(
+            icon(1, 1, IconPixels::Color { bgra: vec![9, 8, 7, 0], and_mask: Some(and) }),
+            "custom",
+        );
+        assert_eq!(px(s.bmp.bytes(), 1, 0, 0), [9, 8, 7, 255]);
+        assert!(s.mask.is_none());
+    }
+
+    #[test]
+    fn rendered_fallback_recovers_alpha_and_inversion() {
+        // [opaque red, transparent, half-alpha grey, inverted].
+        let black = [0, 0, 200, 0, 0, 0, 0, 0, 64, 64, 64, 0, 255, 255, 255, 0];
+        let white = [0, 0, 200, 0, 255, 255, 255, 0, 191, 191, 191, 0, 0, 0, 0, 0];
+        let (bmp, mask) = decompose_rendered(&black, &white);
+        let mask = mask.expect("an inverted pixel needs the mask");
+        assert_eq!(px(&bmp, 4, 0, 0), [0, 0, 200, 255]);
+        assert_eq!(px(&bmp, 4, 1, 0), TRANSPARENT);
+        assert_eq!(px(&bmp, 4, 2, 0), [64, 64, 64, 128]);
+        assert_eq!(px(&mask, 4, 3, 0), WHITE);
+        assert_eq!(px(&bmp, 4, 3, 0), TRANSPARENT);
+        // Nothing inverted, nothing masked.
+        assert!(decompose_rendered(&black[..12], &white[..12]).1.is_none());
     }
 }

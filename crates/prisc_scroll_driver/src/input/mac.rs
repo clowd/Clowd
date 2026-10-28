@@ -23,7 +23,6 @@
 use std::time::Instant;
 
 use core_graphics::access::ScreenCaptureAccess;
-use core_graphics::display::CGDisplay;
 use core_graphics::event::{CGEvent, CGEventTapLocation, ScrollEventUnit};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use core_graphics::geometry::CGPoint;
@@ -288,28 +287,22 @@ pub fn window_rect(target: Target) -> Option<ScreenRect> {
 /// question about what the *user* is doing, and re-parking it would erase the
 /// answer.
 pub fn park_cursor(point: ScreenPoint) {
-    if let Err(e) = CGDisplay::warp_mouse_cursor_position(as_cg_point(point)) {
+    // The warp re-couples the hardware mouse to the cursor: the user's next
+    // physical movement continues from the parked point instead of snapping
+    // back to where their hand left it, which the driver would then read as
+    // drift and pause over.
+    if let Err(e) = desktop::warp_cursor(desktop::CGPoint::new(point.x as f64, point.y as f64)) {
         warn!(
             "CGWarpMouseCursorPosition({}, {}) failed: {e:?}; wheel events may land elsewhere",
             point.x, point.y
         );
-    }
-    // A warp moves the cursor without moving the mouse, and the two can be
-    // left uncoupled: re-associating is what makes the user's next physical
-    // movement continue from where the cursor now is instead of snapping back
-    // to where their hand left it — which the driver would then read as drift
-    // and pause over. Same call, same reason, as the overlay's own
-    // `mac_mouse::set_position`.
-    unsafe {
-        CGAssociateMouseAndMouseCursorPosition(1);
     }
 }
 
 /// Where the cursor is now, or `None` if the window server will not say.
 /// Callers treat that as "no news", never as "it moved".
 pub fn cursor_pos() -> Option<ScreenPoint> {
-    let event = CGEvent::new(event_source()?).ok()?;
-    let pt = event.location();
+    let pt = desktop::cursor_location()?;
     Some(ScreenPoint::new(pt.x.round() as i32, pt.y.round() as i32))
 }
 
@@ -439,11 +432,6 @@ extern "C" {
 extern "C" {
     /// Level-read of one key's state. Not bound by the `core-graphics` crate.
     fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
-
-    /// Re-couples the hardware mouse to the cursor after a warp. Declared
-    /// here for the same reason the overlay's `mac_mouse` declares it: the
-    /// crate binds the warp but not its companion.
-    fn CGAssociateMouseAndMouseCursorPosition(connected: i32) -> i32;
 }
 
 #[cfg(test)]

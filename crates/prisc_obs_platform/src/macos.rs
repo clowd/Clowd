@@ -5,7 +5,7 @@ use std::env;
 use std::ffi::CStr;
 use std::path::Path;
 
-use objc2_core_graphics::{CGEvent, CGEventSource, CGEventSourceStateID, CGMouseButton};
+use objc2_core_graphics::{CGEventSource, CGEventSourceStateID, CGMouseButton};
 use prisc_obs::data::ObsData;
 use prisc_rust_core::desktop;
 
@@ -151,17 +151,10 @@ pub const WEBCAM_SOURCE_ID: &str = "macos-avcapture";
 /// (an `AVCaptureDevice.uniqueID`).
 pub const WEBCAM_DEVICE_KEY: &str = "device";
 
-/// `CGEvent::new(None)` (CGEventCreate) snapshots the current event state; its
-/// location is the cursor position in global display coordinates (points).
-/// The `CFRetained` handle follows the CF Create rule and releases on drop.
+/// The cursor position in global display coordinates (points); the origin
+/// when the window server will not say.
 fn cursor_location() -> (f64, f64) {
-    match CGEvent::new(None) {
-        Some(event) => {
-            let p = CGEvent::location(Some(&event));
-            (p.x, p.y)
-        }
-        None => (0.0, 0.0),
-    }
+    desktop::cursor_location().map_or((0.0, 0.0), |p| (p.x, p.y))
 }
 
 /// Cursor position in global display points (the same space as

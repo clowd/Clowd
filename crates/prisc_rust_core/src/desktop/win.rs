@@ -29,7 +29,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MONITORINFOF_PRIMARY, WS_CAPTION, WS_EX_LAYERED, WS_VISIBLE,
 };
 
-use super::{has_alpha, is_shell_window_class, mono_stride, split_mono_planes, MIN_WINDOW_SIZE};
+use super::{has_alpha, is_shell_window_class, mono_stride, split_mono_planes, IconBitmap, IconPixels, MIN_WINDOW_SIZE};
 use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 // ---------------------------------------------------------------------------
@@ -585,30 +585,6 @@ pub fn cursor_snapshot() -> Option<CursorSnapshot> {
         showing: info.flags.0 & CURSOR_SHOWING.0 != 0,
         handle: info.hCursor.0 as isize,
     })
-}
-
-/// A cursor's pixels, read exactly as GDI stores them. Every plane is
-/// top-down; 1bpp planes are MSB-first with [`mono_stride`] bytes per row.
-pub enum IconPixels {
-    /// A 32bpp color cursor as BGRA. `and_mask` is the 1bpp AND plane, read
-    /// only when the color plane carries no alpha (a legacy masked cursor);
-    /// a modern alpha cursor's mask is vestigial and left unread.
-    Color { bgra: Vec<u8>, and_mask: Option<Vec<u8>> },
-    /// A monochrome cursor: GDI draws it as `dst = (dst AND and) XOR xor`.
-    Mono { and: Vec<u8>, xor: Vec<u8> },
-    /// The last resort when `GetDIBits` refuses: the cursor drawn by
-    /// `DrawIconEx` over solid black and over solid white, both BGRA. The
-    /// difference between the two recovers alpha and screen inversion.
-    Rendered { over_black: Vec<u8>, over_white: Vec<u8> },
-}
-
-pub struct IconBitmap {
-    pub width: u32,
-    pub height: u32,
-    /// Hotspot in bitmap pixels.
-    pub hotspot_x: i32,
-    pub hotspot_y: i32,
-    pub pixels: IconPixels,
 }
 
 /// Reads the pixels of cursor `handle` (an `HCURSOR`, e.g.

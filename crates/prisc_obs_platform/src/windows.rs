@@ -17,7 +17,7 @@ use windows::Win32::UI::HiDpi::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorInfo, LoadCursorW, CURSORINFO, CURSOR_SHOWING, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS,
+    LoadCursorW, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS,
     IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_PERSON, IDC_PIN, IDC_SIZEALL, IDC_SIZENESW,
     IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_UPARROW, IDC_WAIT,
 };
@@ -334,31 +334,28 @@ fn stock_cursor_table() -> &'static Vec<(isize, CursorKind)> {
 /// classification — and the sprite rasterized from `handle` — can never
 /// disagree with the sampled position).
 pub fn get_cursor_state() -> CursorState {
-    let mut info: CURSORINFO = unsafe { mem::zeroed() };
-    info.cbSize = mem::size_of::<CURSORINFO>() as u32;
-    if unsafe { GetCursorInfo(&mut info) }.is_err() {
+    let Some(cursor) = desktop::cursor_snapshot() else {
         return CursorState {
             x: 0,
             y: 0,
             kind: CursorKind::Hidden,
             handle: 0,
         };
-    }
-    let kind = if info.flags.0 & CURSOR_SHOWING.0 == 0 {
+    };
+    let kind = if !cursor.showing {
         CursorKind::Hidden
     } else {
-        let h = info.hCursor.0 as isize;
         stock_cursor_table()
             .iter()
-            .find(|(handle, _)| *handle == h)
+            .find(|(handle, _)| *handle == cursor.handle)
             .map(|(_, kind)| *kind)
             .unwrap_or(CursorKind::Custom)
     };
     CursorState {
-        x: info.ptScreenPos.x,
-        y: info.ptScreenPos.y,
+        x: cursor.position.x,
+        y: cursor.position.y,
         kind,
-        handle: info.hCursor.0 as isize,
+        handle: cursor.handle,
     }
 }
 
@@ -369,8 +366,8 @@ pub fn take_cursor_sprite(state: &CursorState) -> SpriteEvent {
     sprite::take(state)
 }
 
-/// HCURSOR → [`RawSprite`] rasterization for the sidecar's `cursor_image`
-/// rows.
+/// HCURSOR → [`RawSprite`](crate::cursor_sprite::RawSprite) rasterization
+/// for the sidecar's `cursor_image` rows.
 ///
 /// The tick thread calls [`take`] once per rendered frame with the same
 /// `GetCursorInfo` snapshot the frame row records. Steady state is a handle
@@ -384,27 +381,17 @@ pub fn take_cursor_sprite(state: &CursorState) -> SpriteEvent {
 /// physical pixels on uniform-DPI machines. Mixed-DPI parity is an open
 /// verification item, deliberately not compensated for here.
 mod sprite {
-    use std::ffi::c_void;
     use std::mem;
     use std::sync::{Mutex, OnceLock};
     use std::time::Instant;
 
+    use prisc_rust_core::desktop;
     use windows::core::{s, w};
-    use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GdiFlush, GetDC, GetDIBits,
-        GetObjectW, ReleaseDC, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-        DIB_RGB_COLORS, HBITMAP, HDC, RGBQUAD,
-    };
     use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        CopyIcon, DestroyIcon, DrawIconEx, GetIconInfo, DI_NORMAL, HCURSOR, HICON, ICONINFO,
-    };
+    use windows::Win32::UI::WindowsAndMessaging::HCURSOR;
 
     use super::{CursorKind, CursorState};
-    use crate::cursor_sprite::{
-        decompose_masked_color, decompose_mono, has_alpha, mono_stride, split_mono_planes,
-        RawSprite, SpriteEvent, SpritePixels,
-    };
+    use crate::cursor_sprite::{self, SpriteEvent};
 
     /// The last handle whose sprite actually reached the writer, plus when it
     /// was first seen (the animation clock's epoch, so `istep` starts at
@@ -435,7 +422,7 @@ mod sprite {
         };
         drop(tracker);
 
-        let hcur = HCURSOR(state.handle as *mut c_void);
+        let hcur = HCURSOR(state.handle as *mut std::ffi::c_void);
         let event = match frame_info(hcur) {
             // A static cursor whose handle did not change is byte-identical to
             // what the writer already holds — skip the pixel work entirely.
@@ -472,19 +459,15 @@ mod sprite {
         event
     }
 
-    /// `CopyIcon` → rasterize → `DestroyIcon`. The copy is not optional: the
-    /// sampled handle belongs to the foreground app, which may destroy it at
-    /// any moment. Failure degrades to `Hidden` (frame rows drop their `ci`
-    /// ref — the wire contract's "unavailable" case) rather than `Unchanged`,
-    /// which would pin the ref to a sprite of the *previous* shape.
+    /// The cursor's pixels as a sprite (`desktop::read_cursor` copies the
+    /// handle first: it belongs to the foreground app, which may destroy it
+    /// at any moment). Failure degrades to `Hidden` (frame rows drop their
+    /// `ci` ref, the wire contract's "unavailable" case) rather than
+    /// `Unchanged`, which would pin the ref to a sprite of the *previous*
+    /// shape.
     fn rasterize_copied(hcur: HCURSOR, kind: CursorKind) -> SpriteEvent {
-        let Ok(copy) = (unsafe { CopyIcon(hcur.into()) }) else {
-            return SpriteEvent::Hidden;
-        };
-        let sprite = rasterize_icon(copy, kind);
-        let _ = unsafe { DestroyIcon(copy) };
-        match sprite {
-            Some(s) => SpriteEvent::Candidate(s),
+        match desktop::read_cursor(hcur.0 as isize) {
+            Some(icon) => SpriteEvent::Candidate(cursor_sprite::from_icon(icon, kind.as_str())),
             None => SpriteEvent::Hidden,
         }
     }
@@ -546,240 +529,6 @@ mod sprite {
         let mut frames: u32 = 0;
         let frame = unsafe { f(hcur, 0, istep, &mut rate, &mut frames) };
         (!frame.is_invalid()).then_some(frame)
-    }
-
-    // -- rasterization (GetIconInfo + GetDIBits) ----------------------------
-
-    /// Exact-pixel rasterization via `GetIconInfo`. The ICONINFO bitmaps are
-    /// *copies* owned by the caller, so both are deleted on every path.
-    fn rasterize_icon(icon: HICON, kind: CursorKind) -> Option<RawSprite> {
-        unsafe {
-            let mut ii: ICONINFO = mem::zeroed();
-            if GetIconInfo(icon, &mut ii).is_err() {
-                return None;
-            }
-            let sprite = read_icon_planes(icon, &ii, kind);
-            if !ii.hbmMask.is_invalid() {
-                let _ = DeleteObject(ii.hbmMask.into());
-            }
-            if !ii.hbmColor.is_invalid() {
-                let _ = DeleteObject(ii.hbmColor.into());
-            }
-            sprite
-        }
-    }
-
-    unsafe fn read_icon_planes(icon: HICON, ii: &ICONINFO, kind: CursorKind) -> Option<RawSprite> {
-        let hdc = GetDC(None);
-        if hdc.is_invalid() {
-            return None;
-        }
-        let sprite = read_icon_planes_with_dc(hdc, icon, ii, kind);
-        ReleaseDC(None, hdc);
-        sprite
-    }
-
-    unsafe fn read_icon_planes_with_dc(
-        hdc: HDC,
-        icon: HICON,
-        ii: &ICONINFO,
-        kind: CursorKind,
-    ) -> Option<RawSprite> {
-        let make = |w: u32, h: u32, bmp: Vec<u8>, mask: Option<Vec<u8>>| RawSprite {
-            kind: kind.as_str(),
-            w,
-            h,
-            hotx: ii.xHotspot as i32,
-            hoty: ii.yHotspot as i32,
-            bmp: SpritePixels::Bgra(bmp),
-            mask,
-        };
-
-        if ii.hbmColor.is_invalid() {
-            // Mono cursor: hbmMask is double height — the AND plane stacked on
-            // top of the XOR plane.
-            let (w, full_h) = bitmap_size(ii.hbmMask)?;
-            let h = full_h / 2;
-            if h == 0 {
-                return None;
-            }
-            let stride = mono_stride(w);
-            let mut planes = vec![0u8; stride * full_h as usize];
-            if !get_dibits(hdc, ii.hbmMask, w, full_h, 1, &mut planes) {
-                return draw_icon_fallback(hdc, icon, w, h, kind, ii);
-            }
-            let (and, xor) = split_mono_planes(&planes, h, stride)?;
-            let (bmp, mask) = decompose_mono(and, xor, w, h, stride);
-            return Some(make(w, h, bmp, Some(mask)));
-        }
-
-        let (w, h) = bitmap_size(ii.hbmColor)?;
-        let mut color = vec![0u8; (w as usize) * (h as usize) * 4];
-        if !get_dibits(hdc, ii.hbmColor, w, h, 32, &mut color) {
-            return draw_icon_fallback(hdc, icon, w, h, kind, ii);
-        }
-        if has_alpha(&color) {
-            // Modern alpha cursor: the AND mask is vestigial.
-            return Some(make(w, h, color, None));
-        }
-        // Legacy masked color cursor: a single-height AND mask decides pixel
-        // ownership (and carries any XOR region).
-        let stride = mono_stride(w);
-        let mut and = vec![0u8; stride * h as usize];
-        if !get_dibits(hdc, ii.hbmMask, w, h, 1, &mut and) {
-            return draw_icon_fallback(hdc, icon, w, h, kind, ii);
-        }
-        let (bmp, mask) = decompose_masked_color(&color, &and, w, h, stride);
-        Some(make(w, h, bmp, mask))
-    }
-
-    /// Width/height off `GetObjectW` — the only reliable dimension source for
-    /// a handle whose creator we do not control.
-    unsafe fn bitmap_size(hbm: HBITMAP) -> Option<(u32, u32)> {
-        let mut bm: BITMAP = mem::zeroed();
-        let read = GetObjectW(
-            hbm.into(),
-            mem::size_of::<BITMAP>() as i32,
-            Some(&mut bm as *mut BITMAP as *mut c_void),
-        );
-        if read == 0 || bm.bmWidth <= 0 || bm.bmHeight <= 0 {
-            return None;
-        }
-        Some((bm.bmWidth as u32, bm.bmHeight as u32))
-    }
-
-    /// `BITMAPINFO` with room for the 2-entry color table a 1bpp `GetDIBits`
-    /// writes back (the `windows`-crate struct only reserves one entry).
-    #[repr(C)]
-    struct BitmapInfo2 {
-        header: BITMAPINFOHEADER,
-        colors: [RGBQUAD; 2],
-    }
-
-    /// Reads a bitmap's pixels top-down (negative `biHeight`) at the given bit
-    /// depth into `buf`, which must already have the right stride × height
-    /// size (DWORD-aligned rows for 1bpp — see [`mono_stride`]).
-    unsafe fn get_dibits(hdc: HDC, hbm: HBITMAP, w: u32, h: u32, bpp: u16, buf: &mut [u8]) -> bool {
-        let mut bi: BitmapInfo2 = mem::zeroed();
-        bi.header.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
-        bi.header.biWidth = w as i32;
-        bi.header.biHeight = -(h as i32);
-        bi.header.biPlanes = 1;
-        bi.header.biBitCount = bpp;
-        bi.header.biCompression = BI_RGB.0;
-        GetDIBits(
-            hdc,
-            hbm,
-            0,
-            h,
-            Some(buf.as_mut_ptr() as *mut c_void),
-            &mut bi as *mut BitmapInfo2 as *mut BITMAPINFO,
-            DIB_RGB_COLORS,
-        ) as u32
-            == h
-    }
-
-    // -- DrawIconEx fallback ------------------------------------------------
-
-    /// Last-resort rasterization when `GetDIBits` fails: render the icon over
-    /// black and over white and recover per pixel `alpha = 255 − (W − B)`,
-    /// `color = B`; a channel where `W < B` means the icon inverted the
-    /// background, so the pixel goes to the mask (white) instead of being
-    /// dropped the way `SystemCursorImage` used to.
-    unsafe fn draw_icon_fallback(
-        hdc: HDC,
-        icon: HICON,
-        w: u32,
-        h: u32,
-        kind: CursorKind,
-        ii: &ICONINFO,
-    ) -> Option<RawSprite> {
-        let black = render_on(hdc, icon, w, h, 0x00)?;
-        let white = render_on(hdc, icon, w, h, 0xFF)?;
-
-        let px = (w as usize) * (h as usize) * 4;
-        let mut bmp = vec![0u8; px];
-        let mut mask = vec![0u8; px];
-        let mut any_mask = false;
-        for i in (0..px).step_by(4) {
-            let db = white[i] as i32 - black[i] as i32;
-            let dg = white[i + 1] as i32 - black[i + 1] as i32;
-            let dr = white[i + 2] as i32 - black[i + 2] as i32;
-            // A clearly darker render over white = background inversion. The
-            // threshold tolerates DrawIconEx rounding on ordinary pixels.
-            if db < -16 || dg < -16 || dr < -16 {
-                mask[i..i + 4].copy_from_slice(&[255, 255, 255, 255]);
-                any_mask = true;
-                continue;
-            }
-            let alpha = 255 - ((db + dg + dr) / 3).clamp(0, 255);
-            if alpha > 0 {
-                bmp[i..i + 4].copy_from_slice(&[black[i], black[i + 1], black[i + 2], alpha as u8]);
-            }
-        }
-        Some(RawSprite {
-            kind: kind.as_str(),
-            w,
-            h,
-            hotx: ii.xHotspot as i32,
-            hoty: ii.yHotspot as i32,
-            bmp: SpritePixels::Bgra(bmp),
-            mask: any_mask.then_some(mask),
-        })
-    }
-
-    /// Draws the icon over a solid background (`bg` per channel) into a 32bpp
-    /// top-down DIB section and returns its BGRA bytes.
-    unsafe fn render_on(hdc: HDC, icon: HICON, w: u32, h: u32, bg: u8) -> Option<Vec<u8>> {
-        let memdc = CreateCompatibleDC(Some(hdc));
-        if memdc.is_invalid() {
-            return None;
-        }
-        let result = (|| {
-            let mut bi: BitmapInfo2 = mem::zeroed();
-            bi.header.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
-            bi.header.biWidth = w as i32;
-            bi.header.biHeight = -(h as i32);
-            bi.header.biPlanes = 1;
-            bi.header.biBitCount = 32;
-            bi.header.biCompression = BI_RGB.0;
-            let mut bits: *mut c_void = std::ptr::null_mut();
-            let dib = CreateDIBSection(
-                Some(memdc),
-                &bi as *const BitmapInfo2 as *const BITMAPINFO,
-                DIB_RGB_COLORS,
-                &mut bits,
-                None,
-                0,
-            )
-            .ok()?;
-            if bits.is_null() {
-                return None;
-            }
-            let len = (w as usize) * (h as usize) * 4;
-            let old = SelectObject(memdc, dib.into());
-            std::ptr::write_bytes(bits as *mut u8, bg, len);
-            let drawn = DrawIconEx(
-                memdc,
-                0,
-                0,
-                icon,
-                w as i32,
-                h as i32,
-                0,
-                None,
-                DI_NORMAL,
-            );
-            let _ = GdiFlush();
-            let out = drawn
-                .is_ok()
-                .then(|| std::slice::from_raw_parts(bits as *const u8, len).to_vec());
-            SelectObject(memdc, old);
-            let _ = DeleteObject(dib.into());
-            out
-        })();
-        let _ = DeleteDC(memdc);
-        result
     }
 }
 

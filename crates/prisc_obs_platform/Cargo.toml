@@ -79,31 +79,10 @@ objc2-app-kit = { workspace = true, features = [
     # bindings.
     "objc2-core-foundation",
 ] }
-objc2-core-foundation = { workspace = true, features = [
-    "CFCGTypes",
-    "CFString",
-    "CFUUID",
-    # Window capture: CGWindowListCopyWindowInfo hands back a CFArray of
-    # CFDictionary window descriptions whose values are CFNumbers.
-    "CFArray",
-    "CFDictionary",
-    "CFNumber",
-] }
-objc2-core-graphics = { workspace = true, features = [
-    "CGDirectDisplay",
-    "CGDisplayConfiguration",
-    "CGError",
-    "CGEvent",
-    "CGEventSource",
-    "CGEventTypes",
-    # CGCursorIsVisible (cursor sampling): deprecated since 10.9 but still the
-    # only public answer; the binding also needs `libc` (boolean_t return).
-    "CGRemoteOperation",
-    # CGWindowListCopyWindowInfo + the kCGWindow* description keys: the
-    # --window-capture enumerator.
-    "CGWindow",
-    "libc",
-] }
+# Mouse button state (CGEventSourceButtonState) and CGCursorIsVisible:
+# deprecated since 10.9 but still the only public answer; its binding needs
+# `libc` (boolean_t return).
+objc2-core-graphics = { workspace = true, features = ["CGEventSource", "CGEventTypes", "CGRemoteOperation", "libc"] }
 # The cursor hash (TIFF NSData bytes) and the sprite PNG encode (NSData plus the
 # empty properties NSDictionary it takes; the representation list is an
 # NSArray).

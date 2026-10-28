@@ -30,17 +30,16 @@ fn bgra_to_png(bgra: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
     if bgra.len() != (w as usize) * (h as usize) * 4 || w == 0 || h == 0 {
         return None;
     }
+    use image::ImageEncoder;
+
     let mut rgba = bgra.to_vec();
     for p in rgba.chunks_exact_mut(4) {
         p.swap(0, 2);
     }
     let mut out = Vec::new();
-    let mut enc = png::Encoder::new(&mut out, w, h);
-    enc.set_color(png::ColorType::Rgba);
-    enc.set_depth(png::BitDepth::Eight);
-    let mut writer = enc.write_header().ok()?;
-    writer.write_image_data(&rgba).ok()?;
-    writer.finish().ok()?;
+    image::codecs::png::PngEncoder::new(&mut out)
+        .write_image(&rgba, w, h, image::ExtendedColorType::Rgba8)
+        .ok()?;
     Some(out)
 }
 
