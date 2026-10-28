@@ -137,6 +137,8 @@ namespace Prisc.UI
         /// <summary>The recorder's <c>cameras</c> terminal, or null when it ended any other way.</summary>
         private static async Task<List<CameraDeviceInfo>> EnumerateWithRecorderAsync(string exePath)
         {
+            // one budget for the whole enumeration, start included, like the single exit wait it replaced
+            var elapsed = Stopwatch.StartNew();
             HelperClient<RecorderEvent, RecorderCommand> client;
             try
             {
@@ -154,7 +156,8 @@ namespace Prisc.UI
                 HelperOutcome<RecorderEvent> outcome;
                 try
                 {
-                    outcome = await client.Completion.WaitAsync(EnumerateTimeout).ConfigureAwait(false);
+                    var left = EnumerateTimeout - elapsed.Elapsed;
+                    outcome = await client.Completion.WaitAsync(left > TimeSpan.Zero ? left : TimeSpan.Zero).ConfigureAwait(false);
                 }
                 catch (TimeoutException)
                 {
