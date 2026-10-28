@@ -850,20 +850,25 @@ namespace Prisc.VideoSDK.Tests
             string dll = FindRenderDll();
             Assert.SkipWhen(dll == null, "Prisc.VideoRender.dll not found: build the exe project.");
 
-            // long enough that the quit always lands mid-render: a release build renders a couple of
-            // seconds of 64x64 faster than a loaded test host turns hello around into the quit, and
-            // a render that finishes first rightly ends with done{ok}
-            string input = WriteFixtureMp4(64, 64, 30, seconds: 60, sampleRate: 48000);
+            // a release build renders a whole fixture faster than a loaded test host can turn hello
+            // around into the quit, and a render that finishes first rightly ends with done{ok}: the
+            // tool's test knob holds it after its first frame until the quit arrives. A quit that
+            // never arrives still fails this, as a kill (Timeout) after the catalog's grace.
+            string input = WriteFixtureMp4(64, 64, 30, seconds: 5, sampleRate: 48000);
             string output = TempPath(".mp4");
             string argsPath = TempPath(".json");
-            File.WriteAllText(argsPath, ArgsJson(input, output, segments: "[{\"start_ms\":0,\"end_ms\":60000}]", crf: "30"));
+            File.WriteAllText(argsPath, ArgsJson(input, output, segments: "[{\"start_ms\":0,\"end_ms\":5000}]", crf: "30"));
 
             var client = await HelperClient<JobEvent, JobCommand>.StartAsync(HelperSpecs.Job, "dotnet",
                 new[] { "exec", dll, argsPath },
                 new HelperStartOptions
                 {
                     WorkingDirectory = Path.GetDirectoryName(dll),
-                    Environment = new Dictionary<string, string> { [FFmpegLoader.EnvVarName] = FFmpegLoader.LibrariesDirectory },
+                    Environment = new Dictionary<string, string>
+                    {
+                        [FFmpegLoader.EnvVarName] = FFmpegLoader.LibrariesDirectory,
+                        ["PRISC_RENDER_TEST_HOLD_FOR_QUIT"] = "1",
+                    },
                 });
             await using (client)
             {

@@ -20,6 +20,14 @@ namespace Prisc.VideoSDK.Tests
         private const string RenderStem = "Prisc.VideoRender";
         private static readonly TimeSpan Bound = TimeSpan.FromSeconds(60);
 
+        /// <summary>The render tool's test knob: it waits after its first frame until the quit
+        /// arrives, so the cancel always lands mid-render however long the host takes to send it.
+        /// A run that never stops the tool still fails these (the hold gives up long after the
+        /// quit grace and the render ends done{ok}); a quit lost on the wire is the
+        /// RenderArgsCompatTests cancel test's to catch, as there it shows up as a kill.</summary>
+        internal static readonly IReadOnlyDictionary<string, string> HoldForQuit =
+            new Dictionary<string, string> { ["PRISC_RENDER_TEST_HOLD_FOR_QUIT"] = "1" };
+
         private readonly List<string> _tempPaths = new();
 
         public void Dispose()
@@ -83,11 +91,9 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public async Task A_cancel_before_the_client_exists_ends_the_run_canceled()
         {
-            // long enough that the quit always lands mid-render (see the RenderArgsCompatTests
-            // cancel test)
-            var (argsPath, output) = Prepare(seconds: 60);
+            var (argsPath, output) = Prepare(seconds: 5);
 
-            using var runner = JobRunner.ForVideoRender(argsPath);
+            using var runner = JobRunner.ForVideoRender(argsPath, HoldForQuit);
             await runner.CancelAsync().WaitAsync(Bound);
             var result = await runner.RunAsync().WaitAsync(Bound);
 
@@ -100,9 +106,9 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public async Task A_cancel_racing_the_start_ends_the_run_canceled()
         {
-            var (argsPath, output) = Prepare(seconds: 60);
+            var (argsPath, output) = Prepare(seconds: 5);
 
-            using var runner = JobRunner.ForVideoRender(argsPath);
+            using var runner = JobRunner.ForVideoRender(argsPath, HoldForQuit);
             var run = runner.RunAsync();
             await runner.CancelAsync().WaitAsync(Bound);
             var result = await run.WaitAsync(Bound);

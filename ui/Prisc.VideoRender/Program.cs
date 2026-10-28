@@ -46,6 +46,16 @@ namespace Prisc.VideoRender
         /// only ends an orphan.</summary>
         private static readonly TimeSpan SelfExitMargin = TimeSpan.FromSeconds(5);
 
+        /// <summary>Tests only: with this set to <c>1</c> the render waits after its first encoded
+        /// frame until it is told to quit (bounded by <see cref="HoldForQuitBound"/>), so a cancel
+        /// test always lands its quit mid-render. A short fixture renders in a second or two, which
+        /// a loaded test host can take just to turn <c>hello</c> around into the quit.</summary>
+        internal const string HoldForQuitVariable = "PRISC_RENDER_TEST_HOLD_FOR_QUIT";
+
+        /// <summary>Long past the catalog's quit grace: a quit that never arrives shows up as a
+        /// parent-side kill, not as a hold that quietly gave up first.</summary>
+        private static readonly TimeSpan HoldForQuitBound = TimeSpan.FromSeconds(30);
+
         private static int Main(string[] argv)
         {
             // first, before FFmpeg, Skia or a GPU driver can print to fd 1
@@ -63,6 +73,7 @@ namespace Prisc.VideoRender
                 reason => events.Emit(new JobEvent.Error(IpcErrorCodes.BadCommand, reason, false)));
 
             var emitter = new ProgressEmitter(events);
+            bool holdForQuit = Environment.GetEnvironmentVariable(HoldForQuitVariable) == "1";
 
             // remembered as soon as the args parse, so the error path can remove a partial output
             // that RenderJob did not get to clean up itself.
@@ -112,7 +123,17 @@ namespace Prisc.VideoRender
                         SidecarCacheDir = Path.GetDirectoryName(Path.GetFullPath(argsPath)),
                         DiagnosticLog = message => Console.Error.WriteLine("Prisc.VideoRender: " + message),
                     },
-                    new InlineProgress(percent => emitter.Emit(percent)),
+                    new InlineProgress(percent =>
+                    {
+                        emitter.Emit(percent);
+                        // the first report past the start is the first encoded frame: the output
+                        // exists, and the encode loop checks the token right after this returns
+                        if (holdForQuit && percent > 0)
+                        {
+                            holdForQuit = false;
+                            cancel.Token.WaitHandle.WaitOne(HoldForQuitBound);
+                        }
+                    }),
                     cancel.Token);
 
                 if (result.Outcome == RenderOutcome.Canceled)

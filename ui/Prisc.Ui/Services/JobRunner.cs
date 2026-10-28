@@ -87,7 +87,11 @@ namespace Prisc.UI.Services
         /// <summary>A render of an already-written render-args file (a serialized project plus its
         /// output/crf siblings, see <see cref="Prisc.VideoSDK.Editing.ProjectFileWriter"/>), which is the
         /// tool's single argument.</summary>
-        public static JobRunner ForVideoRender(string renderArgsPath)
+        public static JobRunner ForVideoRender(string renderArgsPath) => ForVideoRender(renderArgsPath, null);
+
+        /// <summary><see cref="ForVideoRender(string)"/> with extra variables for the tool's
+        /// environment: the tests' seam for the tool's test-only knobs.</summary>
+        internal static JobRunner ForVideoRender(string renderArgsPath, IReadOnlyDictionary<string, string> extraEnvironment)
         {
             // The render tool finds FFmpeg beside the recorder itself, but hand it the directory we
             // already resolved so the two can never disagree. Harmless when there is none: the
@@ -96,6 +100,11 @@ namespace Prisc.UI.Services
             var ffmpegDir = FFmpegLoader.FindBesideRecorder();
             if (!String.IsNullOrEmpty(ffmpegDir))
                 environment[FFmpegLoader.EnvVarName] = ffmpegDir;
+            if (extraEnvironment != null)
+            {
+                foreach (var (name, value) in extraEnvironment)
+                    environment[name] = value;
+            }
 
             return new JobRunner("Prisc.VideoRender", "video render", new[] { renderArgsPath },
                 new HelperStartOptions { Environment = environment });
