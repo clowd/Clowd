@@ -81,7 +81,7 @@ namespace Prisc.UI.Services
 
         /// <summary>Locates the render tool: the <c>PRISC_VID_RENDER_PATH</c> override first, then
         /// beside the app executable (Prisc.VideoRender publishes into the same directory as
-        /// Prisc.Ui — see ci.yml), then the dev-build output next to this repo's csproj. Returns
+        /// Prisc.Ui — see build-ui.yml), then the dev-build output next to this repo's csproj. Returns
         /// null when it cannot be found.</summary>
         public static string ResolveBinaryPath()
         {

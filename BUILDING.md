@@ -68,7 +68,7 @@ Roughly a hundred tests — every encode, render, composition-player, filmstrip,
 sidecar test — skip rather than fail when FFmpeg is missing, so check for `Skipped: 0` before
 believing a green run.
 
-The screen capture overlay is a separate Rust binary (`prisc_capture`); the tray app / editor is the Avalonia project `Prisc.Ui`. For video recording, Prisc runs the recorder (`prisc_recorder`, built from `crates/prisc_recorder` in this repository) from a `recorder/` directory alongside the Prisc.Ui binary — see `.github/workflows/ci.yml` and `.github/workflows/build-recorder.yml` for how release packages are assembled.
+The screen capture overlay is a separate Rust binary (`prisc_capture`); the tray app / editor is the Avalonia project `Prisc.Ui`. For video recording, Prisc runs the recorder (`prisc_recorder`, built from `crates/prisc_recorder` in this repository) from a `recorder/` directory alongside the Prisc.Ui binary — see `.github/workflows/ci.yml` (which merges the outputs of `build-ui.yml`, `build-rust.yml` and `build-recorder.yml` in the same folder) for how release packages are assembled.
 
 The video editor runs on Windows and macOS alike. Platform-specific pieces: the frame compositor
 renders on Direct3D 12 or Metal (`GpuSurfaceFactory`, with a CPU fallback either way), video decode

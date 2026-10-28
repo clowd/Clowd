@@ -4,7 +4,7 @@
   The package contains only this manifest and the two logos; the COM dll and the
   app executable live in the Prisc install root, which is passed to
   Add-AppxPackage as -ExternalLocation at registration time (SparsePackageManager).
-  {{VERSION}} and {{ARCH}} are substituted during packaging (ci.yml).
+  {{VERSION}} and {{ARCH}} are substituted during packaging (build-rust.yml).
 -->
 <Package
     xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"

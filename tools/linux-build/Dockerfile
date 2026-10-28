@@ -2,7 +2,7 @@
 # glibc 2.34. Everything built here runs on any distro with glibc >= 2.34
 # (Ubuntu 22.04+, Debian 12+, Fedora / RHEL 9+), which the Ubuntu 24.04 image
 # (glibc 2.38) could not offer. CI builds inside this exact image (see the
-# linux job in .github/workflows/build-recorder.yml); for a local build:
+# linux job in .github/workflows/build-recorder-linux.yml); for a local build:
 #
 #   docker build -t prisc-recorder-linux tools/linux-build
 #   docker run --rm -it -v "$PWD":/src -w /src prisc-recorder-linux cargo build --release -p prisc_recorder -p prisc_vid2gif

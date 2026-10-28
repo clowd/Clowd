@@ -68,7 +68,7 @@ if [ "$RID" != "linux-x64" ]; then
 fi
 # prisc_ai only builds where ONNX Runtime still exists: upstream
 # dropped macOS x86_64, so Intel macs skip it (the app grays the AI
-# effects out there and OCR reports as unavailable) — matches ci.yml's
+# effects out there and OCR reports as unavailable) — matches build-rust.yml's
 # `ai: false` on the osx-x64 leg.
 if [ "$RID" != "osx-x64" ]; then
     CARGO_PKGS+=(-p prisc_ai)

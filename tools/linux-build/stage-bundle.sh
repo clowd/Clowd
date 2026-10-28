@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Assembles the self-contained Linux bundle from a cargo profile dir and checks
 # that it is relocatable and portable. Used by the linux job in
-# .github/workflows/build-recorder.yml (inside the tools/linux-build image), and
+# .github/workflows/build-recorder-linux.yml (inside the tools/linux-build image), and
 # runnable by hand in that image:
 #
 #   tools/linux-build/stage-bundle.sh target/release dist/recorder-linux-x64

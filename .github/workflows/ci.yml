@@ -1,19 +1,25 @@
 name: CI
 
 # Test + package on every commit.
-# Each package is the published Prisc.Ui app with the Rust binaries beside it and
-# the recorder (prisc_recorder + libobs, built by build-recorder.yml) in a recorder/
-# subdirectory, the layout ScreenCaptureService/ObsBinaryLocator expects.
-# Every package except osx-x64 (which upstream ONNX Runtime no longer supports) also
-# carries the prisc_ai inference binary (OCR, matting, denoising) with its
-# execution-provider dylibs.
+# Each package is the published Prisc.Ui app (build-ui.yml) with the Rust binaries
+# beside it (build-rust.yml) and the recorder (prisc_recorder + libobs,
+# build-recorder.yml) in a recorder/ subdirectory, the layout
+# ScreenCaptureService/ObsBinaryLocator expects. Every package except osx-x64 (which
+# upstream ONNX Runtime no longer supports) also carries the prisc_ai inference binary
+# (OCR, matting, denoising) with its execution-provider dylibs.
+#
+# The three builds run in parallel and package only merges their outputs, so the app
+# build no longer waits behind the recorder's.
 #
 # Job graph:
-#   version                                  -> artifact `version` (release.yml reads it)
-#   recorder-windows/-macos/-linux           -> recorder-<rid> (build-recorder.yml; Linux is a check only)
-#   test                                     Rust gate + Shared/Drawing dotnet tests (no needs)
-#   test-video  needs recorder-windows/-macos (runs even if they fail; the FFmpeg tests then skip)
-#   package     needs recorder-windows/-macos -> prisc-<rid>
+#   version                                    -> artifact `version` (release.yml reads it)
+#   recorder        build-recorder.yml         -> recorder-<rid>, Windows + macOS
+#   recorder-linux  build-recorder-linux.yml   check only, nothing consumes it
+#   rust            build-rust.yml             -> rust-<rid>
+#   ui              build-ui.yml               -> ui-<rid>
+#   test                                       Rust gate + Shared/Drawing dotnet tests (no needs)
+#   test-video      needs recorder             runs even if it fails; the FFmpeg tests then skip
+#   package         needs recorder, rust, ui   -> prisc-<rid>
 
 on:
   push:
@@ -50,24 +56,24 @@ jobs:
           path: version.txt
           if-no-files-found: error
 
-  # The recorder stack (libobs via CMake, 20-40 min cold) builds in these three calls, the
+  # The recorder stack (libobs via CMake, 20-40 min cold) builds in these two calls, the
   # only jobs that check out the obs-studio submodule.
-  recorder-windows:
+  recorder:
     uses: ./.github/workflows/build-recorder.yml
-    with:
-      platform: windows
-
-  recorder-macos:
-    uses: ./.github/workflows/build-recorder.yml
-    with:
-      platform: macos
 
   # Linux has no app package yet; this proves the recorder still builds, tests and runs
-  # there (bundle + portability checks). Nothing consumes its artifacts.
+  # there (bundle + portability checks). Nothing consumes its artifacts. Its own workflow so
+  # that package, which needs `recorder` as a whole, never waits on it.
   recorder-linux:
-    uses: ./.github/workflows/build-recorder.yml
-    with:
-      platform: linux
+    uses: ./.github/workflows/build-recorder-linux.yml
+
+  rust:
+    uses: ./.github/workflows/build-rust.yml
+    secrets:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+
+  ui:
+    uses: ./.github/workflows/build-ui.yml
 
   test:
     name: test (${{ matrix.os }})
@@ -99,7 +105,7 @@ jobs:
           dotnet-version: 10.0.x
 
       # App crates only. The recorder crates build libobs from their build scripts, so they
-      # are built and tested in build-recorder.yml (their clippy is not gated yet).
+      # are built and tested in build-recorder*.yml (their clippy is not gated yet).
       # `cargo fmt --check` covers the whole workspace; the imported recorder crates opt out
       # of formatting through their own rustfmt.toml.
       - name: "Rust gate: format + lint + tests"
@@ -146,7 +152,7 @@ jobs:
   # runner has not got (FFmpeg, the prisc_ai binary, another platform) skip rather than fail.
   test-video:
     name: test-video (${{ matrix.os }})
-    needs: [recorder-windows, recorder-macos]
+    needs: [recorder]
     # Also runs when a recorder build failed: the FFmpeg-backed tests then skip (see below)
     # and the rest of the suite still gates.
     if: ${{ !cancelled() }}
@@ -211,288 +217,60 @@ jobs:
         run: dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj -c Release --nologo
         shell: bash
 
+  # Merges the three builds for one rid: the UI publish is the package directory, the Rust
+  # binaries go beside Prisc.Ui, and the recorder goes in recorder/. Pure file shuffling, so it
+  # runs on Linux for every rid; Info-ZIP's unzip and zip there keep the macOS execute bits
+  # and the recorder's framework symlinks, as they did on the macOS runner.
   package:
     name: package (${{ matrix.rid }})
-    # Every package carries its rid's recorder build in recorder/.
-    needs: [recorder-windows, recorder-macos]
-    timeout-minutes: 60
+    needs: [recorder, rust, ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # ai: whether the prisc_ai inference binary builds for this
-          # target. false only on osx-x64: upstream ONNX Runtime dropped
-          # macOS x86_64, so ort has no binaries for it — the app grays the
-          # AI effects out there and the overlay reports OCR as unavailable.
-          - rid: win-x64
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            ai: true
-            exe: .exe
-            msix-arch: x64
-          - rid: win-arm64
-            os: windows-latest
-            target: aarch64-pc-windows-msvc
-            ai: true
-            exe: .exe
-            msix-arch: arm64
-          - rid: osx-x64
-            os: macos-15
-            target: x86_64-apple-darwin
-            ai: false
-            exe: ""
-          - rid: osx-arm64
-            os: macos-15
-            target: aarch64-apple-darwin
-            ai: true
-            exe: ""
-    runs-on: ${{ matrix.os }}
-    # Lifted to the job so the Sentry step can test the token in an `if:`, where secrets are unavailable but env is; no SENTRY_ORG because an org token carries the slug itself.
-    env:
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        rid: [win-x64, win-arm64, osx-x64, osx-arm64]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Download UI publish
+        uses: actions/download-artifact@v8
         with:
-          # nbgv needs full history to compute the version height.
-          fetch-depth: 0
+          name: ui-${{ matrix.rid }}
+          path: artifacts
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download rust binaries
+        uses: actions/download-artifact@v8
         with:
-          targets: ${{ matrix.target }}
+          name: rust-${{ matrix.rid }}
+          path: artifacts
 
-      # rust-cache already hashes Cargo.toml, but .cargo/config.toml is named explicitly so a rustflags-only edit cannot restore a cache built with the previous flags.
-      - name: Cache cargo build
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.rid }}-${{ hashFiles('Cargo.toml', '.cargo/config.toml') }}
-
-      # SDK 10 is required: Avalonia 12's XAML generators target Roslyn 4.14, and older SDKs skip them as CS9057 so the x:Name fields go missing.
-      - name: Install .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-
-      # No PublishSingleFile: vpk pack (release.yml) requires a normal multi-file publish directory.
-      - name: Publish Prisc.Ui
-        run: >
-          dotnet publish ui/Prisc.Ui/Prisc.Ui.csproj
-          -c Release -r ${{ matrix.rid }} --self-contained true
-          -o publish
-
-      # macOS 26 gates its window design (the larger corner radius, the modern titlebar) on the
-      # linked-SDK field of LC_BUILD_VERSION in the MAIN executable, not on any runtime API. That
-      # executable is the .NET apphost, which Microsoft ships prebuilt declaring sdk 15.5, so
-      # AppKit puts every Prisc window in the pre-Tahoe compatibility frame. Nothing in Avalonia
-      # or the Info.plist can override it: libAvaloniaNative is already sdk 26.0 and AppKit never
-      # looks at it. So stamp the field here, leaving minos alone; sdk newer than the deployment
-      # target is exactly what an ordinary Xcode build produces, and dyld enforces only minos, so
-      # the package still runs everywhere it does today.
-      #
-      # Only gates above the currently declared 15.5 are newly opted into, which in practice means
-      # the macOS 26 ones, so behaviour on macOS 12 through 15 is unchanged. Worth knowing that
-      # this also opts the process into any future runtime cutoff for the screen capture APIs
-      # deprecated in favour of ScreenCaptureKit: ScreenPixels still calls
-      # CGWindowListCreateImage, which the SDK headers mark obsoleted=15.0 (compile time only,
-      # and still returning images at runtime on 26.6, but Apple has signalled the intent).
-      #
-      # vtool cannot re-sign the apphost's ad-hoc signature (it only regenerates linker-signed
-      # ones), so from here until vpk signs with Developer ID in release.yml this binary has an
-      # invalid signature and is SIGKILLed on launch on Apple Silicon. That makes the uploaded
-      # prisc-osx-* artifact unrunnable as-is; add `codesign -s - --force` below if that ever
-      # needs to change.
-      - name: Stamp the macOS SDK version into the apphost
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          MINOS=$(vtool -show-build-version publish/Prisc.Ui | awk '/minos/ { print $2 }')
-          vtool -set-build-version macos "$MINOS" 26.0 -replace -output publish/Prisc.Ui publish/Prisc.Ui
-          vtool -show-build-version publish/Prisc.Ui
-          # A silent no-op here would ship the legacy frame and go unnoticed until someone looked
-          # at a window, so fail the build instead.
-          vtool -show-build-version publish/Prisc.Ui | grep -qE '^\s*sdk 26\.' \
-            || { echo "::error::apphost SDK stamp did not apply"; exit 1; }
-
-      # The render tool is a separate thin exe over Prisc.VideoSDK; publishing into the
-      # same directory shares the self-contained runtime and SDK assemblies, so the
-      # marginal cost is the apphost. VidRenderRunner looks for it beside Prisc.Ui.
-      - name: Publish Prisc.VideoRender
-        run: >
-          dotnet publish ui/Prisc.VideoRender/Prisc.VideoRender.csproj
-          -c Release -r ${{ matrix.rid }} --self-contained true
-          -o publish
-
-      # The Rust build has no nbgv hook, so stamp the same version into its Sentry release name (crates/prisc_rust_core/src/telemetry.rs).
-      - name: Resolve version for capture binary
-        shell: bash
-        run: |
-          dotnet tool update -g nbgv
-          echo "PRISC_VERSION=$(nbgv get-version -v SimpleVersion)" >> "$GITHUB_ENV"
-
-      # One invocation rather than one per crate, so codegen and the LTO links overlap instead of leaving the runner idle.
-      # Explicit packages: the workspace also holds the recorder crates, which build-recorder.yml builds.
-      - name: Build rust binaries
-        shell: bash
-        run: |
-          PKGS="-p prisc_capture -p prisc_scroll_driver -p prisc_hotkeys"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            PKGS="$PKGS -p prisc_shell_ext"
-          fi
-          # The ort crate's build downloads pyke's prebuilt ONNX Runtime for the target and links it statically (see the matrix `ai` flag).
-          if [ "${{ matrix.ai }}" = "true" ]; then
-            PKGS="$PKGS -p prisc_ai"
-          fi
-          cargo build --release --target ${{ matrix.target }} $PKGS
-
-      # Without these an LTO'd release build reports mangled frames with no file or line; skipped rather than failed when the token is absent (forks).
-      # The recorder has no Sentry integration, so it uploads no debug files.
-      - name: Upload capture debug files to Sentry
-        if: env.SENTRY_AUTH_TOKEN != ''
-        shell: bash
-        run: |
-          npm install -g @sentry/cli
-          OUT="target/${{ matrix.target }}/release"
-          # Name the artifacts rather than the directory, which would recurse into deps/ and upload every dependency's intermediates.
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            DIF="$OUT/prisc_capture.pdb"
-            SCROLL_DIF="$OUT/prisc_scroll_driver.pdb"
-            AI_DIF="$OUT/prisc_ai.pdb"
-          else
-            DIF="$OUT/prisc_capture.dSYM"
-            SCROLL_DIF="$OUT/prisc_scroll_driver.dSYM"
-            AI_DIF="$OUT/prisc_ai.dSYM"
-          fi
-          # The executable goes up alongside the debug file for its symbol table.
-          sentry-cli debug-files upload "$DIF" "$OUT/prisc_capture${{ matrix.exe }}"
-          sentry-cli debug-files upload "$SCROLL_DIF" "$OUT/prisc_scroll_driver${{ matrix.exe }}"
-          # absent on the one leg that does not build the AI inference binary
-          if [ "${{ matrix.ai }}" = "true" ]; then
-            sentry-cli debug-files upload "$AI_DIF" "$OUT/prisc_ai${{ matrix.exe }}"
-          fi
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            sentry-cli debug-files upload "$OUT/prisc_shell_ext.pdb" "$OUT/prisc_shell_ext.dll"
-            sentry-cli debug-files upload "$OUT/prisc_hotkeys.pdb" "$OUT/prisc_hotkeys.dll"
-          else
-            sentry-cli debug-files upload "$OUT/libprisc_hotkeys.dylib.dSYM" "$OUT/libprisc_hotkeys.dylib"
-          fi
-
-      # The driver (and prisc_ai, below) sit beside the overlay, which resolves them as siblings of its own executable.
-      - name: Copy capture binary into package
-        run: cp "target/${{ matrix.target }}/release/prisc_capture${{ matrix.exe }}" publish/
-        shell: bash
-
-      - name: Copy scrolling capture driver into package
-        run: cp "target/${{ matrix.target }}/release/prisc_scroll_driver${{ matrix.exe }}" publish/
-        shell: bash
-
-      # The global hotkey library Prisc.Ui P/Invokes, beside it where HotkeysLibraryLocator looks.
-      # release.yml signs it with the rest: vpk's Trusted Signing pass covers every dll in the pack
-      # dir, and the macOS app signing and notarization cover every Mach-O in the bundle.
-      - name: Copy hotkeys library into package
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then cp "target/${{ matrix.target }}/release/prisc_hotkeys.dll" publish/
-          else cp "target/${{ matrix.target }}/release/libprisc_hotkeys.dylib" publish/; fi
-        shell: bash
-
-      # Beside Prisc.Ui (where AiLoader looks for it) and beside the overlay (which spawns it for OCR).
-      - name: Copy AI inference binary into package
-        if: matrix.ai
-        run: cp "target/${{ matrix.target }}/release/prisc_ai${{ matrix.exe }}" publish/
-        shell: bash
-
-      # prisc_ai is GPL-3.0 (it embeds the RobustVideoMatting weights);
-      # GPL sections 4/6 require the license text and source offer to travel
-      # with every distributed copy.
-      - name: Copy AI inference license into package
-        if: matrix.ai
-        run: |
-          cp crates/prisc_ai/LICENSE publish/prisc_ai.LICENSE.txt
-          cp crates/prisc_ai/NOTICE.txt publish/prisc_ai.NOTICE.txt
-        shell: bash
-
-      # The runtime itself is statically linked, but the DirectML EP needs
-      # its helper dylib beside the exe (both Windows arches). The macOS
-      # CoreML EP is fully static — nothing to ship.
-      - name: Copy execution-provider dylibs into package (Windows)
-        if: matrix.ai && runner.os == 'Windows'
-        run: cp "target/${{ matrix.target }}/release/DirectML.dll" publish/
-        shell: bash
-
-      # prisc_ai is the app's one /MD binary (its build.rs swaps
-      # it off `+crt-static` to match pyke's ONNX Runtime libs), so it
-      # imports msvcp140/vcruntime140 at runtime. Those are not OS
-      # components; ship them app-local from the runner's own VS redist,
-      # matching the package's architecture. Every other binary beside
-      # Prisc.Ui stays crt-static and needs none of this (the recorder/
-      # folder carries its own copies for libobs).
-      - name: Copy VC++ CRT into package (Windows)
-        if: matrix.ai && runner.os == 'Windows'
-        run: |
-          CRT_DIR=$(find "/c/Program Files/Microsoft Visual Studio" -type d \
-            -path "*/VC/Redist/MSVC/*/${{ matrix.msix-arch }}/Microsoft.VC*.CRT" 2>/dev/null | sort | tail -1)
-          if [ -z "$CRT_DIR" ]; then echo "VC redist dir not found" >&2; exit 1; fi
-          for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do
-            if [ -f "$CRT_DIR/$f" ]; then cp "$CRT_DIR/$f" publish/; fi
-          done
-          # the two every-arch dlls must have made it; fail loudly here rather
-          # than with a cryptic loader error on user machines
-          test -f publish/msvcp140.dll
-          test -f publish/vcruntime140.dll
-        shell: bash
-
-      # The version in the filename means a changed extension arrives under a fresh name that a lock on the old copy cannot block.
-      - name: Copy shell extension into package (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          EXT_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "prisc_shell_ext") | .version')
-          echo "PRISC_EXT_VERSION=$EXT_VERSION" >> "$GITHUB_ENV"
-          cp "target/${{ matrix.target }}/release/prisc_shell_ext.dll" "publish/PriscShellExt_${EXT_VERSION}.dll"
-        shell: bash
-
-      # Sparse package: the msix holds only the manifest + logos and /nv skips the payload validation that would reject its references to the external dll.
-      - name: Build shell extension MSIX (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $staging = Join-Path $env:RUNNER_TEMP msix-staging
-          New-Item -ItemType Directory -Path $staging | Out-Null
-          Copy-Item -Recurse crates/prisc_shell_ext/msix/Assets (Join-Path $staging Assets)
-          $manifest = (Get-Content crates/prisc_shell_ext/msix/AppxManifest.template.xml -Raw)
-          $manifest = $manifest.Replace('{{VERSION}}', "$env:PRISC_VERSION.0").Replace('{{ARCH}}', '${{ matrix.msix-arch }}').Replace('{{EXTVERSION}}', $env:PRISC_EXT_VERSION)
-          Set-Content -Path (Join-Path $staging AppxManifest.xml) -Value $manifest -Encoding utf8
-          $makeappx = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe' | Select-Object -Last 1
-          & $makeappx.FullName pack /d $staging /p publish/PriscShellExt.msix /nv /o
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        shell: pwsh
-
-      # The recorder this run built for the same rid (build-recorder.yml): one archive with its
-      # members at the root, unpacked into recorder/ where ObsBinaryLocator looks for it.
       - name: Download recorder
         uses: actions/download-artifact@v8
         with:
           name: recorder-${{ matrix.rid }}
-          path: recorder-artifact
+          path: artifacts
 
-      - name: Extract recorder into package (Windows)
-        if: runner.os == 'Windows'
-        run: Expand-Archive recorder-artifact/recorder-${{ matrix.rid }}.zip -DestinationPath publish/recorder
-        shell: pwsh
+      # Each archive holds its members at the root. The Rust stage goes in after the UI
+      # publish and wins any collision (-o), as its copy steps did when this was one job.
+      - name: Assemble package
+        run: |
+          unzip -q "artifacts/ui-${{ matrix.rid }}.zip" -d publish
+          unzip -qo "artifacts/rust-${{ matrix.rid }}.zip" -d publish
+          unzip -q "artifacts/recorder-${{ matrix.rid }}.zip" -d publish/recorder
 
-      # No repair pass: the recorder job archives its bundle with ditto rather than uploading the
-      # loose tree, so the zip carries the execute bits and the framework symlinks itself, and
-      # unzip restores both.
-      - name: Extract recorder into package (macOS)
-        if: runner.os == 'macOS'
-        run: unzip -q recorder-artifact/recorder-${{ matrix.rid }}.zip -d publish/recorder
-
-      # upload-artifact does not preserve unix file modes, but a zip does.
+      # upload-artifact does not preserve unix file modes, but a zip does. The checks make sure
+      # the hop through this Linux runner kept the apphost's execute bit and the recorder's
+      # framework symlinks.
       - name: Zip package (macOS)
-        if: runner.os == 'macOS'
-        run: cd publish && zip -qry "../prisc-${{ matrix.rid }}.zip" .
+        if: startsWith(matrix.rid, 'osx-')
+        run: |
+          set -euo pipefail
+          zip="prisc-${{ matrix.rid }}.zip"
+          (cd publish && zip -qry "../$zip" .)
+          zipinfo "$zip" | grep -E ' Prisc\.Ui$' | grep -q '^-rwx' || { echo "::error::package lost the execute bit"; exit 1; }
+          [ "$(zipinfo "$zip" | grep -c '^l')" -gt 0 ] || { echo "::error::package lost the recorder's symlinks"; exit 1; }
 
       - name: Upload package (macOS)
-        if: runner.os == 'macOS'
+        if: startsWith(matrix.rid, 'osx-')
         uses: actions/upload-artifact@v7
         with:
           name: prisc-${{ matrix.rid }}
@@ -500,7 +278,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload package (Windows)
-        if: runner.os == 'Windows'
+        if: startsWith(matrix.rid, 'win-')
         uses: actions/upload-artifact@v7
         with:
           name: prisc-${{ matrix.rid }}
