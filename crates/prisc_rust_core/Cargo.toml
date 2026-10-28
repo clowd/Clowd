@@ -14,17 +14,28 @@ rust-version.workspace = true
 # app.manifest sits here for the same reason — it is what makes a process per-monitor DPI
 # aware, and a drifted copy would silently make one binary photograph the wrong pixels.
 
+# Each consumer names the modules it uses (the workspace entry turns default
+# features off), so the recorder stack, which never reports to Sentry, does not
+# build the sentry/TLS tree, and prisc_ai, which reads no windows or monitors,
+# does not link the desktop module's frameworks.
+[features]
+default = ["desktop", "telemetry"]
+# The window list, monitors, DXGI outputs and the cursor.
+desktop = ["dep:windows", "dep:objc2-core-foundation", "dep:objc2-core-graphics"]
+# The shared Sentry setup.
+telemetry = ["dep:sentry"]
+
 [dependencies]
 anyhow.workspace = true
 euclid.workspace = true
 image = { workspace = true, features = ["png"] }
 log.workspace = true
-sentry.workspace = true
+sentry = { workspace = true, optional = true }
 serde.workspace = true
 
 # The desktop module: window list, monitors, DXGI outputs and the cursor.
 [target.'cfg(windows)'.dependencies]
-windows = { workspace = true, features = [
+windows = { workspace = true, optional = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Dxgi",
@@ -40,8 +51,8 @@ windows = { workspace = true, features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-core-foundation = { workspace = true, features = ["CFArray", "CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString", "CFUUID"] }
-objc2-core-graphics = { workspace = true, features = [
+objc2-core-foundation = { workspace = true, optional = true, features = ["CFArray", "CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString", "CFUUID"] }
+objc2-core-graphics = { workspace = true, optional = true, features = [
     "CGDataProvider",
     "CGDirectDisplay",
     "CGError",

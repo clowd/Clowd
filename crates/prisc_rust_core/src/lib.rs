@@ -22,9 +22,11 @@
 //! lives in this crate's directory for the same reason its Rust neighbors
 //! do; each binary's `build.rs` embeds it.
 
+#[cfg(feature = "desktop")]
 pub mod desktop;
 pub mod exit;
 pub mod geometry;
 pub mod ocr;
 pub mod session;
+#[cfg(feature = "telemetry")]
 pub mod telemetry;

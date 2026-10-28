@@ -24,9 +24,11 @@ edition = "2021"
 rust-version = "1.89"
 
 [workspace.dependencies]
-# Shared by prisc_capture and prisc_scroll_driver: geometry, the session.json
-# contract, exit codes, Sentry setup.
-prisc_rust_core = { path = "crates/prisc_rust_core" }
+# Shared by prisc_capture, prisc_scroll_driver, prisc_ai and (through
+# prisc_obs_platform) the recorder stack: geometry, the session.json contract, exit
+# codes, the desktop queries and Sentry setup. Default features are off here so each
+# consumer names the `desktop` and `telemetry` modules it actually uses.
+prisc_rust_core = { path = "crates/prisc_rust_core", default-features = false }
 # The global hotkey hook: linked into prisc_capture, and built as prisc_hotkeys.dll / .dylib for Prisc.Ui.
 prisc_hotkeys = { path = "crates/prisc_hotkeys" }
 # The recorder stack's internal crates (libobs/FFmpeg bindings and the platform layer).

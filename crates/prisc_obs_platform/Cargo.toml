@@ -6,8 +6,9 @@ license = "GPL-2.0-or-later"
 
 [dependencies]
 # The window list, monitors and cursor (prisc_rust_core::desktop), shared with the
-# overlay and the scrolling driver.
-prisc_rust_core = { workspace = true }
+# overlay and the scrolling driver. Not `telemetry`: the recorder stack does not
+# report to Sentry, so it stays out of the sentry/TLS tree.
+prisc_rust_core = { workspace = true, features = ["desktop"] }
 prisc_obs = { workspace = true }
 prisc_obs_sys = { workspace = true }
 
