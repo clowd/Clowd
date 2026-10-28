@@ -1093,7 +1093,7 @@ namespace Prisc.UI
         /// <summary>
         /// The helper process is gone. This is the ONLY signal that a running share stopped — the
         /// protocol has no terminal line after <c>sharing_started</c>; the process simply exits and
-        /// the pipe closes — so ObsCapturer's rule that an exit without a terminal message is fatal
+        /// the pipe closes — so RecorderDriver's rule that an exit without a terminal message is fatal
         /// must NOT be applied here. An exit code of 0 after the share started is the normal end of
         /// a share.
         /// </summary>

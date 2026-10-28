@@ -1,10 +1,8 @@
 using System;
-using System.Text;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Text.Json;
 using System.Threading.Tasks;
+using Prisc.Ipc;
 
 namespace Prisc.UI
 {
@@ -28,13 +26,14 @@ namespace Prisc.UI
     /// The result is cached for the life of the process; call <see cref="Refresh"/> to
     /// re-enumerate after a hot-plug, which is now cheap enough to do on every dropdown.
     ///
-    /// Nothing here throws: a missing binary, a recorder too old to know the flag, a timeout or
-    /// unparseable output all come back as an empty list (logged). A user with no cameras and a
+    /// Nothing here throws: a missing binary, a failed or mismatched recorder, or a timeout all come
+    /// back as an empty list (logged). A user with no cameras and a
     /// user whose recorder cannot list them look the same on purpose — neither can record one.
     /// </summary>
     public static class CameraDeviceManager
     {
-        /// <summary>The recorder flag; it prints the camera list and exits without touching OBS.</summary>
+        /// <summary>The recorder flag; it answers with a <c>cameras</c> terminal and exits without
+        /// touching OBS.</summary>
         public const string ListCamerasFlag = "--list-cameras";
 
         // the fallback spawn opens each capture device long enough to read its name, which a
@@ -114,139 +113,71 @@ namespace Prisc.UI
         {
             var empty = new List<CameraDeviceInfo>();
 
-            var exePath = Prisc.Ipc.HelperLocator.Find("prisc_recorder");
+            var exePath = HelperLocator.Find("prisc_recorder");
             if (String.IsNullOrEmpty(exePath))
             {
                 Debug.WriteLine("Cannot enumerate cameras: prisc_recorder was not found.");
                 return empty;
             }
 
-            Process proc = null;
             try
             {
-                var psi = new ProcessStartInfo(exePath)
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    // prisc_recorder loads the OBS libraries that sit beside it relative to the
-                    // working directory — it cannot start anywhere else.
-                    WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(exePath)),
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    // UTF-8, like HelperProcess: a camera id is its localized friendly name, which the
-                    // console code page .NET would otherwise use cannot spell.
-                    StandardOutputEncoding = new UTF8Encoding(false),
-                    StandardErrorEncoding = new UTF8Encoding(false),
-                };
-                psi.ArgumentList.Add(ListCamerasFlag);
-
-                proc = Process.Start(psi);
-                if (proc == null)
-                {
-                    Debug.WriteLine("Cannot enumerate cameras: the recorder process did not start.");
-                    return empty;
-                }
-
-                // read stdout and stderr concurrently: both are small here, but a full pipe buffer
-                // on either one would deadlock a sequential read.
-                var stdout = proc.StandardOutput.ReadToEndAsync();
-                var stderr = proc.StandardError.ReadToEndAsync();
-
-                if (!proc.WaitForExit((int)EnumerateTimeout.TotalMilliseconds))
-                {
-                    Debug.WriteLine($"Camera enumeration did not finish within {EnumerateTimeout.TotalSeconds:0}s; killing it.");
-                    KillQuietly(proc);
-                    return empty;
-                }
-
-                var output = stdout.GetAwaiter().GetResult();
-                var cameras = Parse(output);
-
-                if (cameras == null)
-                {
-                    // an older recorder rejects the flag outright (clap exits 2 with a usage
-                    // error): expected until the recorder side ships, so it is a log line, not a
-                    // report. The webcam settings simply offer nothing to pick.
-                    var error = stderr.GetAwaiter().GetResult();
-                    Debug.WriteLine($"Camera enumeration produced no camera list (exit {proc.ExitCode}). {Truncate(error)}");
-                    return empty;
-                }
-
-                return cameras;
+                // never on the UI thread (GetCamerasAsync), and the client awaits nothing on a
+                // captured context, so blocking on it here cannot deadlock.
+                return EnumerateWithRecorderAsync(exePath).GetAwaiter().GetResult() ?? empty;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to enumerate cameras: " + ex);
                 SentryConfig.CaptureHandled(ex, "camera.enumerate");
-                KillQuietly(proc);
                 return empty;
             }
-            finally
-            {
-                try { proc?.Dispose(); }
-                catch { }
-            }
         }
 
-        /// <summary>Finds the <c>cameras</c> line in the recorder's stdout and reads it. Returns
-        /// null when there is no such line (so the caller can tell "this recorder cannot list
-        /// cameras" apart from "this machine has none").</summary>
-        private static List<CameraDeviceInfo> Parse(string output)
+        /// <summary>The recorder's <c>cameras</c> terminal, or null when it ended any other way.</summary>
+        private static async Task<List<CameraDeviceInfo>> EnumerateWithRecorderAsync(string exePath)
         {
-            if (String.IsNullOrWhiteSpace(output))
-                return null;
-
-            foreach (var raw in output.Split('\n'))
-            {
-                // same protocol rule as the recording stream: only lines that are a whole JSON
-                // object are ours, everything else is chatter.
-                var line = raw.Trim();
-                if (!line.StartsWith("{", StringComparison.Ordinal) || !line.EndsWith("}", StringComparison.Ordinal))
-                    continue;
-
-                try
-                {
-                    using var doc = JsonDocument.Parse(line);
-                    var root = doc.RootElement;
-                    if (!root.TryGetProperty("type", out var typeEl) ||
-                        !String.Equals(typeEl.GetString(), "cameras", StringComparison.Ordinal))
-                        continue;
-
-                    var list = new List<CameraDeviceInfo>();
-                    if (root.TryGetProperty("cameras", out var camerasEl) && camerasEl.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var camera in camerasEl.EnumerateArray())
-                        {
-                            var id = camera.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
-                            if (String.IsNullOrEmpty(id))
-                                continue;
-
-                            var name = camera.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
-                            list.Add(new CameraDeviceInfo(id, String.IsNullOrEmpty(name) ? id : name));
-                        }
-                    }
-
-                    return list;
-                }
-                catch (JsonException ex)
-                {
-                    Debug.WriteLine("Unparseable camera list line: " + line + " (" + ex.Message + ")");
-                }
-            }
-
-            return null;
-        }
-
-        private static void KillQuietly(Process proc)
-        {
+            HelperClient<RecorderEvent, RecorderCommand> client;
             try
             {
-                if (proc != null && !proc.HasExited)
-                    proc.Kill(entireProcessTree: true);
+                client = await HelperClient<RecorderEvent, RecorderCommand>.StartAsync(HelperSpecs.Recorder, exePath,
+                    new[] { ListCamerasFlag }, new HelperStartOptions { HelloTimeout = EnumerateTimeout }).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (HelperStartException ex)
             {
-                Debug.WriteLine("Failed to kill the camera enumeration process: " + ex.Message);
+                Debug.WriteLine("Cannot enumerate cameras: " + ex.Message);
+                return null;
+            }
+
+            await using (client.ConfigureAwait(false))
+            {
+                HelperOutcome<RecorderEvent> outcome;
+                try
+                {
+                    outcome = await client.Completion.WaitAsync(EnumerateTimeout).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    Debug.WriteLine($"Camera enumeration did not finish within {EnumerateTimeout.TotalSeconds:0}s; killing it.");
+                    client.Kill();
+                    return null;
+                }
+
+                if (outcome.Terminal is not RecorderEvent.Cameras cameras)
+                {
+                    Debug.WriteLine($"Camera enumeration produced no camera list ({outcome.Describe()}). {Truncate(outcome.StderrTail)}");
+                    return null;
+                }
+
+                var list = new List<CameraDeviceInfo>();
+                foreach (var camera in cameras.Items ?? Array.Empty<RecorderCamera>())
+                {
+                    if (String.IsNullOrEmpty(camera?.Id))
+                        continue;
+                    list.Add(new CameraDeviceInfo(camera.Id, String.IsNullOrEmpty(camera.Name) ? camera.Id : camera.Name));
+                }
+
+                return list;
             }
         }
 

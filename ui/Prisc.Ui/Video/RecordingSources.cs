@@ -101,7 +101,7 @@ namespace Prisc.UI
         /// <summary>
         /// Whether <paramref name="source"/> will be recorded as things stand. Mic and system audio
         /// are the tick alone; a webcam is only captured when the box is ticked, a camera has been
-        /// chosen and Studio mode is on — <c>ObsArguments.WriteSettingsFile</c> writes an empty device
+        /// chosen and Studio mode is on: <c>RecorderArguments.WriteSettingsFile</c> writes an empty device
         /// id (i.e. no webcam source at all) when any of those is missing, so the button says the
         /// same rather than lighting up for a camera that will not be recorded.
         /// </summary>
@@ -109,7 +109,7 @@ namespace Prisc.UI
         {
             CaptureSource.Microphone => _settings.CaptureMicrophone,
             CaptureSource.Speaker => _settings.CaptureSpeaker,
-            _ => ObsArguments.UsesWebcam(_settings),
+            _ => RecorderArguments.UsesWebcam(_settings),
         };
 
         /// <summary>

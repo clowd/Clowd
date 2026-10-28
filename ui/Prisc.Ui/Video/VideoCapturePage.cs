@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using Prisc.Config;
 using Prisc.PlatformUtil;
+using Prisc.Ipc;
 using Prisc.UI.Helpers;
 using Prisc.VideoSDK;
 using Prisc.VideoSDK.Playback;
@@ -14,7 +15,7 @@ using Prisc.VideoSDK.Playback;
 namespace Prisc.UI
 {
     /// <summary>
-    /// Orchestrates a screen-recording session (DESIGN §4.2): hosts the <see cref="ObsCapturer"/>
+    /// Orchestrates a screen-recording session (DESIGN §4.2): hosts the <see cref="RecorderDriver"/>
     /// process, shows the click-through <see cref="BorderWindow"/> and the
     /// <see cref="RecordingFloatingButtons"/>, and creates the recents session when the recording
     /// finishes (§4.5). Window-less <see cref="IPage"/> like <see cref="ScreenCapturePage"/>;
@@ -64,9 +65,8 @@ namespace Prisc.UI
         // the capture source built during bootstrap, so a change means a respawn too.
         private ScreenCaptureMethod _appliedCaptureMethod;
 
-        // whether the recorder currently running was spawned with --window-capture. Unlike the
-        // flag above this is not a settings question but a binary question, so it is remembered
-        // for the same reason and answered by a probe rather than by SettingsRecording.
+        // whether the recorder currently running was spawned with --window-capture (every
+        // multi-track one is), remembered for the same reason as the flag above.
         private bool _appliedWindowCapture;
 
         // the container the recorder currently running was spawned to write, i.e. the extension of
@@ -74,12 +74,7 @@ namespace Prisc.UI
         // respawn. Always Mp4 for a multi-track recording, whatever the setting says.
         private VideoContainer _appliedContainer;
 
-        // whether the resolved recorder accepts an .mkv output at all (a binary question, probed
-        // once like _appliedWindowCapture). Folded into WantedContainer so a recorder that cannot
-        // settles on Mp4 rather than respawning after every unrelated settings change.
-        private bool _recorderSupportsMkv;
-
-        private ObsCapturer _obs;
+        private RecorderDriver _recorder;
         // shutdown of a capturer being replaced (failed configure) — awaited before the
         // replacement spawns (both write into the same session directory).
         private Task _pendingShutdown;
@@ -127,7 +122,7 @@ namespace Prisc.UI
                 // provisional: InitializeCapturerAsync settles the container once it knows what
                 // the recorder can write, but the crash/cancel paths read these before then.
                 SetOutputFile(VideoContainer.Mp4);
-                _settingsPath = Path.Combine(sessionDir, ObsArguments.SettingsFileName);
+                _settingsPath = Path.Combine(sessionDir, RecorderArguments.SettingsFileName);
 
                 // normalize the configured output folder up-front (creating it, or falling back to
                 // Videos when it has gone away) and write it back, so the settings page the OPTIONS
@@ -165,8 +160,8 @@ namespace Prisc.UI
                 // the tray item's and hotkey's entry point: opens the drawing toolbar, or points at the open one
                 _toolbar.DrawClicked += (s, e) => DrawOnScreen.DrawOnScreenSession.Toggle();
                 // live mutes only — the toolbar itself persists the toggle settings.
-                _toolbar.MicToggled += (s, enabled) => _obs?.SetMicrophoneMute(!enabled);
-                _toolbar.SpeakerToggled += (s, enabled) => _obs?.SetSpeakerMute(!enabled);
+                _toolbar.MicToggled += (s, enabled) => _recorder?.SetMicrophoneMute(!enabled);
+                _toolbar.SpeakerToggled += (s, enabled) => _recorder?.SetSpeakerMute(!enabled);
                 _toolbar.WebcamToggled += (s, enabled) => OnWebcamToggled(enabled);
                 _toolbar.SetWaiting(true);
                 _toolbar.ShowNear(region);
@@ -215,42 +210,25 @@ namespace Prisc.UI
                 // before the spawn. Written here rather than in Open so a change made during a
                 // respawn is picked up by the process it starts (hence the flag reset).
                 _configurePending = false;
-                ObsArguments.WriteSettingsFile(_settingsPath, _settings);
+                RecorderArguments.WriteSettingsFile(_settingsPath, _settings);
                 // the file just written is what this process is about to be built from.
                 _appliedWebcam = IsWebcamCaptured();
                 // …and so is the track layout, which is a command-line argument (the output object
                 // is built once), hence remembered here rather than reconfigured later.
-                _appliedMultiTrack = ObsArguments.UsesMultiTrack(_settings);
+                _appliedMultiTrack = RecorderArguments.UsesMultiTrack(_settings);
                 _appliedCaptureMethod = WantedCaptureMethod();
 
-                // …and whether this build of the recorder can write the window sidecar at all.
-                // Probed once per binary and cached; a recorder that cannot records exactly as
-                // before, and the editor's crop then offers Manual only.
-                _appliedWindowCapture = _appliedMultiTrack
-                    && await ObsCapabilities.SupportsWindowCaptureAsync(_binaryPath);
-
-                // …and whether it can write Matroska, which decides the extension of --output.
-                // Same probe cost model: an older recorder quietly records MP4, which is what it
-                // always did, rather than exit 2 on a path it does not accept.
-                _recorderSupportsMkv = await ObsCapabilities.SupportsMkvOutputAsync(_binaryPath);
-                if (_settings.Container == VideoContainer.Mkv && !_recorderSupportsMkv)
-                    Debug.WriteLine("The recorder does not accept an .mkv output; recording MP4 instead.");
+                // …and so is the window sidecar, which every multi-track recording writes.
+                _appliedWindowCapture = _appliedMultiTrack;
                 SetOutputFile(WantedContainer());
 
-                // the first probe of a binary spawns `--help` and can take seconds, during which
-                // Cancel stays live — so re-assert the guard above rather than spawning into a
-                // session that has since been torn down (nothing would ever dispose that process:
-                // OnCriticalError returns early once _closing is set).
-                if (_closing)
-                    return;
+                _recorder = new RecorderDriver();
+                _recorder.CriticalError += OnCriticalError;
+                _recorder.StatusReceived += OnStatusReceived;
+                _recorder.LevelsReceived += OnLevelsReceived;
 
-                _obs = new ObsCapturer();
-                _obs.CriticalError += OnCriticalError;
-                _obs.StatusReceived += OnStatusReceived;
-                _obs.LevelsReceived += OnLevelsReceived;
-
-                await _obs.InitializeAsync(
-                    ObsArguments.Build(_region, _outputFile, _settingsPath, _settings, _appliedWindowCapture),
+                await _recorder.InitializeAsync(
+                    RecorderArguments.Build(_region, _outputFile, _settingsPath, _settings, _appliedWindowCapture),
                     _binaryPath);
             }
             finally
@@ -294,7 +272,7 @@ namespace Prisc.UI
                 // already flowing — text cleared after would be captured in the first frames.
                 _border.SetOverlayText(null);
 
-                await _obs.StartAsync();
+                await _recorder.StartAsync();
 
                 if (_closing)
                     return;
@@ -330,12 +308,12 @@ namespace Prisc.UI
 
                 if (IsPaused)
                 {
-                    await _obs.ResumeAsync();
+                    await _recorder.ResumeAsync();
                     IsPaused = false;
                 }
                 else
                 {
-                    await _obs.PauseAsync();
+                    await _recorder.PauseAsync();
                     IsPaused = true;
                 }
 
@@ -367,7 +345,7 @@ namespace Prisc.UI
 
                 HideWindows();
 
-                if (!await _obs.StopAsync())
+                if (!await _recorder.StopAsync())
                     return; // CriticalError has already been raised; its handler owns cleanup
 
                 if (_closing)
@@ -468,7 +446,7 @@ namespace Prisc.UI
                 {
                     try
                     {
-                        await _obs.StopAsync();
+                        await _recorder.StopAsync();
                     }
                     catch (Exception ex)
                     {
@@ -534,7 +512,7 @@ namespace Prisc.UI
                 {
                     try
                     {
-                        stoppedCleanly = await _obs.StopAsync();
+                        stoppedCleanly = await _recorder.StopAsync();
                     }
                     catch (Exception ex)
                     {
@@ -620,7 +598,7 @@ namespace Prisc.UI
         /// <summary>
         /// True when changing <paramref name="propertyName"/> changes the settings file the
         /// recorder reads. Deliberately a deny-list of the settings that never reach it: a setting
-        /// added to <see cref="ObsArguments.WriteSettingsFile"/> without touching this method costs
+        /// added to <see cref="RecorderArguments.WriteSettingsFile"/> without touching this method costs
         /// at worst a needless configure, never a recording made with the value the user just
         /// changed away from — so a null or empty name ("everything changed") counts too.
         /// </summary>
@@ -685,15 +663,15 @@ namespace Prisc.UI
             _configuring = true;
             try
             {
-                while (!_closing && !IsRecording && !_starting && _initialized && _obs != null)
+                while (!_closing && !IsRecording && !_starting && _initialized && _recorder != null)
                 {
                     _configurePending = false;
-                    var obs = _obs;
+                    var recorder = _recorder;
 
                     // the track layout is a command-line argument, so a configure could not change
                     // it — and the recorder refuses a webcam a single-track process cannot carry.
                     // Replace the process instead, which rewrites the settings file anyway.
-                    if (ObsArguments.UsesMultiTrack(_settings) != _appliedMultiTrack
+                    if (RecorderArguments.UsesMultiTrack(_settings) != _appliedMultiTrack
                         || WantedCaptureMethod() != _appliedCaptureMethod
                         || WantedContainer() != _appliedContainer)
                     {
@@ -705,11 +683,11 @@ namespace Prisc.UI
                     // a rejection can be blamed on the webcam only when the webcam is what changed.
                     var wantedWebcam = IsWebcamCaptured();
 
-                    ObsConfigureResult result = null;
+                    RecorderConfigureResult result = null;
                     try
                     {
-                        ObsArguments.WriteSettingsFile(_settingsPath, _settings);
-                        result = await obs.ConfigureAsync(_settingsPath);
+                        RecorderArguments.WriteSettingsFile(_settingsPath, _settings);
+                        result = await recorder.ConfigureAsync(_settingsPath);
                     }
                     catch (Exception ex)
                     {
@@ -719,7 +697,7 @@ namespace Prisc.UI
 
                     // the capturer may have been replaced or shut down while we waited; whoever
                     // did that owns the new one.
-                    if (_closing || !ReferenceEquals(_obs, obs))
+                    if (_closing || !ReferenceEquals(_recorder, recorder))
                         return;
 
                     // Start is actionable throughout the (up to 10 s) wait for the ack, and the
@@ -737,7 +715,7 @@ namespace Prisc.UI
                     if (result == null || !result.Applied)
                     {
                         Debug.WriteLine("Recorder did not apply the new settings" +
-                            (result == null ? "" : $" (fatal={result.Fatal}): {result.Message}") + "; respawning it.");
+                            (result == null ? "" : $" (restart_required={result.RestartRequired}): {result.Message}") + "; respawning it.");
 
                         // A camera the recorder refuses (unplugged, held by another app, or a
                         // platform that has no webcam support at all) would otherwise be retried by
@@ -762,7 +740,7 @@ namespace Prisc.UI
 
                     // the recorder only ignores keys once recording has started, which is not a
                     // state this method runs in — worth knowing about, not worth acting on.
-                    if (result.IgnoredKeys.Length > 0)
+                    if (result.IgnoredKeys.Count > 0)
                         Debug.WriteLine("Recorder ignored settings: " + String.Join(", ", result.IgnoredKeys));
 
                     if (!_configurePending)
@@ -799,27 +777,27 @@ namespace Prisc.UI
         {
             _initialized = false;
 
-            var obs = _obs;
-            _obs = null;
-            if (obs != null)
+            var recorder = _recorder;
+            _recorder = null;
+            if (recorder != null)
             {
-                obs.CriticalError -= OnCriticalError;
-                obs.StatusReceived -= OnStatusReceived;
-                obs.LevelsReceived -= OnLevelsReceived;
+                recorder.CriticalError -= OnCriticalError;
+                recorder.StatusReceived -= OnStatusReceived;
+                recorder.LevelsReceived -= OnLevelsReceived;
                 _toolbar?.SetAudioLevels(null, null);
-                _pendingShutdown = obs.DisposeAsync();
+                _pendingShutdown = recorder.DisposeAsync();
             }
 
             await InitializeCapturerAsync();
         }
 
         /// <summary>True when the current settings will actually produce a webcam track — exactly
-        /// the condition <see cref="ObsArguments.WriteSettingsFile"/> uses to emit a non-empty
+        /// the condition <see cref="RecorderArguments.WriteSettingsFile"/> uses to emit a non-empty
         /// <c>webcam_device</c>.</summary>
-        private bool IsWebcamCaptured() => ObsArguments.UsesWebcam(_settings);
+        private bool IsWebcamCaptured() => RecorderArguments.UsesWebcam(_settings);
 
         /// <summary>The capture API the current settings ask for — what
-        /// <see cref="ObsArguments.Build"/> would put on the next spawn's command line, compared
+        /// <see cref="RecorderArguments.Build"/> would put on the next spawn's command line, compared
         /// against <c>_appliedCaptureMethod</c> to decide whether a configure has to become a
         /// respawn.</summary>
         private ScreenCaptureMethod WantedCaptureMethod()
@@ -827,11 +805,11 @@ namespace Prisc.UI
 
         /// <summary>The container the current settings ask for, narrowed to what can actually be
         /// written: a multi-track recording is the hybrid MP4 whatever the setting says (the
-        /// recorder rejects an .mkv path with --multi-track), and a recorder that predates .mkv
-        /// support records MP4. Compared against <c>_appliedContainer</c> like the method above.</summary>
+        /// recorder rejects an .mkv path with --multi-track). Compared against
+        /// <c>_appliedContainer</c> like the method above.</summary>
         private VideoContainer WantedContainer()
         {
-            if (_settings == null || ObsArguments.UsesMultiTrack(_settings) || !_recorderSupportsMkv)
+            if (_settings == null || RecorderArguments.UsesMultiTrack(_settings))
                 return VideoContainer.Mp4;
             return _settings.Container;
         }
@@ -888,8 +866,8 @@ namespace Prisc.UI
         /// whether audio is actually recorded.</summary>
         private void ApplyCaptureMutes()
         {
-            _obs?.SetSpeakerMute(!_settings.CaptureSpeaker);
-            _obs?.SetMicrophoneMute(!_settings.CaptureMicrophone);
+            _recorder?.SetSpeakerMute(!_settings.CaptureSpeaker);
+            _recorder?.SetMicrophoneMute(!_settings.CaptureMicrophone);
         }
 
         /// <summary>Shuts the current capturer down AND waits out a process an in-flight
@@ -898,8 +876,8 @@ namespace Prisc.UI
         /// prisc_recorder.</summary>
         private async Task ShutdownCapturersAsync()
         {
-            if (_obs != null)
-                await _obs.DisposeAsync();
+            if (_recorder != null)
+                await _recorder.DisposeAsync();
 
             await AwaitPendingShutdownAsync();
         }
@@ -930,20 +908,21 @@ namespace Prisc.UI
             _toolbar?.SetWaiting(waiting);
         }
 
-        private void OnStatusReceived(object sender, ObsStatus status)
+        private void OnStatusReceived(object sender, RecorderEvent.Status status)
         {
-            _lastStatusElapsed = status.Elapsed;
-            _toolbar?.SetElapsed(status.Elapsed);
+            var elapsed = TimeSpan.FromMilliseconds(status.TimeMs);
+            _lastStatusElapsed = elapsed;
+            _toolbar?.SetElapsed(elapsed);
             // the measured rate, dropped frames and all: the FPS tile's readout once frames flow.
             _toolbar?.SetActualFps(status.Fps);
         }
 
-        private void OnLevelsReceived(object sender, ObsLevels levels)
+        private void OnLevelsReceived(object sender, RecorderEvent.Levels levels)
         {
             // one device per source type (CLI index 0); an absent source sends an empty array.
             _toolbar?.SetAudioLevels(
-                levels.Mic.Length > 0 ? levels.Mic[0] : null,
-                levels.Speaker.Length > 0 ? levels.Speaker[0] : null);
+                levels.Mic?.Count > 0 ? levels.Mic[0] : null,
+                levels.Speaker?.Count > 0 ? levels.Speaker[0] : null);
         }
 
         /// <summary>
@@ -1061,15 +1040,7 @@ namespace Prisc.UI
         /// </summary>
         private SessionAudioTrack[] ResolveAudioTracks()
         {
-            var reported = _obs?.LastTracks?.Audio;
-            if (reported == null || reported.Count == 0)
-                return null;
-
-            var tracks = new SessionAudioTrack[reported.Count];
-            for (var i = 0; i < tracks.Length; i++)
-                tracks[i] = new SessionAudioTrack { Index = reported[i].Index, Kind = reported[i].Kind };
-
-            return tracks;
+            return _recorder?.LastReport?.ToSessionAudioTracks();
         }
 
         /// <summary>
@@ -1083,16 +1054,16 @@ namespace Prisc.UI
         {
             try
             {
-                var reported = _obs?.LastTracks;
+                var reported = _recorder?.LastReport?.Tracks;
                 if (reported != null)
                 {
                     return reported.Webcam == null
                         ? null
                         : new SessionVideoTrack
                         {
-                            Index = reported.Webcam.Index,
-                            Width = reported.Webcam.Width,
-                            Height = reported.Webcam.Height,
+                            Index = (int)reported.Webcam.Index,
+                            Width = (int)reported.Webcam.Width,
+                            Height = (int)reported.Webcam.Height,
                         };
                 }
 
@@ -1133,11 +1104,11 @@ namespace Prisc.UI
         {
             try
             {
-                var reported = _obs?.LastTracks?.InputCapturePath;
+                var reported = _recorder?.LastReport?.InputCapturePath;
                 if (!String.IsNullOrEmpty(reported) && File.Exists(reported))
                     return reported;
 
-                var expected = ObsArguments.GetInputCapturePath(_sessionDir);
+                var expected = RecorderArguments.GetInputCapturePath(_sessionDir);
                 return File.Exists(expected) ? expected : null;
             }
             catch (Exception ex)
@@ -1156,11 +1127,11 @@ namespace Prisc.UI
         {
             try
             {
-                var reported = _obs?.LastTracks?.WindowCapturePath;
+                var reported = _recorder?.LastReport?.WindowCapturePath;
                 if (!String.IsNullOrEmpty(reported) && File.Exists(reported))
                     return reported;
 
-                var expected = ObsArguments.GetWindowCapturePath(_sessionDir);
+                var expected = RecorderArguments.GetWindowCapturePath(_sessionDir);
                 return File.Exists(expected) ? expected : null;
             }
             catch (Exception ex)
@@ -1248,7 +1219,7 @@ namespace Prisc.UI
                     dir = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
                 var logPath = Path.Combine(dir, $"capture_error_log_{DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}.txt");
-                File.WriteAllText(logPath, message + Environment.NewLine + Environment.NewLine + (_obs?.GetLog() ?? ""));
+                File.WriteAllText(logPath, message + Environment.NewLine + Environment.NewLine + (_recorder?.GetLog() ?? ""));
                 return logPath;
             }
             catch (Exception ex)

@@ -668,8 +668,8 @@ namespace Prisc.VideoSDK.Tests
                 var stale = TestPath.Native(@"D:\old-session");
                 var project = ProjectWithSidecars(
                     Path.Combine(stale, "video.mp4"),
-                    ObsArguments.GetInputCapturePath(stale),
-                    ObsArguments.GetWindowCapturePath(stale));
+                    RecorderArguments.GetInputCapturePath(stale),
+                    RecorderArguments.GetWindowCapturePath(stale));
 
                 var path = WriteTemp(project.ToJson());
                 try
@@ -678,8 +678,8 @@ namespace Prisc.VideoSDK.Tests
                     var source = Assert.Single(VideoEditPersistence.LoadOrCreate(path, video, Probe()).Sources);
 
                     Assert.Equal(video, source.Path);
-                    Assert.Equal(ObsArguments.GetInputCapturePath(dir), source.InputCapturePath);
-                    Assert.Equal(ObsArguments.GetWindowCapturePath(dir), source.WindowCapturePath);
+                    Assert.Equal(RecorderArguments.GetInputCapturePath(dir), source.InputCapturePath);
+                    Assert.Equal(RecorderArguments.GetWindowCapturePath(dir), source.WindowCapturePath);
                 }
                 finally
                 {
@@ -706,11 +706,11 @@ namespace Prisc.VideoSDK.Tests
                 var stale = TestPath.Native(@"D:\old-session");
                 var project = ProjectWithSidecars(
                     Path.Combine(stale, "video.mp4"),
-                    ObsArguments.GetInputCapturePath(elsewhere),
-                    ObsArguments.GetWindowCapturePath(stale));
+                    RecorderArguments.GetInputCapturePath(elsewhere),
+                    RecorderArguments.GetWindowCapturePath(stale));
 
                 // the video's own directory holds nothing to relink the window sidecar to
-                File.Delete(ObsArguments.GetWindowCapturePath(dir));
+                File.Delete(RecorderArguments.GetWindowCapturePath(dir));
 
                 var path = WriteTemp(project.ToJson());
                 try
@@ -719,8 +719,8 @@ namespace Prisc.VideoSDK.Tests
                     var source = Assert.Single(VideoEditPersistence.LoadOrCreate(path, video, Probe()).Sources);
 
                     Assert.Equal(video, source.Path);
-                    Assert.Equal(ObsArguments.GetInputCapturePath(elsewhere), source.InputCapturePath);
-                    Assert.Equal(ObsArguments.GetWindowCapturePath(stale), source.WindowCapturePath);
+                    Assert.Equal(RecorderArguments.GetInputCapturePath(elsewhere), source.InputCapturePath);
+                    Assert.Equal(RecorderArguments.GetWindowCapturePath(stale), source.WindowCapturePath);
                 }
                 finally
                 {
@@ -741,9 +741,9 @@ namespace Prisc.VideoSDK.Tests
             var dir = Path.Combine(Path.GetTempPath(), "prisc-projectload-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
             File.WriteAllBytes(Path.Combine(dir, "video.mp4"), Array.Empty<byte>());
-            File.WriteAllBytes(ObsArguments.GetInputCapturePath(dir), Array.Empty<byte>());
+            File.WriteAllBytes(RecorderArguments.GetInputCapturePath(dir), Array.Empty<byte>());
             if (window)
-                File.WriteAllBytes(ObsArguments.GetWindowCapturePath(dir), Array.Empty<byte>());
+                File.WriteAllBytes(RecorderArguments.GetWindowCapturePath(dir), Array.Empty<byte>());
             return dir;
         }
 

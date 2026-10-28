@@ -242,7 +242,7 @@ namespace Prisc.UI
         }
 
         /// <summary>Drives the microphone / system-audio level bars from the recorder's 100 ms levels
-        /// feed (the page forwards <see cref="ObsLevels"/>). Peak dBFS; null means that source does not
+        /// feed (the page forwards <see cref="Prisc.Ipc.RecorderEvent.Levels"/>). Peak dBFS; null means that source does not
         /// exist or the capturer was torn down — the bar empties rather than freezing.</summary>
         public void SetAudioLevels(double? micDb, double? spkDb)
         {
