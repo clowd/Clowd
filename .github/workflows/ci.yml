@@ -4,7 +4,7 @@ name: CI
 # Each package is the published Prisc.Ui app (build-ui.yml) with the Rust binaries
 # beside it (build-rust.yml) and the recorder (prisc_recorder + libobs,
 # build-recorder.yml) in a recorder/ subdirectory, the layout
-# HelperLocator expects. Every package except osx-x64 (which
+# ScreenCaptureService/ObsBinaryLocator expects. Every package except osx-x64 (which
 # upstream ONNX Runtime no longer supports) also carries the prisc_ai inference binary
 # (OCR, matting, denoising) with its execution-provider dylibs.
 #

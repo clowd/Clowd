@@ -9,7 +9,7 @@ name: Build recorder
 #
 # Each artifact `recorder-<rid>` holds one archive, `recorder-<rid>.zip`, whose
 # members sit at the archive root; ci.yml's package job unpacks it into
-# publish/recorder/, the folder HelperLocator resolves.
+# publish/recorder/, the folder ObsBinaryLocator resolves.
 #
 # These are the only CI jobs that check out the submodules. libobs is 20-40 min
 # cold, so the OBS build tree is cached per OS and arch, keyed by the submodule
