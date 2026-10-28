@@ -25,21 +25,21 @@ namespace Prisc.Ipc
         /// Never faults.</summary>
         public Task<int?> Exit { get; init; }
 
-        /// <summary>Kills the process (with its tree, unless the start options said otherwise). Must
-        /// not throw.</summary>
-        public Action Kill { get; init; }
+        /// <summary>Kills the process, and its whole tree when the argument is true. Must not
+        /// throw.</summary>
+        public Action<bool> Kill { get; init; }
 
         /// <summary>Releases the process object once the pumps are off its streams. May be null.</summary>
         public Action Release { get; init; }
 
-        public static HelperChild FromProcess(Process process, bool entireTree) => new()
+        public static HelperChild FromProcess(Process process) => new()
         {
             ProcessId = process.Id,
             Stdout = process.StandardOutput,
             Stderr = process.StandardError,
             Stdin = process.StandardInput,
             Exit = WaitForExitAsync(process),
-            Kill = () =>
+            Kill = entireTree =>
             {
                 try
                 {
@@ -159,7 +159,7 @@ namespace Prisc.Ipc
                     $"Could not start {Path.GetFileName(exePath)}: {ex.Message}", inner: ex);
             }
 
-            var client = new HelperClient<TEvent, TCommand>(spec, HelperChild.FromProcess(process, options.KillEntireTree), options);
+            var client = new HelperClient<TEvent, TCommand>(spec, HelperChild.FromProcess(process), options);
             // a job-assignment note written before the client existed belongs in its log
             var early = log.GetLog();
             if (early.Length > 0)
@@ -316,7 +316,7 @@ namespace Prisc.Ipc
                 {
                     Debug.WriteLine($"Helper {_spec.Catalog} did not stop within {QuitGrace.TotalSeconds:0} s; killing it.");
                     _killedByStop = true;
-                    _child.Kill();
+                    _child.Kill(_options.KillEntireTree);
                 }
             }
 
@@ -335,7 +335,7 @@ namespace Prisc.Ipc
         public void Kill()
         {
             _killRequested = true;
-            _child.Kill();
+            _child.Kill(_options.KillEntireTree);
             CloseStdin();
         }
 

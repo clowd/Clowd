@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -253,6 +254,40 @@ namespace Prisc.Ipc.Tests
             Assert.Equal(HelperFailure.Timeout, outcome.Failure);
         }
 
+        /// <summary>prisc_capture opts out of the tree kill so the apps it launched (the user's
+        /// browser) outlive it; every other helper takes its descendants down with it.</summary>
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task Both_kills_follow_the_kill_entire_tree_option(bool entireTree)
+        {
+            async Task<(HelperClient<RecorderEvent, RecorderCommand>, FakeChild)> Start()
+            {
+                var child = new FakeChild();
+                child.WriteStdout(Hello(HelperSpecs.Recorder));
+                var client = new HelperClient<RecorderEvent, RecorderCommand>(HelperSpecs.Recorder, child.ToHelperChild(),
+                    new HelperStartOptions { KillEntireTree = entireTree })
+                {
+                    PumpDrainTimeout = Short,
+                    KillWait = Short,
+                    QuitGrace = Short,
+                };
+                await HelperClient<RecorderEvent, RecorderCommand>.StartAsync(client, "prisc_recorder", default).WaitAsync(Generous);
+                return (client, child);
+            }
+
+            // the escalation of a stop the helper ignored
+            var (stopped, stoppedChild) = await Start();
+            await stopped.StopAsync().WaitAsync(Generous);
+            Assert.Equal(new[] { entireTree }, stoppedChild.KillTrees);
+
+            // and a kill asked for outright
+            var (killed, killedChild) = await Start();
+            killed.Kill();
+            await killed.Completion.WaitAsync(Generous);
+            Assert.Equal(new[] { entireTree }, killedChild.KillTrees);
+        }
+
         [Fact]
         public async Task A_held_open_pipe_does_not_hang_completion()
         {
@@ -337,6 +372,7 @@ namespace Prisc.Ipc.Tests
             public Action<string> OnCommand { get; set; }
             public Action OnKill { get; set; }
             public volatile bool Killed;
+            public ConcurrentQueue<bool> KillTrees { get; } = new();
             public bool StdinClosed => _stdin.Closed;
 
             public void WriteStdout(string line) => _stdout.Write(line);
@@ -359,8 +395,9 @@ namespace Prisc.Ipc.Tests
                 Stderr = _stderr,
                 Stdin = _stdin,
                 Exit = _exit.Task,
-                Kill = () =>
+                Kill = entireTree =>
                 {
+                    KillTrees.Enqueue(entireTree);
                     Killed = true;
                     if (OnKill != null)
                         OnKill();
