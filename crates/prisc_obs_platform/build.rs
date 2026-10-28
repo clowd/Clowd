@@ -14,12 +14,6 @@ fn main() {
 }
 
 fn build_macos() {
-    // enumerate_monitors talks straight to CoreGraphics/CoreFoundation via
-    // hand-rolled extern decls (macos.rs), so anything that links this crate's
-    // objects — including this crate's own test binary — needs the frameworks.
-    println!("cargo:rustc-link-lib=framework=CoreGraphics");
-    println!("cargo:rustc-link-lib=framework=CoreFoundation");
-
     // Bake the plugin path into the crate so no env var is needed at runtime
     // (default_obs_paths's env!("OBS_PLUGIN_DIR") — the dev-build fallback that
     // points at the OBS build tree in place). Consumers (prisc_recorder) used to
