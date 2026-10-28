@@ -3,11 +3,11 @@
 //! CAPTURE_PROTOCOL.md §2.
 //!
 //! Every argument is `Option`al to clap even though the driver needs all
-//! but one of them. A missing flag has to come back as a `fatal_error`
-//! line on the protocol channel — the only place the shell is listening —
-//! and not as a clap usage error on stderr with a non-zero exit, which the
-//! shell would only be able to report as "the driver died". Validation
-//! therefore lives in `drive::DriveArgs::from_cli`, not in the derive.
+//! but one of them. A missing flag has to come back as a fatal
+//! `error{code:"usage"}` on the protocol channel (the only place the shell
+//! is listening) and not as a clap usage error on stderr, which the shell
+//! would only be able to report as "the driver died". Validation therefore
+//! lives in `drive::DriveArgs::from_cli`, not in the derive.
 
 use std::path::PathBuf;
 

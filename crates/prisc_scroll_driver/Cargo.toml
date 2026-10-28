@@ -9,12 +9,12 @@ edition = "2021"
 
 # image, euclid and sentry all reach this crate through prisc_rust_core and are not named directly.
 [dependencies]
+prisc_ipc.workspace = true
 prisc_rust_core.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 log.workspace = true
 simplelog.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]
