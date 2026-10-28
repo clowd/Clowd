@@ -98,8 +98,10 @@ namespace Prisc.Ipc
         private readonly HelperSpec<TEvent, TCommand> _spec;
         private readonly HelperChild _child;
         private readonly HelperStartOptions _options;
+        // written by the stdout pump, but completed by either the pump (EOF) or the completion
+        // tracking, so not single-writer
         private readonly Channel<TEvent> _events = Channel.CreateUnbounded<TEvent>(
-            new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+            new UnboundedChannelOptions { SingleReader = true });
 
         private readonly TaskCompletionSource<IpcHello> _hello = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly object _eventLock = new();
