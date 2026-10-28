@@ -144,7 +144,9 @@ impl<E: Event> Channel<E> {
                 return false;
             }
             if terminal {
-                self.inner.finished.store(true, Ordering::SeqCst);
+                self.inner
+                    .finished
+                    .store(true, Ordering::SeqCst);
             }
             match out
                 .write_all(&line)
@@ -245,7 +247,10 @@ mod tests {
         drop(channel);
         let mut text = String::new();
         reader.read_to_string(&mut text).unwrap();
-        assert_eq!(text, "{\"type\":\"progress\",\"percent\":1}\n{\"type\":\"done\",\"result\":\"cancelled\"}\n");
+        assert_eq!(
+            text,
+            "{\"type\":\"progress\",\"percent\":1}\n{\"type\":\"done\",\"result\":\"cancelled\"}\n"
+        );
     }
 
     #[test]
