@@ -588,8 +588,9 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
 
 /// The child configures above get no OBS_VERSION_OVERRIDE and fall back to
 /// `git describe --tags`, which fails on a tagless submodule checkout (the
-/// usual case) and with it the whole configure. Gives HEAD the same local,
-/// lightweight tag CI does, unless it already has one.
+/// usual case) and with it the whole configure. Gives a tagless HEAD a local,
+/// lightweight tag of the pinned version, so neither CI nor a local build has
+/// to tag the checkout by hand.
 fn ensure_obs_version_tag(obs_src: &Path) {
     if !obs_src.join(".git").exists()
         || git_output(obs_src, &["describe", "--tags", "--exact-match"]).is_some()

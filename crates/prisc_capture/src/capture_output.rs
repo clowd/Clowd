@@ -118,7 +118,7 @@ const CLIPBOARD_RETRY_BACKOFF: Duration = Duration::from_millis(15);
 /// clipboard-history service, which wakes up on precisely the `EmptyClipboard` we just issued.
 ///
 /// `arboard` retries its `OpenClipboard` internally, so that half is already covered — but the
-/// failure crash reports actually showed was error 1418 `ERROR_CLIPBOARD_NOT_OPEN` coming out of
+/// failure seen in crash reports was error 1418 `ERROR_CLIPBOARD_NOT_OPEN` coming out of
 /// `SetClipboardData`, i.e. the open had *succeeded* and the clipboard was gone by the time the
 /// pixels were handed over. Nothing short of re-running open/empty/set recovers from that.
 ///
