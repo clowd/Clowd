@@ -2,21 +2,37 @@ name: Build recorder
 
 # Reusable build of the recorder stack (crates/prisc_recorder, prisc_share_region,
 # prisc_vid2gif and libobs from the obs-studio submodule, built by prisc_obs_sys
-# via CMake) for the packaged platforms: recorder-win-x64, recorder-win-arm64,
-# recorder-osx-arm64 and recorder-osx-x64. ci.yml calls it once. Linux lives in
-# build-recorder-linux.yml so that ci.yml's package job, which needs this whole
-# workflow, never waits on the Linux build and its portability checks.
+# via CMake). ci.yml calls it twice:
 #
-# Each artifact `recorder-<rid>` holds one archive, `recorder-<rid>.zip`, whose
-# members sit at the archive root; ci.yml's package job unpacks it into
-# publish/recorder/, the folder ObsBinaryLocator resolves.
+#   platforms: desktop  -> recorder-win-x64, recorder-win-arm64,
+#                          recorder-osx-arm64, recorder-osx-x64 (packaged)
+#   platforms: linux    -> recorder-linux-x64, recorder-linux-arm64 plus the
+#                          portability checks (a check only: nothing consumes it)
+#
+# Two calls rather than one because a caller's `needs` waits on every job of a
+# reusable workflow: ci.yml's package job needs only the desktop call, so it
+# never waits on Linux.
+#
+# Each desktop artifact `recorder-<rid>` holds one archive, `recorder-<rid>.zip`,
+# whose members sit at the archive root; ci.yml's package job unpacks it into
+# publish/recorder/, the folder ObsBinaryLocator resolves. Staging is
+# tools/staging/stage-recorder.sh, the same script build.sh runs.
 #
 # These are the only CI jobs that check out the submodules. libobs is 20-40 min
-# cold, so the OBS build tree is cached per OS and arch, keyed by the submodule
-# SHA and the build inputs (no restore-keys: a partial match would be a stale
-# CMake tree).
+# cold, so the OBS build tree is cached per OS and arch (see
+# .github/actions/setup-obs-build).
+#
+# No step tags the tagless obs-studio checkout for OBS's `git describe --tags`
+# version discovery: the top-level configure gets -DOBS_VERSION_OVERRIDE, and
+# the Windows child configures that ignore it are covered by prisc_obs_sys's
+# ensure_obs_version_tag, which tags HEAD before every configure.
 on:
   workflow_call:
+    inputs:
+      platforms:
+        description: "Which legs to run: desktop (Windows + macOS) or linux"
+        type: string
+        required: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -32,6 +48,7 @@ jobs:
   # ---------------------------------------------------------------------------
   windows:
     name: recorder (${{ matrix.rid }})
+    if: inputs.platforms == 'desktop'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     strategy:
@@ -60,23 +77,6 @@ jobs:
           # dirs must EXIST even though disabled, or their CMakeLists FATAL_ERROR.
           submodules: recursive
 
-      - name: Record OBS submodule SHA
-        id: obs
-        run: |
-          $sha = git -C crates/obs-studio rev-parse HEAD
-          "sha=$sha" >> $env:GITHUB_OUTPUT
-          Write-Host "OBS submodule SHA: $sha"
-
-      # OBS derives its version from `git describe --tags`. CI submodule
-      # checkouts have no tags, so OBS falls back to the short commit hash
-      # (`fb4d98b`) — not a valid MAJOR.MINOR.PATCH. The top-level build gets
-      # -DOBS_VERSION_OVERRIDE, but OBS's windows/architecture.cmake spawns
-      # *child* CMake configures (build_x86, and build_x64 for the ARM64 parent)
-      # that ignore that cache var and re-run `git describe`. HEAD is exactly the
-      # 32.2.2 release commit, so a lightweight tag makes it resolve everywhere.
-      - name: Tag OBS submodule for versioning
-        run: git -C crates/obs-studio tag -f 32.2.2
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -93,27 +93,11 @@ jobs:
             Write-Host "::warning::libclang.dll not found at LIBCLANG_PATH ($env:LIBCLANG_PATH) - bindgen may fail"
           }
 
-      - name: Cache cargo registry
-        uses: actions/cache@v6
+      - name: Set up the OBS build caches
+        uses: ./.github/actions/setup-obs-build
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
-
-      # The native OBS build and its downloaded prebuilt deps (.deps) are cached
-      # together under one arch-scoped key so they can never evict independently.
-      # runner.os is "Windows" for both x64 and arm64, so the arch MUST be in the
-      # key or the two builds would clobber each other's cache.
-      - name: Cache OBS native build + prebuilt deps
-        uses: actions/cache@v6
-        with:
-          path: |
-            target/obs-${{ matrix.arch }}
-            crates/obs-studio/.deps
-          key: ${{ runner.os }}-${{ matrix.arch }}-obs-${{ steps.obs.outputs.sha }}-${{ hashFiles('crates/prisc_obs_sys/build.rs', 'crates/prisc_obs_sys/cmake/**', 'crates/prisc_build_support/src/**') }}
+          arch: ${{ matrix.arch }}
+          obs-build-path: target/obs-${{ matrix.arch }}
 
       - name: Build (release)
         run: cargo build --release -p prisc_recorder -p prisc_share_region -p prisc_vid2gif
@@ -133,52 +117,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --release -p prisc_ffmpeg_sys
 
+      # The runtime tree prisc_recorder's build.rs assembled in target/release,
+      # plus the VC++ runtime the /MD-built libobs, plugins and FFmpeg DLLs import.
       - name: Stage artifact
-        run: |
-          $dist = "dist/recorder-${{ matrix.rid }}"
-          New-Item -ItemType Directory -Force -Path $dist | Out-Null
-          # prisc_recorder.exe plus the copied helpers and all runtime DLLs. *.pdb
-          # is excluded by only matching *.exe / *.dll; cargo build junk stays
-          # behind because we copy explicit top-level items only. The globs are
-          # safe because this job builds only the recorder crates.
-          Copy-Item target/release/*.exe $dist
-          Copy-Item target/release/*.dll $dist
-          if (Test-Path target/release/obs-plugins) { Copy-Item -Recurse target/release/obs-plugins $dist }
-          if (Test-Path target/release/data)        { Copy-Item -Recurse target/release/data $dist }
-          # GPL-2.0: the license text travels with every distributed copy.
-          Copy-Item crates/prisc_recorder/LICENSE "$dist/LICENSE.txt"
-
-      # obs.dll, its plugins and the FFmpeg DLLs are /MD builds, so they import
-      # msvcp140/vcruntime140 at runtime. Those are not OS components; ship them
-      # app-local from the runner's own VS redist for this arch (the same lookup
-      # build-rust.yml uses for prisc_ai).
-      - name: Stage VC++ CRT
         shell: bash
-        run: |
-          dist="dist/recorder-${{ matrix.rid }}"
-          CRT_DIR=$(find "/c/Program Files/Microsoft Visual Studio" -type d \
-            -path "*/VC/Redist/MSVC/*/${{ matrix.arch }}/Microsoft.VC*.CRT" 2>/dev/null | sort | tail -1)
-          if [ -z "$CRT_DIR" ]; then echo "VC redist dir not found" >&2; exit 1; fi
-          echo "VC redist: $CRT_DIR"
-          for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do
-            if [ -f "$CRT_DIR/$f" ]; then cp "$CRT_DIR/$f" "$dist/"; fi
-          done
-
-      - name: Check staged artifact
-        run: |
-          $dist = "dist/recorder-${{ matrix.rid }}"
-          # prisc_vid2gif links the FFmpeg DLLs directly; it is a hard shipping
-          # requirement on every platform (no separate ffmpeg.exe needed).
-          foreach ($required in @("prisc_recorder.exe","prisc_share_region.exe","prisc_vid2gif.exe","obs.dll","obs-ffmpeg-mux.exe","avcodec-62.dll","avfilter-11.dll","vcruntime140.dll","LICENSE.txt")) {
-            if (-not (Test-Path "$dist/$required")) {
-              Write-Host "::error::required file missing from dist: $required"
-              exit 1
-            }
-          }
-          Write-Host "Staged contents:"
-          Get-ChildItem $dist | Select-Object Name
-          $mb = (Get-ChildItem -Recurse $dist | Measure-Object -Property Length -Sum).Sum / 1MB
-          Write-Host ("Total staged size: {0:N1} MB" -f $mb)
+        run: tools/staging/stage-recorder.sh "${{ matrix.rid }}" target/release "dist/recorder-${{ matrix.rid }}"
 
       # Archive in the build job so the artifact is one file with the members at
       # the archive root; ci.yml expands it into publish/recorder.
@@ -199,21 +142,23 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # macOS: Xcode generator, prisc_obs_sys builds libobs.framework. Both slices
-  # run on the arm64 macos-latest runner; the x64 slice is cross-compiled via
+  # run on the arm64 macos-26 runner; the x64 slice is cross-compiled via
   # `--target x86_64-apple-darwin` (build.rs forwards the arch to
   # CMAKE_OSX_ARCHITECTURES; OBS's macOS prebuilt deps are universal). The Stage
-  # step assembles a self-contained, relocatable bundle (framework + graphics
-  # modules + dep dylibs + plugins), rewrites rpaths to @executable_path, and
-  # zips it with ditto (symlinks and modes intact) for upload. release.yml's
-  # vpk pack then signs and notarizes the whole recorder/ tree inside the app
-  # bundle (Contents/MacOS/recorder/).
+  # step (stage-recorder.sh) assembles a self-contained, relocatable bundle
+  # (framework + graphics modules + dep dylibs + plugins), rewrites rpaths to
+  # @executable_path, and the Archive step zips it with ditto (symlinks and
+  # modes intact) for upload. release.yml's vpk pack then signs and notarizes
+  # the whole recorder/ tree inside the app bundle (Contents/MacOS/recorder/).
   # ---------------------------------------------------------------------------
   macos:
     name: recorder (${{ matrix.rid }})
-    # macos-latest (not a pinned older image): OBS 32.2.2's CMake requires the
-    # macOS 26.5 SDK (Xcode 26.5+); macos-latest ships a current Xcode. Both the arm64
+    if: inputs.platforms == 'desktop'
+    # macos-26, not the macos-15 the app jobs use (see build-rust.yml): OBS
+    # 32.2.2's CMake requires the macOS 26.5 SDK (Xcode 26.5+). Pinned rather
+    # than macos-latest so the image only changes on purpose. Both the arm64
     # (native) and x64 (cross) slices run on this arm64 runner.
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -238,23 +183,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Record OBS submodule SHA
-        id: obs
-        run: |
-          sha=$(git -C crates/obs-studio rev-parse HEAD)
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "OBS submodule SHA: $sha"
-
-      # See the Windows job: give the tagless CI submodule a lightweight tag on
-      # HEAD (the 32.2.2 release commit) so OBS's `git describe --tags` version
-      # discovery resolves to a valid MAJOR.MINOR.PATCH.
-      - name: Tag OBS submodule for versioning
-        run: git -C crates/obs-studio tag -f 32.2.2
-
       - name: Select full Xcode
         run: |
           # build.rs uses the Xcode generator + enable_language(Swift); the CLT
-          # alone are not enough. macos-latest's default Xcode.app is current.
+          # alone are not enough. The image's default Xcode.app is current.
           sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
           xcode-select -p
           xcodebuild -version
@@ -277,27 +209,13 @@ jobs:
           clang --version
           echo "Target: ${{ matrix.triple }}"
 
-      - name: Cache cargo registry
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
-
       # prisc_obs_sys has no build-dir override on macOS; the OBS build lands in
-      # its OUT_DIR, which is under the per-target output dir. Cache that whole
-      # `out` dir together with the downloaded deps under one arch-scoped key
-      # (runner.os is "macOS" for both slices, so arch must be in the key).
-      - name: Cache OBS native build + prebuilt deps
-        uses: actions/cache@v6
+      # its OUT_DIR, under the per-target output dir.
+      - name: Set up the OBS build caches
+        uses: ./.github/actions/setup-obs-build
         with:
-          path: |
-            ${{ matrix.outdir }}/build/prisc_obs_sys-*/out
-            crates/obs-studio/.deps
-          key: ${{ runner.os }}-${{ matrix.arch }}-obs-${{ steps.obs.outputs.sha }}-${{ hashFiles('crates/prisc_obs_sys/build.rs', 'crates/prisc_obs_sys/cmake/**', 'crates/prisc_build_support/src/**') }}
+          arch: ${{ matrix.arch }}
+          obs-build-path: ${{ matrix.outdir }}/build/prisc_obs_sys-*/out
 
       - name: Build (release)
         run: cargo build --release -p prisc_recorder -p prisc_share_region -p prisc_vid2gif ${{ matrix.target_flag }}
@@ -315,134 +233,10 @@ jobs:
           cargo test --release -p prisc_vid2gif ${{ matrix.target_flag }}
           cargo test --release -p prisc_ffmpeg_sys ${{ matrix.target_flag }}
 
+      # The arm64 slice also runs a vid2gif conversion and a foreign dlopen of
+      # the dep dylibs; the cross-compiled x64 slice cannot execute here.
       - name: Stage artifact (self-contained bundle)
-        run: |
-          set -euo pipefail
-          arch="${{ matrix.arch }}"
-          outdir="${{ matrix.outdir }}"
-          config=RelWithDebInfo
-          dist="dist/recorder-${{ matrix.rid }}"
-          rm -rf "$dist"; mkdir -p "$dist/Frameworks" "$dist/obs-plugins"
-
-          # Locate the OBS build tree prisc_obs_sys assembled (OUT_DIR/obs-build).
-          # Multiple prisc_obs_sys-<hash>/out/obs-build dirs can accumulate in the
-          # restored cache as prisc_obs_sys/build.rs changes across commits, so
-          # pick the newest one that actually holds the built framework.
-          obs_build=""
-          for cand in $(ls -dt "$outdir"/build/prisc_obs_sys-*/out/obs-build 2>/dev/null); do
-            if [ -d "$cand/libobs/$config/libobs.framework" ]; then obs_build="$cand"; break; fi
-          done
-          echo "OBS build tree: ${obs_build:-<none found>}"
-          test -n "$obs_build"
-
-          # 1. Executables
-          cp "$outdir/prisc_recorder" "$dist/"
-          cp "$outdir/prisc_share_region" "$dist/"
-          [ -f "$outdir/obs-ffmpeg-mux" ] && cp "$outdir/obs-ffmpeg-mux" "$dist/" || true
-          cp "$outdir/prisc_vid2gif" "$dist/"
-
-          # 2. libobs.framework + Metal/OpenGL graphics modules
-          cp -R "$obs_build/libobs/$config/libobs.framework" "$dist/Frameworks/"
-          cp -a "$obs_build/libobs-metal/$config/"*.dylib "$dist/Frameworks/" 2>/dev/null || true
-          cp -a "$obs_build/libobs-opengl/$config/"*.dylib "$dist/Frameworks/" 2>/dev/null || true
-
-          # 3. Prebuilt dependency dylibs (FFmpeg, x264, ...). Taken from the
-          #    profile dir, NOT from crates/obs-studio/.deps: build.rs stages them
-          #    there (stage_macos_dylibs) with an @loader_path rpath and a
-          #    fresh ad-hoc signature, so they are self-resolving for any
-          #    consumer that dlopens them, and the dev tree and this bundle
-          #    carry byte-identical files. `cp -a` keeps the versioned aliases
-          #    as symlinks (the Archive step preserves them).
-          find "$outdir" -maxdepth 1 -name '*.dylib' -exec cp -a {} "$dist/Frameworks/" \;
-          for required in libavcodec.dylib libavformat.dylib libavutil.dylib libx264.dylib; do
-            if [ ! -e "$dist/Frameworks/$required" ]; then
-              echo "::error::required dylib missing from dist (build.rs did not stage it): $required"
-              exit 1
-            fi
-          done
-
-          # 4. Plugins (.plugin bundles), preserving the <name>/RelWithDebInfo
-          #    layout the runtime plugin-path template expects.
-          for pdir in "$obs_build/plugins/"*/; do
-            name=$(basename "$pdir")
-            plug="$pdir$config/$name.plugin"
-            if [ -d "$plug" ]; then
-              mkdir -p "$dist/obs-plugins/$name/$config"
-              cp -R "$plug" "$dist/obs-plugins/$name/$config/"
-            fi
-          done
-
-          # 5. Relocate: add an @executable_path-relative rpath, drop the absolute
-          #    build-tree rpaths, then ad-hoc re-sign (install_name_tool
-          #    invalidates the signature on Apple Silicon).
-          relocate() {
-            local bin="$1"
-            install_name_tool -add_rpath "@executable_path/Frameworks" "$bin" 2>/dev/null || true
-            otool -l "$bin" | grep -A2 'cmd LC_RPATH' | awk '$1=="path"{print $2}' | while read -r rp; do
-              case "$rp" in
-                @*) : ;;
-                *) install_name_tool -delete_rpath "$rp" "$bin" 2>/dev/null || true ;;
-              esac
-            done
-            codesign --force --sign - "$bin" 2>/dev/null || true
-          }
-          relocate "$dist/prisc_recorder"
-          relocate "$dist/prisc_share_region"
-          [ -f "$dist/obs-ffmpeg-mux" ] && relocate "$dist/obs-ffmpeg-mux" || true
-          relocate "$dist/prisc_vid2gif"
-          # Plugin binaries are dlopen'd by prisc_recorder; @executable_path in
-          # them resolves to prisc_recorder, so the same rpath reaches the
-          # Frameworks dir beside it.
-          find "$dist/obs-plugins" -type f -path '*/Contents/MacOS/*' | while read -r pb; do
-            install_name_tool -add_rpath "@executable_path/Frameworks" "$pb" 2>/dev/null || true
-            codesign --force --sign - "$pb" 2>/dev/null || true
-          done
-
-          # GPL-2.0: the license text travels with every distributed copy.
-          cp crates/prisc_recorder/LICENSE "$dist/LICENSE.txt"
-
-          # 6. Verify relocation: relative rpaths only, no build-tree leakage.
-          echo "=== prisc_recorder LC_RPATH ==="
-          otool -l "$dist/prisc_recorder" | grep -A2 'cmd LC_RPATH' | awk '$1=="path"{print "  rpath:",$2}'
-          if otool -l "$dist/prisc_recorder" | grep -Eq "/Users/runner|obs-build|/\.deps/"; then
-            echo "::error::prisc_recorder still references an absolute build-tree path"
-            otool -l "$dist/prisc_recorder" | grep -E "/Users/runner|obs-build|/\.deps/" || true
-            exit 1
-          fi
-          codesign -v "$dist/prisc_recorder" || { echo "::error::prisc_recorder signature invalid"; exit 1; }
-          # 7. Verify prisc_vid2gif (links the bundled FFmpeg dylibs). The arm64
-          #    slice runs a real conversion against a repo fixture; the
-          #    cross-compiled x64 slice can only be checked for presence.
-          test -f "$dist/prisc_vid2gif" || { echo "::error::prisc_vid2gif missing from dist"; exit 1; }
-          if [ "$arch" = "arm64" ]; then
-            "$dist/prisc_vid2gif" crates/prisc_vid2gif/tests/fixtures/clip.mp4 /tmp/prisc-vid2gif-smoke.gif --quality fair
-            [ "$(head -c 6 /tmp/prisc-vid2gif-smoke.gif)" = "GIF89a" ]
-            echo "prisc_vid2gif GIF toolchain OK"
-          fi
-          # 8. Verify the dep dylibs are self-resolving: @loader_path rpath and
-          #    a valid signature on every real file (the symlink aliases resolve
-          #    to them), and — on the native slice — an actual dlopen from a
-          #    process that is NOT prisc_recorder. libavformat has the widest
-          #    @rpath fan-out in the payload (avcodec, swresample, avutil, rist,
-          #    srt, mbedtls x3, x264), so if it loads, everything does.
-          find "$dist/Frameworks" -maxdepth 1 -type f -name 'lib*.dylib' \
-              ! -name 'libobs-*.dylib' | while read -r lib; do
-            if ! otool -l "$lib" | grep -A2 'cmd LC_RPATH' | grep -q 'path @loader_path'; then
-              echo "::error::$(basename "$lib") has no @loader_path rpath"; exit 1
-            fi
-            codesign -v "$lib" || { echo "::error::$(basename "$lib") signature invalid"; exit 1; }
-          done
-          if [ "$arch" = "arm64" ]; then
-            python3 -c "import ctypes, sys; [ctypes.CDLL(p) for p in sys.argv[1:]]" \
-              "$PWD/$dist/Frameworks/libavformat.dylib" \
-              "$PWD/$dist/Frameworks/libavfilter.dylib" \
-              "$PWD/$dist/Frameworks/libavdevice.dylib"
-            echo "dep dylibs dlopen OK from a foreign host"
-          fi
-
-          echo "Frameworks:"; ls "$dist/Frameworks"
-          echo "Plugins:";    ls "$dist/obs-plugins"
-          echo "Bundle size:"; du -sh "$dist"
+        run: tools/staging/stage-recorder.sh "${{ matrix.rid }}" "${{ matrix.outdir }}" "dist/recorder-${{ matrix.rid }}"
 
       # The staged tree is correct (755 executables, symlinked dylib aliases,
       # a symlinked libobs.framework), but actions/upload-artifact does not
@@ -474,3 +268,281 @@ jobs:
           if-no-files-found: error
           # Already a zip; re-deflating it only costs time.
           compression-level: 0
+
+  # ---------------------------------------------------------------------------
+  # Linux: built inside tools/linux-build/Dockerfile, a manylinux_2_34
+  # (AlmaLinux 9, glibc 2.34) image, so the bundle runs on any distro with
+  # glibc >= 2.34 (Ubuntu 22.04+, Debian 12+, Fedora / RHEL 9+) rather than
+  # only on the build machine's release. prisc_obs_sys downloads the pinned
+  # BtbN FFmpeg bundle (SHA-256 verified) and builds pinned x264 and Mbed TLS
+  # from source (both static, private inside their plugins) into
+  # crates/obs-studio/.deps, then libobs + the Linux plugins into target/obs-<arch>.
+  # Everything else (X11/xcb, Wayland, EGL/GL, PipeWire, PulseAudio, v4l2,
+  # glib, ...) is linked from the image's -devel packages, whose SONAMEs are
+  # stable across distros.
+  #
+  # The job runs on a plain ubuntu runner and executes each build step in the
+  # image through tools/linux-build/run-in-image.sh (checkout bind-mounted at
+  # the same path), so actions/cache and the artifact actions work on the host
+  # as in the Windows and macOS builds. cargo is the image's own toolchain,
+  # so no dtolnay/rust-toolchain here. Staging and the end-to-end checks live
+  # in scripts (stage-recorder.sh, which runs stage-bundle.sh, and
+  # verify-bundle.sh) that also run by hand in the image, and the
+  # linux-portability job re-runs verify-bundle.sh on stock Ubuntu runners
+  # with only runtime packages installed.
+  # ---------------------------------------------------------------------------
+  linux:
+    name: recorder (linux-${{ matrix.arch }})
+    if: inputs.platforms == 'linux'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each arch builds natively on its own runner (no cross toolchain or
+          # emulation): the manylinux base matches the runner's arch, and
+          # prisc_build_support pins the BtbN FFmpeg archive per arch.
+          - arch: x64
+            runner: ubuntu-24.04
+            base: quay.io/pypa/manylinux_2_34_x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            base: quay.io/pypa/manylinux_2_34_aarch64
+    defaults:
+      run:
+        shell: bash
+    env:
+      IMAGE: prisc-recorder-linux-${{ matrix.arch }}
+    steps:
+      - name: Checkout (recursive submodules)
+        uses: actions/checkout@v7
+        with:
+          # See the Windows job: disabled plugin submodule dirs must exist.
+          submodules: recursive
+
+      # The image is rebuilt from the Dockerfile every run, with its layers
+      # cached in the GitHub Actions cache, so a Dockerfile edit takes effect
+      # immediately and an unchanged one costs only the cache restore.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the Linux build image
+        uses: docker/build-push-action@v6
+        with:
+          context: tools/linux-build
+          build-args: BASE=${{ matrix.base }}
+          tags: ${{ env.IMAGE }}
+          load: true
+          cache-from: type=gha,scope=recorder-linux-build-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=recorder-linux-build-${{ matrix.arch }}
+
+      - name: Toolchain diagnostics
+        run: |
+          # shellcheck disable=SC2016 # expanded inside the image, not here
+          tools/linux-build/run-in-image.sh '
+            sed -n 1,2p /etc/os-release
+            ldd --version | sed -n 1p
+            gcc --version | sed -n 1p
+            cmake --version | sed -n 1p
+            echo "ninja $(ninja --version)"
+            nasm -v 2>/dev/null || echo "nasm: not installed (only needed on x86_64)"
+            patchelf --version
+            clang --version | sed -n 1p
+            rustc --version
+            cargo --version
+            pkg-config --modversion glib-2.0 libpipewire-0.3
+          '
+          echo "Target arch: ${{ matrix.arch }}"
+
+      # The native deps under crates/obs-studio/.deps are keyed by their pins, not by
+      # a file hash: a pin bump extracts/builds into a new, versioned dir that
+      # OBS must then be reconfigured and relinked against, so every pin
+      # belongs in the OBS cache key. Read from the one place each is pinned.
+      # The Dockerfile and the CMake finder overrides are in the key too: a new
+      # base image or package set changes what OBS configures and links
+      # against.
+      - name: Resolve native dependency pins
+        id: pins
+        run: |
+          ffmpeg=$(grep -oP 'dir_name: "\K[^"]+' crates/prisc_build_support/src/linux.rs | sort | paste -sd+ || true)
+          x264=$(grep -oP 'const X264_COMMIT: &str = "\K[0-9a-f]+' crates/prisc_obs_sys/build.rs || true)
+          mbedtls=$(grep -oP 'const MBEDTLS_VERSION: &str = "\K[^"]+' crates/prisc_obs_sys/build.rs || true)
+          simde=$(grep -oP 'const SIMDE_COMMIT: &str = "\K[0-9a-f]+' crates/prisc_obs_sys/build.rs || true)
+          for pin in ffmpeg x264 mbedtls simde; do
+            test -n "${!pin}" || { echo "::error::$pin pin not found in crates/prisc_build_support or crates/prisc_obs_sys/build.rs"; exit 1; }
+          done
+          image=$(cat tools/linux-build/Dockerfile crates/prisc_obs_sys/cmake/* | sha256sum | cut -c1-12)
+          echo "key=$ffmpeg-x264-${x264:0:12}-mbedtls-$mbedtls-simde-${simde:0:12}-image-$image" >> "$GITHUB_OUTPUT"
+          echo "FFmpeg:  $ffmpeg"
+          echo "x264:    $x264"
+          echo "MbedTLS: $mbedtls"
+          echo "SIMDe:   $simde"
+          echo "Image:   $image"
+
+      # As on Windows, the OBS build (target/obs-<arch>, prisc_obs_sys's default
+      # build dir) and .deps (FFmpeg bundle, x264 / Mbed TLS prefixes, SIMDe)
+      # are cached together. The build runs as root in the image; the cache
+      # steps run on the host and only need to read those files.
+      # rust-cache (in setup-obs-build) keys on and prunes with the host's
+      # cargo, which nothing else in this job uses, so install it explicitly
+      # rather than rely on the runner image shipping one.
+      - name: Install host Rust toolchain (for the cargo cache)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up the OBS build caches
+        uses: ./.github/actions/setup-obs-build
+        with:
+          arch: ${{ matrix.arch }}
+          obs-build-path: target/obs-${{ matrix.arch }}
+          key-suffix: -manylinux-${{ steps.pins.outputs.key }}
+
+      # prisc_share_region is not built on Linux at all (no Linux UI; see its
+      # README), and the app crates are not part of this job (prisc_scroll_driver
+      # is a compile_error! on Linux), so every Linux cargo invocation names its
+      # packages explicitly rather than using --workspace.
+      - name: Build (release)
+        run: tools/linux-build/run-in-image.sh cargo build --release -p prisc_recorder -p prisc_vid2gif
+
+      - name: Test (release, unit tests only)
+        run: |
+          # No LD_LIBRARY_PATH needed (unlike Windows' PATH): every test
+          # executable in target/release/deps carries absolute RUNPATHs to the
+          # OBS build tree and the FFmpeg bundle, set by the crates' build
+          # scripts. prisc_vid2gif links the bundled FFmpeg directly; its
+          # integration tests are self-contained. prisc_ffmpeg_sys verifies
+          # linkage + ABI version. prisc_recorder's smoke tests stay #[ignore]d
+          # here, as on the other platforms; verify-bundle.sh records for real
+          # below. prisc_obs_sys and prisc_build_support have no #[test]s but
+          # compile the bindgen layout asserts under test.
+          tools/linux-build/run-in-image.sh cargo test --release -p prisc_recorder -p prisc_obs -p prisc_obs_platform -p prisc_vid2gif -p prisc_ffmpeg_sys -p prisc_obs_sys -p prisc_build_support
+
+      # Scene-item placement across a canvas reset, against real libobs (it
+      # needs a graphics context, hence Xvfb). This is the transform Wayland
+      # picker mode depends on, and portal capture itself cannot run in CI.
+      - name: Test canvas-reset placement (Xvfb)
+        run: tools/linux-build/run-in-image.sh xvfb-run -a -s "'-screen 0 1280x720x24'" cargo test --release -p prisc_recorder --test canvas_reset -- --ignored
+
+      # Copies the runtime tree out of target/release, strips the build-tree
+      # RUNPATH entries, and enforces the relocation, glibc-ceiling and
+      # no-forbidden-library rules (see tools/linux-build/stage-bundle.sh).
+      - name: Stage artifact (self-contained bundle)
+        run: tools/linux-build/run-in-image.sh tools/staging/stage-recorder.sh "linux-${{ matrix.arch }}" target/release "dist/recorder-linux-${{ matrix.arch }}"
+
+      # ldd -r of every ELF file, real X11 recordings under Xvfb through xshm
+      # capture, x264, AAC and both muxers, prisc_vid2gif on a recording, and
+      # the out-of-scope fail-fast checks, all from a copy outside the checkout.
+      # The ffprobe is the pinned FFmpeg archive's own (the image has no
+      # FFmpeg of its own).
+      - name: Verify relocated bundle (ldd + Xvfb smoke recording + prisc_vid2gif)
+        run: |
+          # shellcheck disable=SC2016 # expanded inside the image, not here
+          tools/linux-build/run-in-image.sh '
+            ffbin=(crates/obs-studio/.deps/ffmpeg-*/bin)
+            tools/linux-build/verify-bundle.sh "dist/recorder-linux-${{ matrix.arch }}" "${ffbin[0]}/ffprobe" /tmp/verify
+          '
+
+      # A tarball, not a zip: tar keeps the execute bits (upload-artifact
+      # drops them from a loose tree, as on macOS) and is what Linux users
+      # expect. Members sit at the archive root, matching the zips. Runs in the
+      # image because dist/ was created there, as root.
+      - name: Archive bundle
+        run: |
+          # shellcheck disable=SC2016 # expanded inside the image, not here
+          tools/linux-build/run-in-image.sh '
+            dist="dist/recorder-linux-${{ matrix.arch }}"
+            tarball="$dist.tar.gz"
+            (cd "$dist" && tar --owner=0 --group=0 -czf "../$(basename "$tarball")" -- *)
+            listing=$(tar -tvzf "$tarball")
+            grep -E " (prisc_recorder|prisc_vid2gif|obs-ffmpeg-mux)$" <<< "$listing"
+            grep -Eq "^-rwx.* prisc_recorder$" <<< "$listing" || { echo "::error::archive lost the execute bit"; exit 1; }
+            ls -la "$tarball"
+            # Probe tool for the portability job, uploaded separately and never
+            # released: the ffprobe from the pinned FFmpeg archive runs against
+            # the FFmpeg libraries in the bundle, so test runners need no FFmpeg.
+            mkdir -p dist/test-tools
+            cp crates/obs-studio/.deps/ffmpeg-*/bin/ffprobe dist/test-tools/
+          '
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: recorder-linux-${{ matrix.arch }}
+          path: dist/recorder-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          # Already gzip-compressed; re-deflating it only costs time.
+          compression-level: 0
+
+      - name: Upload test tools
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-test-tools-${{ matrix.arch }}
+          path: dist/test-tools/ffprobe
+          if-no-files-found: error
+          retention-days: 7
+
+      # cargo wrote the mounted ~/.cargo/registry and git as root in the image.
+      # rust-cache's post step prunes them with host-side cargo, so hand them
+      # back to the runner user first or its cleanup and save can fail.
+      - name: Return the cargo caches to the runner user
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$HOME/.cargo/registry" "$HOME/.cargo/git"
+
+  # ---------------------------------------------------------------------------
+  # Linux portability: the bundle tarball, unpacked on stock Ubuntu runners
+  # with only runtime packages installed (tools/linux-build/
+  # install-runtime-deps.sh, which is also the reference list for users), then
+  # checked with the same verify-bundle.sh as the build job. 22.04 (glibc
+  # 2.35, GLib 2.72, PipeWire 0.3.48) is the oldest supported LTS and the
+  # strictest test of the glibc 2.34 floor; 24.04 is current. `ldd -r` of
+  # every ELF file there catches a system library too old for a symbol we
+  # link against.
+  # ---------------------------------------------------------------------------
+  linux-portability:
+    name: recorder portability (linux-${{ matrix.arch }}, ${{ matrix.runner }})
+    needs: linux
+    if: inputs.platforms == 'linux'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: ubuntu-22.04 }
+          - { arch: x64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-22.04-arm }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Only the scripts are needed, not the submodules.
+      - name: Checkout (scripts only)
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/linux-build
+
+      - name: Download bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: recorder-linux-${{ matrix.arch }}
+          path: artifact
+
+      - name: Download test tools
+        uses: actions/download-artifact@v8
+        with:
+          name: linux-test-tools-${{ matrix.arch }}
+          path: test-tools
+
+      - name: Install runtime packages only
+        run: sudo tools/linux-build/install-runtime-deps.sh
+
+      - name: Unpack and verify bundle
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/recorder-linux-${{ matrix.arch }}"
+          rm -rf "$bundle"; mkdir -p "$bundle"
+          tar -xzf "artifact/recorder-linux-${{ matrix.arch }}.tar.gz" -C "$bundle"
+          # upload-artifact drops execute bits from loose files.
+          chmod +x test-tools/ffprobe
+          tools/linux-build/verify-bundle.sh "$bundle" "$PWD/test-tools/ffprobe" "$RUNNER_TEMP/verify"

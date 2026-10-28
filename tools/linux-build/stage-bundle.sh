@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Assembles the self-contained Linux bundle from a cargo profile dir and checks
-# that it is relocatable and portable. Used by the linux job in
-# .github/workflows/build-recorder-linux.yml (inside the tools/linux-build image), and
-# runnable by hand in that image:
+# that it is relocatable and portable. tools/staging/stage-recorder.sh runs
+# it for the linux job in .github/workflows/build-recorder.yml (inside the
+# tools/linux-build image) and for build.sh; runnable by hand in that image:
 #
 #   tools/linux-build/stage-bundle.sh target/release dist/recorder-linux-x64
 #
@@ -19,18 +19,28 @@ src=${1:?usage: stage-bundle.sh <cargo profile dir> <dist dir>}
 dist=${2:?usage: stage-bundle.sh <cargo profile dir> <dist dir>}
 GLIBC_MAX=${GLIBC_MAX:-2.34}
 
+# shellcheck source=tools/staging/shipped.sh
+. "$(dirname "$0")/../staging/shipped.sh"
+case "$(uname -m)" in
+  aarch64|arm64) rid=linux-arm64 ;;
+  *) rid=linux-x64 ;;
+esac
+mapfile -t binaries < <(recorder_binaries "$rid")
+mapfile -t rust_exes < <(recorder_packages "$rid" | tr ' ' '\n')
+
 rm -rf "$dist"; mkdir -p "$dist"
 
-# 1. Executables, the shared libraries build.rs staged under their SONAMEs
-#    (libobs.so.30, libobs-opengl.so.30, the FFmpeg set) and the plugin/data
-#    trees. Explicit items only, so cargo's build junk (deps/, build/, *.rlib,
-#    *.d) stays behind. prisc_share_region is not built on Linux (the CI
-#    build does not select it), so it is not part of the bundle.
-cp -a "$src/prisc_recorder" "$src/prisc_vid2gif" "$src/obs-ffmpeg-mux" "$dist/"
+# 1. Executables (shipped.sh's recorder_binaries), the shared libraries
+#    build.rs staged under their SONAMEs (libobs.so.30, libobs-opengl.so.30,
+#    the FFmpeg set) and the plugin/data trees. Explicit items only, so
+#    cargo's build junk (deps/, build/, *.rlib, *.d) stays behind.
+for bin in "${binaries[@]}"; do
+  cp -a "$src/$bin" "$dist/"
+done
 cp -a "$src"/lib*.so.* "$dist/"
 cp -a "$src/obs-plugins" "$src/data" "$dist/"
 
-for required in prisc_recorder prisc_vid2gif obs-ffmpeg-mux \
+for required in "${binaries[@]}" \
     libobs.so.30 libobs-opengl.so.30 \
     libavcodec.so.62 libavformat.so.62 libavutil.so.60 libavfilter.so.11 \
     libavdevice.so.62 libswscale.so.9 libswresample.so.6 \
@@ -50,7 +60,7 @@ done
 #    resolve libobs/FFmpeg in place). The shipped copies keep only $ORIGIN.
 #    Everything else was staged by build.rs with a relative RUNPATH already.
 # shellcheck disable=SC2016 # a literal $ORIGIN, for the loader
-for exe in prisc_recorder prisc_vid2gif; do
+for exe in "${rust_exes[@]}"; do
   patchelf --set-rpath '$ORIGIN' "$dist/$exe"
 done
 

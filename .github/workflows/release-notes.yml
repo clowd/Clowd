@@ -75,8 +75,8 @@ jobs:
           # parent of the import merge) already shipped to users inside the downloaded recorder, so
           # it never belongs in a release. Excluding its ancestors drops only that history: they
           # share no commits with the app's own, so this is safe for every range. The merge is
-          # found by its subject rather than a pinned sha, which a history rewrite would orphan;
-          # a range whose end predates the import has none of that history and excludes nothing.
+          # looked up by subject inside the range's own history, so a range whose end predates
+          # the import finds none and excludes nothing, with no special case for it.
           IMPORT_MERGE=$(git rev-list -1 --merges \
             --grep='^Import obs-express-rs .* history into crates/$' "$TO")
           EXCLUDE=""
@@ -85,10 +85,19 @@ jobs:
           fi
           echo "EXCLUDE=$EXCLUDE" >> "$GITHUB_ENV"
 
-          # The release that ships the rename to Prisc gets a section announcing it. Found by
-          # subject for the same reason as above; empty unless the rename is inside the range.
-          RENAME=$(git rev-list -1 --no-merges \
-            --grep='^Rename Clowd to Prisc in code and build the recorder in-repo$' "$TO" "^$FROM")
+          # The release that ships the rename to Prisc gets a section announcing it: the commit
+          # "Rename Clowd to Prisc in code and build the recorder in-repo", pinned by sha so a later
+          # commit reusing that subject cannot take its place. Empty unless it is inside the range.
+          # A missing object (a history rewrite, a shallow clone) fails the job rather than
+          # silently dropping the section.
+          RENAME_COMMIT=e851d1f2987d91101e92ef8b5a318390074e0eb7
+          git cat-file -e "$RENAME_COMMIT^{commit}" \
+            || { echo "::error::rename commit $RENAME_COMMIT not in history"; exit 1; }
+          RENAME=""
+          if git merge-base --is-ancestor "$RENAME_COMMIT" "$TO" \
+            && ! git merge-base --is-ancestor "$RENAME_COMMIT" "$FROM"; then
+            RENAME=$RENAME_COMMIT
+          fi
           echo "RENAME_SHA=$RENAME" >> "$GITHUB_ENV"
 
           # EXCLUDE stays unquoted so that an empty value adds no argument

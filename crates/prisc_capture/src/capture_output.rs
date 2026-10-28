@@ -118,7 +118,7 @@ const CLIPBOARD_RETRY_BACKOFF: Duration = Duration::from_millis(15);
 /// clipboard-history service, which wakes up on precisely the `EmptyClipboard` we just issued.
 ///
 /// `arboard` retries its `OpenClipboard` internally, so that half is already covered — but the
-/// failure we actually saw (CLOWD-Y) was error 1418 `ERROR_CLIPBOARD_NOT_OPEN` coming out of
+/// failure seen in crash reports was error 1418 `ERROR_CLIPBOARD_NOT_OPEN` coming out of
 /// `SetClipboardData`, i.e. the open had *succeeded* and the clipboard was gone by the time the
 /// pixels were handed over. Nothing short of re-running open/empty/set recovers from that.
 ///
@@ -284,7 +284,7 @@ mod tests {
         assert_eq!(calls.get(), 1);
     }
 
-    /// The CLOWD-Y case: the clipboard is taken away for the first couple of tries and then
+    /// The reported case: the clipboard is taken away for the first couple of tries and then
     /// available. This must report success, because the image did reach the clipboard.
     #[test]
     fn retry_clipboard_write_recovers_after_transient_failures() {

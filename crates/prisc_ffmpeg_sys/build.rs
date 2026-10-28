@@ -18,8 +18,7 @@ fn main() {
     }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let obs_src = repo_root.join("crates").join("obs-studio");
+    let obs_src = prisc_build_support::obs_src();
     let deps_dir = obs_src.join(".deps");
     if target_os != "linux" {
         // Windows and macOS take FFmpeg from the obs-deps bundle the OBS
@@ -30,7 +29,7 @@ fn main() {
         let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
         prisc_build_support::linux::ensure_ffmpeg(&deps_dir, &arch).root
     } else {
-        wait_for_deps(&deps_dir)
+        wait_for_deps(&obs_src)
     };
     let include = deps.join("include");
     let lib = deps.join("lib");
@@ -70,16 +69,16 @@ fn main() {
 /// immediately. Incremental builds hit the happy path instantly.
 ///
 /// Waiting specifically for this target's bundle matters on Windows ARM64: the
-/// build also downloads the x86 and x64 bundles (for the child CMake
-/// configures OBS spawns for its helpers), and one of those can land first.
-/// Accepting it linked x64 import libraries into an ARM64 binary, which fails
-/// with LNK4272 plus an unresolved external for every FFmpeg symbol. Hanging
-/// on to the deadline and then failing loudly beats that silent mislink.
-fn wait_for_deps(deps_dir: &Path) -> PathBuf {
+/// build also downloads the x86 and x64 bundles, and one of those can land
+/// first (see prisc_build_support::target_obs_deps_bundle). Hanging on to the
+/// deadline and then failing loudly beats a silent mislink.
+fn wait_for_deps(obs_src: &Path) -> PathBuf {
+    let deps_dir = obs_src.join(".deps");
     let deadline = Instant::now() + Duration::from_secs(600);
     let mut announced = false;
     loop {
-        if let Some(found) = find_deps(deps_dir) {
+        // Headers for the bindings, import libraries / dylibs for the link.
+        if let Some(found) = prisc_build_support::target_obs_deps_bundle(obs_src, &["include/libavcodec", "lib"]) {
             println!(
                 "cargo:warning=prisc_ffmpeg_sys: using obs-deps bundle {}",
                 found.display()
@@ -87,7 +86,7 @@ fn wait_for_deps(deps_dir: &Path) -> PathBuf {
             return found;
         }
         if Instant::now() >= deadline {
-            let seen: Vec<String> = std::fs::read_dir(deps_dir)
+            let seen: Vec<String> = std::fs::read_dir(&deps_dir)
                 .map(|entries| {
                     entries
                         .flatten()
@@ -113,38 +112,6 @@ fn wait_for_deps(deps_dir: &Path) -> PathBuf {
             announced = true;
         }
         std::thread::sleep(Duration::from_secs(5));
-    }
-}
-
-/// The bundle for this target arch, or `None` while it is still missing. A
-/// bundle for a *different* arch is never returned (see [`wait_for_deps`]).
-fn find_deps(deps_dir: &Path) -> Option<PathBuf> {
-    // deps_dir is <obs-studio>/.deps; the bundle version comes from the
-    // checkout's CMakePresets.json.
-    prisc_build_support::obs_deps_bundles(deps_dir.parent()?)
-        .into_iter()
-        .find(|dir| {
-            let name = dir.file_name().unwrap_or_default().to_string_lossy();
-            is_target_arch(&name)
-                && dir.join("include").join("libavcodec").exists()
-                && dir.join("lib").exists()
-        })
-}
-
-/// True for a bundle name built for the target arch. macOS ships one
-/// `-universal` bundle covering both slices; Windows names them `-x64` /
-/// `-arm64` / `-x86`.
-fn is_target_arch(name: &str) -> bool {
-    if name.contains("universal") {
-        return true;
-    }
-    match env::var("CARGO_CFG_TARGET_ARCH")
-        .unwrap_or_default()
-        .as_str()
-    {
-        "x86_64" => name.ends_with("-x64"),
-        "aarch64" => name.ends_with("-arm64"),
-        _ => false,
     }
 }
 

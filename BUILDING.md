@@ -150,16 +150,16 @@ so this part needs a full native toolchain:
 Then, from the repository root:
 
 ```sh
-git -C crates/obs-studio tag -f 32.2.2   # once per clone, see below
 cargo rec                         # = cargo build -p prisc_recorder -p prisc_share_region -p prisc_vid2gif
 cargo recr                        # the same, --release
 ```
 
 The first build compiles libobs and takes 20–40 minutes; later builds reuse it. OBS derives its
-version from `git describe --tags`, and a submodule checkout usually has no tags, so the local
-lightweight tag above (HEAD is the 32.2.2 release commit) keeps it from falling back to a commit
-hash. On Windows, where OBS's child configures need it most, the build script adds that tag itself
-when HEAD has none. `OBS_VERSION_OVERRIDE` sets the version stamped into the OBS build directly.
+version from `git describe --tags`, and a submodule checkout usually has no tags, so the build
+passes the version itself (`OBS_VERSION_OVERRIDE`, default the pinned 32.2.2, sets it). On
+Windows, OBS's child configures for the 32-bit helpers ignore that and still run `git describe`,
+so before configuring, the build script gives HEAD a local lightweight tag of that version when it
+has none. No manual tagging is needed, in CI or locally.
 
 The build tree records a successful configure, together with the checkout and the submodule commit
 it was for, so a failed configure, a moved clone or a submodule bump configures again on the next
@@ -186,6 +186,10 @@ The build scripts stage the runtime next to the binaries:
   `$ORIGIN`-relative RUNPATH. The executables also carry absolute RUNPATHs into the build tree, so
   cargo's test binaries resolve. `tools/linux-build/stage-bundle.sh` removes those for the bundle and
   checks it, and `tools/linux-build/verify-bundle.sh` runs it end to end under Xvfb; CI runs both.
+  `build.sh` stages through `stage-bundle.sh` too, so a local Linux package build needs `patchelf`
+  and binutils (`readelf`, `objdump`) and is held to the same rules, except that the glibc ceiling
+  is the build machine's own. A native build that links `libstdc++` or a system FFmpeg, x264 or
+  Mbed TLS fails there rather than producing a bundle.
 - **macOS** — the binaries link `libobs.framework`, the graphics modules and the plugins straight
   out of the OBS build tree (absolute rpaths), and the FFmpeg/x264 dependency dylibs are copied into
   `target/<profile>/` (symlinked aliases preserved, each given an `@loader_path` rpath and ad-hoc
@@ -239,4 +243,4 @@ dotnet test ui/Prisc.Drawing.Tests/Prisc.Drawing.Tests.csproj
 
 The recorder crates' tests are listed under [Recording stack (libobs)](#recording-stack-libobs).
 
-The upload relay server lives in its own repository, [clowd/Clowd.Server](https://github.com/clowd/Clowd.Server).
+The upload relay server lives in its own repository, [priscapp/Prisc.Server](https://github.com/priscapp/Prisc.Server).

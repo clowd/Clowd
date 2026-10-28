@@ -252,30 +252,7 @@ pub fn stage_ffmpeg_runtime(bundle: &FfmpegBundle, dst_dir: &Path) {
         bundle.lib().display()
     );
     for (name, real) in entries {
-        copy_if_newer(&real, &dst_dir.join(name));
-    }
-}
-
-/// Copies `src` to `dst` when `dst` is missing, older, or a different size.
-///
-/// The copy lands under a temporary name and is renamed over `dst`, because
-/// several build scripts stage the same FFmpeg files into the shared profile
-/// directory concurrently (prisc_vid2gif and prisc_recorder both do, as on Windows): a
-/// plain `fs::copy` from each would interleave into a corrupt file.
-pub fn copy_if_newer(src: &Path, dst: &Path) {
-    let should_copy = match (fs::metadata(src), fs::metadata(dst)) {
-        (Ok(s), Ok(d)) => {
-            s.len() != d.len()
-                || match (s.modified(), d.modified()) {
-                    (Ok(sm), Ok(dm)) => sm > dm,
-                    _ => true,
-                }
-        }
-        (Ok(_), Err(_)) => true,
-        _ => false,
-    };
-    if should_copy {
-        atomic_copy(src, dst, |_| true);
+        crate::copy_if_newer(&real, &dst_dir.join(name));
     }
 }
 
@@ -297,31 +274,10 @@ pub fn stage_with_runpath(src: &Path, dst: &Path, runpath: &str) {
         _ => false,
     };
     if !up_to_date {
-        atomic_copy(src, dst, |tmp| set_runpath_checked(tmp, runpath));
+        crate::atomic_copy(src, dst, |tmp| set_runpath_checked(tmp, runpath));
     }
 }
 
-/// Copy `src` to a temporary sibling of `dst`, run `finish` on it, and rename
-/// it into place if `finish` succeeds.
-fn atomic_copy(src: &Path, dst: &Path, finish: impl FnOnce(&Path) -> bool) {
-    if let Some(parent) = dst.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    let tmp = dst.with_file_name(format!(
-        ".{}.{}.tmp",
-        dst.file_name().unwrap().to_string_lossy(),
-        std::process::id()
-    ));
-    let ok = fs::copy(src, &tmp).is_ok() && finish(&tmp) && fs::rename(&tmp, dst).is_ok();
-    if !ok {
-        let _ = fs::remove_file(&tmp);
-        println!(
-            "cargo:warning=failed to stage {} -> {}",
-            src.display(),
-            dst.display()
-        );
-    }
-}
 
 /// `patchelf --set-rpath`, panicking on failure (used where a wrong RUNPATH
 /// would ship).

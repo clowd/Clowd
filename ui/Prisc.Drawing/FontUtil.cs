@@ -10,7 +10,7 @@ namespace Prisc.Drawing
     /// constructor accepts any string; the parse (Typeface.Normalize) only runs during glyph
     /// lookup, deep inside the render pass, where a name it rejects — e.g. one with leading
     /// whitespace — throws a FormatException that takes down the whole compositor loop
-    /// (CLOWD-10). Names reach that point from persisted settings, saved sessions and the
+    /// (seen in crash reports). Names reach that point from persisted settings, saved sessions and the
     /// system font enumeration, so every such boundary validates through here.
     /// </summary>
     public static class FontUtil

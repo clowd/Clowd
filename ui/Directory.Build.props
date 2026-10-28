@@ -9,7 +9,8 @@
     <SkiaSharpVersion>3.119.4</SkiaSharpVersion>
   </PropertyGroup>
   <!-- Version stamping for all UI assemblies comes from nbgv (version.json at repo root):
-       patch = git height since version.json introduced 4.0. -->
+       major.minor is its "version", patch = git height since that version was last set
+       (shifted by its versionHeightOffset). -->
   <ItemGroup>
     <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.91" PrivateAssets="all" />
   </ItemGroup>

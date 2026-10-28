@@ -43,8 +43,7 @@ namespace Prisc
         /// relates to (a string in <see cref="Exception.Data"/>). <see cref="CaptureHandled"/>
         /// extracts it and uploads it as a <c>process-log.txt</c> attachment on the event, so the
         /// log reaches Sentry no matter how many layers up the exception is finally reported —
-        /// "exited unexpectedly" / "timed out" events are undiagnosable without it (CLOWD-Z,
-        /// CLOWD-C).</summary>
+        /// "exited unexpectedly" / "timed out" events are undiagnosable without it.</summary>
         public const string ProcessLogKey = "prisc.process-log";
 
         /// <summary>Sets a tag on every event this process reports from now on. No-op in debug
@@ -261,7 +260,7 @@ namespace Prisc
         /// <para>Every one of these is a property of the user's network or the far end on that
         /// particular day, and none of them is actionable here. They also arrive in enormous
         /// volume — a single machine behind an expired proxy token retried the update check
-        /// hundreds of times a day (CLOWD-5, CLOWD-6) — which buries the real defects.</para>
+        /// hundreds of times a day, which buries the real defects.</para>
         ///
         /// <para>The line drawn is <b>did anything answer us</b>. Nothing did: the request died in
         /// the transport, so no judgment was ever passed on it and none of it can be our fault.
