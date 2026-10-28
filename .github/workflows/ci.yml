@@ -119,7 +119,7 @@ jobs:
           dotnet-version: 10.0.x
 
       # App crates only. The recorder crates build libobs from their build scripts, so they
-      # are built and tested in build-recorder*.yml (their clippy is not gated yet).
+      # are built and tested in build-recorder.yml (their clippy is not gated yet).
       # `cargo fmt --check` covers the whole workspace; the imported recorder crates opt out
       # of formatting through their own rustfmt.toml.
       - name: "Rust gate: format + lint + tests"
