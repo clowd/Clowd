@@ -269,9 +269,22 @@ Windows caveats, stated so nobody relies on more than this:
 - `_dup2(2, 1)` closes the OS handle UCRT fd 1 owned. A native library with its own CRT (static
   CRT, or a mingw-built FFmpeg on `msvcrt.dll`) keeps the old handle value in its own fd table
   and would write to a closed or reused handle. The guard therefore **assumes every native
-  library shares the dynamic UCRT**. Verify that for the shipped libobs and FFmpeg DLLs (check
-  their imports for `api-ms-win-crt-*` / `ucrtbase.dll` and no `msvcrt.dll`) as part of the
-  recorder port, and record the result here.
+  library shares the dynamic UCRT**.
+
+  Checked on the `recorder-win-x64` artifact of CI run 40698648187 (master, 2026-10-28) by
+  reading each PE's import table. Every libobs, plugin and FFmpeg module imports the CRT only
+  through `api-ms-win-crt-*` (plus `VCRUNTIME140`/`MSVCP140`), and none imports `msvcrt.dll`:
+  `obs.dll`, `libobs-d3d11.dll`, `libobs-winrt.dll`, `w32-pthreads.dll`, every DLL in
+  `obs-plugins/64bit/`, `obs-ffmpeg-mux.exe`, `avcodec-62`, `avdevice-62`, `avfilter-11`,
+  `avformat-62`, `avutil-60`, `swresample-6`, `swscale-9`, `libcurl`, `librist`, `srt`, `zlib`.
+  Two exceptions, neither a problem:
+  - `libx264-164.dll` has a static CRT. It is loaded only with the `obs-x264` plugin, after the
+    guard ran, so its CRT takes the already redirected `STD_OUTPUT_HANDLE` as its fd 1; and
+    `obs-x264` routes x264's logging through its own callback anyway.
+  - The win-capture helpers (`get-graphics-offsets*`, `inject-helper*`, `graphics-hook*`) have
+    a static CRT, but run as child processes or inside other processes, never in ours.
+  The Rust binaries themselves are `+crt-static`; Rust's std writes through `GetStdHandle`,
+  which `SetStdHandle` already covers. Re-check when the obs-deps or FFmpeg bundle changes.
 - Load-time-imported DLLs run their initialisers before `main`, so "before any native library"
   means before any native library is **initialised by us or called**, not before it is mapped.
   A DLL that prints from `DllMain` is not covered (none of ours is known to).
