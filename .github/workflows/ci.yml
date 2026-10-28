@@ -14,7 +14,7 @@ name: CI
 # Job graph:
 #   version                                    -> artifact `version` (release.yml reads it), output `version`
 #   recorder        build-recorder.yml         -> recorder-<rid>, Windows + macOS
-#   recorder-linux  build-recorder.yml         check only, nothing consumes it
+#   recorder-linux  build-recorder-linux.yml   check only, nothing consumes it
 #   rust            build-rust.yml             -> rust-<rid>, needs version (stamps it)
 #   ui              build-ui.yml               -> ui-<rid>
 #   test                                       Rust gate + Shared/Drawing dotnet tests (no needs)
@@ -67,16 +67,12 @@ jobs:
   # only jobs that check out the obs-studio submodule.
   recorder:
     uses: ./.github/workflows/build-recorder.yml
-    with:
-      platforms: desktop
 
   # Linux has no app package yet; this proves the recorder still builds, tests and runs
-  # there (bundle + portability checks). Nothing consumes its artifacts. A call of its own so
-  # that package, which needs `recorder` as a whole, never waits on it.
+  # there (bundle + portability checks). Nothing consumes its artifacts. A workflow of its
+  # own so that package, which needs `recorder` as a whole, never waits on it.
   recorder-linux:
-    uses: ./.github/workflows/build-recorder.yml
-    with:
-      platforms: linux
+    uses: ./.github/workflows/build-recorder-linux.yml
 
   rust:
     needs: version
