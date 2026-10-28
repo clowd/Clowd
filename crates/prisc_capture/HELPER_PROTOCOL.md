@@ -5,7 +5,8 @@ process Prisc ships. It replaces the four stdout dialects in use today (recorder
 JSONL, vid2gif/VideoRender text, standby `PRISC_*` lines) and the three stdin dialects (recorder
 text, share text, scroll/standby NDJSON).
 
-Status: **implemented.** Every helper and its C# client speak this protocol.
+Status: **implemented**, with the open items of §8.3. Every helper and its C# client speak
+this protocol.
 `CAPTURE_PROTOCOL.md` stays authoritative for everything that is not stdio: CLI flags,
 the session-directory files, `session.json`, the OCR request header.
 
@@ -256,8 +257,10 @@ Generalised from `prisc_ai::claim_payload_stdout`, and like it built on std's
 `bInheritHandle = FALSE`. Otherwise a grandchild (obs-ffmpeg-mux, prisc_ai, a browser) would
 inherit the protocol pipe and the parent's stdout pump would never see EOF.
 
-Then: Unix `dup2(2, 1)`. Windows `SetStdHandle(STD_OUTPUT_HANDLE, stderr)` and the CRT
-`_dup2(2, 1)` so native `printf` follows. After it, `println!`, libobs, FFmpeg, CoreML and ONNX
+Then: Unix `dup2(2, 1)`. Windows clears the inherit flag on the original stdout handle (it
+arrives inheritable through `STARTUPINFO`, and only the UCRT `_dup2` below would close it, which
+a static-CRT process that never loads `ucrtbase.dll` skips), then
+`SetStdHandle(STD_OUTPUT_HANDLE, stderr)` and the CRT `_dup2(2, 1)` so native `printf` follows. After it, `println!`, libobs, FFmpeg, CoreML and ONNX
 Runtime all land on stderr, and only `Channel::emit` (or prisc_ai's payload writer) reaches the
 real pipe. When stdout is not a pipe (a developer running the binary in a terminal) the guard
 still applies; the protocol stays readable because both streams reach the same terminal.
@@ -1014,3 +1017,34 @@ Files deleted (C#): `ui/Prisc.Ui/Services/ObsCapabilities.cs`, `ObsBinaryLocator
 `HelperLocatorTests`), and `ShareRegionProtocolTests.cs` / `CaptureStandbyStatusTests.cs`
 decode tests superseded by the generated-sample tests (behavioural assertions move to the
 runner tests). Moved, not deleted: `HelperProcess.cs`, `HelperProcessLog.cs` → `ui/Prisc.Ipc/`.
+
+### 8.3 Open items
+
+Integration smoke tests not yet run (they need the screen-recording permission or a person at
+the running app):
+
+- One-shot capture ended with Escape through `ScreenCaptureService`, with standby turned off in
+  settings. Through the C# client it has only been launched and quit; Escape has been seen only
+  on a raw `prisc_capture` run.
+- A share session in the running app with obscure and move toggled: `ShareRegionDriver` has not
+  yet seen share_region's acks or its `done`.
+- A real scrolling capture that returns a session. Only `hello` and `quit` have been driven
+  through `ScrollDriver`.
+- A recording that produces frames: `started_recording`, `status`, `levels` and `done{stopped}`.
+
+Not yet run on Windows: the `ci.yml` Rust gate on `windows-latest`, which runs
+`guard::tests::private_stdout_is_not_inherited_and_fd1_goes_to_stderr` and so checks the
+Windows stdout guard of §3.2 for the first time. Linux is unbuilt for the same change.
+
+Left to other branches:
+
+- audit/platform: `fatal()` in `crates/prisc_obs_platform/src/linux.rs` still calls
+  `exit_process(1)` directly, which skips the shutdown hook and writes no fatal `error`, so the
+  parent sees `Crashed` instead of `FatalError`. Route it through
+  `prisc_ipc::lifetime::exit(exit::FAILED)`, or return an error so the recorder emits
+  `error{init_failed}`.
+- audit/build: workflow comments still name deleted types. `build-rust.yml` (the
+  `HotkeysLibraryLocator` and `AiLoader` comments) → `HelperLocator.FindLibrary` /
+  `HelperLocator.Find`; `build-ui.yml` (`VidRenderRunner`) → `JobRunner.ForVideoRender`;
+  the `build-recorder.yml` and `ci.yml` header comments (`ObsBinaryLocator`) →
+  `HelperLocator`.
