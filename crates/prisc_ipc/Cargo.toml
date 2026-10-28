@@ -1,0 +1,19 @@
+[package]
+name = "prisc_ipc"
+version = "1.0.0"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+# The helper protocol (crates/prisc_capture/HELPER_PROTOCOL.md): the message catalogs every
+# helper speaks, their exit codes, and the generator of the C# mirror in ui/Prisc.Ipc. A leaf:
+# no libobs, no prisc_rust_core.
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+# the sample round-trips
+serde_json.workspace = true

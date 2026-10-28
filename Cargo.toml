@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_rust_core",
+    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_ipc", "crates/prisc_rust_core",
     "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
     "crates/prisc_build_support", "crates/prisc_ffmpeg_sys", "crates/prisc_obs", "crates/prisc_obs_platform",
     "crates/prisc_obs_sys", "crates/prisc_recorder", "crates/prisc_share_region", "crates/prisc_vid2gif",
@@ -9,7 +9,7 @@ members = [
 # Plain `cargo build/test` stays fast and toolchain-light: the recorder stack (libobs via CMake,
 # 20-40 min cold, needs the obs-studio submodule + cmake + LLVM) builds only when asked: `cargo rec`.
 default-members = [
-    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_rust_core",
+    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_ipc", "crates/prisc_rust_core",
     "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
 ]
 
@@ -29,6 +29,8 @@ rust-version = "1.89"
 prisc_rust_core = { path = "crates/prisc_rust_core" }
 # The global hotkey hook: linked into prisc_capture, and built as prisc_hotkeys.dll / .dylib for Prisc.Ui.
 prisc_hotkeys = { path = "crates/prisc_hotkeys" }
+# The helper protocol: message catalogs, exit codes, the stdio channel (crates/prisc_capture/HELPER_PROTOCOL.md).
+prisc_ipc = { path = "crates/prisc_ipc" }
 # The recorder stack's internal crates (libobs/FFmpeg bindings and the platform layer).
 prisc_obs_sys = { path = "crates/prisc_obs_sys" }
 prisc_obs = { path = "crates/prisc_obs" }

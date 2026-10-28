@@ -111,6 +111,8 @@ jobs:
       - name: "Rust gate: format + lint + tests"
         run: |
           cargo fmt --check
+          cargo clippy -p prisc_ipc --all-targets -- -D warnings
+          cargo test -p prisc_ipc
           cargo clippy -p prisc_rust_core --all-targets -- -D warnings
           cargo test -p prisc_rust_core
           cargo clippy -p prisc_hotkeys --all-targets -- -D warnings
