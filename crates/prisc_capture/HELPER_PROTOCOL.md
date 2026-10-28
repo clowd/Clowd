@@ -688,13 +688,14 @@ public sealed class HelperClient<TEvent, TCommand> : IAsyncDisposable
     public bool Send(TCommand command);                     // false once stdin is closed
     public Task<TEvent> SendAndWaitAsync(TCommand command, Func<TEvent, bool> isReply, TimeSpan timeout);
     public Task<HelperOutcome<TEvent>> StopAsync();         // §7.3, idempotent
-    public void Kill();                                     // tree kill now
+    public void Kill();                                     // kill now (tree unless KillEntireTree = false)
     public ValueTask DisposeAsync();                        // StopAsync + join pumps (bounded)
 }
 
 public sealed record HelperStartOptions
 {
     public bool KillWithParent { get; init; } = true;       // job object (§7.4)
+    public bool KillEntireTree { get; init; } = true;       // false for prisc_capture (§7.4)
     public bool GrantForeground { get; init; }              // AllowSetForegroundWindow
     public IReadOnlyDictionary<string, string> Environment { get; init; }
     public string WorkingDirectory { get; init; }           // default: exe's directory
@@ -775,6 +776,11 @@ right after `Process.Start`.
   browser is already running, and killed whenever Prisc.Ui exits, updates or crashes. Helper
   grandchildren (prisc_ai under prisc_capture) end through their own stdin lease when their
   parent dies, and `Kill()` is a tree kill.
+- **Except for prisc_capture.** The breakaway keeps the browser out of the job, but a tree kill
+  walks parent PIDs, so it would still take the browser down. Both prisc_capture spawns (the
+  standby supervisor and the one-shot) start with `KillEntireTree = false`, so `Kill()` and the
+  kill a stop escalates to end only prisc_capture; its prisc_ai child ends through its stdin
+  lease.
 - **Assignment is best-effort.** If `CreateJobObject` or `AssignProcessToJobObject` fails
   (Prisc.Ui itself running inside a job that forbids nesting or breakaway, as some launchers
   and CI runners do), log it once to the `HelperLog` and continue; never fail the start. The
@@ -918,8 +924,8 @@ Deleted Rust code: `prisc_recorder/src/commands.rs` `parse_command` and its test
    `PRISC_HELPERS_DIR`.
 2. Rename and port runners per §7.7, and apply the rename map below.
 3. `ScreenCaptureService` one-shot: redirect all three streams through `HelperClient`, await
-   `done`; `CaptureStandbySupervisor`: `Kill()` → tree kill via the client, branch crash
-   accounting on the fatal `error` code.
+   `done`; `CaptureStandbySupervisor`: `Kill()` → kill via the client (not a tree kill, see
+   §7.4), branch crash accounting on the fatal `error` code.
 4. `Prisc.VideoRender/Program.cs`: `IpcChild` (fd-level guard), `job` catalog, `cancelled`
    spelling.
 5. Env vars: `ci.yml` sets `PRISC_HELPERS_DIR=$(pwd)` (the directory holding `recorder/`) in

@@ -11,8 +11,8 @@ namespace Prisc.Ipc
 {
     /// <summary>
     /// The stdio of one child process as <see cref="HelperClient{TEvent, TCommand}"/> sees it: three
-    /// text streams, a task that completes with the exit code when the process exits, and a tree
-    /// kill. <see cref="FromProcess"/> wraps a real process; tests build one over in-memory streams.
+    /// text streams, a task that completes with the exit code when the process exits, and a kill.
+    /// <see cref="FromProcess"/> wraps a real process; tests build one over in-memory streams.
     /// </summary>
     internal sealed class HelperChild
     {
@@ -25,13 +25,14 @@ namespace Prisc.Ipc
         /// Never faults.</summary>
         public Task<int?> Exit { get; init; }
 
-        /// <summary>Kills the whole process tree. Must not throw.</summary>
+        /// <summary>Kills the process (with its tree, unless the start options said otherwise). Must
+        /// not throw.</summary>
         public Action Kill { get; init; }
 
         /// <summary>Releases the process object once the pumps are off its streams. May be null.</summary>
         public Action Release { get; init; }
 
-        public static HelperChild FromProcess(Process process) => new()
+        public static HelperChild FromProcess(Process process, bool entireTree) => new()
         {
             ProcessId = process.Id,
             Stdout = process.StandardOutput,
@@ -43,7 +44,7 @@ namespace Prisc.Ipc
                 try
                 {
                     if (!process.HasExited)
-                        process.Kill(entireProcessTree: true);
+                        process.Kill(entireTree);
                 }
                 catch (Exception ex)
                 {
@@ -154,7 +155,7 @@ namespace Prisc.Ipc
                     $"Could not start {Path.GetFileName(exePath)}: {ex.Message}", inner: ex);
             }
 
-            var client = new HelperClient<TEvent, TCommand>(spec, HelperChild.FromProcess(process), options);
+            var client = new HelperClient<TEvent, TCommand>(spec, HelperChild.FromProcess(process, options.KillEntireTree), options);
             // a job-assignment note written before the client existed belongs in its log
             var early = log.GetLog();
             if (early.Length > 0)
@@ -290,7 +291,7 @@ namespace Prisc.Ipc
 
         /// <summary>
         /// Ends the run (HELPER_PROTOCOL.md §7.3): <c>quit</c>, close stdin, wait the catalog's quit
-        /// grace, then kill the tree (the outcome is <see cref="HelperFailure.Timeout"/> from then on),
+        /// grace, then kill (the outcome is <see cref="HelperFailure.Timeout"/> from then on),
         /// wait a little more, then give up. Idempotent; resolves with the outcome.
         /// </summary>
         public Task<HelperOutcome<TEvent>> StopAsync()
@@ -323,7 +324,8 @@ namespace Prisc.Ipc
             return new HelperOutcome<TEvent>(Volatile.Read(ref _terminal), null, HelperFailure.Timeout, StderrTail);
         }
 
-        /// <summary>Kills the process tree now, with no quit. The outcome is whatever the exit maps to.
+        /// <summary>Kills the process (and its tree, per <see cref="HelperStartOptions.KillEntireTree"/>)
+        /// now, with no quit. The outcome is whatever the exit maps to.
         /// Safe from any thread, including while a <see cref="Send"/> is blocked on a full pipe: the
         /// kill comes first, and is what unblocks that write.</summary>
         public void Kill()

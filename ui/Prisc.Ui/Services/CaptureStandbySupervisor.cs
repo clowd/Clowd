@@ -170,9 +170,13 @@ namespace Prisc.UI
 
                     // The open stdin is the child's parent-lifetime lease: if Prisc.Ui terminates
                     // for any reason, EOF tells the standby event loop to exit.
+                    // Not a tree kill: on Windows the browser an OCR search opens is this process's
+                    // child when no browser was already running, and quitting Prisc, turning warm
+                    // capture off or the hang watchdog must not close the user's browser (§7.4).
                     client = await HelperClient<CaptureEvent, CaptureCommand>.StartAsync(HelperSpecs.Capture, binary,
                         CaptureArguments.BuildStandby(PathConstants.SessionData, SettingsRoot.Current,
-                            SettingsRoot.Current.General.LastSavePath));
+                            SettingsRoot.Current.General.LastSavePath),
+                        new HelperStartOptions { KillEntireTree = false });
                     var startedUtc = DateTime.UtcNow;
                     lock (_stdinGate)
                         _client = client;
@@ -557,7 +561,7 @@ namespace Prisc.UI
             _onFallback = null;
             _stop.Cancel();
             // Kill WITHOUT _stdinGate: a writer stuck in SendLocked on a full pipe would
-            // hold the lock, and this tree kill is the only thing that can unstick it; taking
+            // hold the lock, and this kill is the only thing that can unstick it; taking
             // the lock here would deadlock the UI thread. The runner observes the
             // kill/cancel and winds itself down (waiting for it here would stall the UI
             // thread during shutdown or a warm-setting toggle) and disposes the client in its

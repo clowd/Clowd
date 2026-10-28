@@ -100,13 +100,14 @@ namespace Prisc.UI
                 // stderr, and the stdin lease, so a dead Prisc.Ui ends the overlay instead of
                 // orphaning it. The overlay needs keyboard focus immediately (Esc / shortcuts), so it
                 // gets our foreground rights; best-effort, it only works while we hold them (hotkey
-                // or tray interaction).
+                // or tray interaction). A kill spares its descendants: an OCR search's browser may
+                // be one of them (§7.4).
                 HelperOutcome<Prisc.Ipc.CaptureEvent> outcome;
                 try
                 {
                     var client = await HelperClient<Prisc.Ipc.CaptureEvent, CaptureCommand>.StartAsync(HelperSpecs.Capture, binary,
                         CaptureArguments.Build(sessionDir, SettingsRoot.Current, mode, intent, SettingsRoot.Current.General.LastSavePath),
-                        new HelperStartOptions { GrantForeground = true });
+                        new HelperStartOptions { GrantForeground = true, KillEntireTree = false });
                     await using (client)
                     {
                         // one-shot reports its session through the directory (action.txt,

@@ -17,6 +17,12 @@ namespace Prisc.Ipc
         /// stops and flushes the recording instead of truncating it.</summary>
         public bool KillWithParent { get; init; } = true;
 
+        /// <summary>Whether a kill (<see cref="HelperClient{TEvent, TCommand}.Kill"/>, or the one a
+        /// stop escalates to) takes the child's descendants with it. The standby capturer opts out:
+        /// the browser it opens for an OCR search is its child when no browser was already running,
+        /// and must outlive it (§7.4).</summary>
+        public bool KillEntireTree { get; init; } = true;
+
         /// <summary>Hand the child our foreground rights (<c>AllowSetForegroundWindow</c>), for
         /// helpers that put a window of their own on screen.</summary>
         public bool GrantForeground { get; init; }
