@@ -59,7 +59,7 @@ namespace Prisc.VideoSDK.Tests
         /// <summary>A realistic v1 args file: two keep segments, a webcam overlay with a mask, a crf.
         /// The literal JSON here <i>is</i> the v1 contract — the writer that produced these files is
         /// gone, so nothing else pins the field names.</summary>
-        private static string ArgsJson(string input = "C:/in.mp4", string output = "C:/out.mp4",
+        internal static string ArgsJson(string input = "C:/in.mp4", string output = "C:/out.mp4",
             string segments = null, string webcam = null, string crf = null)
         {
             var parts = new List<string>
@@ -661,7 +661,7 @@ namespace Prisc.VideoSDK.Tests
         /// <summary>The built Prisc.VideoRender.dll (run through <c>dotnet exec</c>, which needs no
         /// apphost and works on every RID). The exe project is a build-only reference of this test
         /// project, so it is up to date whenever the tests are.</summary>
-        private static string FindRenderDll()
+        internal static string FindRenderDll()
         {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
@@ -735,10 +735,17 @@ namespace Prisc.VideoSDK.Tests
             return new ToolRun(process.ExitCode, hello, events, stderr);
         }
 
-        /// <summary>A 2s 64x64 30fps mp4 with audio, encoded through Mp4Writer.</summary>
         private string WriteFixtureMp4(int width, int height, int fps, int seconds, int sampleRate)
         {
             string path = TempPath(".mp4");
+            WriteFixtureMp4(path, width, height, fps, seconds, sampleRate);
+            return path;
+        }
+
+        /// <summary>A synthetic mp4 with audio (a colour ramp and a 440 Hz tone), encoded through
+        /// Mp4Writer.</summary>
+        internal static void WriteFixtureMp4(string path, int width, int height, int fps, int seconds, int sampleRate)
+        {
             using var writer = new Mp4Writer(path, new Mp4WriterOptions
             {
                 Width = width,
@@ -785,8 +792,6 @@ namespace Prisc.VideoSDK.Tests
                 writer.SubmitAudioSamples(samples, n);
             }
             writer.Finish();
-
-            return path;
         }
 
         [Fact]
