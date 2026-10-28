@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Prisc.Config;
 using Prisc.PlatformUtil;
 using Prisc.UI.Helpers;
+using Prisc.Ipc;
 
 namespace Prisc.UI
 {
@@ -158,7 +159,7 @@ namespace Prisc.UI
         // remembered wire value would send "obscure blur 1" — an invisible blur the user believes
         // is on, over a region their meeting can read.
         private bool _hideRequested;
-        private ShareObscureMode _intendedMode = ShareObscureMode.None;
+        private ShareRegionObscureMode _intendedMode = ShareRegionObscureMode.None;
         private int _intendedStrength;
 
         // Captured when resize mode is entered and put back when it ends. _resizeHideSent is the
@@ -167,7 +168,7 @@ namespace Prisc.UI
         // owes nothing on exit and must send nothing, or it would unobscure something the user
         // deliberately hid.
         private bool _resizeWasHidden;
-        private ShareObscureMode _preResizeMode = ShareObscureMode.None;
+        private ShareRegionObscureMode _preResizeMode = ShareRegionObscureMode.None;
         private int _preResizeStrength;
         private bool _resizeHideSent;
 
@@ -404,13 +405,12 @@ namespace Prisc.UI
         }
 
         /// <summary>The obscure the Hide tile asks for, from settings. Strength is passed
-        /// unconditionally: <see cref="ShareRegionProtocol.BuildObscureCommand"/> DROPS it for Hide
-        /// (producing a bare <c>obscure hide</c>), and hand-building the line instead is forbidden —
-        /// <c>obscure hide 50</c> is refused with <c>command_error</c>, no ack ever arrives, and the
-        /// driver's NoteObscureSent count is stranded, which makes the next genuine unsolicited
-        /// <c>obscure/none</c> look solicited and leaves the tile lit over a region being mirrored
+        /// unconditionally: <see cref="ShareRegionDriver.BuildObscureCommand"/> drops it for Hide, and
+        /// building the command anywhere else is forbidden: a refused obscure gets no ack, which
+        /// strands the driver's pending-ack count, makes the next genuine unsolicited
+        /// <c>obscure/none</c> look solicited, and leaves the tile lit over a region being mirrored
         /// in the clear.</summary>
-        private static (ShareObscureMode Mode, int Strength) ConfiguredObscure()
+        private static (ShareRegionObscureMode Mode, int Strength) ConfiguredObscure()
         {
             var s = SettingsRoot.Current?.ShareRegion;
             return (ToProtocolMode(s?.ObscureStyle ?? ShareRegionObscureStyle.Blur),
@@ -418,15 +418,15 @@ namespace Prisc.UI
         }
 
         /// <summary>Maps the settings enum onto the protocol one. They are two types on purpose:
-        /// <see cref="ShareObscureMode"/> lives in this assembly and the project reference to
-        /// Prisc.Shared is one-way, so the settings side cannot see it. The settings enum has no
+        /// <see cref="ShareRegionObscureMode"/> is generated into Prisc.Ipc, which Prisc.Shared does
+        /// not reference. The settings enum has no
         /// <c>None</c> member — "not obscured" is the tile being off, not a configuration — so this
         /// mapping is total and its default arm can never be reached by a valid value.</summary>
-        private static ShareObscureMode ToProtocolMode(ShareRegionObscureStyle style) => style switch
+        private static ShareRegionObscureMode ToProtocolMode(ShareRegionObscureStyle style) => style switch
         {
-            ShareRegionObscureStyle.Pixelate => ShareObscureMode.Pixelate,
-            ShareRegionObscureStyle.Hide => ShareObscureMode.Hide,
-            _ => ShareObscureMode.Blur,
+            ShareRegionObscureStyle.Pixelate => ShareRegionObscureMode.Pixelate,
+            ShareRegionObscureStyle.Hide => ShareRegionObscureMode.Hide,
+            _ => ShareRegionObscureMode.Blur,
         };
 
         /// <summary>
@@ -455,7 +455,7 @@ namespace Prisc.UI
 
             var (mode, strength) = ConfiguredObscure();
             _hideRequested = hidden;
-            _intendedMode = hidden ? mode : ShareObscureMode.None;
+            _intendedMode = hidden ? mode : ShareRegionObscureMode.None;
             _intendedStrength = hidden ? strength : 0;
             _driver?.SetObscure(_intendedMode, _intendedStrength);
         }
@@ -546,9 +546,9 @@ namespace Prisc.UI
             // its pixelate blocks top out at 9 canvas px, so a viewer plainly watches a region being
             // dragged through either. Hide is the only mode that reveals nothing (it samples no
             // source texture). No strength — the helper REFUSES one on hide.
-            if (_intendedMode != ShareObscureMode.Hide && _driver.BlurAvailable)
+            if (_intendedMode != ShareRegionObscureMode.Hide && _driver.BlurAvailable)
             {
-                _driver.SetObscure(ShareObscureMode.Hide);
+                _driver.SetObscure(ShareRegionObscureMode.Hide);
                 _resizeHideSent = true;
                 _resizeArm.Start();     // 400 ms fallback if the ack is lost or the drain is blocked
             }
@@ -868,7 +868,7 @@ namespace Prisc.UI
 
             if (!_closing && _driver != null && _resizeHideSent)
             {
-                if (_resizeWasHidden && _preResizeMode != ShareObscureMode.None && _driver.BlurAvailable)
+                if (_resizeWasHidden && _preResizeMode != ShareRegionObscureMode.None && _driver.BlurAvailable)
                 {
                     // the user had deliberately hidden it: put back exactly what they had.
                     _driver.SetObscure(_preResizeMode, _preResizeStrength);
@@ -878,8 +878,8 @@ namespace Prisc.UI
                 }
                 else
                 {
-                    _driver.SetObscure(ShareObscureMode.None);
-                    _intendedMode = ShareObscureMode.None;
+                    _driver.SetObscure(ShareRegionObscureMode.None);
+                    _intendedMode = ShareRegionObscureMode.None;
                     _intendedStrength = 0;
                     _hideRequested = false;
                 }
@@ -1009,17 +1009,17 @@ namespace Prisc.UI
             // FinishResize reconciles the tile once, from the page's own remembered state.
             if (_resizeState == ResizeState.Off)
             {
-                _toolbar?.SetHidden(state.Mode != ShareObscureMode.None);
+                _toolbar?.SetHidden(state.Mode != ShareRegionObscureMode.None);
 
                 // Driven from the WIRE state, not from _hideRequested: the eye is a claim about what
                 // the meeting is seeing right now, so the only honest source for it is the mode the
                 // helper says it is actually compositing. Suppressed for the same reason the tile is
                 // while resize owns the obscure state — the border is hidden for all of that mode
                 // anyway, and FinishResize reconciles both once at the end.
-                _border?.SetHiddenIndicator(state.Mode != ShareObscureMode.None);
+                _border?.SetHiddenIndicator(state.Mode != ShareRegionObscureMode.None);
             }
 
-            if (_resizeState == ResizeState.Entering && state.Mode == ShareObscureMode.Hide)
+            if (_resizeState == ResizeState.Entering && state.Mode == ShareRegionObscureMode.Hide)
                 TryShowResizeChrome();
 
             if (state.Unsolicited && !state.BlurAvailable)
@@ -1029,10 +1029,10 @@ namespace Prisc.UI
                 // GfxState::Failed is permanent for the PROCESS and gates hide, pixelate and blur
                 // alike, so the remembered mode is now unrestorable — clear it rather than sending a
                 // command that can only produce another retraction.
-                _intendedMode = ShareObscureMode.None;
+                _intendedMode = ShareRegionObscureMode.None;
                 _intendedStrength = 0;
                 _hideRequested = false;
-                _preResizeMode = ShareObscureMode.None;
+                _preResizeMode = ShareRegionObscureMode.None;
                 _resizeWasHidden = false;
                 _resizeHideSent = false;
 
@@ -1091,11 +1091,9 @@ namespace Prisc.UI
         }
 
         /// <summary>
-        /// The helper process is gone. This is the ONLY signal that a running share stopped — the
-        /// protocol has no terminal line after <c>sharing_started</c>; the process simply exits and
-        /// the pipe closes — so RecorderDriver's rule that an exit without a terminal message is fatal
-        /// must NOT be applied here. An exit code of 0 after the share started is the normal end of
-        /// a share.
+        /// The helper process is gone. A share that ends itself after it started says
+        /// <c>done{stopped}</c> first (the user closed the mirror window, the meeting app took it
+        /// down); any other end is a failure worth reporting.
         /// </summary>
         private void OnEnded(object sender, ShareSessionEnded ended)
         {
@@ -1130,16 +1128,14 @@ namespace Prisc.UI
                 if (_closing)
                     return;
 
-                if (ended.ExitCode != 0)
+                if (!ended.Clean)
                 {
-                    OnCriticalError(
-                        $"The region sharing tool exited unexpectedly (code {ended.ExitCode.ToString(CultureInfo.InvariantCulture)}).",
-                        null);
+                    OnCriticalError($"The region sharing tool exited unexpectedly ({ended.Description}).", null);
                     return;
                 }
 
                 _closing = true;
-                Debug.WriteLine("The region share ended on its own (exit code 0).");
+                Debug.WriteLine("The region share ended on its own.");
                 HideWindows();
 
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information,
@@ -1334,7 +1330,7 @@ namespace Prisc.UI
         /// this is a re-wrapping and never a conversion. Null in, null out — the helper has said
         /// nothing yet and the caller keeps what it asked for.</summary>
         private static ScreenRect ToScreenRect(ShareRegionRect rect) =>
-            rect == null ? null : new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
+            rect == null ? null : new ScreenRect(rect.X, rect.Y, (int)rect.W, (int)rect.H);
 
         private void HideWindows()
         {

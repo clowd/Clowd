@@ -8,7 +8,7 @@ namespace Prisc.VideoSDK.Tests
     /// <summary>
     /// The drag math behind a live share-region resize, pinned rule by rule.
     /// <see cref="ShareRegionGeometry"/> is deliberately free of Avalonia, windows, dispatchers and
-    /// timers for exactly the reason <see cref="ShareRegionProtocol"/> is: a resize is the one place
+    /// timers: a resize is the one place
     /// in this feature where the code can silently produce a rectangle that is merely WRONG rather
     /// than obviously broken — off by the rounding, pinned to the wrong edge, or inside-out — and a
     /// wrong rectangle here moves the pixels a meeting is watching. None of those failures throws,
