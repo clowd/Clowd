@@ -8,12 +8,23 @@ edition.workspace = true
 rust-version.workspace = true
 
 # The helper protocol (crates/prisc_capture/HELPER_PROTOCOL.md): the message catalogs every
-# helper speaks, their exit codes, and the generator of the C# mirror in ui/Prisc.Ipc. A leaf:
-# no libobs, no prisc_rust_core.
+# helper speaks, their exit codes, the stdio channel and process lifetime, and the generator of
+# the C# mirror in ui/Prisc.Ipc. A leaf: no libobs, no prisc_rust_core.
 
 [dependencies]
 serde.workspace = true
-
-[dev-dependencies]
-# the sample round-trips
 serde_json.workspace = true
+
+# SIGINT/SIGTERM/SIGHUP into the quit path (lifetime.rs), and dup2 for the stdout guard.
+[target.'cfg(unix)'.dependencies]
+ctrlc.workspace = true
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    # SetConsoleCtrlHandler (lifetime.rs), GetStdHandle/SetStdHandle (the stdout guard).
+    "Win32_System_Console",
+    # GetModuleHandleW/GetProcAddress: the shared UCRT's `_dup2` for the stdout guard.
+    "Win32_System_LibraryLoader",
+] }

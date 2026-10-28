@@ -3593,8 +3593,11 @@ dependencies = [
 name = "prisc_ipc"
 version = "1.0.0"
 dependencies = [
+ "ctrlc",
+ "libc",
  "serde",
  "serde_json",
+ "windows",
 ]
 
 [[package]]
