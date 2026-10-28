@@ -126,13 +126,19 @@ namespace Prisc.UI.Services
             }
 
             var client = await HelperClient<JobEvent, JobCommand>.StartAsync(HelperSpecs.Job, exePath, _args, _options);
+            bool cancelledWhileStarting;
             lock (_sync)
+            {
+                // published and checked under the lock CancelAsync and DisposeAsync decide under, so a
+                // cancel either sees the client or is seen here, never neither
                 _client = client;
+                cancelledWhileStarting = _cancelRequested;
+            }
 
             try
             {
                 // a cancel that arrived while the helper was still starting had nobody to tell yet
-                if (_cancelRequested)
+                if (cancelledWhileStarting)
                     _ = client.StopAsync();
 
                 await foreach (var ev in client.Events.ReadAllAsync())
@@ -181,11 +187,12 @@ namespace Prisc.UI.Services
         /// normally with <see cref="JobOutcome.Canceled"/>.</summary>
         public async Task CancelAsync()
         {
-            _cancelRequested = true;
-
             HelperClient<JobEvent, JobCommand> client;
             lock (_sync)
+            {
+                _cancelRequested = true;
                 client = _client;
+            }
 
             // RunAsync stops it itself once it exists
             if (client != null)
@@ -210,9 +217,11 @@ namespace Prisc.UI.Services
         /// output); <see cref="RunAsync"/> releases it on its way out. Idempotent.</summary>
         public Task DisposeAsync()
         {
-            _cancelRequested = true;
             lock (_sync)
+            {
+                _cancelRequested = true;
                 return _client == null ? Task.CompletedTask : _client.StopAsync();
+            }
         }
     }
 }
