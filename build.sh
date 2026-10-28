@@ -19,12 +19,15 @@
 # only (build-rust.yml, build-ui.yml).
 #
 # Works on macOS (arm64, x64), Linux (x64, arm64) and on Windows (x64, ARM64)
-# under git bash.
+# under git bash. On Linux the recorder is staged by stage-bundle.sh with CI's
+# bundle rules (only the glibc ceiling is relaxed to this machine's), so it
+# needs patchelf and binutils, and a build that links libstdc++ or a system
+# FFmpeg / x264 / Mbed TLS fails there; see BUILDING.md.
 set -euo pipefail
 
 case "${1:-}" in
     -h|--help)
-        sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
         exit 0
         ;;
 esac

@@ -186,6 +186,10 @@ The build scripts stage the runtime next to the binaries:
   `$ORIGIN`-relative RUNPATH. The executables also carry absolute RUNPATHs into the build tree, so
   cargo's test binaries resolve. `tools/linux-build/stage-bundle.sh` removes those for the bundle and
   checks it, and `tools/linux-build/verify-bundle.sh` runs it end to end under Xvfb; CI runs both.
+  `build.sh` stages through `stage-bundle.sh` too, so a local Linux package build needs `patchelf`
+  and binutils (`readelf`, `objdump`) and is held to the same rules, except that the glibc ceiling
+  is the build machine's own. A native build that links `libstdc++` or a system FFmpeg, x264 or
+  Mbed TLS fails there rather than producing a bundle.
 - **macOS** — the binaries link `libobs.framework`, the graphics modules and the plugins straight
   out of the OBS build tree (absolute rpaths), and the FFmpeg/x264 dependency dylibs are copied into
   `target/<profile>/` (symlinked aliases preserved, each given an `@loader_path` rpath and ad-hoc
