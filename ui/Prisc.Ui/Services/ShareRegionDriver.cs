@@ -85,6 +85,7 @@ namespace Prisc.UI
         private HelperClient<ShareRegionEvent, ShareRegionCommand> _client;
         private bool _started;
         private Task _shutdownTask;
+        private TaskCompletionSource _pendingShutdown;
 
         // protocol state; touched only by the one event pump (and the obscure counter by the writer)
         private ShareHandshake _handshake = ShareHandshake.Pending;
@@ -166,29 +167,51 @@ namespace Prisc.UI
         public async Task InitializeAsync(ScreenRect region, string title, bool captureCursor, int fps,
             ScreenCaptureMethod captureMethod, Color? accent, string exePath)
         {
+            if (String.IsNullOrEmpty(exePath))
+                throw new ArgumentException("The screen sharing helper could not be located.", nameof(exePath));
+
             lock (_sync)
             {
                 if (_started)
                     throw new InvalidOperationException(
                         "A ShareRegionDriver drives exactly one share session; the mirror window's handle cannot be re-created.");
+                // from here a shutdown waits for the client this call is about to start
                 _started = true;
             }
 
-            if (String.IsNullOrEmpty(exePath))
-                throw new ArgumentException("The screen sharing helper could not be located.", nameof(exePath));
-
             // the prompt window is the whole point of the spawn; the client hands it our foreground
             // rights before it tries to show itself
-            var client = await HelperClient<ShareRegionEvent, ShareRegionCommand>.StartAsync(HelperSpecs.ShareRegion, exePath,
-                BuildArguments(region, title, captureCursor, fps, captureMethod, accent),
-                new HelperStartOptions { GrantForeground = true });
+            HelperClient<ShareRegionEvent, ShareRegionCommand> client;
+            try
+            {
+                client = await HelperClient<ShareRegionEvent, ShareRegionCommand>.StartAsync(HelperSpecs.ShareRegion, exePath,
+                    BuildArguments(region, title, captureCursor, fps, captureMethod, accent),
+                    new HelperStartOptions { GrantForeground = true });
+            }
+            catch
+            {
+                // StartAsync has already disposed whatever it spawned
+                Volatile.Read(ref _pendingShutdown)?.TrySetResult();
+                throw;
+            }
 
+            TaskCompletionSource pendingShutdown;
+            bool stopNow;
             lock (_sync)
             {
                 _client = client;
-                if (_shutdownTask != null)
-                    _ = client.StopAsync();
+                pendingShutdown = _pendingShutdown;
+                stopNow = _shutdownTask != null;
             }
+
+            // a shutdown that arrived during the start resolves only once this client is gone, so
+            // the next session never overlaps a mirror that is still up
+            if (stopNow)
+                _ = Task.Run(async () =>
+                {
+                    await client.DisposeAsync();
+                    pendingShutdown?.TrySetResult();
+                });
 
             _ = Task.Run(() => PumpAsync(client));
 
@@ -339,8 +362,20 @@ namespace Prisc.UI
             {
                 if (_shutdownTask == null)
                 {
-                    var client = _client;
-                    _shutdownTask = client == null ? Task.CompletedTask : Task.Run(() => client.DisposeAsync().AsTask());
+                    if (_client is { } client)
+                    {
+                        _shutdownTask = Task.Run(() => client.DisposeAsync().AsTask());
+                    }
+                    else if (_started)
+                    {
+                        // InitializeAsync is still waiting for hello; it completes this once it has the client
+                        _pendingShutdown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _shutdownTask = _pendingShutdown.Task;
+                    }
+                    else
+                    {
+                        _shutdownTask = Task.CompletedTask;
+                    }
                 }
 
                 return _shutdownTask;

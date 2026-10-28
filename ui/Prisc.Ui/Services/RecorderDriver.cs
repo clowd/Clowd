@@ -104,6 +104,7 @@ namespace Prisc.UI
         private int _criticalRaised;
         private volatile bool _disposed;
         private Task _disposeTask;
+        private TaskCompletionSource _pendingDispose;
 
         /// <summary>Raised on the UI thread for every <c>status</c> event while recording.</summary>
         public event EventHandler<RecorderEvent.Status> StatusReceived;
@@ -135,17 +136,37 @@ namespace Prisc.UI
                 _ended = Task.FromResult(false); // claimed; replaced below once the client exists
             }
 
-            var client = await HelperClient<RecorderEvent, RecorderCommand>.StartAsync(HelperSpecs.Recorder, exePath, args,
-                new HelperStartOptions { KillWithParent = false });
+            HelperClient<RecorderEvent, RecorderCommand> client;
+            try
+            {
+                client = await HelperClient<RecorderEvent, RecorderCommand>.StartAsync(HelperSpecs.Recorder, exePath, args,
+                    new HelperStartOptions { KillWithParent = false });
+            }
+            catch
+            {
+                // StartAsync has already disposed whatever it spawned
+                Volatile.Read(ref _pendingDispose)?.TrySetResult();
+                throw;
+            }
 
+            TaskCompletionSource pendingDispose;
+            bool stopNow;
             lock (_sync)
             {
                 _client = client;
                 _ended = Task.Run(() => PumpAsync(client));
+                pendingDispose = _pendingDispose;
+                stopNow = _disposed;
             }
 
-            if (_disposed)
-                _ = client.StopAsync();
+            // a dispose that arrived during the start resolves only once this client is gone, so
+            // its awaiters never overlap a recorder that is still flushing
+            if (stopNow)
+                _ = Task.Run(async () =>
+                {
+                    await client.DisposeAsync();
+                    pendingDispose?.TrySetResult();
+                });
 
             try
             {
@@ -259,7 +280,16 @@ namespace Prisc.UI
             lock (_sync)
             {
                 _disposed = true;
-                return _disposeTask ??= _client == null ? Task.CompletedTask : Task.Run(() => _client.DisposeAsync().AsTask());
+                if (_disposeTask != null)
+                    return _disposeTask;
+                if (_client is { } client)
+                    return _disposeTask = Task.Run(() => client.DisposeAsync().AsTask());
+                if (_ended == null)
+                    return _disposeTask = Task.CompletedTask;
+
+                // InitializeAsync is still waiting for hello; it completes this once it has the client
+                _pendingDispose = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                return _disposeTask = _pendingDispose.Task;
             }
         }
 
