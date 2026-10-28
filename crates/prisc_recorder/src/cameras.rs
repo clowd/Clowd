@@ -10,7 +10,6 @@
 //! Windows, an `AVCaptureDevice.uniqueID` on macOS — and is passed to
 //! `--webcam` verbatim.
 
-use std::ffi::CString;
 
 use prisc_obs::audio::AudioInfo;
 use prisc_obs::context::ObsContext;
@@ -84,11 +83,9 @@ fn list_cameras() -> Result<Vec<prisc_obs::properties::ListItem>, String> {
     context.add_module_path(&paths.module_bin, &paths.module_data);
     context.load_all_modules();
 
-    // Registration check (same pattern as Recorder::new: get_display_name is
-    // null exactly when the id is unregistered).
+    // Registration check (same as Recorder::new).
     let source_id = platform::WEBCAM_SOURCE_ID;
-    let source_c = CString::new(source_id).unwrap();
-    if unsafe { prisc_obs_sys::obs_source_get_display_name(source_c.as_ptr()) }.is_null() {
+    if !prisc_obs::source::is_registered(source_id) {
         return Err(format!(
             "Camera source '{source_id}' is not registered — the camera capture plugin failed \
              to load.\n  module bin:  {}\n  module data: {}",

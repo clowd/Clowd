@@ -671,11 +671,7 @@ pub fn enumerate_windows() -> Vec<WindowInfo> {
 /// all system output — `device_id` is ignored on that path. Falls back to
 /// coreaudio_output_capture on macOS 12.
 pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
-    // NOT obs_source_create != null: libobs creates a placeholder source for
-    // unknown ids; get_display_name returns null exactly when unregistered.
-    let sck_registered =
-        !unsafe { prisc_obs_sys::obs_source_get_display_name(c"sck_audio_capture".as_ptr()) }.is_null();
-    if sck_registered {
+    if prisc_obs::source::is_registered("sck_audio_capture") {
         let settings = ObsData::new();
         settings.set_int("type", 0);
         ("sck_audio_capture", settings)

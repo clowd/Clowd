@@ -8,6 +8,22 @@ pub struct ObsSource {
     pub(crate) ptr: *mut prisc_obs_sys::obs_source_t,
 }
 
+// SAFETY: a source is reference-counted with atomic operations, and the calls
+// this wrapper makes (update, volume, mute, mixers, size) are ones libobs
+// takes from any thread; the graphics thread updates sources it does not own
+// all the time.
+unsafe impl Send for ObsSource {}
+unsafe impl Sync for ObsSource {}
+
+/// Whether a source type with this id is registered, i.e. the plugin that
+/// provides it loaded. Asked through `obs_source_get_display_name`, which is
+/// null exactly for an unknown id; `obs_source_create` is no test, since it
+/// returns a placeholder source for an unknown id rather than null.
+pub fn is_registered(id: &str) -> bool {
+    let id_c = CString::new(id).unwrap();
+    !unsafe { prisc_obs_sys::obs_source_get_display_name(id_c.as_ptr()) }.is_null()
+}
+
 impl ObsSource {
     pub fn create(id: &str, name: &str, settings: Option<&ObsData>) -> Result<Self, ObsError> {
         let id_c = CString::new(id).unwrap();
@@ -69,6 +85,17 @@ impl ObsSource {
 
     pub fn as_ptr(&self) -> *mut prisc_obs_sys::obs_source_t {
         self.ptr
+    }
+}
+
+impl Clone for ObsSource {
+    /// Another reference to the same source.
+    fn clone(&self) -> Self {
+        // A source the caller still holds a reference to cannot be mid-destroy,
+        // so obs_source_get_ref always succeeds here.
+        Self {
+            ptr: unsafe { prisc_obs_sys::obs_source_get_ref(self.ptr) },
+        }
     }
 }
 
