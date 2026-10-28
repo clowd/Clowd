@@ -1,0 +1,226 @@
+<UserControl
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Prisc.UI.Controls"
+    x:Class="Prisc.UI.Pages.SystemSettingsPage">
+
+    <UserControl.Styles>
+        <!-- Vertical rhythm matched to the generated settings pages (SettingsControlFactory
+             .AddRowToGrid): 24px between one setting and the next, 2px between a control and its
+             own caption. Each setting is a "Setting"-classed StackPanel holding the control
+             followed by its caption; the group's own panel spaces those blocks apart. -->
+        <Style Selector="StackPanel.SettingsGroup">
+            <Setter Property="Spacing" Value="24" />
+        </Style>
+        <Style Selector="StackPanel.Setting">
+            <Setter Property="Spacing" Value="2" />
+        </Style>
+        <Style Selector="StackPanel.SettingRow">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="12" />
+        </Style>
+        <!-- Permission status pill: the class is toggled from code-behind so the colors stay with
+             the rest of the page's styling rather than being poked in as brushes. -->
+        <Style Selector="TextBlock.PermissionStatus">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.PermissionStatus.Granted">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorSuccess}" />
+        </Style>
+        <Style Selector="TextBlock.PermissionStatus.Missing">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorWarning}" />
+        </Style>
+        <Style Selector="TextBlock.Caption">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="560" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+    </UserControl.Styles>
+
+    <controls:FadeEdgeScrollViewer>
+        <StackPanel Margin="0,0,16,16" Spacing="16">
+            <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
+                 (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
+                 the groupbox look is the keyed "GroupBox" theme). -->
+            <!-- The WPF "Shell" group is gone: its auto-start checkbox lives under Behavior in this
+                 build, and its "Upload with Prisc" context menu entry moved to the Uploads page,
+                 which owns the feature that entry starts (see UploadSettingsPage). -->
+
+            <!-- macOS only, and deliberately first: until Screen Recording is granted Prisc cannot
+                 capture anything at all, so on a fresh Mac install this is the one thing on the page
+                 that matters. Collapsed entirely on Windows/Linux, where there is nothing to grant
+                 (MacPermissions.IsRelevant), leaving Appearance first. Status is re-read on
+                 every window activation, since the user grants these over in System Settings and
+                 then comes back. -->
+            <HeaderedContentControl x:Name="PermissionsGroup"
+                                    IsVisible="False"
+                                    Theme="{StaticResource GroupBox}">
+                <!-- The header doubles as the collapse toggle once there is nothing left to grant
+                     (RenderPermissionsCollapse). While a permission is missing there is no chevron
+                     and no click, so the group cannot be closed over the top of an unusable Prisc. -->
+                <HeaderedContentControl.Header>
+                    <Grid x:Name="PermissionsHeader"
+                          ColumnDefinitions="*,Auto"
+                          Background="Transparent"
+                          PointerPressed="OnPermissionsHeaderPressed">
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Permissions" />
+                        <Path x:Name="PermissionsChevron"
+                              Grid.Column="1"
+                              Width="9"
+                              Height="5.5"
+                              VerticalAlignment="Center"
+                              Data="M 0,0 L 4,4 L 8,0"
+                              IsVisible="False"
+                              Stretch="Uniform"
+                              Stroke="{DynamicResource SemiColorText1}"
+                              StrokeJoin="Round"
+                              StrokeLineCap="Round"
+                              StrokeThickness="1.3" />
+                    </Grid>
+                </HeaderedContentControl.Header>
+                <StackPanel x:Name="PermissionsBody" Classes="SettingsGroup">
+                    <StackPanel Classes="Setting" Spacing="8">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Screen Recording" />
+                            <TextBlock x:Name="ScreenRecordingStatus" Classes="PermissionStatus" VerticalAlignment="Center" />
+                            <Button x:Name="ScreenRecordingButton" Click="OnScreenRecordingClick" />
+                        </StackPanel>
+                        <TextBlock x:Name="ScreenRecordingCaption" Classes="Caption" />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting" Spacing="8">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Accessibility" />
+                            <TextBlock x:Name="AccessibilityStatus" Classes="PermissionStatus" VerticalAlignment="Center" />
+                            <Button x:Name="AccessibilityButton" Click="OnAccessibilityClick" />
+                        </StackPanel>
+                        <TextBlock x:Name="AccessibilityCaption" Classes="Caption" />
+                    </StackPanel>
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <HeaderedContentControl Header="Appearance" Theme="{StaticResource GroupBox}">
+                <StackPanel Classes="SettingsGroup">
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Theme" />
+                            <ComboBox x:Name="ThemeCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   Text="Choose light or dark, or follow the system setting." />
+                    </StackPanel>
+
+                    <!-- macOS only (hidden in the code-behind): the window chrome choice. Read
+                         once per window in SystemThemedWindow's constructor, hence the caption's
+                         promise about new windows; the main window reopens itself on the spot so
+                         the change is visible. -->
+                    <StackPanel x:Name="ExtendTitleBarSetting" Classes="Setting">
+                        <CheckBox x:Name="ExtendTitleBarCheck" IsChecked="{Binding ExtendIntoTitleBar}">
+                            <TextBlock Text="Extend windows into the title bar" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="Run window content under a transparent title bar, like most modern Mac apps." />
+                    </StackPanel>
+
+                    <!-- The accent of the capture surfaces: the overlay, and the recording toolbar
+                         and border that are styled to match it. Lives here rather than on the
+                         Capture page because it is no longer the overlay's alone. The swatch shows
+                         the EFFECTIVE color (what will actually be drawn), which is what makes the
+                         contrast checkbox below legible as a control — see the code-behind. -->
+                    <StackPanel x:Name="SystemAccentSetting" Classes="Setting">
+                        <CheckBox x:Name="SystemAccentCheck" IsChecked="{Binding UseSystemAccentColor}">
+                            <TextBlock Text="Use system accent color" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   Text="Use the accent color chosen in Windows settings." />
+                    </StackPanel>
+
+                    <StackPanel x:Name="AccentColorSetting" Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Accent color" />
+                            <StackPanel x:Name="AccentSwatchRow"
+                                        Orientation="Horizontal"
+                                        Spacing="8"
+                                        Cursor="Hand">
+                                <Border x:Name="AccentSwatchOuter"
+                                        Width="24"
+                                        Height="24"
+                                        BorderBrush="Black"
+                                        BorderThickness="1"
+                                        CornerRadius="4">
+                                    <Border x:Name="AccentSwatch"
+                                            BorderBrush="White"
+                                            BorderThickness="1"
+                                            CornerRadius="3" />
+                                </Border>
+                                <TextBlock x:Name="AccentSwatchHex" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock x:Name="AccentColorCaption" Classes="Caption" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <CheckBox x:Name="ContrastCheck" IsChecked="{Binding MaintainMinimumContrast}">
+                            <TextBlock Text="Maintain minimum contrast" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="Darken the accent color so white labels on it stay readable." />
+                    </StackPanel>
+                </StackPanel>
+            </HeaderedContentControl>
+            <HeaderedContentControl Header="Behavior" Theme="{StaticResource GroupBox}">
+                <StackPanel Classes="SettingsGroup">
+                    <StackPanel Classes="Setting">
+                        <CheckBox x:Name="AutoStartCheck" IsChecked="{Binding RegisterAutoStart}">
+                            <TextBlock Text="Start Prisc when your computer starts up" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="Prisc starts quietly in the notification area." />
+                        <TextBlock x:Name="AutoStartStatusText" Classes="Caption" IsVisible="False" />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <CheckBox IsChecked="{Binding ConfirmClose}">
+                            <TextBlock Text="Confirm before exiting" />
+                        </CheckBox>
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Tray icon click" />
+                            <ComboBox x:Name="TrayClickCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   Text="What a single click on the tray icon does." />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Shortcut click" />
+                            <ComboBox x:Name="ShortcutClickCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="What launching Prisc from a shortcut, the taskbar or the dock does." />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Hide Prisc windows from screen capture" />
+                            <ComboBox x:Name="HideFromCaptureCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="Keep Prisc's own windows out of screenshots, recordings and screen shares." />
+                    </StackPanel>
+                </StackPanel>
+            </HeaderedContentControl>
+        </StackPanel>
+    </controls:FadeEdgeScrollViewer>
+</UserControl>

@@ -1,30 +1,30 @@
 [
   {
-    "label": "Build Clowd.Ui (Debug)",
+    "label": "Build Prisc.Ui (Debug)",
     "command": "dotnet",
     "args": [
       "build",
-      "${ZED_WORKTREE_ROOT}/clowd_ui/Clowd.Ui/Clowd.Ui.csproj",
+      "${ZED_WORKTREE_ROOT}/ui/Prisc.Ui/Prisc.Ui.csproj",
       "-p:Configuration=Debug",
     ],
   },
   {
-    "label": "Build clowd_capture (Debug)",
+    "label": "Build prisc_capture (Debug)",
     "command": "cargo",
-    "args": ["build", "-p", "clowd_capture"],
+    "args": ["build", "-p", "prisc_capture"],
   },
   {
     "label": "Rebuild All",
     "command": "dotnet",
     "args": [
       "build",
-      "${ZED_WORKTREE_ROOT}/clowd_ui/Clowd.Ui/Clowd.Ui.csproj",
+      "${ZED_WORKTREE_ROOT}/ui/Prisc.Ui/Prisc.Ui.csproj",
       "-p:Configuration=Debug",
       ";",
       "cargo",
       "build",
       "-p",
-      "clowd_capture",
+      "prisc_capture",
     ],
   },
 ]

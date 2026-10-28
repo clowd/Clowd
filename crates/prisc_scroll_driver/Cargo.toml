@@ -1,0 +1,40 @@
+[package]
+name = "prisc_scroll_driver"
+version = "1.0.0"
+edition = "2021"
+
+# The second half of a scrolling capture: the overlay picks the region and scroll point,
+# this binary scrolls, photographs and stitches. Kept out of the capturer because starting a
+# window or GPU here would put pixels in front of the very content it is about to photograph.
+
+# image, euclid and sentry all reach this crate through prisc_rust_core and are not named directly.
+[dependencies]
+prisc_rust_core.workspace = true
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+log.workspace = true
+simplelog.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    # SendInput / GetAsyncKeyState for the wheel injection and the Esc poll (input/win.rs).
+    "Win32_UI_Input_KeyboardAndMouse",
+    # Window resolution, cursor parking, WM_MOUSEWHEEL (input/win.rs).
+    "Win32_UI_WindowsAndMessaging",
+    # The per-monitor-DPI-awareness assertion (input/win.rs::preflight).
+    "Win32_UI_HiDpi",
+    # BitBlt of the capture region (frame/win.rs) and ScreenToClient (input/win.rs).
+    "Win32_Graphics_Gdi",
+] }
+
+# The macOS half of the same two modules: core-graphics carries the window list, scroll
+# events, cursor warp and CGWindowListCreateImage, core-foundation reads the window-list
+# dictionaries, and objc2-app-kit provides NSRunningApplication for activation.
+# The feature flags are OS-version gates on bindings the driver cannot do without, all long
+# past our minimum.
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = { workspace = true, features = ["highsierra", "elcapitan"] }
+core-foundation.workspace = true
+objc2-app-kit = { workspace = true, features = ["libc"] }

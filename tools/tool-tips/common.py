@@ -1,7 +1,7 @@
 """The shared framework behind the image editor's tool-tip demo GIFs.
 
 Everything a demo module (demos/<name>.py) draws with lives here: the frame and the mock artwork,
-the storyboard timing, the real Clowd cursors, the ink painters that mimic Clowd.Drawing's graphics
+the storyboard timing, the real Prisc cursors, the ink painters that mimic Prisc.Drawing's graphics
 at miniature scale, the selection chrome, and the mini keycaps for modifiers. generate.py imports
 the demos, downsamples, quantises and saves. The tool's own shortcut is not in the GIF: the flyout
 card shows it as a keycap beside the header. See README.md next to this file for the storyboard
@@ -153,7 +153,7 @@ def unit(dx, dy):
 # ---------------------------------------------------------------------------- fonts
 _FONT_FILES = {
     False: [
-        os.path.join(REPO_ROOT, "clowd_ui", "Clowd.Ui", "Assets", "Fonts", "Inter", "Inter-Regular.ttf"),
+        os.path.join(REPO_ROOT, "ui", "Prisc.Ui", "Assets", "Fonts", "Inter", "Inter-Regular.ttf"),
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -161,7 +161,7 @@ _FONT_FILES = {
         "C:/Windows/Fonts/arial.ttf",
     ],
     True: [
-        os.path.join(REPO_ROOT, "clowd_ui", "Clowd.Ui", "Assets", "Fonts", "Inter", "Inter-SemiBold.ttf"),
+        os.path.join(REPO_ROOT, "ui", "Prisc.Ui", "Assets", "Fonts", "Inter", "Inter-SemiBold.ttf"),
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -170,8 +170,8 @@ _FONT_FILES = {
     ],
 }
 _MONO_FILES = [
-    os.path.join(REPO_ROOT, "clowd_ui", "Clowd.Ui", "Assets", "Fonts", "CascadiaMono-Regular.ttf"),
-    os.path.join(REPO_ROOT, "clowd_ui", "Clowd.Ui", "Assets", "Fonts", "CascadiaMono.ttf"),
+    os.path.join(REPO_ROOT, "ui", "Prisc.Ui", "Assets", "Fonts", "CascadiaMono-Regular.ttf"),
+    os.path.join(REPO_ROOT, "ui", "Prisc.Ui", "Assets", "Fonts", "CascadiaMono.ttf"),
     "C:/Windows/Fonts/consolab.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
 ]
@@ -530,7 +530,7 @@ def blink(i, period=3):
 
 
 # ---------------------------------------------------------------------------- cursors
-_CURSOR_DIR = os.path.join(REPO_ROOT, "clowd_ui", "Clowd.Drawing", "Cursors")
+_CURSOR_DIR = os.path.join(REPO_ROOT, "ui", "Prisc.Drawing", "Cursors")
 _CURSOR_FILES = {
     "default": "Default", "rect": "Rect", "ellipse": "Ellipse", "line": "Line", "arrow": "Arrow",
     "measure": "Measure", "pen": "Pen", "numerical": "Numerical", "text": "Text",
@@ -543,7 +543,7 @@ _cursor_cache = {}
 
 
 def load_cursor(kind):
-    """The 256 px frame of a Clowd .cur plus its hotspot: (RGBA image, hx, hy)."""
+    """The 256 px frame of a Prisc .cur plus its hotspot: (RGBA image, hx, hy)."""
     if kind in _cursor_cache:
         return _cursor_cache[kind]
     path = os.path.join(_CURSOR_DIR, _CURSOR_FILES[kind] + ".cur")
@@ -564,7 +564,7 @@ def load_cursor(kind):
 
 
 def cursor(img, x, y, kind="default", s=1.0, pressed=False):
-    """Pastes the real Clowd cursor art with its hotspot on (x, y), CURSOR_PX * s logical px
+    """Pastes the real Prisc cursor art with its hotspot on (x, y), CURSOR_PX * s logical px
     across (92 % while pressed)."""
     src, hx, hy = load_cursor(kind)
     if pressed:

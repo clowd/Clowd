@@ -1,0 +1,228 @@
+using System;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Media;
+using Prisc.UI.Controls;
+using Prisc.Util;
+
+namespace Prisc.UI.Dialogs.ColorPicker
+{
+    /// <summary>
+    /// Press-and-drag eyedropper. Holding the button and dragging samples whatever is under the
+    /// pointer — anywhere on the desktop, not just over Prisc — raising <see cref="Preview"/> as
+    /// it moves and <see cref="Picked"/> on release. Releasing without ever leaving the button
+    /// (a plain click) is treated as a canceled drag, since the pixel under the button is the
+    /// button itself.
+    /// </summary>
+    /// <remarks>
+    /// Pointer capture is what makes this work past the window edge: Avalonia maps it to Win32
+    /// SetCapture, so moves outside the owning window (or popup) keep arriving here.
+    ///
+    /// Hidden entirely where <see cref="ScreenPixels"/> cannot sample the screen at all
+    /// (Linux), but only disabled — with a tooltip saying why — when the platform could sample and
+    /// macOS Screen Recording permission is what's missing. That's a state the user can fix, and a
+    /// vanished button reads as a feature Prisc doesn't have.
+    /// </remarks>
+    public class EyedropperButton : ToolButton
+    {
+        /// <summary>Fires when a drag begins, before any sample — the caller's cue to snapshot
+        /// whatever <see cref="Canceled"/> would have to restore.</summary>
+        public event Action Started;
+
+        /// <summary>Fires continuously while dragging, for live preview. The argument is the
+        /// color under the pointer.</summary>
+        public event Action<Color> Preview;
+
+        /// <summary>Fires once, on release over a valid pixel, with the color to commit.</summary>
+        public event Action<Color> Picked;
+
+        /// <summary>Fires when a drag ends without a pick (released on the button, or off-screen),
+        /// so the caller can undo whatever <see cref="Preview"/> applied.</summary>
+        public event Action Canceled;
+
+        private bool _dragging;
+
+        private bool _leftButton;
+
+        // the pointer that holds the capture, so a keyboard cancel can release it
+        private IPointer _capturedPointer;
+
+        /// <summary>Whether a press-and-drag sample is under way.</summary>
+        public bool IsSampling => _dragging;
+
+        private Color? _lastSampled;
+
+        /// <summary>What the button is for. Explains the press-and-drag gesture, which is not
+        /// discoverable from the icon — a plain click does nothing.</summary>
+        private const string GestureTip = "Click and drag to a point on your screen";
+
+        internal const string PermissionTip =
+            "Prisc needs Screen Recording permission to pick a color from the screen. "
+            + "Grant it under " + MacPermissions.GrantLocation + ".";
+
+        // a hand says "press here"; the crosshair takes over once the press starts a sample
+        private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
+        private static readonly Cursor CrossCursor = new(StandardCursorType.Cross);
+
+        public EyedropperButton()
+        {
+            Cursor = HandCursor;
+
+            // Sampling is a press-and-drag gesture over the desktop, so there is nothing the
+            // keyboard can do with this button — keep it out of the tab order (it stays
+            // focusable, so a click still moves focus here like any other button).
+            IsTabStop = false;
+
+            // no screen sampling on this platform — an eyedropper that cannot sample is worse
+            // than no eyedropper, so take it out of the layout entirely
+            if (!ScreenPixels.IsSupported)
+                IsVisible = false;
+
+            // permission can be granted while a picker is open, and this control is created fresh
+            // each time a dialog opens, so re-check on the way into the tree rather than only here.
+            AttachedToVisualTree += (s, e) => ApplyPermissionState();
+            ApplyPermissionState();
+        }
+
+        /// <summary>Grays the button out, with the reason as its tooltip, while macOS Screen
+        /// Recording is missing.</summary>
+        private void ApplyPermissionState()
+        {
+            if (!ScreenPixels.IsSupported)
+                return;
+
+            var permitted = ScreenPixels.IsPermitted;
+            IsEnabled = permitted;
+
+            // ShowOnDisabled is off by default, and the tooltip is the only thing explaining why the
+            // button is grayed out — without this the disabled state has no explanation at all.
+            ToolTip.SetShowOnDisabled(this, true);
+            ToolTip.SetTip(this, permitted ? GestureTip : PermissionTip);
+        }
+
+        protected override Type StyleKeyOverride => typeof(ToolButton);
+
+        /// <summary>Re-arms the tooltip once the pointer has left and come back, so the hint is
+        /// available again on a later hover without ever reappearing mid-gesture.</summary>
+        protected override void OnPointerEntered(PointerEventArgs e)
+        {
+            base.OnPointerEntered(e);
+            ToolTip.SetServiceEnabled(this, true);
+        }
+
+        protected override void OnPointerPressed(PointerPressedEventArgs e)
+        {
+            base.OnPointerPressed(e);
+
+            // The hint has been read by the time the gesture starts, and the drag samples pixels
+            // under the pointer — a tooltip following it would cover the very pixels being picked.
+            // Disabling the service keeps it from reopening on release, when the pointer is often
+            // back over the button; the next hover re-arms it (OnPointerEntered).
+            ToolTip.SetIsOpen(this, false);
+            ToolTip.SetServiceEnabled(this, false);
+
+            if (!ScreenPixels.IsAvailable)
+                return;
+
+            _dragging = true;
+            _leftButton = false;
+            _lastSampled = null;
+            _capturedPointer = e.Pointer;
+            e.Pointer.Capture(this);
+            Cursor = CrossCursor;
+            e.Handled = true;
+            Started?.Invoke();
+        }
+
+        protected override void OnPointerMoved(PointerEventArgs e)
+        {
+            base.OnPointerMoved(e);
+
+            if (!_dragging || !Equals(e.Pointer.Captured, this))
+                return;
+
+            // ignore samples taken while still over the button: they would read the button's own
+            // pixels, and a click that never moves off should not change the color at all
+            var local = e.GetPosition(this);
+            if (local.X >= 0 && local.Y >= 0 && local.X < Bounds.Width && local.Y < Bounds.Height)
+                return;
+
+            _leftButton = true;
+
+            var color = Sample(e);
+            if (color.HasValue)
+            {
+                _lastSampled = color;
+                Preview?.Invoke(color.Value);
+            }
+        }
+
+        protected override void OnPointerReleased(PointerReleasedEventArgs e)
+        {
+            base.OnPointerReleased(e);
+
+            if (!_dragging)
+                return;
+
+            _dragging = false;
+            _capturedPointer = null;
+            Cursor = HandCursor;
+            e.Pointer.Capture(null);
+            e.Handled = true;
+
+            // prefer a fresh sample at the release point; fall back to the last one seen while
+            // dragging so a release over a non-sampleable spot still commits something sensible
+            var color = _leftButton ? Sample(e) ?? _lastSampled : null;
+
+            if (color.HasValue)
+                Picked?.Invoke(color.Value);
+            else
+                Canceled?.Invoke();
+        }
+
+        protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+        {
+            base.OnPointerCaptureLost(e);
+
+            if (!_dragging)
+                return;
+
+            _dragging = false;
+            _capturedPointer = null;
+            Cursor = HandCursor;
+            Canceled?.Invoke();
+        }
+
+        /// <summary>
+        /// Abandons a sample under way, as Escape does: the drag ends with <see cref="Canceled"/>,
+        /// so the caller puts back the color the live preview replaced. No-op when not sampling.
+        /// </summary>
+        public void CancelSampling()
+        {
+            if (!_dragging)
+                return;
+
+            var pointer = _capturedPointer;
+            _dragging = false;
+            _capturedPointer = null;
+            Cursor = HandCursor;
+            pointer?.Capture(null);
+            Canceled?.Invoke();
+        }
+
+        private Color? Sample(PointerEventArgs e)
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel == null)
+                return null;
+
+            // PointToScreen applies the top level's scaling, so the result is the physical pixel
+            // GDI addresses even on a mixed-DPI desktop
+            var screenPoint = topLevel.PointToScreen(e.GetPosition(topLevel));
+            var color = ScreenPixels.GetColorAt(screenPoint);
+
+            return color;
+        }
+    }
+}

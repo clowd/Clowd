@@ -1,0 +1,1868 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Notifications;
+using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
+using Avalonia.Data;
+using Avalonia.Data.Converters;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using Prisc.Config;
+using Prisc.Drawing;
+using Prisc.Drawing.Graphics;
+using Prisc.PlatformUtil;
+using Prisc.UI.Config;
+using Prisc.UI.Controls;
+using Prisc.UI.Helpers;
+using Prisc.UI.VideoEditor;
+using Prisc.Util;
+using Path = System.IO.Path;
+
+namespace Prisc.UI
+{
+    public partial class EditorWindow : SystemThemedWindow
+    {
+        private ToolType? _panPreviousTool = null; // null means we're not in a held-key (space) pan
+        private SettingsRoot _settings = SettingsRoot.Current;
+        // "Save style for current session": per-window tool settings that supersede the persisted
+        // ones until this editor closes (see the ToolSettingsResolver set in the constructor)
+        private readonly Dictionary<ToolType, SavedToolSettings> _sessionToolSettings = new();
+        private SessionInfo _session;
+        private int _nudgeRepeatCount;
+        private ScreenRect _normalBounds; // tracked manually while WindowState == Normal (decision table #55)
+        private readonly HashSet<Key> _pressedKeys = new HashSet<Key>(); // repeat tracker (decision table #37)
+
+        // the swatch that opened the mini color picker, so closing the popup puts keyboard focus
+        // back where it came from instead of dropping it into the popup root as it disappears
+        private Control _colorSwatchToRefocus;
+
+        private readonly string _graphicsPath;
+        private readonly string _historyPath;
+
+        private DispatcherTimer _sessionInfoDebounce;
+
+        // the recent list draws PreviewImgPath, which is otherwise only re-flattened on close/save/
+        // copy/upload — so a still-open editor would leave its row showing the bare capture. Set on
+        // every canvas commit, consumed when the window loses focus (see SchedulePreviewRefresh).
+        private bool _previewStale;
+        private DispatcherTimer _previewDebounce;
+        private readonly bool _openedEmpty; // no graphics on the canvas when the window opened (see Closing)
+
+        // the ActiveUpload currently forwarding its Progress into btnUpload's ring, or null. Tracked
+        // separately from _session.ActiveUpload so we can detach its PropertyChanged on swap/close.
+        private ActiveUpload _trackedUpload;
+
+        // graphics.json/history.json persistence is latest-wins on a background thread (see StateUpdated handler)
+        private byte[] _pendingGraphicsJson;
+        private byte[] _pendingHistoryJson;
+        private Task _graphicsWriteTask = Task.CompletedTask;
+        private readonly object _graphicsWriteLock = new object();
+
+        // sidebar drag bounds — also mirrored onto the sidebar ColumnDefinition (MinWidth/MaxWidth)
+        // so Avalonia's own splitter clamps the drag; the editor re-clamps on read/persist.
+        // per-window, deliberately not persisted — every editor opens with the layers sidebar closed
+        private bool _sidebarVisible;
+
+        private const double SidebarMinWidth = 140;
+        private const double SidebarMaxWidth = 600;
+
+        // the sidebar's ColumnDefinition (contentGrid column 3). Avalonia's XAML compiler does not
+        // emit a field for an x:Named ColumnDefinition, so reach it through the named grid.
+        private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[3];
+
+        public RelayCommand SelectToolCommand { get; }
+        public RelayCommand CommandSave { get; }
+        public RelayCommand CommandCopy { get; }
+        public RelayCommand CommandCut { get; }
+        public RelayCommand CommandPaste { get; }
+        public RelayCommand CommandUpload { get; }
+
+        // satisfies the XAML compiler's runtime-loader check (AVLN3001); an editor is only
+        // ever constructed through ShowSession with a real SessionInfo
+        [Obsolete("Runtime-loader signature only — use EditorWindow(SessionInfo).", error: true)]
+        public EditorWindow()
+        {
+            throw new NotSupportedException("EditorWindow requires a SessionInfo.");
+        }
+
+        public EditorWindow(SessionInfo info)
+        {
+            _session = info;
+            _graphicsPath = Path.Combine(Path.GetDirectoryName(info.FilePath), "graphics.json");
+            _historyPath = Path.Combine(Path.GetDirectoryName(info.FilePath), "history.json");
+
+            SelectToolCommand = new RelayCommand { Executed = SelectToolExecuted, Text = "Select tool" };
+            CommandSave = new RelayCommand { Executed = SaveCommandExecuted, Text = "_Save", Gesture = new SimpleKeyGesture(Key.S, KeyModifiers.Control) };
+            CommandCopy = new RelayCommand { Executed = CopyCommandExecuted, Text = "_Copy", Gesture = new SimpleKeyGesture(Key.C, KeyModifiers.Control) };
+            CommandCut = new RelayCommand { Executed = CutCommandExecuted, Text = "Cu_t", Gesture = new SimpleKeyGesture(Key.X, KeyModifiers.Control) };
+            CommandPaste = new RelayCommand { Executed = PasteCommandExecuted, Text = "_Paste", Gesture = new SimpleKeyGesture(Key.V, KeyModifiers.Control) };
+            CommandUpload = new RelayCommand { Executed = UploadCommandExecuted, Text = "_Upload", Gesture = new SimpleKeyGesture(Key.U, KeyModifiers.Control) };
+
+            DataContext = this;
+
+            InitializeComponent();
+
+            ApplyChrome();
+            ApplyToolbarOverflow();
+            _settings.Editor.PropertyChanged += OnEditorSettingChanged;
+            Closed += (_, _) => _settings.Editor.PropertyChanged -= OnEditorSettingChanged;
+
+            // Under the extended client area (macOS) this bar IS the title bar.
+            EnableTitleBarDrag(PropertiesBar);
+
+            // and the traffic lights ride the same bar, centred in it rather than tucked into the
+            // window's corner above it.
+            CenterMacTrafficLightsIn(PropertiesBar);
+
+            // the browsers' col-resize (bars + arrows), not the plain SizeWestEast — which
+            // GridSplitter assigns to its own Cursor on attach, so the custom cursor has to sit
+            // on the template's panel, where the innermost non-null cursor wins
+            sidebarSplitter.TemplateApplied += (_, e) =>
+            {
+                if (e.NameScope.Find("splitterZone") is InputElement zone)
+                    zone.Cursor = DragCursors.ColResize;
+            };
+            // …and on the splitter itself (after its own attach-time assignment), because a drag
+            // in progress captures the pointer and shows the captured control's cursor
+            sidebarSplitter.AttachedToVisualTree += (_, _) => sidebarSplitter.Cursor = DragCursors.ColResize;
+
+            drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
+            drawingCanvas.HandleColor = AppStyles.AccentColor;
+            drawingCanvas.StateUpdated += drawingCanvas_StateUpdated;
+            LoadSessionState();
+            // a blank "new document" window (no capture, no restored graphics) that is still
+            // blank when it closes is discarded rather than persisted to the recent list
+            _openedEmpty = drawingCanvas.GraphicsList.Count == 0;
+            // a restored editor (app restart) may hold edits whose preview was never flattened
+            _previewStale = !_openedEmpty;
+
+            // Modifier-carrying command gestures become Window.KeyBindings (§2.4). Bare gestures
+            // (Escape/Delete/Home/End and the tool letters) are routed exclusively by the tunnel
+            // KeyDown handler below — RelayCommand.CreateKeyBinding returns null for those.
+            AddCommandKeyBinding(drawingCanvas.CommandSelectAll);
+            AddCommandKeyBinding(drawingCanvas.CommandUnselectAll);
+            AddCommandKeyBinding(drawingCanvas.CommandDelete);
+            AddCommandKeyBinding(drawingCanvas.CommandMoveToFront);
+            AddCommandKeyBinding(drawingCanvas.CommandMoveToBack);
+            AddCommandKeyBinding(drawingCanvas.CommandMoveForward);
+            AddCommandKeyBinding(drawingCanvas.CommandMoveBackward);
+            AddCommandKeyBinding(drawingCanvas.CommandUndo);
+            AddCommandKeyBinding(drawingCanvas.CommandRedo);
+            AddKeyBinding(drawingCanvas.CommandZoomPanAuto, Key.D0);
+            AddKeyBinding(drawingCanvas.CommandZoomPanAuto, Key.NumPad0);
+            AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.D1);
+            AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad1);
+            AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.D2, 2d);
+            AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad2, 2d);
+            AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.D3, 3d);
+            AddKeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad3, 3d);
+            AddKeyBinding(drawingCanvas.CommandZoomIn, Key.OemPlus);
+            AddKeyBinding(drawingCanvas.CommandZoomIn, Key.Add);
+            AddKeyBinding(drawingCanvas.CommandZoomOut, Key.OemMinus);
+            AddKeyBinding(drawingCanvas.CommandZoomOut, Key.Subtract);
+            AddKeyBinding(CommandSave, Key.S);
+            AddKeyBinding(CommandCopy, Key.C);
+            AddKeyBinding(CommandCut, Key.X);
+            AddKeyBinding(CommandPaste, Key.V);
+            AddKeyBinding(CommandUpload, Key.U);
+
+            AddHandler(KeyDownEvent, OnTunnelKeyDown, RoutingStrategies.Tunnel);
+            AddHandler(KeyUpEvent, OnTunnelKeyUp, RoutingStrategies.Tunnel);
+
+            // feeds the "has this editor been touched lately" test that gates background update
+            // restarts (IdleMonitor). Tunneling handlers so they see the input regardless of
+            // which child control ends up handling it.
+            AddHandler(KeyDownEvent, (object s, KeyEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
+            AddHandler(PointerPressedEvent, (object s, PointerPressedEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
+            AddHandler(PointerWheelChangedEvent, (object s, PointerWheelEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
+
+            Opened += EditorWindow_Opened;
+            Closing += EditorWindow_Closing;
+            Activated += (_, _) => {
+                IdleMonitor.NotifyInteraction();
+                UpdateSessionInfo();
+            };
+            Deactivated += (_, _) => {
+                _pressedKeys.Clear();
+                if (_panPreviousTool != null) {
+                    // the pan key's KeyUp will never arrive; restore the tool now
+                    drawingCanvas.Tool = _panPreviousTool.Value;
+                    _panPreviousTool = null;
+                }
+                UpdateSessionInfo();
+                SchedulePreviewRefresh();
+            };
+            PositionChanged += (_, _) => {
+                TrackNormalBounds();
+                // fires for every pixel of a window drag, and a session write is a synchronous
+                // disk serialize (FileSyncObject) — record the final position once the move settles
+                ScheduleUpdateSessionInfo();
+            };
+            SizeChanged += (_, _) => TrackNormalBounds();
+            ScalingChanged += (_, _) => drawingCanvas.UpdateForScalingChange(); // decision table #56
+
+            // dropping files in from Explorer/Finder (DragDrop.AllowDrop is set on the window in
+            // XAML and inherits down the tree). handledEventsToo: a child that consumed the drag
+            // for its own purposes — a TextBox offered text — did not consume the files in it.
+            AddHandler(DragDrop.DragOverEvent, OnDragOverFiles, RoutingStrategies.Bubble, handledEventsToo: true);
+            AddHandler(DragDrop.DropEvent, OnDropFiles, RoutingStrategies.Bubble, handledEventsToo: true);
+
+            btnUpload.AddHandler(PointerPressedEvent, btnUpload_RightMouseDown, RoutingStrategies.Tunnel);
+
+            // Uploads Off (the Uploads page) takes the button away; the command guards itself, so
+            // Ctrl+U goes quiet with it.
+            ApplyUploadsMode();
+            SettingsRoot.Current.Uploads.PropertyChanged += Uploads_PropertyChanged;
+
+            miniColor.ParentWindow = this;
+            miniColor.Canceled += (_, _) => miniColorPopup.IsOpen = false;
+            InitStyleFields();
+
+            // covers every close path, light dismiss included
+            miniColorPopup.Closed += (_, _) =>
+            {
+                var swatch = _colorSwatchToRefocus;
+                _colorSwatchToRefocus = null;
+                if (swatch is { IsEffectivelyVisible: true })
+                    swatch.Focus(NavigationMethod.Tab);
+                else
+                    drawingCanvas.Focus();
+            };
+
+            InitCustomizePopup();
+            InitZoomPill();
+
+            // a tool with a style saved for this window draws (and edits) that; every other tool
+            // falls through to the persisted settings
+            drawingCanvas.ToolSettingsResolver = tool =>
+                _sessionToolSettings.TryGetValue(tool, out var s) ? s : _settings.Editor.GetToolSettings(tool);
+
+            // opt-in editor features (customizable toolbar / layers sidebar). The sidebar is
+            // per-window and always starts closed, so the strip renders exactly as before plus the
+            // customize button, and no sidebar.
+            //
+            // ApplySidebarVisible sets the border + splitter visibility, sizes (or collapses) the
+            // sidebar column, and attaches the layers panel only when the sidebar is actually shown —
+            // an IsVisible=false panel stays in the visual tree, so an unconditional Attach would
+            // rebuild rows on every edit for a panel nobody can see. The SidebarVisible setter runs
+            // the same path on toggle.
+            ApplySidebarVisible(_sidebarVisible);
+            RebuildToolStrip();
+
+            // reflect the session's in-flight upload (if any) on the upload button's ring, and keep
+            // it in sync as uploads start/finish. Handles a window opened onto an already-active upload.
+            _session.PropertyChanged += Session_PropertyChanged;
+            SyncUploadProgress();
+            SyncStarButton();
+            SyncRenameButton();
+            renamePopup.FallbackFocus = drawingCanvas;
+        }
+
+        private void Session_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(SessionInfo.ActiveUpload))
+                SyncUploadProgress();
+            else if (e.PropertyName == nameof(SessionInfo.Starred))
+                SyncStarButton(); // the Recent page, or another window, can star the same session
+            else if (e.PropertyName == nameof(SessionInfo.Name))
+                SyncRenameButton(); // ...and rename it
+        }
+
+        private void rename_Click(object sender, RoutedEventArgs e) => renamePopup.Open(_session, btnRename);
+
+        /// <summary>Puts the session's name in the window title (the taskbar and Alt+Tab read it)
+        /// and in the rename tooltip.</summary>
+        private void SyncRenameButton()
+        {
+            Title = !String.IsNullOrEmpty(_session?.Name) ? $"{_session.Name} - Prisc" : "Edit - Prisc";
+            ToolTip.SetTip(btnRename, _session?.RenameTooltip);
+        }
+
+        private void star_Click(object sender, RoutedEventArgs e)
+        {
+            if (_session == null)
+                return;
+
+            // the setter persists the flag and raises PropertyChanged, which brings the button back
+            // through SyncStarButton — so there is nothing to redraw here.
+            _session.Starred = !_session.Starred;
+        }
+
+        /// <summary>Draws btnStar in the session's current starred state: the filled gold glyph when
+        /// starred, the outline in the strip's white when not, carrying the Recent page's own wording
+        /// in the tooltip so the retention promise is spelled out in both places.</summary>
+        private void SyncStarButton()
+        {
+            var starred = _session?.Starred == true;
+            btnStar.IconPath = FindIconGeometry(starred ? "IconStarFilled" : "IconStarOutline");
+            btnStar.Classes.Set("starOn", starred);
+            ToolTip.SetTip(btnStar, _session?.StarTooltip);
+        }
+
+        /// <summary>Points btnUpload's ring at the session's current ActiveUpload: subscribes to the
+        /// new upload's Progress (or clears the ring when there is none), detaching any previous one.</summary>
+        private void SyncUploadProgress()
+        {
+            var upload = _session?.ActiveUpload;
+            if (ReferenceEquals(upload, _trackedUpload))
+                return;
+
+            if (_trackedUpload != null)
+                _trackedUpload.PropertyChanged -= ActiveUpload_PropertyChanged;
+
+            _trackedUpload = upload;
+
+            if (upload != null) {
+                upload.PropertyChanged += ActiveUpload_PropertyChanged;
+                btnUpload.Progress = upload.Progress;
+                btnUpload.ShowProgress = true;
+            } else {
+                btnUpload.ShowProgress = false;
+                btnUpload.Progress = 0;
+            }
+        }
+
+        private void ActiveUpload_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ActiveUpload.Progress))
+                btnUpload.Progress = ((ActiveUpload) sender).Progress;
+        }
+
+        private void ScheduleUpdateSessionInfo()
+        {
+            _sessionInfoDebounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => {
+                _sessionInfoDebounce.Stop();
+                UpdateSessionInfo();
+            });
+            _sessionInfoDebounce.Stop();
+            _sessionInfoDebounce.Start();
+        }
+
+        /// <summary>
+        /// Re-flattens the preview once the editor is in the background — the moment the user can
+        /// look at the recent list — rather than on every commit, which would put a full render and
+        /// PNG encode on the UI thread mid-edit. Debounced so a commit that lands just after
+        /// deactivation (an in-place text edit finishes on focus loss) folds into the same refresh.
+        /// </summary>
+        private void SchedulePreviewRefresh()
+        {
+            if (!_previewStale)
+                return;
+
+            _previewDebounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => {
+                _previewDebounce.Stop();
+                if (_session != null && _previewStale && !IsActive)
+                    UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
+            });
+            _previewDebounce.Stop();
+            _previewDebounce.Start();
+        }
+
+        private void UpdateSessionInfo()
+        {
+            if (_session != null) {
+                _session.OpenEditor = new SessionOpenEditor() {
+                    IsTopMost = Topmost,
+                    IsMaximized = WindowState == WindowState.Maximized,
+                    IsMinimized = WindowState == WindowState.Minimized,
+                    RestorePosition = _normalBounds,
+                    VirtualDesktopId = null, // virtual-desktop restore dropped (decision table #55)
+                };
+            }
+        }
+
+        private void TrackNormalBounds()
+        {
+            if (WindowState != WindowState.Normal)
+                return;
+
+            // physical px (Position is physical; ClientSize is logical → multiply by scaling)
+            var scaling = RenderScaling;
+            _normalBounds = new ScreenRect(
+                Position.X,
+                Position.Y,
+                (int) Math.Round(ClientSize.Width * scaling),
+                (int) Math.Round(ClientSize.Height * scaling));
+        }
+
+        private void EditorWindow_Opened(object sender, EventArgs e)
+        {
+            TrackNormalBounds();
+            UpdateSessionInfo();
+
+            drawingCanvas.Focus();
+
+            // if window is bigger than image, show at actual size. else, zoom to fit (§5.1:
+            // posted so it runs after the first layout pass has produced a real canvas size).
+            Dispatcher.UIThread.Post(() => drawingCanvas.ZoomPanAuto(), DispatcherPriority.Loaded);
+        }
+
+        private void EditorWindow_Closing(object sender, WindowClosingEventArgs e)
+        {
+            _sessionInfoDebounce?.Stop();
+            _previewDebounce?.Stop();
+
+            SettingsRoot.Current.Uploads.PropertyChanged -= Uploads_PropertyChanged;
+
+            // detach upload-progress handlers while _session is still alive (it is nulled below).
+            if (_session != null)
+                _session.PropertyChanged -= Session_PropertyChanged;
+            if (_trackedUpload != null) {
+                _trackedUpload.PropertyChanged -= ActiveUpload_PropertyChanged;
+                _trackedUpload = null;
+            }
+
+            // an in-place text edit commits on focus loss (ToolText.FinishEdit); force that now,
+            // while _session is still alive: FlushPendingState defers while an edit is active, and
+            // a commit raised after this handler (window Deactivated fires post-close) is dropped
+            // by the null-_session check — losing the typed text AND any armed autosave tail
+            drawingCanvas.Focus();
+
+            drawingCanvas.FlushPendingState(); // deliver any debounced (mid-scrub) canvas state before the writer flush below
+            // flush any pending background graphics.json write before the session is torn down
+            Task pendingWrite;
+            lock (_graphicsWriteLock)
+                pendingWrite = _graphicsWriteTask;
+            try { pendingWrite.Wait(TimeSpan.FromSeconds(5)); } catch {; }
+            WritePendingGraphicsJson();
+
+            // the property bar mutates Editor.Tools (SavedToolSettings) through two-way bindings;
+            // persist those edits when the editor closes (explicit-save policy). Saved before the
+            // preview render so a rendering failure can't skip the save.
+            UpdateSidebarWidthSetting(); // belt-and-suspenders: fold in any un-persisted drag width
+            try { SettingsService.Save(_settings); } catch {; }
+
+            // a session that opened blank and is still blank holds nothing worth keeping —
+            // delete it (session dir included) so it never lingers in the recent sessions list.
+            // Checked after the flushes above so a pending text edit / debounced state can't be
+            // mistaken for an empty canvas. Upload-only sessions (clipboard/file uploads) render
+            // blank in the editor but own real upload content, so they are never discarded here.
+            if (_openedEmpty && drawingCanvas.GraphicsList.Count == 0 && !_session.IsUploadOnly) {
+                var session = _session;
+                _session = null;
+                session.OpenEditor = null; // DeleteSession refuses sessions marked open in an editor
+                try {
+                    SessionManager.Current.DeleteSession(session);
+                } catch (Exception ex) {
+                    Debug.WriteLine($"failed to discard empty session: {ex.Message}");
+                    SentryConfig.CaptureHandled(ex, "editor.discard-session");
+                }
+                return;
+            }
+
+            UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
+            if (!App.KeepOpenEditorsOnExit)
+                _session.OpenEditor = null; // left marked across an unrequested exit, to reopen on start
+            _session = null;
+        }
+
+        public static void ShowSession(SessionInfo session)
+        {
+            // check if there is already a window open with this session in it
+            if (session != null) {
+                var openWnd = GetOpenEditors().FirstOrDefault(f => f._session == session);
+                if (openWnd != null) {
+                    if (openWnd.WindowState == WindowState.Minimized)
+                        openWnd.WindowState = WindowState.Normal;
+                    openWnd.Activate();
+                    return;
+                }
+            }
+
+            bool isExistingSession = session?.OpenEditor is { IsVideoEditor: false, RestorePosition: not null };
+            bool canPlaceExactly = session?.OriginalBounds?.IsEmpty() == false;
+
+            if (session == null)
+                session = SessionManager.Current.CreateNewSession();
+
+            var wnd = new EditorWindow(session);
+
+            if (isExistingSession) {
+                // this session was not closed properly, restore it to its previous location
+                var restore = session.OpenEditor.RestorePosition;
+                wnd.Topmost = session.OpenEditor.IsTopMost;
+                wnd.ShowActivated = false;
+                wnd.WindowStartupLocation = WindowStartupLocation.Manual;
+                wnd.SetWindowRect(new PixelRect(restore.X, restore.Y, restore.Width, restore.Height));
+
+                if (session.OpenEditor.IsMaximized)
+                    wnd.WindowState = WindowState.Maximized;
+                else if (session.OpenEditor.IsMinimized)
+                    wnd.WindowState = WindowState.Minimized;
+
+                wnd.Show();
+            } else if (canPlaceExactly) {
+                // this is a brand new session. we'll show it on top of the captured area.
+                // (practical subset per §3 #55: no border compensation, constant padding only)
+                var origRect = session.OriginalBounds;
+                var origPx = new PixelRect(origRect.X, origRect.Y, origRect.Width, origRect.Height);
+                var screen = DesktopScreens.FromRect(wnd, origPx) ?? DesktopScreens.Primary(wnd);
+                var workArea = screen?.WorkingArea ?? origPx;
+                var scaling = screen?.Scaling ?? 1.0;
+
+                var padding = SettingsRoot.Current.Editor.StartupPadding;
+
+                // measure the page to see if any of the tool bars wrap. the window has not been
+                // shown yet so this is best-effort; fall back to the default 30px bar sizes.
+                var logicalImageSize = new Size(origRect.Width / scaling, origRect.Height / scaling);
+                var requiredSize = new Size(logicalImageSize.Width + 30 + padding, logicalImageSize.Height + 30 + padding);
+
+                double toolBarWidth = 30, propBarHeight = 30;
+                try {
+                    wnd.rootGrid.Measure(requiredSize);
+                    if (wnd.ToolBar.DesiredSize.Width > 0)
+                        toolBarWidth = wnd.ToolBar.DesiredSize.Width;
+                    if (wnd.PropertiesBar.DesiredSize.Height > 0)
+                        propBarHeight = wnd.PropertiesBar.DesiredSize.Height;
+                } catch {; }
+
+                int ToScreenWH(double logical) => (int) Math.Round(logical * scaling);
+
+                var rect = new PixelRect(
+                    origPx.X - ToScreenWH(toolBarWidth) - padding,
+                    origPx.Y - ToScreenWH(propBarHeight) - padding,
+                    origPx.Width + ToScreenWH(toolBarWidth) + padding * 2,
+                    origPx.Height + ToScreenWH(propBarHeight) + padding * 2);
+
+                // a tiny capture would ask for less than the window minimum, which the platform
+                // then enforces by growing right/down past the work area; grow it about its centre here.
+                int growW = Math.Max(0, ToScreenWH(wnd.MinWidth) - rect.Width);
+                int growH = Math.Max(0, ToScreenWH(wnd.MinHeight) - rect.Height);
+                rect = new PixelRect(rect.X - growW / 2, rect.Y - growH / 2, rect.Width + growW, rect.Height + growH);
+
+                // we shuffle the rect around each edge if it is off screen to try and
+                // achieve a window location that can show with 100% zoom.
+                if (rect.X < workArea.X) rect = rect.Translate(new PixelVector(workArea.X - rect.X, 0));
+                if (rect.Y < workArea.Y) rect = rect.Translate(new PixelVector(0, workArea.Y - rect.Y));
+                if (rect.Right > workArea.Right) rect = rect.Translate(new PixelVector(workArea.Right - rect.Right, 0));
+                if (rect.Bottom > workArea.Bottom) rect = rect.Translate(new PixelVector(0, workArea.Bottom - rect.Bottom));
+
+                // finally intersect with screen to crop if the image really can't fit.
+                rect = rect.Intersect(workArea);
+
+                wnd.WindowStartupLocation = WindowStartupLocation.Manual;
+                wnd.SetWindowRect(rect);
+                wnd.Show();
+                wnd.Activate();
+            } else {
+                // it is a new or empty session with no specific area to restore to.
+                wnd.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                wnd.Show();
+                wnd.Activate();
+                // a blank editor is asked for by the tray menu or the New Image Editor hotkey, and
+                // Activate alone loses to the foreground lock after a hotkey: the window turns
+                // active on its own thread but stays behind the app in front.
+                WindowNativeExtensions.ForceForeground(wnd);
+            }
+        }
+
+        public static void ShowAllPreviouslyActiveSessions()
+        {
+            var sessions = SessionManager.Current.Sessions
+                                         .Where(s => s.OpenEditor != null).ToArray();
+
+            foreach (var g in sessions) {
+                if (g.OpenEditor.IsVideoEditor)
+                    VideoEditorWindow.RestoreSession(g);
+                else
+                    ShowSession(g);
+            }
+        }
+
+        internal static IEnumerable<EditorWindow> GetOpenEditors()
+        {
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                return desktop.Windows.OfType<EditorWindow>();
+            return Enumerable.Empty<EditorWindow>();
+        }
+
+        /// <summary>The session this editor is displaying (null once the window has closed).</summary>
+        public SessionInfo Session => _session;
+
+        /// <summary>The open editor window showing <paramref name="session"/>, or null if none is.</summary>
+        public static EditorWindow FindWindowForSession(SessionInfo session)
+        {
+            if (session == null)
+                return null;
+            return GetOpenEditors().FirstOrDefault(w => ReferenceEquals(w._session, session));
+        }
+
+        private void SetWindowRect(PixelRect rect)
+        {
+            // all placement math is physical px; divide by the target screen scaling only when
+            // setting the logical Width/Height (decision table #55).
+            var screen = DesktopScreens.FromRect(this, rect) ?? DesktopScreens.Primary(this);
+            var scaling = screen?.Scaling ?? 1.0;
+            Position = rect.Position;
+            Width = rect.Width / scaling;
+            Height = rect.Height / scaling;
+        }
+
+        // ====================================================================
+        // Keyboard (§5.4)
+        // ====================================================================
+
+        private void AddCommandKeyBinding(RelayCommand command)
+        {
+            var kb = command.CreateKeyBinding();
+            if (kb == null)
+                return; // bare gesture — routed by the tunnel KeyDown handler
+
+            KeyBindings.Add(kb);
+
+            // macOS: every Ctrl gesture is also registered with Meta (§2.4)
+            var meta = command.CreateMacMetaKeyBinding();
+            if (meta != null)
+                KeyBindings.Add(meta);
+        }
+
+        private void AddKeyBinding(System.Windows.Input.ICommand command, Key key, object parameter = null)
+        {
+            KeyBindings.Add(MakeKeyBinding(command, new KeyGesture(key, KeyModifiers.Control), parameter));
+
+            if (OperatingSystem.IsMacOS())
+                KeyBindings.Add(MakeKeyBinding(command, new KeyGesture(key, KeyModifiers.Meta), parameter));
+        }
+
+        private static KeyBinding MakeKeyBinding(System.Windows.Input.ICommand command, KeyGesture gesture, object parameter)
+        {
+            var kb = new KeyBinding { Command = command, Gesture = gesture };
+            if (parameter != null)
+                kb.CommandParameter = parameter;
+            return kb;
+        }
+
+        private static void ExecuteCommand(RelayCommand command)
+        {
+            var icmd = (System.Windows.Input.ICommand) command;
+            if (icmd.CanExecute(null))
+                icmd.Execute(null);
+        }
+
+        // Space only. Shift used to pan as well, but it is half of Shift+Tab: holding it to
+        // reach the previous tab stop dropped the tool and put the canvas into pan mode, and the
+        // key is already spoken for inside the canvas as the aspect/snap constrain modifier.
+        private static bool IsPanKey(Key key) => key is Key.Space;
+
+        private void OnTunnelKeyDown(object sender, KeyEventArgs e)
+        {
+            // pressed-set repeat tracker (decision table #37)
+            bool isRepeat = !_pressedKeys.Add(e.Key);
+
+            // An open mini color picker owns Escape and Enter, and neither may reach the canvas
+            // underneath (Escape cancels the in-progress drawing operation). Checked ahead of the
+            // TextBox bail-out so the keys still work from the hex field. The picker hooks its own
+            // popup root as well — that path handles the usual case where the popup holds focus.
+            if (miniColorPopup.IsOpen && (e.Key == Key.Escape || e.Key == Key.Enter)) {
+                if (e.Key == Key.Enter)
+                    miniColor.Accept();
+                else
+                    miniColor.Cancel();
+                e.Handled = true;
+                return;
+            }
+
+            // the measure units popup owns its keys too (its own KeyDown handles them when it holds
+            // focus); none of them may reach the canvas while it is open
+            if (measureUnitsPopup.IsOpen && (e.Key == Key.Escape || e.Key == Key.Enter)) {
+                measureUnitsPopup_KeyDown(sender, e);
+                return;
+            }
+
+            // likewise the rename flyout, before its posted focus has landed in its field
+            if (renamePopup.IsOpen && renamePopup.HandleKey(e))
+                return;
+
+            if (e.Source is TextBox)
+                return;
+
+            // space-pan: save the current tool and enter pan mode while the key is held
+            // (skipped while a tool drag is active, §5.4)
+            if (IsPanKey(e.Key) && _panPreviousTool == null && !drawingCanvas.IsToolDragActive) {
+                _panPreviousTool = drawingCanvas.Tool;
+                drawingCanvas.Tool = ToolType.None;
+            }
+
+            // space has no other editor function; swallow it so a focused button isn't activated
+            if (e.Key == Key.Space) {
+                e.Handled = true;
+                return;
+            }
+
+            // arrow nudge — the only bare-key path that allows Ctrl (§2.4)
+            (int x, int y) = e.Key switch {
+                Key.Left => (-1, 0),
+                Key.Up => (0, -1),
+                Key.Right => (1, 0),
+                Key.Down => (0, 1),
+                _ => (0, 0),
+            };
+
+            if (x != 0 || y != 0) {
+                e.Handled = true;
+
+                var ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
+                if (OperatingSystem.IsMacOS())
+                    ctrl |= (e.KeyModifiers & KeyModifiers.Meta) != 0;
+
+                if (!ctrl || !isRepeat) _nudgeRepeatCount = 0;
+
+                if (ctrl) {
+                    if (isRepeat) _nudgeRepeatCount++;
+                    var distance = Math.Min(Math.Max(10, _nudgeRepeatCount * 2), 40);
+                    x *= distance;
+                    y *= distance;
+                }
+
+                drawingCanvas.Nudge(x, y);
+                return;
+            }
+
+            if (e.KeyModifiers != KeyModifiers.None)
+                return;
+
+            // tools get first refusal on bare keys (the pen finishes on Enter, drops anchors on Backspace)
+            if (drawingCanvas.HandleToolKey(e.Key)) {
+                e.Handled = true;
+                return;
+            }
+
+            switch (e.Key) {
+            case Key.Escape:
+                drawingCanvas.CancelCurrentOperation();
+                e.Handled = true;
+                return;
+            case Key.Delete:
+                ExecuteCommand(drawingCanvas.CommandDelete);
+                e.Handled = true;
+                return;
+            case Key.Home:
+                ExecuteCommand(drawingCanvas.CommandMoveToFront);
+                e.Handled = true;
+                return;
+            case Key.End:
+                ExecuteCommand(drawingCanvas.CommandMoveToBack);
+                e.Handled = true;
+                return;
+            }
+
+            // bare tool letters (replaces the WPF BareKeyBindings, decision table #36). The map is
+            // built from ToolRegistry's Shortcut field, the same value the flyout keycap shows.
+            // Pan (Space) and Selection (Escape) never get here: both keys are handled above.
+            if (ToolShortcuts.TryGetValue(e.Key, out var tool)) {
+                e.Handled = true;
+                SelectToolExecuted(tool.ToString());
+            }
+        }
+
+        private void OnTunnelKeyUp(object sender, KeyEventArgs e)
+        {
+            _pressedKeys.Remove(e.Key);
+
+            // restore the saved tool once no pan key (space) remains held
+            if (IsPanKey(e.Key) && _panPreviousTool != null && !_pressedKeys.Any(IsPanKey)) {
+                drawingCanvas.Tool = _panPreviousTool.Value;
+                _panPreviousTool = null;
+            }
+        }
+
+        private void SelectToolExecuted(object parameter)
+        {
+            if (drawingCanvas.IsToolDragActive)
+                return;
+
+            var tool = (ToolType) Enum.Parse(typeof(ToolType), (string) parameter);
+            drawingCanvas.Tool = tool;
+        }
+
+        // ====================================================================
+        // Opt-in features: generated tool strip, customize popup, master toggles
+        // ====================================================================
+
+        private sealed class ToolRegistryEntry
+        {
+            public ToolType Tool;
+            public string DisplayName;
+            public string IconKey;
+
+            /// <summary>The bare key that selects the tool (OnTunnelKeyDown reads it through
+            /// <see cref="ToolShortcuts"/>) and the label of the keycap beside the flyout's header.
+            /// One place on purpose: change it here and both the key and the tip follow. Must be
+            /// unique across the registry (asserted when the map is built).</summary>
+            public Key Shortcut;
+
+            /// <summary>The flyout copy under the header (the header is <see cref="DisplayName"/>):
+            /// two or three sentences on how the tool works, including its modifiers. Never the
+            /// shortcut letter: the keycap shows it.</summary>
+            public string Description;
+
+            /// <summary>Optional gestures listed one per row under <see cref="Description"/>, for
+            /// a tool with too many to read as prose (the description is then one short lead
+            /// sentence). Same rule: never the shortcut letter.</summary>
+            public string[] Bullets;
+
+            /// <summary>The demo's file stem under Assets/ToolTips without the "tool-" prefix:
+            /// "pen" shows tool-pen.gif. A missing GIF collapses the flyout to header + text.</summary>
+            public string DemoName;
+        }
+
+        // Rows mirror the original static XAML 1:1. The shortcut, the flyout copy and the demo
+        // names live here; the GIFs come from tools/tool-tips/generate.py (README there). The
+        // shortcut is not in the copy and not in the GIF: the card draws it as a keycap beside
+        // the header from Shortcut.
+        private static readonly ToolRegistryEntry[] ToolRegistry =
+        {
+            new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", Shortcut = Key.Space, IconKey = "IconToolNone", DemoName = "pan",
+                Description = "Drag to move the view around. Hold Space with any tool to pan for a moment." },
+            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", Shortcut = Key.Escape, IconKey = "IconToolSelection", DemoName = "select",
+                Description = "Click an object to select it and drag to move it, or drag across empty canvas to select everything inside the box." },
+            new ToolRegistryEntry { Tool = ToolType.Rectangle, DisplayName = "Rectangle", Shortcut = Key.R, IconKey = "IconToolRectangle", DemoName = "rectangle",
+                Description = "Drag from one corner to the opposite one to draw an outline. Hold Shift for a perfect square." },
+            new ToolRegistryEntry { Tool = ToolType.FilledRectangle, DisplayName = "Filled Rectangle", Shortcut = Key.F, IconKey = "IconToolFilledRectangle", DemoName = "filled",
+                Description = "Drag out a solid block of the current color. Hold Shift for a square." },
+            new ToolRegistryEntry { Tool = ToolType.Ellipse, DisplayName = "Ellipse", Shortcut = Key.E, IconKey = "IconToolEllipse", DemoName = "ellipse",
+                Description = "Drag out the box the ellipse should fit in. Hold Shift for a perfect circle." },
+            new ToolRegistryEntry { Tool = ToolType.Line, DisplayName = "Line", Shortcut = Key.L, IconKey = "IconToolLine", DemoName = "line",
+                Description = "Drag from one end to the other. Hold Shift to snap the angle to 15° steps. Drag the middle handle to bend it into a curve." },
+            new ToolRegistryEntry { Tool = ToolType.Arrow, DisplayName = "Arrow", Shortcut = Key.A, IconKey = "IconToolArrow", DemoName = "arrow",
+                Description = "Drag from the tail to the point the arrow should hit. Hold Shift to snap to 15° steps. Drag the middle handle to bend it into a curve." },
+            new ToolRegistryEntry { Tool = ToolType.Measure, DisplayName = "Measure", Shortcut = Key.M, IconKey = "IconToolMeasure", DemoName = "measure",
+                Description = "Drag between two points to measure the distance and angle between them. Hold Shift to snap to 15° steps." },
+            new ToolRegistryEntry { Tool = ToolType.Pen, DisplayName = "Pen", Shortcut = Key.P, IconKey = "IconToolPen", DemoName = "pen",
+                Description = "Draw a path node by node.",
+                Bullets = new[]
+                {
+                    "Click for a corner, click-and-drag for a curve.",
+                    "While dragging curve handles, hold Alt to move one handle on its own, or Shift to snap to 15° steps.",
+                    "Press Backspace to remove the last node.",
+                    "Press Enter to finish drawing an open path, or click the first node to close it.",
+                    "Click the first or last node to extend an existing path.",
+                    "Click between two nodes on an existing path to add a new node between them.",
+                    "Double-click a node to switch it between corner and curve.",
+                } },
+            new ToolRegistryEntry { Tool = ToolType.Brush, DisplayName = "Brush", Shortcut = Key.B, IconKey = "IconToolBrush", DemoName = "brush",
+                Description = "Press and drag to paint a freehand stroke. Stroke in the bar above sets its width." },
+            new ToolRegistryEntry { Tool = ToolType.Highlighter, DisplayName = "Highlighter", Shortcut = Key.H, IconKey = "IconToolHighlighter", DemoName = "highlighter",
+                Description = "Press and drag to mark over text or detail with translucent ink, flat-tipped like a marker. Stroke in the bar above sets its height." },
+            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", Shortcut = Key.C, IconKey = "IconToolNumericCount", DemoName = "count",
+                Description = "Click to drop the next numbered step. Drag before letting go to pull an arrow out of it." },
+            new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", Shortcut = Key.T, IconKey = "IconToolText", DemoName = "text",
+                Description = "Click where the text should go, then type. Enter commits and Shift+Enter starts a new line." },
+            new ToolRegistryEntry { Tool = ToolType.StickyNote, DisplayName = "Sticky Note", Shortcut = Key.N, IconKey = "IconToolStickyNote", DemoName = "note",
+                Description = "Click to stick a note, then type into it. Enter commits and Shift+Enter adds a line." },
+            new ToolRegistryEntry { Tool = ToolType.Pixelate, DisplayName = "Obscure", Shortcut = Key.O, IconKey = "IconToolPixelate", DemoName = "obscure",
+                Description = "Drag a box over the part of an image to hide. Hold Shift for a square. Only image objects under the box are obscured, not shapes or text." },
+        };
+
+        /// <summary>Bare key to tool, built from <see cref="ToolRegistry"/> so the key handler and
+        /// the flyout keycaps cannot drift: there is one letter per tool and it lives in the
+        /// registry. Declared after the registry (static initialisers run in textual order).</summary>
+        private static readonly Dictionary<Key, ToolType> ToolShortcuts = BuildToolShortcuts();
+
+        private static Dictionary<Key, ToolType> BuildToolShortcuts()
+        {
+            var map = new Dictionary<Key, ToolType>();
+            foreach (var entry in ToolRegistry)
+            {
+                Debug.Assert(entry.Shortcut != Key.None, $"ToolRegistry: {entry.Tool} has no shortcut; every tool button's keycap and bare key come from it");
+                Debug.Assert(!map.ContainsKey(entry.Shortcut), $"ToolRegistry: shortcut {entry.Shortcut} is used by both {map.GetValueOrDefault(entry.Shortcut)} and {entry.Tool}");
+                map[entry.Shortcut] = entry.Tool;
+            }
+            return map;
+        }
+
+        /// <summary>The keycap label for a registry shortcut: the enum name, which for the letter
+        /// keys is the letter itself (Key.R is "R"). Escape is shortened to "Esc"; anything fancier
+        /// (digits as "D1", OEM keys) would need entries here.</summary>
+        private static string ShortcutLabel(Key key) => key switch {
+            Key.None => null,
+            Key.Escape => "Esc",
+            _ => key.ToString(),
+        };
+
+        private readonly List<Control> _generatedToolControls = new List<Control>();
+
+        private static ToolRegistryEntry GetToolEntry(ToolType tool) => ToolRegistry.FirstOrDefault(e => e.Tool == tool);
+
+        /// <summary>A tool's toolbar name and icon key, for lists of tools outside the editor (the
+        /// settings window's tool defaults). Null for a tool the editor does not offer.</summary>
+        internal static (string DisplayName, string IconKey)? GetToolLabel(ToolType tool)
+            => GetToolEntry(tool) is { } entry ? (entry.DisplayName, entry.IconKey) : null;
+
+        /// <summary>Toggles the right-hand layers sidebar. Deliberately per-window and transient:
+        /// it is a view of the document you are looking at right now, not a preference, so it always
+        /// starts closed and toggling it never touches the other editors or the settings file.
+        /// (Only the sidebar's *width* is still remembered.)</summary>
+        public bool SidebarVisible
+        {
+            get => _sidebarVisible;
+            set
+            {
+                if (_sidebarVisible == value)
+                    return;
+
+                _sidebarVisible = value;
+                ApplySidebarVisible(value);
+            }
+        }
+
+        /// <summary>Applies the current sidebar-visible flag to this window. Attaches the layers panel
+        /// when shown and detaches it when hidden so a hidden panel does no per-edit rebuild work.</summary>
+        private void ApplySidebarVisible(bool value)
+        {
+            sidebarBorder.IsVisible = value;
+            sidebarSplitter.IsVisible = value;
+
+            // a pixel-width column reserves its space even when its content is collapsed, so a hidden
+            // sidebar would leave an empty gap. Collapse the column when hidden (both Width AND
+            // MinWidth — the MinWidth that bounds the drag would otherwise pin the column open) and
+            // restore the persisted, clamped width when shown.
+            if (value) {
+                SidebarColumn.MinWidth = SidebarMinWidth;
+                SidebarColumn.Width = new GridLength(Math.Clamp(_settings.Editor.SidebarWidth, SidebarMinWidth, SidebarMaxWidth), GridUnitType.Pixel);
+                layersPanel.Attach(drawingCanvas);
+            } else {
+                SidebarColumn.MinWidth = 0;
+                SidebarColumn.Width = new GridLength(0, GridUnitType.Pixel);
+                layersPanel.Detach();
+            }
+        }
+
+        private void sidebarSplitter_DragCompleted(object sender, VectorEventArgs e)
+        {
+            UpdateSidebarWidthSetting();
+            TrySaveSettings();
+        }
+
+        /// <summary>Captures the current sidebar column width (clamped) into settings. No-op while the
+        /// sidebar is hidden so a collapsed 0-width column can't overwrite the remembered width.</summary>
+        private void UpdateSidebarWidthSetting()
+        {
+            if (!_sidebarVisible)
+                return;
+
+            // the border stretches to fill the sidebar column, so its arranged width is the column's
+            // actual width; clamp to guard a value the drag bounds should already have enforced.
+            _settings.Editor.SidebarWidth = Math.Clamp(sidebarBorder.Bounds.Width, SidebarMinWidth, SidebarMaxWidth);
+        }
+
+        /// <summary>The editor is chrome around an image, not a page of prose, so it takes the
+        /// backdrop in the light theme too — the bars and the canvas are the whole window, and
+        /// neither is text the way a settings page is.</summary>
+        protected override bool AllowMicaInLightTheme => true;
+
+        // The legacy flat fill the compact bars have always been painted with.
+        private static readonly IBrush CompactChromeBrush = new SolidColorBrush(Color.FromRgb(0x53, 0x53, 0x53));
+
+        // Holds the modern chrome's Foreground binding so switching back to Compact can drop it —
+        // a plain assignment would sit underneath a live binding and never show.
+        private IDisposable _foregroundBinding;
+
+        private void OnEditorSettingChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is null or nameof(SettingsEditor.EditorLayout))
+                ApplyChrome();
+            if (e.PropertyName is null or nameof(SettingsEditor.EditorToolbarOverflow))
+                ApplyToolbarOverflow();
+        }
+
+        private void ApplyToolbarOverflow()
+        {
+            ToolBar.HideOverflow = _settings.Editor.EditorToolbarOverflow == ToolbarOverflow.Hide;
+        }
+
+        /// <summary>
+        /// Puts the chosen chrome's class on the root, which is what every size, radius and fill
+        /// in EditorWindow.axaml keys off, and settles the one thing a style cannot say: whether
+        /// the surface the two tool bars sit on paints at all. The modern bars ARE the window's
+        /// own background showing through, so they paint nothing and the window supplies it —
+        /// Mica where the compositor grants it, otherwise the theme's ApplicationBackgroundBrush
+        /// (#FAFAFA light / #202020 dark), which SystemThemedWindow already keeps in step with the
+        /// variant. The compact bars are the legacy opaque grey, whatever the theme.
+        /// </summary>
+        private void ApplyChrome()
+        {
+            if (rootGrid == null)
+                return;
+
+            var modern = _settings.Editor.EditorLayout != EditorLayout.Compact;
+
+            rootGrid.Classes.Set("modern", modern);
+            rootGrid.Classes.Set("compact", !modern);
+            rootGrid.Background = modern ? Brushes.Transparent : CompactChromeBrush;
+
+            // Everything in the window inherits this, which is the whole point: the Compact bars
+            // are hand-painted dark chrome and need white on them, while the modern ones are the
+            // window's own background and want the theme's text colour — and so does every Semi
+            // and Ursa control in them, none of which states a foreground of its own. Set here
+            // rather than in the markup because a local value in the markup cannot be restated by
+            // a chrome, and the field that inherited the wrong one is inside a template no style
+            // can reach.
+            _foregroundBinding?.Dispose();
+            _foregroundBinding = null;
+
+            if (modern)
+                _foregroundBinding = this.Bind(ForegroundProperty, new DynamicResourceExtension("SemiColorText0"));
+            else
+                SetValue(ForegroundProperty, Brushes.White);
+        }
+
+        /// <summary>Rebuilds the generated portion of the vertical tool strip (visible tools in the
+        /// resolved order). The fixed Undo/Redo/customize buttons stay at the end; generated
+        /// controls are always inserted at the front.</summary>
+        private void RebuildToolStrip()
+        {
+            var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor);
+            var hidden = ToolbarConfig.ResolveHiddenTools(_settings.Editor);
+
+            bool IsToolVisible(ToolType t) => order.Contains(t) && !hidden.Contains(t);
+
+            // if the active tool's button is about to disappear, fall back to the pointer first
+            var active = drawingCanvas.Tool;
+            if (!IsToolVisible(active))
+                drawingCanvas.Tool = ToolType.Pointer;
+
+            // during a held-key pan the active tool is None but the tool to restore on key-up is
+            // saved in _panPreviousTool; if its button is disappearing (hidden via the customize
+            // popup), drop it to Pointer so key-up can't reinstate a now-hidden tool
+            if (_panPreviousTool != null && !IsToolVisible(_panPreviousTool.Value))
+                _panPreviousTool = ToolType.Pointer;
+
+            foreach (var control in _generatedToolControls)
+                ToolBar.Children.Remove(control);
+            _generatedToolControls.Clear();
+
+            var generated = new List<Control>();
+            ToolButton pinned = null;
+
+            // the bare ToolTip theme the rich tips wear (AppResources.axaml); resolved once per
+            // rebuild rather than per button, since FindResource walks up to the app resources
+            var tipTheme = this.FindResource("RichTipToolTipTheme") as ControlTheme;
+            Debug.Assert(tipTheme != null, "RichTipToolTipTheme not found: the tips would fall back to the default ToolTip chrome");
+
+            foreach (var tool in order)
+            {
+                if (hidden.Contains(tool))
+                    continue;
+
+                var entry = GetToolEntry(tool);
+                if (entry == null)
+                    continue;
+
+                var button = CreateToolButton(entry, tipTheme);
+                generated.Add(button);
+                if (tool.ToString() == _settings.Editor.PinnedOverflowTool)
+                    pinned = button;
+            }
+
+            for (int i = 0; i < generated.Count; i++)
+                ToolBar.Children.Insert(i, generated[i]);
+            _generatedToolControls.AddRange(generated);
+            ToolBar.PinnedChild = pinned;
+        }
+
+        /// <summary>Lists the tools the strip had to hide, and runs and pins the one picked: it
+        /// keeps the strip's last slot from then on, whenever its own place is cut off.</summary>
+        private void moreTools_Click(object sender, RoutedEventArgs e)
+        {
+            var entries = new List<ToolStripOverflowEntry>();
+            foreach (var button in _generatedToolControls.OfType<ToolButton>())
+            {
+                var key = (string)button.CommandParameter;
+                var entry = GetToolEntry(Enum.Parse<ToolType>(key));
+                var shortcut = entry.Shortcut == Key.None ? null : new KeyGesture(entry.Shortcut);
+                entries.Add(new ToolStripOverflowEntry(key, button, entry.DisplayName, shortcut));
+            }
+
+            ToolStripOverflowMenu.Show(ToolBar, btnMoreTools, entries, picked =>
+            {
+                picked.Button.PerformClick();
+                _settings.Editor.PinnedOverflowTool = picked.Key;
+                ToolBar.PinnedChild = picked.Button;
+                TrySaveSettings();
+            });
+        }
+
+        private ToolButton CreateToolButton(ToolRegistryEntry entry, ControlTheme tipTheme)
+        {
+            var name = entry.Tool.ToString();
+            var button = new ToolButton
+            {
+                Command = SelectToolCommand,
+                CommandParameter = name,
+                IconPath = FindIconGeometry(entry.IconKey),
+            };
+
+            // The rich tip (header, shortcut keycap, description, demo GIF), the same card the
+            // video editor's add-track buttons carry, placed to the right of the strip with a
+            // small gap in both chromes. Tool buttons are never disabled, so no ShowOnDisabled or
+            // DisabledReason.
+            // The buttons are recreated on every customise change, which is fine: a card costs
+            // nothing until its tooltip opens, and the player decodes only while attached.
+            ToolTip.SetPlacement(button, PlacementMode.Right);
+            ToolTip.SetHorizontalOffset(button, 6);
+            ToolTip.SetTip(button, new ToolTip
+            {
+                Theme = tipTheme,
+                Content = new ToolTipCard
+                {
+                    Header = entry.DisplayName,
+                    Shortcut = ShortcutLabel(entry.Shortcut),
+                    Description = entry.Description,
+                    Bullets = entry.Bullets,
+                    DemoSource = ToolTipCard.DemoUri("ToolTips", "tool-" + entry.DemoName),
+                },
+            });
+
+            // mirror the original XAML IsChecked pattern: OneWay from the canvas Tool through the
+            // ToolTypeConverter, checked iff the active tool equals this button's tool.
+            button.Bind(ToggleButton.IsCheckedProperty, new Binding
+            {
+                Source = drawingCanvas,
+                Path = "Tool",
+                Mode = BindingMode.OneWay,
+                Converter = new ToolTypeConverter(),
+                ConverterParameter = name,
+            });
+
+            return button;
+        }
+
+        private Geometry FindIconGeometry(string key)
+        {
+            return this.TryFindResource(key, ActualThemeVariant, out var value) ? value as Geometry : null;
+        }
+
+        // ---- customize popup ------------------------------------------------------------
+
+        /// <summary>Wires the shared customize flyout to this editor: what the rows are, and
+        /// what each change means here. The interaction itself (reorder drag, keyboard, Escape,
+        /// light dismiss) is the control's.</summary>
+        /// <summary>
+        /// The zoom pill's tooltips and the readout's preset menu. In code rather than XAML so the
+        /// gestures they show name the modifier this platform uses.
+        /// </summary>
+        private void InitZoomPill()
+        {
+            static string Tip(RelayCommand command) => $"{command.Text} ({command.GestureText})";
+
+            ToolTip.SetTip(btnZoomOut, Tip(drawingCanvas.CommandZoomOut));
+            ToolTip.SetTip(btnZoomIn, Tip(drawingCanvas.CommandZoomIn));
+            ToolTip.SetTip(btnZoomFit, Tip(drawingCanvas.CommandZoomPanAuto));
+            ToolTip.SetTip(btnZoomLevel, "Zoom presets");
+
+            var mod = OperatingSystem.IsMacOS() ? "Cmd" : "Ctrl";
+            var menu = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
+            menu.Items.Add(drawingCanvas.CommandZoomPanAuto.CreateMenuItem());
+            menu.Items.Add(drawingCanvas.CommandZoomPanActualSize.CreateMenuItem());
+            menu.Items.Add(new Separator());
+            // the numbered presets are the same command (and gesture) as Ctrl+2/3. 100% repeats the
+            // actual size item above so the ladder has no hole, without restating its Ctrl+1
+            foreach (var (zoom, key) in new (double, string)[] { (0.25, null), (0.5, null), (1, null), (2, "2"), (3, "3"), (4, null) })
+            {
+                var item = new MenuItem
+                {
+                    Header = zoom.ToString("0%", CultureInfo.CurrentCulture),
+                    Command = drawingCanvas.CommandZoomPanActualSize,
+                    CommandParameter = zoom,
+                };
+                if (key != null)
+                {
+                    // see RelayCommand.CreateMenuItem: a KeyGesture cannot display Ctrl+1
+                    var gestureText = $"{mod}+{key}";
+                    item.TemplateApplied += (_, e) =>
+                    {
+                        if (e.NameScope.Find<TextBlock>("PART_InputGestureText") is { } textBlock)
+                            textBlock.Text = gestureText;
+                    };
+                }
+                menu.Items.Add(item);
+            }
+            btnZoomLevel.Flyout = menu;
+        }
+
+        private void InitCustomizePopup()
+        {
+            customizePopup.FallbackFocus = drawingCanvas;
+            customizePopup.ItemsProvider = BuildCustomizeItems;
+
+            customizePopup.VisibilityChanged += (_, e) =>
+            {
+                if (Enum.TryParse<ToolType>(e.Key, out var tool))
+                    SetToolHidden(tool, !e.IsVisible);
+            };
+            customizePopup.Moved += (_, e) => MoveTool(e.Keys, e.FromRow, e.ToRow);
+            customizePopup.ResetOrderRequested += (_, _) => ResetToolOrder();
+            customizePopup.EditDefaultsRequested += (_, _) => EditToolDefaults();
+        }
+
+        /// <summary>One row per vector tool, in resolved order. The order list may name a tool the
+        /// registry does not know; those are dropped, so a row index is not an order index and
+        /// <see cref="MoveTool"/> is handed the keys it showed.</summary>
+        private IReadOnlyList<CustomizeToolbarItem> BuildCustomizeItems()
+        {
+            var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor);
+            var hidden = ToolbarConfig.ResolveHiddenTools(_settings.Editor);
+
+            return order
+                .Select(tool => new { Tool = tool, Entry = GetToolEntry(tool) })
+                .Where(x => x.Entry != null)
+                .Select(x => new CustomizeToolbarItem(
+                    x.Tool.ToString(),
+                    x.Entry.DisplayName,
+                    isVisible: !hidden.Contains(x.Tool),
+                    canHide: x.Tool != ToolType.Pointer)) // the pointer can never be hidden
+                .ToList();
+        }
+
+        private void SetToolHidden(ToolType tool, bool hide)
+        {
+            if (tool == ToolType.Pointer)
+                return; // guarded — the pointer is always visible
+
+            var hidden = ToolbarConfig.ResolveHiddenTools(_settings.Editor);
+            if (hide)
+                hidden.Add(tool);
+            else
+                hidden.Remove(tool);
+
+            _settings.Editor.HiddenTools = hidden.Select(t => t.ToString()).ToList();
+            RebuildToolStrip();
+            TrySaveSettings();
+            // no popup rebuild: the row order is unchanged, and the checkbox already shows the new
+            // state — rebuilding would drop the keyboard focus that just toggled it
+        }
+
+        /// <summary>Moves the tool on flyout row <paramref name="fromRow"/> so that it ends up on
+        /// row <paramref name="toRow"/> (both display indexes), and persists the new order.
+        /// <paramref name="keys"/> is what the flyout was showing, in display order.</summary>
+        private void MoveTool(IReadOnlyList<string> keys, int fromRow, int toRow)
+        {
+            if (fromRow == toRow || fromRow < 0 || toRow < 0 || fromRow >= keys.Count || toRow >= keys.Count)
+                return;
+
+            var shown = keys.Select(k => Enum.Parse<ToolType>(k)).ToList();
+            var tool = shown[fromRow];
+            shown.RemoveAt(fromRow);
+            shown.Insert(toRow, tool);
+
+            // The persisted order may carry tools this registry does not show; they keep their
+            // place. The moved tool goes just ahead of whichever shown tool now follows it (or to
+            // the end, when none does).
+            var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor).ToList();
+            order.Remove(tool);
+            var insertAt = toRow + 1 < shown.Count ? order.IndexOf(shown[toRow + 1]) : order.Count;
+            order.Insert(insertAt, tool);
+
+            _settings.Editor.ToolbarOrder = order.Select(t => t.ToString()).ToList();
+            RebuildToolStrip();
+            TrySaveSettings();
+            customizePopup.Rebuild(focusKey: tool.ToString());
+        }
+
+        private void customize_Click(object sender, RoutedEventArgs e)
+        {
+            customizePopup.Open(btnCustomize);
+        }
+
+        private void ResetToolOrder()
+        {
+            _settings.Editor.ToolbarOrder = null;
+            _settings.Editor.HiddenTools = null;
+            _settings.Editor.PinnedOverflowTool = null;
+            RebuildToolStrip();
+            TrySaveSettings();
+            customizePopup.Rebuild();
+        }
+
+        private void EditToolDefaults()
+        {
+            customizePopup.Close();
+            ToolDefaultsList.ShowInSettings(drawingCanvas.Tool);
+        }
+
+        // ---- style menu -----------------------------------------------------------------
+
+        private void StyleMenu_Opening(object sender, EventArgs e)
+        {
+            // "Arrow" -> "arrows", "Brush Stroke" -> "brush strokes"; text is uncountable
+            var name = drawingCanvas.SubjectName?.ToLowerInvariant() ?? "objects";
+            var plural = name == "text" ? name : name + "s";
+            miStyleCopySimilar.Header = $"Apply style to all existing {plural}";
+            miStyleSession.Header = $"Remember for new {plural} in this window";
+            miStyleDefault.Header = $"Make default for new {plural} everywhere";
+        }
+
+        private void StyleCopySimilar_Click(object sender, RoutedEventArgs e)
+        {
+            drawingCanvas.CopyStyleToSimilar();
+        }
+
+        private void StyleSaveSession_Click(object sender, RoutedEventArgs e)
+        {
+            if (drawingCanvas.StyleSubjectTool is not { } tool)
+                return;
+
+            // start from whatever the tool draws with now, so settings this graphic does not
+            // carry (auto-fill, blur...) are kept rather than reset
+            var settings = drawingCanvas.ResolveToolSettings(tool).Clone();
+            drawingCanvas.CopyStyleToSettings(settings);
+            _sessionToolSettings[tool] = settings;
+            drawingCanvas.ResyncToolSettings();
+        }
+
+        private void StyleMakeDefault_Click(object sender, RoutedEventArgs e)
+        {
+            if (drawingCanvas.StyleSubjectTool is not { } tool)
+                return;
+
+            drawingCanvas.CopyStyleToSettings(_settings.Editor.GetToolSettings(tool));
+            // the new default is this style, so a session style saved earlier no longer differs
+            // from it and would only shadow later changes to the default
+            _sessionToolSettings.Remove(tool);
+            TrySaveSettings();
+            drawingCanvas.ResyncToolSettings();
+        }
+
+        private void TrySaveSettings()
+        {
+            // the editor has no ambient auto-save; persist customization/toggle changes explicitly
+            try { SettingsService.Save(_settings); } catch {; }
+        }
+
+        // ====================================================================
+        // Session lifecycle (§5.7)
+        // ====================================================================
+
+        private bool LoadSessionState()
+        {
+            if (File.Exists(_graphicsPath)) {
+                try {
+                    var state = (JsonObject) JsonNode.Parse(File.ReadAllText(_graphicsPath));
+                    drawingCanvas.RestoreState(state);
+                    RestoreHistoryFile(state);
+                    return true;
+                } catch {; }
+            }
+
+            // if there is a desktop image, and we failed to load an existing set of graphics
+            if (File.Exists(_session.DesktopImgPath)) {
+                var sel = _session.CroppedRect ?? ScreenRect.Empty;
+                var crop = new PixelRect(sel.X, sel.Y, sel.Width, sel.Height);
+
+                var scursor = _session.CursorPosition;
+                var cursor = scursor == null ? default(PixelRect) : new PixelRect(scursor.X, scursor.Y, scursor.Width, scursor.Height);
+
+                var graphic = new GraphicImage(
+                    _session.DesktopImgPath,
+                    new Rect(0, 0, crop.Width, crop.Height),
+                    crop,
+                    cursorFilePath: _session.CursorImgPath,
+                    cursorPosition: cursor,
+                    cursorVisible: _settings.Capture.ScreenshotWithCursor);
+
+                // a picked window's rounded corners: desktop.png is a plain bitmap, so the radius the
+                // capturer measured travels in session.json and the graphic rounds the crop itself
+                // (bitmap px — the graphic opens at 1:1, and the user can change it in the bar)
+                if (_session.CornerRadius > 0)
+                    graphic.CornerRadius = _session.CornerRadius;
+
+                // add image
+                drawingCanvas.AddGraphic(graphic);
+            }
+
+            return false;
+        }
+
+        private void RestoreHistoryFile(JsonObject state)
+        {
+            // best-effort: a missing/corrupt/out-of-sync history.json (graphics.json is the
+            // authority) opens the session with empty undo history exactly as before the file
+            // existed; the next commit overwrites it with a fresh chain
+            try {
+                if (File.Exists(_historyPath))
+                    drawingCanvas.TryRestoreHistory((JsonObject) JsonNode.Parse(File.ReadAllText(_historyPath)), state);
+            } catch {; }
+        }
+
+        private static byte[] SerializeToBytes(JsonObject json)
+        {
+            using var ms = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(ms))
+                json.WriteTo(writer);
+            return ms.ToArray();
+        }
+
+        private void drawingCanvas_StateUpdated(object sender, StateChangedEventArgs e)
+        {
+            if (_session == null)
+                return;
+
+            if (e.State == null)
+                return; // never enqueue empty bytes — a truncated graphics.json silently loses the whole session
+
+            _previewStale = true;
+            if (!IsActive)
+                SchedulePreviewRefresh();
+
+            // serialize in memory on the UI thread (cheap), then hand the bytes to a latest-wins
+            // background writer — undo/redo and merged drag steps fire this on every step, and a
+            // synchronous File.Create here stalls the canvas for the duration of the disk write.
+            Interlocked.Exchange(ref _pendingGraphicsJson, SerializeToBytes(e.State));
+            if (e.History != null)
+                Interlocked.Exchange(ref _pendingHistoryJson, SerializeToBytes(e.History));
+            lock (_graphicsWriteLock)
+                _graphicsWriteTask = _graphicsWriteTask.ContinueWith(_ => WritePendingGraphicsJson(), TaskScheduler.Default);
+        }
+
+        private void WritePendingGraphicsJson()
+        {
+            var bytes = Interlocked.Exchange(ref _pendingGraphicsJson, null);
+            if (bytes != null) {
+                try {
+                    File.WriteAllBytes(_graphicsPath, bytes);
+                } catch (Exception ex) {
+                    Debug.WriteLine($"failed to persist graphics.json: {ex.Message}");
+                    SentryConfig.CaptureHandled(ex, "editor.persist-graphics");
+                }
+            }
+
+            // history.json second: after a crash between the two writes, graphics.json (the
+            // authority) is the newer file and the stale history fails its load-time replay
+            // check, falling back cleanly to empty history
+            var history = Interlocked.Exchange(ref _pendingHistoryJson, null);
+            if (history != null) {
+                try {
+                    File.WriteAllBytes(_historyPath, history);
+                } catch (Exception ex) {
+                    Debug.WriteLine($"failed to persist history.json: {ex.Message}");
+                    SentryConfig.CaptureHandled(ex, "editor.persist-history");
+                }
+            }
+        }
+
+        private void UpdatePreview(Bitmap bitmap)
+        {
+            if (bitmap == null || drawingCanvas.GraphicsList.Count == 0)
+                return;
+
+            _previewStale = false;
+
+            // save new preview image to file
+            var newpreview = SaveImageToSessionDir(bitmap);
+            var oldpreview = _session.PreviewImgPath;
+            _session.PreviewImgPath = newpreview;
+            // the flattened canvas IS this session's content, not just its thumbnail: everything
+            // drawing the entry was drawing the png we are about to delete below.
+            _session.NotifyContentChanged();
+
+            try {
+                // it could be locked by something else
+                if (File.Exists(oldpreview))
+                    File.Delete(oldpreview);
+            } catch {; }
+        }
+
+        private string SaveImageToSessionDir(Bitmap src)
+        {
+            var path = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
+            src.Save(path, PngBitmapEncoderOptions.Default);
+            return path;
+        }
+
+        private string CopyFileToSessionDir(string src)
+        {
+            var ext = Path.GetExtension(src);
+            var path = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ext);
+            File.Copy(src, path, true);
+            return path;
+        }
+
+        // ====================================================================
+        // Save / copy / cut / paste / upload
+        // ====================================================================
+
+        private bool VerifyArtworkExists()
+        {
+            var b = drawingCanvas.GraphicsList.ContentBounds;
+            if (b.Height < 1 || b.Width < 1) {
+                NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error,
+                                           "This operation could not be completed because there are no objects on the canvas.", "Canvas Empty");
+                return false;
+            }
+
+            return true;
+        }
+
+        private async void SaveCommandExecuted(object parameter)
+        {
+            if (!VerifyArtworkExists())
+                return;
+
+            var bitmap = drawingCanvas.DrawGraphicsToBitmap();
+            if (bitmap == null)
+                return;
+
+            UpdatePreview(bitmap);
+
+            var savedPath = await NiceDialog.ShowSaveImageDialog(this, bitmap, _settings.General.LastSavePath, _settings.Capture.FilenamePattern);
+            if (savedPath != null) {
+                _settings.General.LastSavePath = Path.GetDirectoryName(savedPath);
+                SettingsService.Save(_settings); // settings no longer auto-save on PropertyChanged
+                if (_settings.Capture.OpenSavedInExplorer)
+                    ShellHelper.RevealFileInFolder(savedPath);
+                Toast.Show(this, "Image Saved");
+            }
+        }
+
+        private async void CopyCommandExecuted(object parameter)
+        {
+            await CopyCommandImpl();
+        }
+
+        private async Task CopyCommandImpl()
+        {
+            if (!VerifyArtworkExists())
+                return;
+
+            var bitmap = drawingCanvas.DrawGraphicsToBitmap();
+            if (bitmap == null)
+                return;
+
+            UpdatePreview(bitmap);
+
+            var graphics = drawingCanvas.GraphicsList.GetGraphicList(drawingCanvas.SelectedCount > 0);
+            var bytes = GraphicsSerializer.SerializeToUtf8Bytes(graphics);
+            await ClipboardImpl.SetClipboardCanvasData(Clipboard, bitmap, bytes);
+            Toast.Show(this, "Copied to Clipboard");
+        }
+
+        private async void CutCommandExecuted(object parameter)
+        {
+            // Cut removes exactly what it copied. CopyCommandImpl serializes the selection when
+            // there is one and the whole canvas otherwise, so mirror that split here — the WPF-era
+            // "cut always clears the canvas" behavior (§5.4) destroyed unselected work.
+            await CopyCommandImpl();
+
+            if (drawingCanvas.SelectedCount > 0)
+                drawingCanvas.Delete();
+            else
+                drawingCanvas.DeleteAll();
+        }
+
+        private async void PasteCommandExecuted(object parameter)
+        {
+            byte[] clipGraphics = null;
+            Bitmap clipBitmap = null;
+
+            try {
+                (clipBitmap, clipGraphics) = await ClipboardImpl.GetClipboardCanvasData(Clipboard);
+            } catch {; }
+
+            if (clipGraphics != null) {
+                clipBitmap?.Dispose();
+                var sessionDir = Path.GetDirectoryName(_session.FilePath);
+                var graphics = GraphicsSerializer.DeserializeFromUtf8Bytes(clipGraphics);
+
+                // copy any pasted bitmaps into this session directory
+                foreach (var img in graphics.OfType<GraphicImage>()) {
+                    if (!String.IsNullOrEmpty(img.CursorFilePath) &&
+                        !img.CursorFilePath.StartsWith(sessionDir, StringComparison.OrdinalIgnoreCase)) {
+                        img.CursorFilePath = CopyFileToSessionDir(img.CursorFilePath);
+                    }
+
+                    if (!String.IsNullOrEmpty(img.BitmapFilePath) &&
+                        !img.BitmapFilePath.StartsWith(sessionDir, StringComparison.OrdinalIgnoreCase)) {
+                        img.BitmapFilePath = CopyFileToSessionDir(img.BitmapFilePath);
+                    }
+                }
+
+                drawingCanvas.AddGraphics(graphics);
+                return;
+            }
+
+            if (clipBitmap != null) {
+                try {
+                    // save pasted image into session folder + add to canvas
+                    using var bmp = clipBitmap;
+                    var imgPath = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
+                    bmp.Save(imgPath, PngBitmapEncoderOptions.Default);
+                    var graphic = new GraphicImage(imgPath, new Size(bmp.PixelSize.Width, bmp.PixelSize.Height));
+                    drawingCanvas.AddGraphic(graphic);
+                    return;
+                } catch {; }
+            }
+
+            await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "The clipboard does not contain an image.", "Failed to paste");
+        }
+
+        // ====================================================================
+        // File drops (Explorer/Finder)
+        // ====================================================================
+
+        /// <summary>Any drag carrying files gets the copy cursor, including files this editor
+        /// cannot open: refusing the drop outright would leave the user dragging at a window that
+        /// says nothing about why. The drop itself sorts them out and says so.</summary>
+        private void OnDragOverFiles(object sender, DragEventArgs e)
+        {
+            if (FileDrop.GetLocalPaths(e).Count == 0)
+                return;
+
+            e.DragEffects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+
+        /// <summary>Adds dropped image files to the canvas — the paste path, from a file rather
+        /// than the clipboard: each is copied into the session directory (the session owns its
+        /// artwork; the file the user dragged may be gone tomorrow) and added as a graphic.</summary>
+        private void OnDropFiles(object sender, DragEventArgs e)
+        {
+            var paths = FileDrop.GetLocalPaths(e);
+            if (paths.Count == 0 || _session == null)
+                return;
+
+            e.Handled = true;
+
+            var graphics = new List<GraphicBase>();
+            var rejected = 0;
+
+            foreach (var path in paths) {
+                if (!MediaFileTypes.IsImage(path)) {
+                    rejected++;
+                    continue;
+                }
+
+                try {
+                    var copied = CopyFileToSessionDir(path);
+                    // decoding is also the only real test that we can draw it — an image with the
+                    // right extension and a broken/unsupported body fails here, not on the canvas
+                    using var bmp = new Bitmap(copied);
+                    // AddGraphics centers the batch as one, so the cascade offset is what keeps a
+                    // multi-file drop from landing as a single stack with only the top one visible
+                    var offset = graphics.Count * 24;
+                    var size = new Size(bmp.PixelSize.Width, bmp.PixelSize.Height);
+                    graphics.Add(new GraphicImage(copied, new Rect(new Point(offset, offset), size), new PixelRect()));
+                } catch (Exception ex) {
+                    Debug.WriteLine("Dropped image could not be added: " + ex);
+                    rejected++;
+                }
+            }
+
+            if (graphics.Count > 0)
+                drawingCanvas.AddGraphics(graphics.ToArray());
+
+            if (rejected == 0)
+                return;
+
+            var message = graphics.Count > 0
+                ? rejected + (rejected == 1 ? " file could not be added." : " files could not be added.")
+                : paths.Count == 1
+                    ? "That file could not be added. The editor takes images (png, jpg, webp, bmp)."
+                    : "Those files could not be added. The editor takes images (png, jpg, webp, bmp).";
+            Toast.Show(this, message, NotificationType.Error);
+        }
+
+        private void Uploads_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (String.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SettingsUpload.Mode))
+                ApplyUploadsMode();
+        }
+
+        private void ApplyUploadsMode()
+        {
+            btnUpload.IsVisible = SettingsRoot.Current.Uploads.IsEnabled;
+        }
+
+        private void UploadCommandExecuted(object parameter)
+        {
+            UploadCommandImpl();
+        }
+
+        private async void UploadCommandImpl(IUploadProvider provider = null)
+        {
+            if (!SettingsRoot.Current.Uploads.IsEnabled)
+                return; // Uploads Off: the button is hidden, and its shortcut must not work around that
+
+            if (_session.ActiveUpload != null)
+                return; // one active upload per document
+
+            if (!VerifyArtworkExists())
+                return;
+
+            var bitmap = drawingCanvas.DrawGraphicsToBitmap();
+            if (bitmap == null)
+                return;
+
+            UpdatePreview(bitmap);
+            await UploadManager.UploadSession(_session, provider);
+        }
+
+        private async void btnUpload_RightMouseDown(object sender, PointerPressedEventArgs e)
+        {
+            if (!e.GetCurrentPoint(btnUpload).Properties.IsRightButtonPressed)
+                return;
+
+            e.Handled = true;
+
+            if (_session.ActiveUpload != null)
+                return; // one active upload per document
+
+            if (!VerifyArtworkExists())
+                return;
+
+            // same destination-picker shown when no default is set; picking here uploads to that
+            // provider once, unless the user ticks "set as default" in the dialog
+            var provider = await UploadManager.SelectProvider(SupportedUploadType.Image);
+            if (provider != null)
+                UploadCommandImpl(provider);
+        }
+
+        // ====================================================================
+        // Color popups + font dialog (§5.1 / §5.3)
+        // ====================================================================
+
+        private void backgroundColor_Click(object sender, PointerPressedEventArgs e)
+        {
+            OpenBackgroundColorPicker();
+        }
+
+        // The swatch is a plain Border (a Button theme would fight the checker/color fill), so
+        // keyboard activation is wired by hand. Enter only: the editor swallows Space window-wide
+        // as the pan modifier, so it never reaches a focused control.
+        private void backgroundColor_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            e.Handled = true;
+            OpenBackgroundColorPicker();
+        }
+
+        private void OpenBackgroundColorPicker()
+        {
+            OpenColorPicker(backgroundColorSwatch, drawingCanvas.ArtworkBackground, c => drawingCanvas.SetBackgroundColor(c));
+        }
+
+        /// <summary>Opens the mini picker at <paramref name="swatch"/>, which gets the focus back
+        /// when it closes.</summary>
+        private void OpenColorPicker(Control swatch, Color current, Action<Color> write)
+        {
+            _colorSwatchToRefocus = swatch;
+            miniColorPopup.PlacementTarget = swatch;
+            miniColor.Reset(current, write);
+            miniColorPopup.IsOpen = true;
+        }
+
+        /// <summary>Puts the style fields (ToolStyleFields, shared with the settings window's tool
+        /// defaults) into the property bar after the canvas background, each shown while the
+        /// canvas's subject has its skill.</summary>
+        private void InitStyleFields()
+        {
+            var fields = new ToolStyleFields(drawingCanvas, ToolStyleFields.CanvasPaths,
+                skill => new Binding(nameof(DrawingCanvas.SubjectSkill))
+                {
+                    Source = drawingCanvas,
+                    Mode = BindingMode.OneWay,
+                    Converter = new FuncValueConverter<Skill, bool>(s => s.HasFlag(skill)),
+                },
+                OpenColorPicker);
+
+            var at = PropertiesBar.Children.IndexOf(canvasBackgroundItem) + 1;
+            foreach (var field in ToolStyleFields.All)
+                PropertiesBar.Children.Insert(at++, fields.BuildBarItem(field));
+        }
+
+        private GraphicMeasure SelectedMeasure
+            => drawingCanvas.GraphicsList.SelectedItems is { Length: 1 } sel ? sel[0] as GraphicMeasure : null;
+
+        private void measureUnits_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedMeasure is not { } measure)
+                return;
+
+            // seeded with what the line reads now, so reopening shows the current calibration
+            var units = drawingCanvas.MeasureUnits;
+            txtMeasureLength.Text = units.Current != null ? MeasureUnits.FormatLength(units.ToUnits(measure.PixelLength)) : "";
+            txtMeasureUnit.Text = units.Current?.Unit ?? "";
+            txtMeasureLength.Classes.Remove("error");
+            txtMeasureUnit.Classes.Remove("error");
+
+            measureUnitsPopup.PlacementTarget = btnMeasureUnits;
+            measureUnitsPopup.IsOpen = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                txtMeasureLength.Focus();
+                txtMeasureLength.SelectAll();
+            }, DispatcherPriority.Input);
+        }
+
+        private void measureUnitsPopup_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+                SaveMeasureUnits();
+            else if (e.Key == Key.Escape)
+                measureUnitsPopup.IsOpen = false;
+            else
+                return;
+            e.Handled = true;
+        }
+
+        private void measureUnitsSave_Click(object sender, RoutedEventArgs e) => SaveMeasureUnits();
+
+        private void measureUnitsReset_Click(object sender, RoutedEventArgs e)
+        {
+            drawingCanvas.ResetMeasureUnits();
+            measureUnitsPopup.IsOpen = false;
+        }
+
+        private void SaveMeasureUnits()
+        {
+            if (SelectedMeasure is not { } measure || measure.PixelLength <= 0)
+            {
+                measureUnitsPopup.IsOpen = false;
+                return;
+            }
+
+            var lengthText = txtMeasureLength.Text?.Trim();
+            var lengthOk = (double.TryParse(lengthText, NumberStyles.Float, CultureInfo.CurrentCulture, out var length)
+                            || double.TryParse(lengthText, NumberStyles.Float, CultureInfo.InvariantCulture, out length))
+                           && double.IsFinite(length) && length > 0;
+            var unit = MeasureUnits.NormalizeUnit(txtMeasureUnit.Text);
+
+            txtMeasureLength.Classes.Set("error", !lengthOk);
+            txtMeasureUnit.Classes.Set("error", unit == null);
+            if (!lengthOk)
+            {
+                txtMeasureLength.Focus();
+                return;
+            }
+            if (unit == null)
+            {
+                txtMeasureUnit.Focus();
+                return;
+            }
+
+            drawingCanvas.SetMeasureUnits(measure, length, unit);
+            measureUnitsPopup.IsOpen = false;
+        }
+    }
+}

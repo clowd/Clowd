@@ -1,0 +1,203 @@
+<ui:SystemThemedWindow
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:u="https://irihi.tech/ursa"
+    xmlns:ui="using:Prisc.UI"
+    x:Class="Prisc.UI.MainWindow"
+    Title="Prisc"
+    Width="800"
+    Height="600"
+    MinWidth="560"
+    MinHeight="360"
+    WindowStartupLocation="CenterScreen">
+
+    <ui:SystemThemedWindow.Styles>
+        <!-- Ursa paints the selected nav item in SemiColorPrimaryLight, the palest step of the
+             accent ramp (~8% accent over white) — next to invisible on the light window.
+             PriscNavSelectedBrush (AccentTheme) is one step up there, and the stock accent in
+             the dark theme. Set on the template border too: Ursa's own pointer-over style writes
+             the border's Background directly, which would otherwise win over the control's
+             Background while hovered. -->
+        <Style Selector="u|NavMenuItem:selected">
+            <Setter Property="Background" Value="{DynamicResource PriscNavSelectedBrush}" />
+        </Style>
+        <Style Selector="u|NavMenuItem:selected /template/ Border#PART_Border">
+            <Setter Property="Background" Value="{DynamicResource PriscNavSelectedBrush}" />
+        </Style>
+        <!-- The glyphs sit a touch behind the labels. -->
+        <Style Selector="u|NavMenuItem PathIcon">
+            <Setter Property="Opacity" Value="0.8" />
+        </Style>
+    </ui:SystemThemedWindow.Styles>
+
+    <!-- Replaces the WPFUI NavigationFluent / Breadcrumb / Frame shell (decision table #53):
+         Ursa NavMenu navigation on the left + a cached ContentControl hosting the pages.
+         Spacing: 16px window padding on the left/top edges; right/bottom are left to the
+         content column so page ScrollViewers can run their scrollbars to the window edge
+         (pages keep a 0,0,16,16 content margin for clearance). -->
+    <Grid Margin="16,16,0,0" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
+
+        <StackPanel Grid.Row="0" Grid.Column="0">
+
+            <!--  Steps the brand row down past the macOS traffic lights, which float over this
+                  corner once the client area is extended. The right-hand column spans both rows
+                  and so keeps its own place at the top. Zero-height off macOS.  -->
+            <Border Height="{DynamicResource MacTitleBarGutterVert}" />
+
+        <!-- The logo: emblem + "prisc" wordmark, both in the emblem's 16-unit space (see
+             PathLogoWordmark), so the emblem keeps the 40px box it always had. -->
+        <Viewbox Height="40" Margin="6,0,0,24" HorizontalAlignment="Left" AutomationProperties.Name="Prisc">
+            <Grid Width="51.47" Height="16">
+                <Path Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Top"
+                      Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource PriscAccentBrush}" />
+                <Path HorizontalAlignment="Left" VerticalAlignment="Top"
+                      Data="{StaticResource PathLogoWordmark}" Stroke="{DynamicResource PriscWordmarkBrush}"
+                      StrokeThickness="1.6627" StrokeLineCap="Round" StrokeJoin="Round" />
+            </Grid>
+        </Viewbox>
+
+        </StackPanel>
+
+        <!-- MinWidth: the column is Auto, and the widest thing in it is the Image | Video row —
+             two equal star halves, so twice the wider button plus the gap. With recording off the
+             Video half goes and the column would shrink to the Image button alone, shifting the
+             whole page sideways; this holds it at the two-button width (measured on Windows). -->
+        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*" MinWidth="186">
+
+            <StackPanel Grid.Row="0" Margin="0,0,0,24" Spacing="8">
+                <!-- Capture leads: it is what the app is for, and the two editors below it are the
+                     ways in without one. -->
+                <Button x:Name="NewCaptureButton"
+                        Classes="Primary"
+                        Theme="{StaticResource SolidButton}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Click="NewCapture_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavCapture}" />
+                        <TextBlock Text="Start Capture" />
+                    </StackPanel>
+                </Button>
+
+                <!-- "New Editor" split in two: the image editor and the video editor open blank
+                     documents of their own, and nothing about one implies the other. The video
+                     half is hidden while recording is switched off (MainWindow.ApplyRecordingMode),
+                     and the image half then takes the whole row. -->
+                <Grid x:Name="NewDocumentRow" ColumnDefinitions="*,8,*">
+                    <Button x:Name="NewImageButton"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            ToolTip.Tip="New image editor"
+                            Click="NewImage_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Width="16" Height="16" Data="{StaticResource IconImage}" />
+                            <TextBlock Text="Image" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="NewVideoButton"
+                            Grid.Column="2"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            ToolTip.Tip="New video editor"
+                            Click="NewVideo_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Width="16" Height="16" Data="{StaticResource IconVideoClip}" />
+                            <TextBlock Text="Video" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </StackPanel>
+
+            <u:NavMenu x:Name="NavList"
+                       Grid.Row="1"
+                       Margin="0,0,0,16"
+                       MinWidth="150">
+                <u:NavMenuItem Header="Recent" Tag="RecentSessions">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavRecent}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem IsSeparator="True" />
+                <!-- the System and About icons double as status badges (MainWindow.RenderNavBadges):
+                     a red alert while a macOS permission is missing, a yellow About renamed
+                     "Update Available" while there is an update to take. -->
+                <u:NavMenuItem x:Name="SystemNavItem" Header="System" Tag="SettingsSystem">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon x:Name="SystemNavIcon" Width="16" Height="16" Data="{StaticResource IconNavGeneral}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Hotkeys" Tag="SettingsHotkeys">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavHotkeys}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Capture" Tag="SettingsCapture">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavCapture}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Recording" Tag="SettingsRecording">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavRecording}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Editor &amp; Sessions" Tag="SettingsEditor">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconEditScreenshot}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Shared Region" Tag="SettingsShareRegion">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavShareRegion}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Draw on Screen" Tag="SettingsDrawOnScreen">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavDrawOnScreen}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Uploads" Tag="SettingsUploads">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavUploads}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem IsSeparator="True" />
+                <u:NavMenuItem x:Name="AboutNavItem" Header="About" Tag="About">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon x:Name="AboutNavIcon" Width="16" Height="16" Data="{StaticResource IconNavAbout}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+            </u:NavMenu>
+
+        </Grid>
+
+        <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="24,0,0,0" RowDefinitions="Auto,*">
+            <!-- The page header lives outside PageHost, so both the title and introduction stay
+                 visible while the settings page scrolls underneath them. -->
+            <!-- The title keeps only the width it needs (Auto) and the slot beside it takes the
+                 rest, so it is the page's header control — not the title — that has to give way
+                 when the window is narrow. -->
+            <Grid Margin="0,8,16,16" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                <TextBlock x:Name="PageTitle" Classes="Subtitle" VerticalAlignment="Center" />
+                <ContentControl x:Name="PageHeaderContent"
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center" />
+                <TextBlock x:Name="PageIntro"
+                           Grid.Row="1"
+                           Grid.ColumnSpan="2"
+                           Margin="0,8,0,0"
+                           Classes="Body"
+                           Opacity="0.7"
+                           TextWrapping="Wrap" />
+            </Grid>
+            <TransitioningContentControl x:Name="PageHost" Grid.Row="1">
+                <TransitioningContentControl.PageTransition>
+                    <CrossFade Duration="0:0:0.12" />
+                </TransitioningContentControl.PageTransition>
+            </TransitioningContentControl>
+        </Grid>
+    </Grid>
+</ui:SystemThemedWindow>

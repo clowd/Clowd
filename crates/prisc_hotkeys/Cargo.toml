@@ -1,0 +1,46 @@
+[package]
+name = "prisc_hotkeys"
+version = "1.0.0"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+# Global hotkeys, gesture recording and the keystroke observe stream, through one keyboard hook
+# (WH_KEYBOARD_LL on Windows, a CGEventTap on macOS). The key table in src/key.rs is the only
+# global-hotkey key map in Prisc; the C# mirror is generated from it (src/csharp.rs).
+
+[lib]
+# rlib: linked statically into prisc_capture. cdylib: prisc_hotkeys.dll / libprisc_hotkeys.dylib, P/Invoked by Prisc.Ui.
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+# none: std only (Modifiers is a hand-written newtype, the queue is std::sync::mpsc)
+
+[dev-dependencies]
+# tests/avalonia_snapshot.rs reads the json
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    # SetWindowsHookExW, KBDLLHOOKSTRUCT, GetMessageW, PostThreadMessageW, GetGUIThreadInfo, GetWindowThreadProcessId,
+    # CreateWindowExW (the watchdog's message-only window)
+    "Win32_UI_WindowsAndMessaging",
+    # RegisterRawInputDevices, GetRegisteredRawInputDevices (the watchdog's canary)
+    "Win32_UI_Input",
+    # SendInput, GetAsyncKeyState, GetKeyState, GetKeyboardLayout, ToUnicodeEx
+    "Win32_UI_Input_KeyboardAndMouse",
+    # GetCurrentThreadId, SetThreadPriority
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-core-foundation = { workspace = true, features = ["CFDate", "CFMachPort", "CFRunLoop", "CFString", "block2"] }
+objc2-core-graphics = { workspace = true, features = ["CGError", "CGEvent", "CGEventTypes", "CGEventSource", "CGRemoteOperation", "libc"] }
+objc2-app-kit = { workspace = true, features = ["NSEvent", "objc2-core-graphics"] }
+block2.workspace = true
+# The main queue, where media keys are decoded (AppKit off the main thread has crashed).
+dispatch2.workspace = true

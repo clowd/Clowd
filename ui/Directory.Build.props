@@ -1,0 +1,16 @@
+﻿<Project>
+  <PropertyGroup>
+    <DebugType>embedded</DebugType>
+    <!-- The single source of truth for SkiaSharp across ui/. Must equal the version
+         Avalonia.Skia resolves in Prisc.Ui (currently Avalonia 12.1.2 -> SkiaSharp 3.119.4)
+         so the app loads exactly one native Skia. Prisc.Ui has a build check
+         (VerifySkiaSharpMatchesAvalonia) that fails when an Avalonia upgrade drifts from
+         this pin - update it here when that fires. -->
+    <SkiaSharpVersion>3.119.4</SkiaSharpVersion>
+  </PropertyGroup>
+  <!-- Version stamping for all UI assemblies comes from nbgv (version.json at repo root):
+       patch = git height since version.json introduced 4.0. -->
+  <ItemGroup>
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.91" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

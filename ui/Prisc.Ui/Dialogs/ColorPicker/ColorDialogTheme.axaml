@@ -1,0 +1,571 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Prisc.UI.Controls"
+        xmlns:cp="using:Prisc.UI.Dialogs.ColorPicker">
+
+    <!--  The color dialog's look, in one place for all three of its tabs (ColorDialog includes it
+          in its window styles, so nothing here leaks into the rest of the app). It wears the
+          editors' modern chrome: the bars on the window's own backdrop, the content on a raised
+          surface that takes the editors' canvas surround, edge and shadow (AppResources) so the
+          three windows cannot drift apart.
+
+          Every color is a token below, keyed "ColorDialog*" and split by theme variant. The dark
+          values are the mockup's. The light ones were not mocked: they follow the editors' light
+          chrome role for role (the #E9E9E9 surround, a faint black veil where the dark theme has a
+          white one, white fields), with the accent stepped darker for anything that is a mark
+          rather than a fill, and muted text chosen to keep 4.5:1 on the surface.  -->
+
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <!--  ink: body text on the surface and the bars, and the quieter labels  -->
+                    <SolidColorBrush x:Key="ColorDialogTextBrush" Color="#F2F2F4" />
+                    <!--  7.3:1 on the #1E1E1E surface  -->
+                    <SolidColorBrush x:Key="ColorDialogMutedTextBrush" Color="#A9ADB4" />
+                    <!--  the top bar's Initial / Selected labels, over the backdrop  -->
+                    <SolidColorBrush x:Key="ColorDialogBarLabelBrush" Color="#B9BCC2" />
+
+                    <!--  hairlines: inside the surface, and the top bar's divider over the backdrop  -->
+                    <SolidColorBrush x:Key="ColorDialogDividerBrush" Color="#2C2C2F" />
+                    <SolidColorBrush x:Key="ColorDialogBarDividerBrush" Color="#29FFFFFF" />
+
+                    <!--  text and number fields  -->
+                    <SolidColorBrush x:Key="ColorDialogInputBrush" Color="#161618" />
+                    <SolidColorBrush x:Key="ColorDialogInputBorderBrush" Color="#3A3D43" />
+                    <SolidColorBrush x:Key="ColorDialogInputHoverBorderBrush" Color="#4D5158" />
+
+                    <!--  the OKLCH tab's charts and tracks where sRGB has no color: the field fill,
+                          dark enough to set off every color but the darkest  -->
+                    <SolidColorBrush x:Key="ColorDialogGamutEmptyBrush" Color="#161618" />
+
+                    <!--  neutral chips and buttons on the surface (Cancel, mood chips, the bottom slots)  -->
+                    <SolidColorBrush x:Key="ColorDialogChipBrush" Color="#262629" />
+                    <SolidColorBrush x:Key="ColorDialogChipHoverBrush" Color="#2F2F33" />
+                    <SolidColorBrush x:Key="ColorDialogChipBorderBrush" Color="#3A3D43" />
+
+                    <!--  faint veils: the empty palette bars, and the rail's tabs  -->
+                    <SolidColorBrush x:Key="ColorDialogBarChipBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="ColorDialogGhostHoverBrush" Color="#14FFFFFF" />
+                    <!--  a copy button's success flash, under its light label  -->
+                    <SolidColorBrush x:Key="ColorDialogCopiedBrush" Color="#1F8F4E" />
+                    <SolidColorBrush x:Key="ColorDialogRailSelectedBrush" Color="#1FFFFFFF" />
+                    <SolidColorBrush x:Key="ColorDialogRailTextBrush" Color="#B8FFFFFF" />
+                    <SolidColorBrush x:Key="ColorDialogRailSelectedTextBrush" Color="#FFFFFF" />
+
+                    <!--  The accent. The fill is Prisc's own blue on both variants (OK, with the
+                          dark ink on it); the "strong" one is for marks — rings, selected icons,
+                          focus — and is lighter here so it reads on the dark surface.  -->
+                    <SolidColorBrush x:Key="ColorDialogAccentBrush" Color="#00AFF0" />
+                    <SolidColorBrush x:Key="ColorDialogAccentStrongBrush" Color="#4CC8F5" />
+                    <Color x:Key="ColorDialogAccentStrongColor">#4CC8F5</Color>
+                    <!--  the faint fill of a selected chip or preset button  -->
+                    <SolidColorBrush x:Key="ColorDialogAccentFaintBrush" Color="#2900AFF0" />
+                    <BoxShadows x:Key="ColorDialogFocusRing">0 0 0 2 #4CC8F5</BoxShadows>
+
+                    <!--  a color chip's inner hairline, so a chip that matches the surface still has an edge  -->
+                    <SolidColorBrush x:Key="ColorDialogSwatchEdgeBrush" Color="#24FFFFFF" />
+                    <!--  a harmony preset glyph's spokes, from its centre out to its dots  -->
+                    <SolidColorBrush x:Key="ColorDialogGlyphLineBrush" Color="#80FFFFFF" />
+                    <!--  the same for a palette bar, fainter since a bar is far bigger than a chip  -->
+                    <SolidColorBrush x:Key="ColorDialogBarEdgeBrush" Color="#14FFFFFF" />
+                    <!--  the content surface: the editors' canvas surround  -->
+                    <SolidColorBrush x:Key="ColorDialogSurfaceBrush" Color="#1E1E1E" />
+                    <!--  what shows through the gap between a palette bar and its accent ring: the surface  -->
+                    <Color x:Key="ColorDialogSurfaceColor">#1E1E1E</Color>
+
+                    <!--  the alpha track's checkerboard  -->
+                    <DrawingBrush x:Key="ColorDialogCheckerBrush"
+                                  DestinationRect="0,0,8,8"
+                                  SourceRect="0,0,8,8"
+                                  Stretch="None"
+                                  TileMode="Tile">
+                        <DrawingBrush.Drawing>
+                            <DrawingGroup>
+                                <GeometryDrawing Brush="#3A3D42" Geometry="M0,0 H8 V8 H0 Z" />
+                                <GeometryDrawing Brush="#5A5D63" Geometry="M0,0 H4 V4 H0 Z M4,4 H8 V8 H4 Z" />
+                            </DrawingGroup>
+                        </DrawingBrush.Drawing>
+                    </DrawingBrush>
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ColorDialogTextBrush" Color="#0D0D0F" />
+                    <!--  5.0:1 on the #E9E9E9 surface  -->
+                    <SolidColorBrush x:Key="ColorDialogMutedTextBrush" Color="#565A60" />
+                    <SolidColorBrush x:Key="ColorDialogBarLabelBrush" Color="#4E5258" />
+
+                    <SolidColorBrush x:Key="ColorDialogDividerBrush" Color="#D2D2D6" />
+                    <SolidColorBrush x:Key="ColorDialogBarDividerBrush" Color="#24000000" />
+
+                    <SolidColorBrush x:Key="ColorDialogInputBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="ColorDialogInputBorderBrush" Color="#C4C7CC" />
+                    <SolidColorBrush x:Key="ColorDialogInputHoverBorderBrush" Color="#A9ADB4" />
+
+                    <!--  the OKLCH tab's charts and tracks where sRGB has no color: a mid gray, not the
+                          white field fill, so the lightest colors still show where the gamut ends  -->
+                    <SolidColorBrush x:Key="ColorDialogGamutEmptyBrush" Color="#C9C9CE" />
+
+                    <SolidColorBrush x:Key="ColorDialogChipBrush" Color="#F7F7F8" />
+                    <SolidColorBrush x:Key="ColorDialogChipHoverBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="ColorDialogChipBorderBrush" Color="#C4C7CC" />
+
+                    <SolidColorBrush x:Key="ColorDialogBarChipBrush" Color="#0F000000" />
+                    <SolidColorBrush x:Key="ColorDialogGhostHoverBrush" Color="#0F000000" />
+                    <!--  a copy button's success flash, under its dark label  -->
+                    <SolidColorBrush x:Key="ColorDialogCopiedBrush" Color="#7FD69D" />
+                    <SolidColorBrush x:Key="ColorDialogRailSelectedBrush" Color="#14000000" />
+                    <SolidColorBrush x:Key="ColorDialogRailTextBrush" Color="#4A4E54" />
+                    <SolidColorBrush x:Key="ColorDialogRailSelectedTextBrush" Color="#0D0D0F" />
+
+                    <SolidColorBrush x:Key="ColorDialogAccentBrush" Color="#00AFF0" />
+                    <!--  the light theme's mark is the accent taken darker (3.9:1 on the surround, past
+                          the 3:1 a ring or an icon needs), where the dark theme's is taken lighter  -->
+                    <SolidColorBrush x:Key="ColorDialogAccentStrongBrush" Color="#0080B8" />
+                    <Color x:Key="ColorDialogAccentStrongColor">#0080B8</Color>
+                    <SolidColorBrush x:Key="ColorDialogAccentFaintBrush" Color="#2200AFF0" />
+                    <BoxShadows x:Key="ColorDialogFocusRing">0 0 0 2 #0080B8</BoxShadows>
+
+                    <SolidColorBrush x:Key="ColorDialogSwatchEdgeBrush" Color="#24000000" />
+                    <SolidColorBrush x:Key="ColorDialogGlyphLineBrush" Color="#59000000" />
+                    <SolidColorBrush x:Key="ColorDialogBarEdgeBrush" Color="#14000000" />
+                    <!--  the content surface: a touch lighter than the editors' #E9E9E9 canvas surround,
+                          nearer white, since here it holds the controls rather than framing a canvas  -->
+                    <SolidColorBrush x:Key="ColorDialogSurfaceBrush" Color="#F2F2F2" />
+                    <Color x:Key="ColorDialogSurfaceColor">#F2F2F2</Color>
+
+                    <DrawingBrush x:Key="ColorDialogCheckerBrush"
+                                  DestinationRect="0,0,8,8"
+                                  SourceRect="0,0,8,8"
+                                  Stretch="None"
+                                  TileMode="Tile">
+                        <DrawingBrush.Drawing>
+                            <DrawingGroup>
+                                <GeometryDrawing Brush="#FFFFFF" Geometry="M0,0 H8 V8 H0 Z" />
+                                <GeometryDrawing Brush="#D3D5D9" Geometry="M0,0 H4 V4 H0 Z M4,4 H8 V8 H4 Z" />
+                            </DrawingGroup>
+                        </DrawingBrush.Drawing>
+                    </DrawingBrush>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!--  Text drawn on a color (a palette bar's hex, a BASE tag) is not themed: it follows the
+                  color under it (cp:ColorDialogInk picks between these two by luminance).  -->
+            <SolidColorBrush x:Key="ColorDialogInkDarkBrush" Color="#16181C" />
+            <SolidColorBrush x:Key="ColorDialogInkLightBrush" Color="#FFFFFF" />
+
+            <!--  Line icons, drawn by cp:LineIcon: 24-unit stroke paths (the mockup's), so they keep
+                  its 1.7-unit stroke at whatever size they are shown.  -->
+            <StreamGeometry x:Key="ColorDialogIconCopy">M10,8 H18 A2,2 0 0 1 20,10 V18 A2,2 0 0 1 18,20 H10 A2,2 0 0 1 8,18 V10 A2,2 0 0 1 10,8 Z M16,8 V6 A2,2 0 0 0 14,4 H6 A2,2 0 0 0 4,6 V14 A2,2 0 0 0 6,16 H8</StreamGeometry>
+            <StreamGeometry x:Key="ColorDialogIconCheck">M20,6 L9,17 L4,12</StreamGeometry>
+            <StreamGeometry x:Key="ColorDialogIconArrowRight">M5,12 H19 M13,6 L19,12 L13,18</StreamGeometry>
+            <StreamGeometry x:Key="ColorDialogIconImage">M5,3 H19 A2,2 0 0 1 21,5 V19 A2,2 0 0 1 19,21 H5 A2,2 0 0 1 3,19 V5 A2,2 0 0 1 5,3 Z M7,9 A2,2 0 1 0 11,9 A2,2 0 1 0 7,9 Z M21,15 L17.9,11.9 A2,2 0 0 0 15.1,11.9 L6,21</StreamGeometry>
+            <StreamGeometry x:Key="ColorDialogIconPalette">M5.2,3 H18.8 A1.2,1.2 0 0 1 20,4.2 V5.8 A1.2,1.2 0 0 1 18.8,7 H5.2 A1.2,1.2 0 0 1 4,5.8 V4.2 A1.2,1.2 0 0 1 5.2,3 Z M5.2,10 H18.8 A1.2,1.2 0 0 1 20,11.2 V12.8 A1.2,1.2 0 0 1 18.8,14 H5.2 A1.2,1.2 0 0 1 4,12.8 V11.2 A1.2,1.2 0 0 1 5.2,10 Z M5.2,17 H18.8 A1.2,1.2 0 0 1 20,18.2 V19.8 A1.2,1.2 0 0 1 18.8,21 H5.2 A1.2,1.2 0 0 1 4,19.8 V18.2 A1.2,1.2 0 0 1 5.2,17 Z</StreamGeometry>
+            <StreamGeometry x:Key="ColorDialogIconReplace">M3,12 A9,9 0 0 1 18,5.3 L21,8 M21,3 V8 H16 M21,12 A9,9 0 0 1 6,18.7 L3,16 M3,21 V16 H8</StreamGeometry>
+
+            <!--  The rail's tab icons: the user's own full-color icons (icons8, 32-unit viewBox), as
+                  drawings rather than geometries because each carries its own palette, gradients and
+                  all. Each opens with a transparent square that sets the box it scales into, cropped
+                  round its own ink so the three balance by visual weight rather than by viewBox:
+                  Image (a wide rectangle) and Palette (a fan) have their larger extent fill 5/6 of
+                  the box, which gives them the same inked area; Simple, a disc, would read smaller
+                  at that ratio, so it fills 0.883 instead, the ratio that gives it the same area.
+                  Not themed: the same colors on either variant.  -->
+            <DrawingImage x:Key="ColorDialogRailIconSimple">
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0.981,0.981 h30.039 v30.039 h-30.039 Z" />
+                    <GeometryDrawing Brush="#0099FF" Geometry="F1 M23.983,26.247C19.197,24.683,15.135,21.194,16,16c-5.201,1.855-5.862,7.686-4.885,12.044 c1.447,0.569,3.431,1.189,6.351,0.861C19.511,28.675,21.752,27.993,23.983,26.247z" />
+                    <GeometryDrawing Brush="#49DB23" Geometry="F1 M11.117,28.038C10.078,23.111,11.069,17.848,16,16c-4.207-3.577-9.587-1.233-12.873,1.791 c0.231,1.538,0.686,3.566,2.430,5.930C6.779,25.378,8.490,26.978,11.117,28.038z" />
+                    <GeometryDrawing Brush="#FFD200" Geometry="F1 M3.134,17.790C6.882,14.427,11.934,12.654,16,16c0.994-5.432-3.726-8.920-7.988-10.253 c-1.216,0.969-2.745,2.377-3.921,5.070C3.268,12.703,2.738,14.985,3.134,17.790z" />
+                    <GeometryDrawing Brush="#FFA000" Geometry="F1 M8.017,5.753C12.803,7.317,16.865,10.806,16,16c5.201-1.855,5.862-7.686,4.885-12.044 c-1.447-0.569-3.431-1.189-6.351-0.861C12.489,3.325,10.248,4.007,8.017,5.753z" />
+                    <GeometryDrawing Brush="#FF4030" Geometry="F1 M20.883,3.962C21.922,8.890,20.932,14.152,16.001,16c4.207,3.577,9.587,1.233,12.873-1.791 c-0.231-1.538-0.686-3.566-2.430-5.930C25.222,6.622,23.511,5.022,20.883,3.962z" />
+                    <GeometryDrawing Brush="#D738FF" Geometry="F1 M28.867,14.210c-3.748,3.363-8.800,5.137-12.866,1.790c-0.994,5.432,3.726,8.920,7.988,10.253 c1.216-0.969,2.745-2.377,3.921-5.070C28.732,19.297,29.262,17.015,28.867,14.210z" />
+                </DrawingGroup>
+            </DrawingImage>
+
+            <DrawingImage x:Key="ColorDialogRailIconImage">
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 h48 v48 h-48 Z" />
+                    <GeometryDrawing Brush="#F57C00" Geometry="M40,41H8c-2.2,0-4-1.8-4-4V11c0-2.2,1.8-4,4-4h32c2.2,0,4,1.8,4,4v26C44,39.2,42.2,41,40,41z" />
+                    <GeometryDrawing Brush="#FFF9C4" Geometry="M35 13A3 3 0 1 0 35 19A3 3 0 1 0 35 13Z" />
+                    <GeometryDrawing Brush="#942A09" Geometry="M20 16L9 32 31 32z" />
+                    <GeometryDrawing Brush="#BF360C" Geometry="M31 22L23 32 39 32z" />
+                </DrawingGroup>
+            </DrawingImage>
+
+            <DrawingImage x:Key="ColorDialogRailIconPalette">
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M2.643,2.785 h26.571 v26.571 h-26.571 Z" />
+                    <GeometryDrawing Geometry="F1 M5,26v-5c0-0.552,0.448-1,1-1h20c0.552,0,1,0.448,1,1v5c0,0.552-0.448,1-1,1H6 C5.448,27,5,26.552,5,26z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="5.109,23.5" EndPoint="27.046,23.5">
+                                <GradientStop Offset="0.174" Color="#D9D9D9" />
+                                <GradientStop Offset="0.181" Color="#00279C" />
+                                <GradientStop Offset="0.447" Color="#00279C" />
+                                <GradientStop Offset="0.458" Color="#0D42DE" />
+                                <GradientStop Offset="0.721" Color="#0D42DE" />
+                                <GradientStop Offset="0.73" Color="#4373FF" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M26,20H6c-0.552,0-1,0.448-1,1v5 c0,0.552,0.448,1,1,1h20c0.552,0,1-0.448,1-1v-5C27,20.448,26.552,20,26,20z M26.75,26c0,0.414-0.336,0.75-0.75,0.75H6 c-0.414,0-0.75-0.336-0.75-0.75v-5c0-0.414,0.336-0.75,0.75-0.75h20c0.414,0,0.75,0.336,0.75,0.75V26z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="16,20" EndPoint="16,27">
+                                <GradientStop Offset="0" Color="#05000000" />
+                                <GradientStop Offset="1" Color="#26000000" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M25.356,20h-14L6.5,22.804 c-0.478,0.276-0.642,0.888-0.366,1.366L7.768,27h5.464L25.356,20z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="15.969,22.478" EndPoint="17.059,24.394">
+                                <GradientStop Offset="0" Color="#4C000000" />
+                                <GradientStop Offset="1" Color="#00000000" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M7.634,26.5l-2.5-4.33 c-0.276-0.478-0.112-1.09,0.366-1.366l17.321-10c0.478-0.276,1.09-0.112,1.366,0.366l2.5,4.33c0.276,0.478,0.112,1.09-0.366,1.366 L9,26.866C8.522,27.142,7.91,26.978,7.634,26.5z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="6.481,24.269" EndPoint="25.479,13.3">
+                                <GradientStop Offset="0.174" Color="#D9D9D9" />
+                                <GradientStop Offset="0.183" Color="#009C1A" />
+                                <GradientStop Offset="0.445" Color="#009C1A" />
+                                <GradientStop Offset="0.458" Color="#1ABA35" />
+                                <GradientStop Offset="0.719" Color="#1ABA35" />
+                                <GradientStop Offset="0.731" Color="#50DE68" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M26.687,15.5l-2.5-4.33 c-0.185-0.321-0.521-0.5-0.867-0.5c-0.17,0-0.342,0.043-0.499,0.134l-17.32,10c-0.478,0.276-0.642,0.888-0.366,1.366l2.5,4.33 C7.819,26.821,8.155,27,8.501,27c0.17,0,0.342-0.043,0.499-0.134l17.32-10C26.799,16.59,26.963,15.978,26.687,15.5z M26.545,16.194 c-0.052,0.194-0.176,0.355-0.349,0.455l-17.32,10c-0.114,0.066-0.243,0.101-0.374,0.101c-0.268,0-0.517-0.144-0.65-0.375l-2.5-4.33 c-0.207-0.358-0.084-0.818,0.275-1.024l17.32-10c0.114-0.066,0.243-0.101,0.374-0.101c0.268,0,0.517,0.144,0.65,0.375l2.5,4.33 C26.57,15.798,26.597,16,26.545,16.194z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="15.91,10.669" EndPoint="15.91,27">
+                                <GradientStop Offset="0" Color="#05000000" />
+                                <GradientStop Offset="1" Color="#26000000" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M15.843,22.915l6.996-12.118 c-0.006,0.003-0.013,0.003-0.019,0.006l-12.102,6.987L7.134,24c-0.276,0.478-0.112,1.09,0.366,1.366l2.049,1.183L15.843,22.915z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="15.213,18.107" EndPoint="17.38,19.367">
+                                <GradientStop Offset="0" Color="#4C000000" />
+                                <GradientStop Offset="1" Color="#00000000" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M9.83,26.866l-4.33-2.5 C5.022,24.09,4.858,23.478,5.134,23l10-17.321c0.276-0.478,0.888-0.642,1.366-0.366l4.33,2.5c0.478,0.276,0.642,0.888,0.366,1.366 l-10,17.321C10.92,26.978,10.309,27.142,9.83,26.866z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="7.708,25.519" EndPoint="18.677,6.52">
+                                <GradientStop Offset="0.174" Color="#D9D9D9" />
+                                <GradientStop Offset="0.187" Color="#D98D00" />
+                                <GradientStop Offset="0.446" Color="#D98D00" />
+                                <GradientStop Offset="0.457" Color="#FAA200" />
+                                <GradientStop Offset="0.719" Color="#FAA200" />
+                                <GradientStop Offset="0.73" Color="#FABC49" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M20.83,7.813l-4.33-2.5 c-0.158-0.091-0.329-0.134-0.499-0.134c-0.346,0-0.682,0.179-0.867,0.5L5.134,23c-0.276,0.478-0.112,1.09,0.366,1.366l4.33,2.5 C9.988,26.957,10.16,27,10.329,27c0.346,0,0.682-0.179,0.867-0.5l10-17.32C21.472,8.701,21.309,8.089,20.83,7.813z M20.98,9.054 l-10,17.32c-0.134,0.231-0.383,0.375-0.65,0.375c-0.131,0-0.26-0.035-0.374-0.101l-4.33-2.5c-0.174-0.1-0.298-0.262-0.349-0.455 C5.224,23.5,5.25,23.298,5.351,23.125l10-17.32c0.134-0.231,0.383-0.375,0.651-0.375c0.131,0,0.26,0.035,0.374,0.101l4.33,2.5 C21.063,8.237,21.187,8.696,20.98,9.054z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="13.165,5.179" EndPoint="13.165,27">
+                                <GradientStop Offset="0" Color="#05000000" />
+                                <GradientStop Offset="1" Color="#26000000" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M14,7.644L7,19.768v5.464l2.83,1.634 c0.478,0.276,1.09,0.112,1.366-0.366L14,21.644V7.644z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="11.686,17.322" EndPoint="14.044,17.322">
+                                <GradientStop Offset="0" Color="#4C000000" />
+                                <GradientStop Offset="1" Color="#00000000" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M11,27H6c-0.552,0-1-0.448-1-1V6 c0-0.552,0.448-1,1-1h5c0.552,0,1,0.448,1,1v20C12,26.552,11.552,27,11,27z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="8.5,26.891" EndPoint="8.5,4.954">
+                                <GradientStop Offset="0.174" Color="#D9D9D9" />
+                                <GradientStop Offset="0.187" Color="#D90000" />
+                                <GradientStop Offset="0.443" Color="#D90000" />
+                                <GradientStop Offset="0.456" Color="#FF3333" />
+                                <GradientStop Offset="0.717" Color="#FF3333" />
+                                <GradientStop Offset="0.73" Color="#FF7D7D" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M11,5H6C5.448,5,5,5.448,5,6v20 c0,0.552,0.448,1,1,1h5c0.552,0,1-0.448,1-1V6C12,5.448,11.552,5,11,5z M11.75,26c0,0.414-0.336,0.75-0.75,0.75H6 c-0.414,0-0.75-0.336-0.75-0.75V6c0-0.414,0.336-0.75,0.75-0.75h5c0.414,0,0.75,0.336,0.75,0.75V26z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="8.5,5" EndPoint="8.5,27">
+                                <GradientStop Offset="0" Color="#05000000" />
+                                <GradientStop Offset="1" Color="#26000000" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage>
+
+            <!--  The Oklch tab: a thumbnail of its Lightness chart at L 0.45 over the whole hue
+                  circle (hue across, the most chroma sRGB has at each hue as the skyline), with the
+                  skyline's lowest point a little below halfway so the valleys stay shallow. The
+                  shape is generated from the gamut, not drawn, with a point every 3 degrees of hue.
+                  The fill is not the chart's: five of the Simple icon's colors as five equal strips,
+                  red to purple (its orange left out, too close to the yellow at this size), as a
+                  gradient with paired stops so each edge is hard; the gamut's own colors read
+                  muddy here.  -->
+            <DrawingImage x:Key="ColorDialogRailIconOklch">
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 h32 v32 h-32 Z" />
+                    <GeometryDrawing Geometry="F1 M3,11.26 L3.22,11.31 3.43,11.35 3.65,11.38 3.87,11.39 4.08,11.38 4.30,11.36 4.52,11.33 4.73,11.28 4.95,11.21 5.17,11.36 5.38,12.07 5.60,12.66 5.82,13.15 6.03,13.57 6.25,13.92 6.47,14.22 6.68,14.48 6.90,14.70 7.12,14.90 7.33,15.06 7.55,15.21 7.77,15.33 7.98,15.43 8.20,15.52 8.42,15.59 8.63,15.64 8.85,15.69 9.07,15.72 9.28,15.73 9.50,15.74 9.72,15.73 9.93,15.70 10.15,15.67 10.37,15.62 10.58,15.56 10.80,15.48 11.02,15.39 11.23,15.28 11.45,15.15 11.67,15.00 11.88,14.82 12.10,14.62 12.32,14.38 12.53,14.10 12.75,13.78 12.97,13.41 13.18,12.96 13.40,13.07 13.62,13.67 13.83,14.15 14.05,14.55 14.27,14.89 14.48,15.16 14.70,15.40 14.92,15.60 15.13,15.78 15.35,15.92 15.57,16.05 15.78,16.16 16.00,16.25 16.22,16.32 16.43,16.38 16.65,16.43 16.87,16.46 17.08,16.49 17.30,16.50 17.52,16.50 17.73,16.49 17.95,16.47 18.17,16.43 18.38,16.39 18.60,16.33 18.82,16.26 19.03,16.17 19.25,16.07 19.47,15.94 19.68,15.80 19.90,15.63 20.12,15.42 20.33,15.19 20.55,14.90 20.77,14.56 20.98,14.14 21.20,13.62 21.42,12.95 21.63,12.04 21.85,10.66 22.07,7.37 22.28,5.29 22.50,5.69 22.72,6.06 22.93,6.40 23.15,6.72 23.37,7.01 23.58,7.28 23.80,7.53 24.02,7.76 24.23,7.99 24.45,8.20 24.67,8.40 24.88,8.59 25.10,8.78 25.32,8.96 25.53,9.14 25.75,9.32 25.97,9.49 26.18,9.66 26.40,9.82 26.62,9.98 26.83,10.14 27.05,10.29 27.27,10.43 27.48,10.57 27.70,10.70 27.92,10.82 28.13,10.93 28.35,11.03 28.57,11.12 28.78,11.19 29.00,11.26 L29,24 A3,3 0 0 1 26,27 L6,27 A3,3 0 0 1 3,24 Z">
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="3,16" EndPoint="29,16">
+                                <GradientStop Offset="0.0" Color="#FF4030" />
+                                <GradientStop Offset="0.2" Color="#FF4030" />
+                                <GradientStop Offset="0.2" Color="#FFD200" />
+                                <GradientStop Offset="0.4" Color="#FFD200" />
+                                <GradientStop Offset="0.4" Color="#49DB23" />
+                                <GradientStop Offset="0.6" Color="#49DB23" />
+                                <GradientStop Offset="0.6" Color="#0099FF" />
+                                <GradientStop Offset="0.8" Color="#0099FF" />
+                                <GradientStop Offset="0.8" Color="#D738FF" />
+                                <GradientStop Offset="1.0" Color="#D738FF" />
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage>
+
+            <!--  ===== Buttons =====
+                  Templated from scratch rather than layered on Semi's, so each look is decided by
+                  these few brushes alone and nothing of the app theme's own button states shows
+                  through. Every one draws its keyboard ring as a box shadow in the strong accent.  -->
+
+            <!--  The Simple tab's HEX / RGB / HSL copy buttons, in the editors' bar metrics: the 8px
+                  radius of their tool buttons, on the Semi fill their bar fields wear, with the
+                  tool buttons' hover fill.  -->
+            <ControlTheme x:Key="ColorDialogBarChipButton" TargetType="Button">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+                <Setter Property="Foreground" Value="{DynamicResource ColorDialogTextBrush}" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="10,0" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="PART_Border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                            <Panel>
+                                <!--  the copy flash (the .copied class), over the fill and under the label  -->
+                                <Border Name="PART_Flash"
+                                        Background="{DynamicResource ColorDialogCopiedBrush}"
+                                        CornerRadius="{TemplateBinding CornerRadius}"
+                                        IsHitTestVisible="False"
+                                        Opacity="0" />
+                                <ContentPresenter Name="PART_ContentPresenter"
+                                                  Padding="{TemplateBinding Padding}"
+                                                  HorizontalContentAlignment="Center"
+                                                  VerticalContentAlignment="Center"
+                                                  Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  Foreground="{TemplateBinding Foreground}" />
+                            </Panel>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+                </Style>
+                <!--  A copy succeeded: green at once, held a moment, then faded back to the fill. Code
+                      re-adds the class for each copy (ColorSimpleTab.FlashCopied), which restarts it.  -->
+                <Style Selector="^.copied /template/ Border#PART_Flash">
+                    <Style.Animations>
+                        <Animation Duration="0:0:1.2" Easing="SineEaseInOut">
+                            <KeyFrame Cue="0%">
+                                <Setter Property="Opacity" Value="1" />
+                            </KeyFrame>
+                            <KeyFrame Cue="20%">
+                                <Setter Property="Opacity" Value="1" />
+                            </KeyFrame>
+                            <KeyFrame Cue="100%">
+                                <Setter Property="Opacity" Value="0" />
+                            </KeyFrame>
+                        </Animation>
+                    </Style.Animations>
+                </Style>
+                <Style Selector="^:pressed">
+                    <Setter Property="Background" Value="{DynamicResource SemiColorFill2}" />
+                </Style>
+                <Style Selector="^:disabled">
+                    <Setter Property="Opacity" Value="0.45" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Style>
+                <Style Selector="^:focus-visible /template/ Border#PART_Border">
+                    <Setter Property="BoxShadow" Value="{DynamicResource ColorDialogFocusRing}" />
+                </Style>
+            </ControlTheme>
+
+            <!--  No fill until hovered, like the editors' tool buttons: the top bar's Initial
+                  button, and small icon buttons on the surface (a header's Copy all).  -->
+            <ControlTheme x:Key="ColorDialogGhostButton"
+                          BasedOn="{StaticResource ColorDialogBarChipButton}"
+                          TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="8,0" />
+            </ControlTheme>
+
+            <!--  A button drawn ON a color (a palette bar's hex and its hover actions). Its fill and
+                  ink are set per bar from the color's luminance (PaletteBars), so hover cannot be a
+                  fill swap: it is a veil of the button's own ink laid over the fill.  -->
+            <ControlTheme x:Key="ColorDialogOnColorButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Width" Value="30" />
+                <Setter Property="Height" Value="30" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="7" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="PART_Border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                            <Panel>
+                                <Border Name="PART_Veil"
+                                        Background="{TemplateBinding Foreground}"
+                                        CornerRadius="{TemplateBinding CornerRadius}"
+                                        Opacity="0" />
+                                <ContentPresenter Name="PART_ContentPresenter"
+                                                  Padding="{TemplateBinding Padding}"
+                                                  HorizontalContentAlignment="Center"
+                                                  VerticalContentAlignment="Center"
+                                                  Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  Foreground="{TemplateBinding Foreground}" />
+                            </Panel>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover /template/ Border#PART_Veil">
+                    <Setter Property="Opacity" Value="0.14" />
+                </Style>
+                <Style Selector="^:pressed /template/ Border#PART_Veil">
+                    <Setter Property="Opacity" Value="0.24" />
+                </Style>
+                <Style Selector="^:focus-visible /template/ Border#PART_Border">
+                    <Setter Property="BoxShadow" Value="{DynamicResource ColorDialogFocusRing}" />
+                </Style>
+            </ControlTheme>
+        </ResourceDictionary>
+    </Styles.Resources>
+
+    <!--  ===== Text =====  -->
+
+    <!--  A section caption (FROM IMAGE, PALETTE, MOOD): written in capitals in the markup, and
+          tracked out by .06em of its 11px.  -->
+    <Style Selector="TextBlock.colorDialogCaption">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LetterSpacing" Value="0.66" />
+        <Setter Property="Foreground" Value="{DynamicResource ColorDialogMutedTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!--  Quieter text on the surface: hints, a field's label.  -->
+    <Style Selector="TextBlock.colorDialogMuted">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource ColorDialogMutedTextBrush}" />
+    </Style>
+
+    <!--  ===== Fields =====
+          Semi's text box with its fill, border and states restated in the dialog's tokens. Semi
+          paints its hover and focus states straight onto the template's border, so those are
+          restated on the same part: a window style outranks the control theme's own.  -->
+    <Style Selector="TextBox.colorDialogField">
+        <Setter Property="Background" Value="{DynamicResource ColorDialogInputBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogInputBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Foreground" Value="{DynamicResource ColorDialogTextBrush}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource ColorDialogTextBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="TextAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.colorDialogField /template/ Border#PART_ContentPresenterBorder">
+        <Setter Property="Background" Value="{DynamicResource ColorDialogInputBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogInputBorderBrush}" />
+    </Style>
+    <Style Selector="TextBox.colorDialogField:pointerover /template/ Border#PART_ContentPresenterBorder">
+        <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogInputHoverBorderBrush}" />
+    </Style>
+    <Style Selector="TextBox.colorDialogField:focus /template/ Border#PART_ContentPresenterBorder">
+        <Setter Property="BorderBrush" Value="{DynamicResource ColorDialogAccentStrongBrush}" />
+    </Style>
+
+    <!--  ===== The rail =====
+          A vertical TabStrip: a tab list to assistive tech, with arrow keys between the items
+          (ColorDialog handles them, so they wrap and never fall through to the content).  -->
+    <Style Selector="TabStrip.colorDialogRail">
+        <!--  bare: the app theme's tab strip draws a rule under its items  -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+            </ControlTemplate>
+        </Setter>
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="Vertical" Spacing="4" />
+            </ItemsPanelTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="TabStrip.colorDialogRail > TabStripItem">
+        <Setter Property="Theme">
+            <!--  56 x 56, a little over the brief's 54 x 50: the full-color icons read best at 30px,
+                  and this dialog's rail has the room.  -->
+            <ControlTheme TargetType="TabStripItem">
+                <Setter Property="Width" Value="56" />
+                <Setter Property="Height" Value="56" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{DynamicResource ColorDialogRailTextBrush}" />
+                <Setter Property="FontSize" Value="10.5" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="PART_Border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8">
+                            <!--  Stretched, not centered: a centered label stack takes its width from the
+                                  label, which the selected tab's semibold widens, and rounding that
+                                  re-centering nudged the icon and text a pixel each way between tabs.
+                                  Filling the fixed 56px item, each centers on the same line always.  -->
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              HorizontalContentAlignment="Stretch"
+                                              VerticalContentAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource ColorDialogGhostHoverBrush}" />
+                </Style>
+                <!--  The icons are full color, so selection cannot tint them, and they stay at full
+                      strength on every tab (dimmed, they washed out on dark): the selected tab is
+                      marked by its fill and its bold label alone.  -->
+                <Style Selector="^:selected">
+                    <Setter Property="Background" Value="{DynamicResource ColorDialogRailSelectedBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource ColorDialogRailSelectedTextBrush}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </Style>
+                <Style Selector="^:focus-visible /template/ Border#PART_Border">
+                    <Setter Property="BoxShadow" Value="{DynamicResource ColorDialogFocusRing}" />
+                </Style>
+            </ControlTheme>
+        </Setter>
+    </Style>
+</Styles>

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Builds the Inter faces Clowd ships: the processed pair the Rust capture overlay (clowd_capture)
-bundles, and the stock weights the C# UI (Clowd.Ui) embeds.
+"""Builds the Inter faces Prisc ships: the processed pair the Rust capture overlay (prisc_capture)
+bundles, and the stock weights the C# UI (Prisc.Ui) embeds.
 
 The source is Inter 4.1's text optical size: the static `extras/ttf/Inter-*.ttf` files from the
 v4.1 release zip on rsms/inter, checked against the zip's known hash. ("Inter", not
@@ -37,8 +37,8 @@ from fontTools import subset
 from fontTools.ttLib import TTFont
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-CAPTURE_DIR = os.path.join(REPO, "clowd_capture", "assets", "fonts")
-UI_DIR = os.path.join(REPO, "clowd_ui", "Clowd.Ui", "Assets", "Fonts", "Inter")
+CAPTURE_DIR = os.path.join(REPO, "crates", "prisc_capture", "assets", "fonts")
+UI_DIR = os.path.join(REPO, "ui", "Prisc.Ui", "Assets", "Fonts", "Inter")
 
 ZIP_URL = "https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip"
 ZIP_SHA256 = "9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e"

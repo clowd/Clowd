@@ -1,0 +1,168 @@
+<UserControl
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Prisc.UI.Controls"
+    x:Class="Prisc.UI.Pages.AboutPage">
+
+    <UserControl.Styles>
+        <!-- Flat, full-width clickable row for a single open-source dependency. UserControl-level
+             styles override the Semi Button ControlTheme, so the row reads as a list entry with a
+             subtle hover fill rather than a filled button. -->
+        <Style Selector="Button.CreditRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.CreditRow /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.CreditRow:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+        </Style>
+        <Style Selector="Button.CreditRow:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+        </Style>
+        <!-- Setting/caption rhythm of the settings pages (see SystemSettingsPage), for the
+             Updates group: 24px between settings, 2px between a control and its caption. -->
+        <Style Selector="StackPanel.SettingsGroup">
+            <Setter Property="Spacing" Value="24" />
+        </Style>
+        <Style Selector="StackPanel.Setting">
+            <Setter Property="Spacing" Value="2" />
+        </Style>
+        <Style Selector="StackPanel.SettingRow">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="12" />
+        </Style>
+        <Style Selector="TextBlock.Caption">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="560" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+    </UserControl.Styles>
+
+    <controls:FadeEdgeScrollViewer>
+        <StackPanel Margin="0,0,16,16" Spacing="8">
+            <!-- The logo (emblem + "prisc" wordmark, as in the main window's sidebar) at the
+                 emblem's old 60px size; the wordmark stands in for the old "Prisc" title. -->
+            <Viewbox Height="60" HorizontalAlignment="Left" AutomationProperties.Name="Prisc">
+                <Grid Width="51.47" Height="16">
+                    <Path Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource PriscAccentBrush}" />
+                    <Path HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Data="{StaticResource PathLogoWordmark}" Stroke="{DynamicResource PriscWordmarkBrush}"
+                          StrokeThickness="1.6627" StrokeLineCap="Round" StrokeJoin="Round" />
+                </Grid>
+            </Viewbox>
+
+            <TextBlock Classes="Base" Text="{Binding PriscVersion}" />
+
+            <!-- Moved here from the System page. DataContext is SettingsGeneral (set in the
+                 code-behind), where the update options are persisted. The version itself is the
+                 line above, so the group does not repeat it. -->
+            <HeaderedContentControl x:Name="UpdatesGroup"
+                                    Header="Updates"
+                                    Margin="0,8"
+                                    Theme="{StaticResource GroupBox}">
+                <StackPanel Classes="SettingsGroup">
+                    <StackPanel Classes="Setting" Spacing="8">
+                        <StackPanel Classes="SettingRow">
+                            <Button x:Name="UpdateButton" Content="Check for Updates" Click="OnUpdateButtonClick" />
+                            <ProgressBar x:Name="UpdateProgress"
+                                         Width="180"
+                                         VerticalAlignment="Center"
+                                         Minimum="0" Maximum="100"
+                                         IsVisible="False" />
+                        </StackPanel>
+                        <TextBlock x:Name="UpdateStatusText" Classes="Caption" />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting" Spacing="8">
+                        <CheckBox x:Name="AutoDownloadCheck" IsChecked="{Binding AutoDownloadUpdates}">
+                            <TextBlock Text="Automatically check for and download updates" TextWrapping="Wrap" />
+                        </CheckBox>
+                        <StackPanel Classes="SettingRow" IsEnabled="{Binding AutoDownloadUpdates}">
+                            <TextBlock VerticalAlignment="Center" Text="Check" />
+                            <ComboBox x:Name="UpdateIntervalCombo" MinWidth="160" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <CheckBox x:Name="AutoApplyCheck" IsChecked="{Binding AutoApplyUpdates}">
+                            <TextBlock Text="Automatically restart Prisc to apply updates in the background"
+                                       TextWrapping="Wrap" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   Text="Only restarts after 10 minutes of inactivity, never during a capture, recording or upload." />
+                    </StackPanel>
+
+                    <StackPanel x:Name="PrereleaseSection" Classes="Setting">
+                        <CheckBox x:Name="PrereleaseCheck" IsChecked="{Binding IncludePrereleaseUpdates}">
+                            <TextBlock Text="Opt in to experimental builds" TextWrapping="Wrap" />
+                        </CheckBox>
+                        <TextBlock x:Name="PrereleaseHelpText" Classes="Caption"
+                                   Text="Experimental builds get new features first but may have more bugs." />
+                    </StackPanel>
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <TextBlock Classes="Body"
+                       Text="Ever wanted a screen capture tool that has everything you need and doesn't need endless tweaking? That is what Prisc strives to be." />
+            <TextBlock Classes="Body"
+                       Text="It covers everything from quick, pixel-perfect selection and one-click screen recording to editing images and uploading them to share." />
+            <TextBlock Classes="Body"
+                       Text="Open this window any time from the tray icon." />
+
+            <HyperlinkButton Padding="0" Content="Read more online" NavigateUri="https://github.com/priscapp/Prisc" />
+
+            <TextBlock Classes="Body"
+                       Text="Prisc is made possible in part by these open source projects." />
+
+            <!-- One section per component (UI / capture engine); rows are generated from
+                 Assets/credits.json — regenerate with tools/gen-credits.sh. -->
+            <ItemsControl ItemsSource="{Binding Sections}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,8,0,0">
+                            <TextBlock Classes="Base" Margin="0,0,0,2" Text="{Binding Title}" />
+                            <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Classes="CreditRow" Command="{Binding OpenCommand}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <StackPanel Grid.Column="0"
+                                                            Orientation="Horizontal"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Classes="Body" Text="{Binding Name}" />
+                                                    <TextBlock Classes="Body"
+                                                               Margin="8,0,0,0"
+                                                               Opacity="0.4"
+                                                               Text="{Binding Version}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1"
+                                                           Classes="Body"
+                                                           VerticalAlignment="Center"
+                                                           Opacity="0.55"
+                                                           Text="{Binding License}" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Classes="Body"
+                       Margin="0,8,0,0"
+                       Text="Missed your project in this list? Feel free to reach out through our GitHub." />
+        </StackPanel>
+    </controls:FadeEdgeScrollViewer>
+</UserControl>

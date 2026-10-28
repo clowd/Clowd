@@ -1,0 +1,112 @@
+[package]
+name = "prisc_capture"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+prisc_rust_core.workspace = true
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+image = { workspace = true, features = ["png", "jpeg"] }
+libblur.workspace = true
+euclid.workspace = true
+log.workspace = true
+simplelog.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+winit.workspace = true
+prisc_hotkeys.workspace = true
+bytemuck = { workspace = true, features = ["derive"] }
+fontdb.workspace = true
+skrifa.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+egui_plot.workspace = true
+arboard.workspace = true
+rfd.workspace = true
+xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
+sentry.workspace = true
+
+# Deliberately no OCR engine: recognition runs in the prisc_ai binary (`prisc_ai ocr`) so
+# an abort or segfault inside ONNX Runtime cannot take a capture down, and its tens of MB
+# of embedded models stay out of the overlay's start-up path.
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Shell",
+    # SendInput / GetAsyncKeyState for the wheel injection and Esc poll (src/scroll/input.rs).
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Dxgi",
+    # The d3d11 gxi backend (src/gxi/d3d11): D3D11CreateDevice + resources,
+    # D3D_DRIVER_TYPE/D3D_FEATURE_LEVEL/topology, DXGI formats + swapchain.
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Storage_Xps",
+    "Win32_System_Com",
+    # SetThreadPriority / MMCSS / power throttling for the thread tiers
+    # (src/system/mod.rs lower_thread_priority and friends).
+    "Win32_System_Threading",
+    # K32GetProcessMemoryInfo for the debug overlay process-RAM row.
+    "Win32_System_ProcessStatus",
+    # D3DKMTSetProcessSchedulingPriorityClass: GPU scheduler priority
+    # (src/system/mod.rs raise_process_priority_class).
+    "Wdk_Graphics_Direct3D",
+    "Win32_System_SystemInformation",
+] }
+
+# `localtime_r` for the save dialog's filename pattern — the Windows build gets
+# the same from `GetLocalTime` (Win32_System_SystemInformation, above).
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+foreign-types.workspace = true
+objc2-core-graphics = { workspace = true, features = ["objc2", "CGImage"] }
+core-graphics.workspace = true
+core-foundation.workspace = true
+objc2.workspace = true
+objc2-app-kit.workspace = true
+objc2-foundation.workspace = true
+# The metal gxi backend (src/gxi/metal): device/queue/resources, MSL library
+# compilation, render pipelines + vertex descriptors, command buffers and the
+# render pass/encoder used per frame. Per-header features, one per Metal
+# framework header the backend touches.
+objc2-metal = { workspace = true, features = [
+    "MTLDevice",
+    "MTLCommandQueue",
+    "MTLCommandBuffer",
+    "MTLCommandEncoder",
+    "MTLRenderCommandEncoder",
+    "MTLRenderPass",
+    "MTLRenderPipeline",
+    "MTLVertexDescriptor",
+    "MTLLibrary",
+    "MTLPixelFormat",
+    "MTLResource",
+    "MTLAllocation",
+    "MTLBuffer",
+    "MTLTexture",
+    "MTLSampler",
+    "MTLTypes",
+    "MTLDrawable",
+    # GPU frame timing (src/gxi/metal/timing.rs): addCompletedHandler takes a
+    # block2 block, GPUStartTime/GPUEndTime return CFTimeInterval.
+    "block2",
+    "objc2-core-foundation",
+] }
+# CAMetalLayer + the objc2-metal interop feature (its setDevice/pixelFormat/
+# nextDrawable signatures are typed against objc2-metal's protocols).
+objc2-quartz-core = { workspace = true, features = ["CALayer", "CAAnimation", "CAMediaTiming", "CAMediaTimingFunction", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
+block2.workspace = true
+
+# Build-time shader translation (see build.rs): WGSL to DXBC on Windows, WGSL
+# to MSL source on macOS. One block for both; the unused naga backend only
+# costs build time, and nothing from naga ships in the binary.
+[build-dependencies]
+naga = { workspace = true, features = ["wgsl-in", "hlsl-out", "msl-out"] }
+libloading.workspace = true

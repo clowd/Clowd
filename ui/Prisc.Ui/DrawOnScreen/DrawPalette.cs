@@ -1,0 +1,119 @@
+using System;
+using System.Collections.Generic;
+using Avalonia.Media;
+
+namespace Prisc.UI.DrawOnScreen
+{
+    /// <summary>
+    /// The fixed choices the draw-on-screen toolbar offers: eight colours, four sizes and the
+    /// nine tools, with the localisation and icon keys that go with them. Pure tables, so the
+    /// values the approved mockup pins are tested (<c>DrawPaletteTests</c>) rather than eyeballed
+    /// at a smoke check.
+    /// </summary>
+    public static class DrawPalette
+    {
+        /// <summary>One size step. <see cref="Stroke"/> is the visible line width in canvas units
+        /// (the brush's dot diameter, a shape's outline), <see cref="PreviewDot"/> the diameter of
+        /// the dot the size button shows, <see cref="TextSize"/> the text tool's font size.</summary>
+        public readonly record struct DrawSize(string Key, double Stroke, double PreviewDot, double TextSize);
+
+        public static IReadOnlyList<Color> Colors { get; } = new[]
+        {
+            Color.Parse("#DF2828"),
+            Color.Parse("#E27F38"),
+            Color.Parse("#E2CF38"),
+            Color.Parse("#86E238"),
+            Color.Parse("#359EC9"),
+            Color.Parse("#7855D4"),
+            Color.Parse("#F4F4F4"),
+            Color.Parse("#1E1E1E"),
+        };
+
+        /// <summary>Tooltip keys for <see cref="Colors"/>, index for index.</summary>
+        public static IReadOnlyList<string> ColorKeys { get; } = new[]
+        {
+            "Draw_Color_Red",
+            "Draw_Color_Orange",
+            "Draw_Color_Yellow",
+            "Draw_Color_Green",
+            "Draw_Color_Blue",
+            "Draw_Color_Purple",
+            "Draw_Color_White",
+            "Draw_Color_Black",
+        };
+
+        public static IReadOnlyList<DrawSize> Sizes { get; } = new[]
+        {
+            new DrawSize("Draw_Size_Thin", 3, 6, 18),
+            new DrawSize("Draw_Size_Medium", 9, 10, 34),
+            new DrawSize("Draw_Size_Thick", 15, 14, 50),
+            new DrawSize("Draw_Size_Huge", 21, 18, 66),
+        };
+
+        /// <summary>The tools, in toolbar order. <see cref="ToolType.Eraser"/> lives only here: the
+        /// editor never offers it. <see cref="ToolType.Pointer"/> is the select tool.</summary>
+        public static IReadOnlyList<ToolType> Tools { get; } = new[]
+        {
+            ToolType.Pointer,
+            ToolType.Brush,
+            ToolType.Arrow,
+            ToolType.Line,
+            ToolType.Rectangle,
+            ToolType.Ellipse,
+            ToolType.Text,
+            ToolType.Count,
+            ToolType.Eraser,
+        };
+
+        public const int DefaultColorIndex = 0;
+        public const int DefaultSizeIndex = 1;
+        public const ToolType DefaultTool = ToolType.Brush;
+
+        /// <summary>
+        /// The canvas LineWidth that makes <paramref name="tool"/> draw <paramref name="size"/>'s
+        /// <see cref="DrawSize.Stroke"/> as its visible width.
+        /// </summary>
+        /// <remarks>
+        /// The one knob means different things per graphic. GraphicBrush hands perfect-freehand a
+        /// size of GraphicBrush.SizePerLineWidth (3)·LineWidth, and its ink runs from half that at
+        /// speed to one and a half times it at rest: the brush takes half the stroke, which puts a
+        /// quick line at 0.75·Stroke and a click at 1.5·Stroke, about the weight of the shapes
+        /// beside it. Rectangle, ellipse and line stroke their outline with a pen LineWidth wide,
+        /// so they take the stroke as is. The arrow's tapered shaft treats LineWidth as its nominal
+        /// weight (thinner at the tail, heavier toward the head) and takes it as is too, matching
+        /// the mockup, where every shape is outlined at the size's stroke. The step badge rings
+        /// itself at 1.5·LineWidth and grows with it, so it takes a third: medium lands on the
+        /// image editor's default badge (LineWidth 3).
+        /// </remarks>
+        public static double LineWidthFor(ToolType tool, DrawSize size) => tool switch
+        {
+            ToolType.Brush => size.Stroke / 2,
+            ToolType.Count => size.Stroke / 3,
+            _ => size.Stroke,
+        };
+
+        /// <summary>
+        /// The canvas font size for <paramref name="tool"/> at <paramref name="size"/>. Text takes
+        /// <see cref="DrawSize.TextSize"/>; the step badge's circle is 1.9 font sizes across, so it
+        /// takes 0.6 of that, which puts medium at the image editor's default badge (20).
+        /// </summary>
+        public static double FontSizeFor(ToolType tool, DrawSize size) =>
+            tool == ToolType.Count ? size.TextSize * 0.6 : size.TextSize;
+
+        /// <summary>Tooltip key for a tool: <c>Draw_Tool_Brush</c> and so on.</summary>
+        public static string ToolKey(ToolType tool) => "Draw_Tool_" + tool;
+
+        /// <summary>Resource key of a tool's icon in Assets/VectorIcons.axaml: <c>IconToolBrush</c>
+        /// and so on. The select tool shares the image editor's Selection icon (a dotted frame under
+        /// a pointer): a pointer is already the click-through toggle's. The step badge drops the
+        /// editor icon's leader arrowhead, which crowded the accelerator hint in the tile's corner, and
+        /// the rectangle rounds its corners off for the same reason.</summary>
+        public static string ToolIconKey(ToolType tool) => tool switch
+        {
+            ToolType.Pointer => "IconToolSelection",
+            ToolType.Rectangle => "IconToolRectangleRounded",
+            ToolType.Count => "IconToolNumericCountPlain",
+            _ => "IconTool" + tool,
+        };
+    }
+}

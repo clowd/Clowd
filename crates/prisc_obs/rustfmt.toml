@@ -1,0 +1,2 @@
+# Imported recorder code is kept as-is: rustfmt never reformats this crate (see the root rustfmt.toml for everything else).
+disable_all_formatting = true

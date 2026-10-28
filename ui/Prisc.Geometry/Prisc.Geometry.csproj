@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The 2D maths the image editor and the video editor must agree on (the arrow look, the
+       curve bend, the angle snap), with no package references so both can share it: the image
+       editor without pulling in FFmpeg, the headless renderer without pulling in Avalonia. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <!-- Not Prisc.Geometry: a namespace of that name would shadow Avalonia's Geometry type in
+         every file under namespace Prisc.*, because C# finds Prisc's member namespaces before
+         the file's using directives. -->
+    <RootNamespace>Prisc.Geometry2D</RootNamespace>
+  </PropertyGroup>
+</Project>

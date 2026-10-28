@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Prisc.Upload</RootNamespace>
+    <!-- providers are ported verbatim from the WPF repo (kept diffable); no sync-context to deadlock on -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Prisc.Shared\Prisc.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Prisc.Shared.Tests" />
+    <!-- UploadManager drives the internal zip-streaming/routing types directly -->
+    <InternalsVisibleTo Include="Prisc.Ui" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Embed\azure.png" />
+    <EmbeddedResource Include="Embed\prisc.png" />
+    <EmbeddedResource Include="Embed\imgur.png" />
+    <EmbeddedResource Include="Embed\backblaze.png" />
+    <EmbeddedResource Include="Embed\cloudflare.png" />
+    <EmbeddedResource Include="Embed\languages.yml" />
+    <EmbeddedResource Include="Embed\mime-db.json" />
+    <EmbeddedResource Include="Embed\picsur.png" />
+    <EmbeddedResource Include="Embed\s3.png" />
+    <EmbeddedResource Include="Embed\vgyme.png" />
+    <EmbeddedResource Include="Embed\catbox.png" />
+    <EmbeddedResource Include="Embed\hastebin.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.0.101.4" />
+    <PackageReference Include="WindowsAzure.Storage" Version="9.3.3" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="6.0.0" />
+  </ItemGroup>
+</Project>

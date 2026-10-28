@@ -1,11 +1,19 @@
 name: CI
 
 # Test + package on every commit.
-# Each package is the published Clowd.Ui app with the Rust binaries beside it and
-# obs-express in a subdirectory, the layout ScreenCaptureService/ObsBinaryLocator expects.
+# Each package is the published Prisc.Ui app with the Rust binaries beside it and
+# the recorder (prisc_recorder + libobs, built by build-recorder.yml) in a recorder/
+# subdirectory, the layout ScreenCaptureService/ObsBinaryLocator expects.
 # Every package except osx-x64 (which upstream ONNX Runtime no longer supports) also
-# carries the clowd_ai inference binary (OCR, matting, denoising) with its
+# carries the prisc_ai inference binary (OCR, matting, denoising) with its
 # execution-provider dylibs.
+#
+# Job graph:
+#   version                                  -> artifact `version` (release.yml reads it)
+#   recorder-windows/-macos/-linux           -> recorder-<rid> (build-recorder.yml; Linux is a check only)
+#   test                                     Rust gate + Shared/Drawing dotnet tests (no needs)
+#   test-video  needs recorder-windows/-macos (runs even if they fail; the FFmpeg tests then skip)
+#   package     needs recorder-windows/-macos -> prisc-<rid>
 
 on:
   push:
@@ -18,6 +26,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # release.yml downloads this from a completed run and trusts it as that run's version.
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compute nbgv version
+        run: |
+          dotnet tool update -g nbgv
+          # Capture first, write after: nbgv reads a repo-root version.txt as a legacy version file and crashes on the empty one tee would leave.
+          VERSION="$(nbgv get-version -v SimpleVersion)"
+          echo "$VERSION" | tee version.txt
+
+      - name: Upload version artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: version
+          path: version.txt
+          if-no-files-found: error
+
+  # The recorder stack (libobs via CMake, 20-40 min cold) builds in these three calls, the
+  # only jobs that check out the obs-studio submodule.
+  recorder-windows:
+    uses: ./.github/workflows/build-recorder.yml
+    with:
+      platform: windows
+
+  recorder-macos:
+    uses: ./.github/workflows/build-recorder.yml
+    with:
+      platform: macos
+
+  # Linux has no app package yet; this proves the recorder still builds, tests and runs
+  # there (bundle + portability checks). Nothing consumes its artifacts.
+  recorder-linux:
+    uses: ./.github/workflows/build-recorder.yml
+    with:
+      platform: linux
+
   test:
     name: test (${{ matrix.os }})
     strategy:
@@ -25,6 +76,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-15]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -46,120 +98,152 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # App crates only. The recorder crates build libobs from their build scripts, so they
+      # are built and tested in build-recorder.yml (their clippy is not gated yet).
+      # `cargo fmt --check` covers the whole workspace; the imported recorder crates opt out
+      # of formatting through their own rustfmt.toml.
       - name: "Rust gate: format + lint + tests"
         run: |
           cargo fmt --check
-          cargo clippy -p clowd_rust_core --all-targets -- -D warnings
-          cargo test -p clowd_rust_core
-          cargo clippy -p clowd_capture -- -D warnings
-          cargo test -p clowd_capture
-          cargo clippy -p clowd_scroll_driver --all-targets -- -D warnings
-          cargo test -p clowd_scroll_driver
-          cargo clippy -p clowd_ai --all-targets -- -D warnings
-          cargo test -p clowd_ai
+          cargo clippy -p prisc_rust_core --all-targets -- -D warnings
+          cargo test -p prisc_rust_core
+          cargo clippy -p prisc_hotkeys --all-targets -- -D warnings
+          cargo test -p prisc_hotkeys
+          cargo clippy -p prisc_capture -- -D warnings
+          cargo test -p prisc_capture
+          cargo clippy -p prisc_scroll_driver --all-targets -- -D warnings
+          cargo test -p prisc_scroll_driver
+          cargo clippy -p prisc_ai --all-targets -- -D warnings
+          cargo test -p prisc_ai
+        shell: bash
+
+      # prisc_hotkeys has no Linux backend yet, but Key/Gesture/the C ABI still build there, and
+      # this job has no Linux leg. The crate is plain Rust on Linux, so clippy needs no linker.
+      - name: "Rust gate: prisc_hotkeys Linux cross-check"
+        if: runner.os == 'Windows'
+        run: |
+          rustup target add x86_64-unknown-linux-gnu
+          cargo clippy -p prisc_hotkeys --target x86_64-unknown-linux-gnu -- -D warnings
         shell: bash
 
       # The shell extension is a Windows COM dll and an empty crate elsewhere.
       - name: "Rust gate: shell extension (Windows)"
         if: runner.os == 'Windows'
         run: |
-          cargo clippy -p clowd_shell_ext -- -D warnings
-          cargo test -p clowd_shell_ext
+          cargo clippy -p prisc_shell_ext -- -D warnings
+          cargo test -p prisc_shell_ext
         shell: bash
 
-      # The video editor's suite needs FFmpeg 8.1 natives to run its decode/encode/render tests;
-      # without them ~100 of them skip. Take them from the same obs-express payload a shipped
-      # build uses, so what CI exercises is what users get — including ObsBinaryLocator's own
-      # resolution of it, which is why this points CLOWD_OBS_EXPRESS_PATH at the binary rather
-      # than CLOWD_FFMPEG_PATH at a directory: the layout differs per platform (beside the exe on
-      # Windows, Frameworks/ on macOS) and working that out is the thing under test.
-      #
-      # Deliberately non-fatal: if the download fails, the variable stays unset, those tests skip
-      # as they always did, and the other ~3300 still run. A convenience dependency should not be
-      # able to take the gate down.
-      - name: obs-express payload for the video editor tests
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          asset=$([ "$RUNNER_OS" = "Windows" ] && echo obs-express-windows-x64.zip || echo obs-express-macos-arm64.zip)
-          if gh release download --repo clowd/obs-express-rs --pattern "$asset" --output obs-express.zip; then
-            mkdir -p obs-express
-            unzip -q obs-express.zip -d obs-express
-            exe=$([ "$RUNNER_OS" = "Windows" ] && echo obs-express.exe || echo obs-express)
-            echo "CLOWD_OBS_EXPRESS_PATH=$(pwd)/obs-express/$exe" >> "$GITHUB_ENV"
-          else
-            echo "::warning::obs-express payload unavailable; the FFmpeg-backed tests will skip"
-          fi
-        shell: bash
-
-      # Clowd.VideoSDK.Tests is the video editor's suite — the playback engine, the compositor,
-      # the render/encode path, the audio clock and the editor model. It used to run nowhere, which
-      # left the whole editor with no CI at all. Tests that need something the runner has not got
-      # (FFmpeg on Windows, the clowd_ai binary, another platform) skip rather than fail.
+      # Prisc.VideoSDK.Tests runs in test-video, which waits for this run's recorder payload.
       - name: "UI gate: dotnet tests"
         run: |
-          dotnet test clowd_ui/Clowd.VideoSDK.Tests/Clowd.VideoSDK.Tests.csproj -c Release --nologo
-          dotnet test clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj -c Release --nologo
-          dotnet test clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj -c Release --nologo
+          dotnet test ui/Prisc.Shared.Tests/Prisc.Shared.Tests.csproj -c Release --nologo
+          dotnet test ui/Prisc.Drawing.Tests/Prisc.Drawing.Tests.csproj -c Release --nologo
         shell: bash
 
-  # release.yml downloads this from a completed run and trusts it as that run's version.
-  version:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Compute nbgv version
-        run: |
-          dotnet tool update -g nbgv
-          # Capture first, write after: nbgv reads a repo-root version.txt as a legacy version file and crashes on the empty one tee would leave.
-          VERSION="$(nbgv get-version -v SimpleVersion)"
-          echo "$VERSION" | tee version.txt
-
-      - name: Upload version artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: version
-          path: version.txt
-          if-no-files-found: error
-
-  package:
-    name: package (${{ matrix.rid }})
+  # Prisc.VideoSDK.Tests is the video editor's suite — the playback engine, the compositor,
+  # the render/encode path, the audio clock and the editor model. Tests that need something the
+  # runner has not got (FFmpeg, the prisc_ai binary, another platform) skip rather than fail.
+  test-video:
+    name: test-video (${{ matrix.os }})
+    needs: [recorder-windows, recorder-macos]
+    # Also runs when a recorder build failed: the FFmpeg-backed tests then skip (see below)
+    # and the rest of the suite still gates.
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ai: whether the clowd_ai inference binary builds for this
+          - os: windows-latest
+            rid: win-x64
+            exe: .exe
+          - os: macos-15
+            rid: osx-arm64
+            exe: ""
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # nbgv needs full history to compute the version height.
+          fetch-depth: 0
+
+      # SDK 10 is required: Avalonia 12's XAML generators target Roslyn 4.14, and older SDKs skip them as CS9057 so the x:Name fields go missing.
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # The video editor's suite needs FFmpeg 8.1 natives to run its decode/encode/render tests;
+      # without them ~100 of them skip. Take them from the recorder payload this run built, the
+      # same one a shipped build carries, so what CI exercises is what users get — including
+      # ObsBinaryLocator's own resolution of it, which is why this points PRISC_RECORDER_PATH at
+      # the binary rather than PRISC_FFMPEG_PATH at a directory: the layout differs per platform
+      # (beside the exe on Windows, Frameworks/ on macOS) and working that out is the thing under
+      # test.
+      #
+      # Deliberately non-fatal: if the recorder build failed, the variable stays unset, those
+      # tests skip, and the other ~3300 still run.
+      - name: Download recorder payload
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: recorder-${{ matrix.rid }}
+          path: recorder-artifact
+
+      - name: Recorder payload for the video editor tests
+        run: |
+          zip="recorder-artifact/recorder-${{ matrix.rid }}.zip"
+          if [ -f "$zip" ]; then
+            mkdir -p recorder
+            unzip -q "$zip" -d recorder
+          fi
+          exe="recorder/prisc_recorder${{ matrix.exe }}"
+          if [ -f "$exe" ]; then
+            echo "PRISC_RECORDER_PATH=$(pwd)/$exe" >> "$GITHUB_ENV"
+          else
+            echo "::warning::recorder payload unavailable; the FFmpeg-backed tests will skip"
+          fi
+        shell: bash
+
+      - name: "UI gate: video editor tests"
+        run: dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj -c Release --nologo
+        shell: bash
+
+  package:
+    name: package (${{ matrix.rid }})
+    # Every package carries its rid's recorder build in recorder/.
+    needs: [recorder-windows, recorder-macos]
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ai: whether the prisc_ai inference binary builds for this
           # target. false only on osx-x64: upstream ONNX Runtime dropped
           # macOS x86_64, so ort has no binaries for it — the app grays the
           # AI effects out there and the overlay reports OCR as unavailable.
           - rid: win-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            obs-asset: obs-express-windows-x64.zip
             ai: true
             exe: .exe
             msix-arch: x64
           - rid: win-arm64
             os: windows-latest
             target: aarch64-pc-windows-msvc
-            obs-asset: obs-express-windows-arm64.zip
             ai: true
             exe: .exe
             msix-arch: arm64
           - rid: osx-x64
             os: macos-15
             target: x86_64-apple-darwin
-            obs-asset: obs-express-macos-x64.zip
             ai: false
             exe: ""
           - rid: osx-arm64
             os: macos-15
             target: aarch64-apple-darwin
-            obs-asset: obs-express-macos-arm64.zip
             ai: true
             exe: ""
     runs-on: ${{ matrix.os }}
@@ -192,16 +276,16 @@ jobs:
           dotnet-version: 10.0.x
 
       # No PublishSingleFile: vpk pack (release.yml) requires a normal multi-file publish directory.
-      - name: Publish Clowd.Ui
+      - name: Publish Prisc.Ui
         run: >
-          dotnet publish clowd_ui/Clowd.Ui/Clowd.Ui.csproj
+          dotnet publish ui/Prisc.Ui/Prisc.Ui.csproj
           -c Release -r ${{ matrix.rid }} --self-contained true
           -o publish
 
       # macOS 26 gates its window design (the larger corner radius, the modern titlebar) on the
       # linked-SDK field of LC_BUILD_VERSION in the MAIN executable, not on any runtime API. That
       # executable is the .NET apphost, which Microsoft ships prebuilt declaring sdk 15.5, so
-      # AppKit puts every Clowd window in the pre-Tahoe compatibility frame. Nothing in Avalonia
+      # AppKit puts every Prisc window in the pre-Tahoe compatibility frame. Nothing in Avalonia
       # or the Info.plist can override it: libAvaloniaNative is already sdk 26.0 and AppKit never
       # looks at it. So stamp the field here, leaving minos alone; sdk newer than the deployment
       # target is exactly what an ordinary Xcode build produces, and dyld enforces only minos, so
@@ -217,51 +301,53 @@ jobs:
       # vtool cannot re-sign the apphost's ad-hoc signature (it only regenerates linker-signed
       # ones), so from here until vpk signs with Developer ID in release.yml this binary has an
       # invalid signature and is SIGKILLed on launch on Apple Silicon. That makes the uploaded
-      # clowd-osx-* artifact unrunnable as-is; add `codesign -s - --force` below if that ever
+      # prisc-osx-* artifact unrunnable as-is; add `codesign -s - --force` below if that ever
       # needs to change.
       - name: Stamp the macOS SDK version into the apphost
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          MINOS=$(vtool -show-build-version publish/Clowd.Ui | awk '/minos/ { print $2 }')
-          vtool -set-build-version macos "$MINOS" 26.0 -replace -output publish/Clowd.Ui publish/Clowd.Ui
-          vtool -show-build-version publish/Clowd.Ui
+          MINOS=$(vtool -show-build-version publish/Prisc.Ui | awk '/minos/ { print $2 }')
+          vtool -set-build-version macos "$MINOS" 26.0 -replace -output publish/Prisc.Ui publish/Prisc.Ui
+          vtool -show-build-version publish/Prisc.Ui
           # A silent no-op here would ship the legacy frame and go unnoticed until someone looked
           # at a window, so fail the build instead.
-          vtool -show-build-version publish/Clowd.Ui | grep -qE '^\s*sdk 26\.' \
+          vtool -show-build-version publish/Prisc.Ui | grep -qE '^\s*sdk 26\.' \
             || { echo "::error::apphost SDK stamp did not apply"; exit 1; }
 
-      # The render tool is a separate thin exe over Clowd.VideoSDK; publishing into the
+      # The render tool is a separate thin exe over Prisc.VideoSDK; publishing into the
       # same directory shares the self-contained runtime and SDK assemblies, so the
-      # marginal cost is the apphost. VidRenderRunner looks for it beside Clowd.Ui.
-      - name: Publish Clowd.VideoRender
+      # marginal cost is the apphost. VidRenderRunner looks for it beside Prisc.Ui.
+      - name: Publish Prisc.VideoRender
         run: >
-          dotnet publish clowd_ui/Clowd.VideoRender/Clowd.VideoRender.csproj
+          dotnet publish ui/Prisc.VideoRender/Prisc.VideoRender.csproj
           -c Release -r ${{ matrix.rid }} --self-contained true
           -o publish
 
-      # The Rust build has no nbgv hook, so stamp the same version into its Sentry release name (clowd_rust_core/src/telemetry.rs).
+      # The Rust build has no nbgv hook, so stamp the same version into its Sentry release name (crates/prisc_rust_core/src/telemetry.rs).
       - name: Resolve version for capture binary
         shell: bash
         run: |
           dotnet tool update -g nbgv
-          echo "CLOWD_VERSION=$(nbgv get-version -v SimpleVersion)" >> "$GITHUB_ENV"
+          echo "PRISC_VERSION=$(nbgv get-version -v SimpleVersion)" >> "$GITHUB_ENV"
 
       # One invocation rather than one per crate, so codegen and the LTO links overlap instead of leaving the runner idle.
+      # Explicit packages: the workspace also holds the recorder crates, which build-recorder.yml builds.
       - name: Build rust binaries
         shell: bash
         run: |
-          PKGS="-p clowd_capture -p clowd_scroll_driver"
+          PKGS="-p prisc_capture -p prisc_scroll_driver -p prisc_hotkeys"
           if [ "${{ runner.os }}" = "Windows" ]; then
-            PKGS="$PKGS -p clowd_shell_ext"
+            PKGS="$PKGS -p prisc_shell_ext"
           fi
           # The ort crate's build downloads pyke's prebuilt ONNX Runtime for the target and links it statically (see the matrix `ai` flag).
           if [ "${{ matrix.ai }}" = "true" ]; then
-            PKGS="$PKGS -p clowd_ai"
+            PKGS="$PKGS -p prisc_ai"
           fi
           cargo build --release --target ${{ matrix.target }} $PKGS
 
       # Without these an LTO'd release build reports mangled frames with no file or line; skipped rather than failed when the token is absent (forks).
+      # The recorder has no Sentry integration, so it uploads no debug files.
       - name: Upload capture debug files to Sentry
         if: env.SENTRY_AUTH_TOKEN != ''
         shell: bash
@@ -270,48 +356,60 @@ jobs:
           OUT="target/${{ matrix.target }}/release"
           # Name the artifacts rather than the directory, which would recurse into deps/ and upload every dependency's intermediates.
           if [ "${{ runner.os }}" = "Windows" ]; then
-            DIF="$OUT/clowd_capture.pdb"
-            SCROLL_DIF="$OUT/clowd_scroll_driver.pdb"
-            AI_DIF="$OUT/clowd_ai.pdb"
+            DIF="$OUT/prisc_capture.pdb"
+            SCROLL_DIF="$OUT/prisc_scroll_driver.pdb"
+            AI_DIF="$OUT/prisc_ai.pdb"
           else
-            DIF="$OUT/clowd_capture.dSYM"
-            SCROLL_DIF="$OUT/clowd_scroll_driver.dSYM"
-            AI_DIF="$OUT/clowd_ai.dSYM"
+            DIF="$OUT/prisc_capture.dSYM"
+            SCROLL_DIF="$OUT/prisc_scroll_driver.dSYM"
+            AI_DIF="$OUT/prisc_ai.dSYM"
           fi
           # The executable goes up alongside the debug file for its symbol table.
-          sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture${{ matrix.exe }}"
-          sentry-cli debug-files upload "$SCROLL_DIF" "$OUT/clowd_scroll_driver${{ matrix.exe }}"
+          sentry-cli debug-files upload "$DIF" "$OUT/prisc_capture${{ matrix.exe }}"
+          sentry-cli debug-files upload "$SCROLL_DIF" "$OUT/prisc_scroll_driver${{ matrix.exe }}"
           # absent on the one leg that does not build the AI inference binary
           if [ "${{ matrix.ai }}" = "true" ]; then
-            sentry-cli debug-files upload "$AI_DIF" "$OUT/clowd_ai${{ matrix.exe }}"
+            sentry-cli debug-files upload "$AI_DIF" "$OUT/prisc_ai${{ matrix.exe }}"
           fi
           if [ "${{ runner.os }}" = "Windows" ]; then
-            sentry-cli debug-files upload "$OUT/clowd_shell_ext.pdb" "$OUT/clowd_shell_ext.dll"
+            sentry-cli debug-files upload "$OUT/prisc_shell_ext.pdb" "$OUT/prisc_shell_ext.dll"
+            sentry-cli debug-files upload "$OUT/prisc_hotkeys.pdb" "$OUT/prisc_hotkeys.dll"
+          else
+            sentry-cli debug-files upload "$OUT/libprisc_hotkeys.dylib.dSYM" "$OUT/libprisc_hotkeys.dylib"
           fi
 
-      # The driver (and clowd_ai, below) sit beside the overlay, which resolves them as siblings of its own executable.
+      # The driver (and prisc_ai, below) sit beside the overlay, which resolves them as siblings of its own executable.
       - name: Copy capture binary into package
-        run: cp "target/${{ matrix.target }}/release/clowd_capture${{ matrix.exe }}" publish/
+        run: cp "target/${{ matrix.target }}/release/prisc_capture${{ matrix.exe }}" publish/
         shell: bash
 
       - name: Copy scrolling capture driver into package
-        run: cp "target/${{ matrix.target }}/release/clowd_scroll_driver${{ matrix.exe }}" publish/
+        run: cp "target/${{ matrix.target }}/release/prisc_scroll_driver${{ matrix.exe }}" publish/
         shell: bash
 
-      # Beside Clowd.Ui (where AiLoader looks for it) and beside the overlay (which spawns it for OCR).
+      # The global hotkey library Prisc.Ui P/Invokes, beside it where HotkeysLibraryLocator looks.
+      # release.yml signs it with the rest: vpk's Trusted Signing pass covers every dll in the pack
+      # dir, and the macOS app signing and notarization cover every Mach-O in the bundle.
+      - name: Copy hotkeys library into package
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then cp "target/${{ matrix.target }}/release/prisc_hotkeys.dll" publish/
+          else cp "target/${{ matrix.target }}/release/libprisc_hotkeys.dylib" publish/; fi
+        shell: bash
+
+      # Beside Prisc.Ui (where AiLoader looks for it) and beside the overlay (which spawns it for OCR).
       - name: Copy AI inference binary into package
         if: matrix.ai
-        run: cp "target/${{ matrix.target }}/release/clowd_ai${{ matrix.exe }}" publish/
+        run: cp "target/${{ matrix.target }}/release/prisc_ai${{ matrix.exe }}" publish/
         shell: bash
 
-      # clowd_ai is GPL-3.0 (it embeds the RobustVideoMatting weights);
+      # prisc_ai is GPL-3.0 (it embeds the RobustVideoMatting weights);
       # GPL sections 4/6 require the license text and source offer to travel
       # with every distributed copy.
       - name: Copy AI inference license into package
         if: matrix.ai
         run: |
-          cp clowd_ai/LICENSE publish/clowd_ai.LICENSE.txt
-          cp clowd_ai/NOTICE.txt publish/clowd_ai.NOTICE.txt
+          cp crates/prisc_ai/LICENSE publish/prisc_ai.LICENSE.txt
+          cp crates/prisc_ai/NOTICE.txt publish/prisc_ai.NOTICE.txt
         shell: bash
 
       # The runtime itself is statically linked, but the DirectML EP needs
@@ -322,12 +420,13 @@ jobs:
         run: cp "target/${{ matrix.target }}/release/DirectML.dll" publish/
         shell: bash
 
-      # clowd_ai is the workspace's one /MD binary (its build.rs swaps
+      # prisc_ai is the app's one /MD binary (its build.rs swaps
       # it off `+crt-static` to match pyke's ONNX Runtime libs), so it
       # imports msvcp140/vcruntime140 at runtime. Those are not OS
       # components; ship them app-local from the runner's own VS redist,
-      # matching the package's architecture. Every other binary in the
-      # package stays crt-static and needs none of this.
+      # matching the package's architecture. Every other binary beside
+      # Prisc.Ui stays crt-static and needs none of this (the recorder/
+      # folder carries its own copies for libobs).
       - name: Copy VC++ CRT into package (Windows)
         if: matrix.ai && runner.os == 'Windows'
         run: |
@@ -347,9 +446,9 @@ jobs:
       - name: Copy shell extension into package (Windows)
         if: runner.os == 'Windows'
         run: |
-          EXT_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "clowd_shell_ext") | .version')
-          echo "CLOWD_EXT_VERSION=$EXT_VERSION" >> "$GITHUB_ENV"
-          cp "target/${{ matrix.target }}/release/clowd_shell_ext.dll" "publish/ClowdShellExt_${EXT_VERSION}.dll"
+          EXT_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "prisc_shell_ext") | .version')
+          echo "PRISC_EXT_VERSION=$EXT_VERSION" >> "$GITHUB_ENV"
+          cp "target/${{ matrix.target }}/release/prisc_shell_ext.dll" "publish/PriscShellExt_${EXT_VERSION}.dll"
         shell: bash
 
       # Sparse package: the msix holds only the manifest + logos and /nv skips the payload validation that would reject its references to the external dll.
@@ -358,50 +457,52 @@ jobs:
         run: |
           $staging = Join-Path $env:RUNNER_TEMP msix-staging
           New-Item -ItemType Directory -Path $staging | Out-Null
-          Copy-Item -Recurse clowd_shell_ext/msix/Assets (Join-Path $staging Assets)
-          $manifest = (Get-Content clowd_shell_ext/msix/AppxManifest.template.xml -Raw)
-          $manifest = $manifest.Replace('{{VERSION}}', "$env:CLOWD_VERSION.0").Replace('{{ARCH}}', '${{ matrix.msix-arch }}').Replace('{{EXTVERSION}}', $env:CLOWD_EXT_VERSION)
+          Copy-Item -Recurse crates/prisc_shell_ext/msix/Assets (Join-Path $staging Assets)
+          $manifest = (Get-Content crates/prisc_shell_ext/msix/AppxManifest.template.xml -Raw)
+          $manifest = $manifest.Replace('{{VERSION}}', "$env:PRISC_VERSION.0").Replace('{{ARCH}}', '${{ matrix.msix-arch }}').Replace('{{EXTVERSION}}', $env:PRISC_EXT_VERSION)
           Set-Content -Path (Join-Path $staging AppxManifest.xml) -Value $manifest -Encoding utf8
           $makeappx = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe' | Select-Object -Last 1
-          & $makeappx.FullName pack /d $staging /p publish/ClowdShellExt.msix /nv /o
+          & $makeappx.FullName pack /d $staging /p publish/PriscShellExt.msix /nv /o
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
 
-      - name: Download obs-express (latest release)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download --repo clowd/obs-express-rs --pattern "${{ matrix.obs-asset }}" --output obs-express.zip
-        shell: bash
+      # The recorder this run built for the same rid (build-recorder.yml): one archive with its
+      # members at the root, unpacked into recorder/ where ObsBinaryLocator looks for it.
+      - name: Download recorder
+        uses: actions/download-artifact@v8
+        with:
+          name: recorder-${{ matrix.rid }}
+          path: recorder-artifact
 
-      - name: Extract obs-express into package (Windows)
+      - name: Extract recorder into package (Windows)
         if: runner.os == 'Windows'
-        run: Expand-Archive obs-express.zip -DestinationPath publish/obs-express
+        run: Expand-Archive recorder-artifact/recorder-${{ matrix.rid }}.zip -DestinationPath publish/recorder
         shell: pwsh
 
-      # No repair pass: since obs-express-rs v0.7.0 the archive is built with ditto in its own
-      # build job rather than round-tripped through upload-artifact, so it carries the execute
-      # bits and the framework symlinks itself (clowd/obs-express-rs#5). unzip restores both.
-      - name: Extract obs-express into package (macOS)
+      # No repair pass: the recorder job archives its bundle with ditto rather than uploading the
+      # loose tree, so the zip carries the execute bits and the framework symlinks itself, and
+      # unzip restores both.
+      - name: Extract recorder into package (macOS)
         if: runner.os == 'macOS'
-        run: unzip -q obs-express.zip -d publish/obs-express
+        run: unzip -q recorder-artifact/recorder-${{ matrix.rid }}.zip -d publish/recorder
 
       # upload-artifact does not preserve unix file modes, but a zip does.
       - name: Zip package (macOS)
         if: runner.os == 'macOS'
-        run: cd publish && zip -qry "../clowd-${{ matrix.rid }}.zip" .
+        run: cd publish && zip -qry "../prisc-${{ matrix.rid }}.zip" .
 
       - name: Upload package (macOS)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v7
         with:
-          name: clowd-${{ matrix.rid }}
-          path: clowd-${{ matrix.rid }}.zip
+          name: prisc-${{ matrix.rid }}
+          path: prisc-${{ matrix.rid }}.zip
           if-no-files-found: error
 
       - name: Upload package (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
-          name: clowd-${{ matrix.rid }}
+          name: prisc-${{ matrix.rid }}
           path: publish/
           if-no-files-found: error

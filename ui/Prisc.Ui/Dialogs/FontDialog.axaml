@@ -1,0 +1,80 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Prisc.UI.Controls"
+        x:Class="Prisc.UI.Dialogs.FontDialog"
+        Title="Font"
+        Width="460" Height="460"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="{DynamicResource ApplicationBackgroundBrush}"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid Margin="14" RowDefinitions="Auto,Auto,*,Auto,Auto" ColumnDefinitions="*,150">
+
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Font family:" Margin="0,0,0,6" />
+        <TextBlock x:Name="SizeStyleHeader" Grid.Row="0" Grid.Column="1" Text="Size &amp; style:" Margin="12,0,0,6" />
+
+        <TextBox x:Name="FilterBox"
+                 Grid.Row="1" Grid.Column="0"
+                 Margin="0,0,0,6"
+                 PlaceholderText="Filter fonts…" />
+
+        <ListBox x:Name="FontList"
+                 Grid.Row="2" Grid.Column="0"
+                 SelectionMode="Single"
+                 BorderThickness="1"
+                 BorderBrush="{DynamicResource SemiColorBorder}"
+                 CornerRadius="3"
+                 Background="Transparent" />
+
+        <StackPanel x:Name="SizeStylePanel" Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Margin="12,0,0,0" Spacing="8">
+            <controls:ScrollableUrsaSpinner x:Name="SizeBox"
+                                            Minimum="8"
+                                            Maximum="64"
+                                            Step="1"
+                                            FormatString="0"
+                                            SnapToWholeNumber="True" />
+            <ToggleButton x:Name="BoldToggle"
+                          Content="Bold"
+                          FontWeight="Bold"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Center" />
+            <ToggleButton x:Name="ItalicToggle"
+                          Content="Italic"
+                          FontStyle="Italic"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Center" />
+        </StackPanel>
+
+        <Border Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                Margin="0,12,0,0"
+                Height="90"
+                Padding="8"
+                BorderBrush="{DynamicResource SemiColorBorder}"
+                BorderThickness="1"
+                CornerRadius="3">
+            <TextBlock x:Name="PreviewText"
+                       Text="AaBbYyZz 123"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
+        </Border>
+
+        <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,14,0,0">
+            <Button x:Name="OkButton"
+                    Theme="{StaticResource SolidButton}"
+                    Classes="Primary"
+                    Content="OK"
+                    MinWidth="80"
+                    HorizontalContentAlignment="Center"
+                    IsDefault="True" />
+            <Button x:Name="CancelButton" Content="Cancel" MinWidth="80" HorizontalContentAlignment="Center" />
+        </StackPanel>
+
+    </Grid>
+
+</Window>

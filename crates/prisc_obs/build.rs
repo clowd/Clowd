@@ -1,0 +1,54 @@
+use std::env;
+use std::path::{Path, PathBuf};
+
+// The prisc_obs crate is a plain safe wrapper: it needs no link inputs of its own
+// (prisc_obs_sys emits those). This script exists only so the crate's *test harness*
+// can launch on macOS — the harness links libobs.framework via prisc_obs_sys, whose
+// install name and FFmpeg/x264 references are all @rpath, and cargo does not
+// propagate `cargo:rustc-link-arg` from prisc_obs_sys to dependents. Same pattern as
+// prisc_obs_platform's build script. Linux needs the same for libobs.so.30 and the
+// FFmpeg bundle it references.
+fn main() {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "macos" {
+        build_macos();
+    }
+    if target_os == "linux" {
+        build_linux();
+    }
+}
+
+fn build_macos() {
+    let framework_path =
+        env::var("DEP_OBS_FRAMEWORK_SEARCH").expect("DEP_OBS_FRAMEWORK_SEARCH not set");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{framework_path}");
+
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let repo_root = Path::new(&out_dir)
+        .ancestors()
+        .find(|p| p.join("crates").join("obs-studio").exists())
+        .expect("Could not find repo root")
+        .to_path_buf();
+    if let Some(deps_lib) = find_obs_deps_lib(&repo_root) {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", deps_lib.display());
+    }
+}
+
+/// The prebuilt obs-deps `lib` dir (FFmpeg et al.) — same probe as
+/// prisc_recorder's build script.
+fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
+    prisc_build_support::obs_deps_bundles(&repo_root.join("crates").join("obs-studio"))
+        .into_iter()
+        .map(|dir| dir.join("lib"))
+        .find(|lib| lib.exists())
+}
+
+/// Linux: absolute RUNPATHs into the OBS build tree and the FFmpeg bundle so
+/// this crate's test harness can launch (the Linux twin of `build_macos`
+/// above; see prisc_obs_sys's `linux_emit_link_directives`).
+fn build_linux() {
+    let lib_dir = env::var("DEP_OBS_OBS_LIB_DIR").expect("DEP_OBS_OBS_LIB_DIR not set");
+    let deps_lib = env::var("DEP_OBS_DEPS_LIB").expect("DEP_OBS_DEPS_LIB not set");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{lib_dir}");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{deps_lib}");
+}

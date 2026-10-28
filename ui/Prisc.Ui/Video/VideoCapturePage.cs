@@ -1,0 +1,1296 @@
+﻿using System;
+using System.Globalization;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
+using Avalonia.Threading;
+using Prisc.Config;
+using Prisc.PlatformUtil;
+using Prisc.UI.Helpers;
+using Prisc.VideoSDK;
+using Prisc.VideoSDK.Playback;
+
+namespace Prisc.UI
+{
+    /// <summary>
+    /// Orchestrates a screen-recording session (DESIGN §4.2): hosts the <see cref="ObsCapturer"/>
+    /// process, shows the click-through <see cref="BorderWindow"/> and the
+    /// <see cref="RecordingFloatingButtons"/>, and creates the recents session when the recording
+    /// finishes (§4.5). Window-less <see cref="IPage"/> like <see cref="ScreenCapturePage"/>;
+    /// single-instance via <see cref="ActiveInstance"/> (UI thread only). Every async void entry
+    /// point wraps its awaits in try/catch routing to the CriticalError path — an unhandled
+    /// exception in async void kills the process.
+    /// </summary>
+    internal sealed class VideoCapturePage : IVideoCapturePage
+    {
+        /// <summary>The currently open recording session, if any. UI thread only.</summary>
+        internal static VideoCapturePage ActiveInstance { get; private set; }
+
+        public bool IsRecording { get; private set; }
+
+        /// <summary>True while the recording is rolling but paused (no frames written).</summary>
+        public bool IsPaused { get; private set; }
+
+        public event EventHandler Closed;
+
+        // set once prisc_recorder has emitted "initialized" — Start/Toggle are no-ops before that
+        // (the WAIT state, §4.2/F6): an ungated "start" pre-initialized combined with a slow
+        // first-run OBS init would time out inside an async void.
+        private bool _initialized;
+        private bool _initializing;
+        private bool _starting;
+        private bool _finishing;
+        private bool _pausing;
+        private bool _closing;
+        private bool _closedRaised;
+
+        // a configure is in flight (only one at a time), and a settings change that arrived while
+        // it — or the initial spawn — was running, coalesced into one follow-up configure (§4.2).
+        private bool _configuring;
+        private bool _configurePending;
+
+        // whether the recorder currently running was built WITH a webcam source. Compared against
+        // what a configure asks for so a rejected configure is only blamed on (and only reverts)
+        // the camera when the camera is the thing that changed.
+        private bool _appliedWebcam;
+
+        // whether the recorder currently running was spawned with --multi-track. The flag picks the
+        // libobs output object, so unlike everything in the settings file it cannot be configured
+        // into an existing process: a change means a respawn.
+        private bool _appliedMultiTrack;
+
+        // ...and which capture API it was spawned with, for the same reason: --capture-method picks
+        // the capture source built during bootstrap, so a change means a respawn too.
+        private ScreenCaptureMethod _appliedCaptureMethod;
+
+        // whether the recorder currently running was spawned with --window-capture. Unlike the
+        // flag above this is not a settings question but a binary question, so it is remembered
+        // for the same reason and answered by a probe rather than by SettingsRecording.
+        private bool _appliedWindowCapture;
+
+        // the container the recorder currently running was spawned to write, i.e. the extension of
+        // _outputFile: --output is a command-line argument like the two above, so a change means a
+        // respawn. Always Mp4 for a multi-track recording, whatever the setting says.
+        private VideoContainer _appliedContainer;
+
+        // whether the resolved recorder accepts an .mkv output at all (a binary question, probed
+        // once like _appliedWindowCapture). Folded into WantedContainer so a recorder that cannot
+        // settles on Mp4 rather than respawning after every unrelated settings change.
+        private bool _recorderSupportsMkv;
+
+        private ObsCapturer _obs;
+        // shutdown of a capturer being replaced (failed configure) — awaited before the
+        // replacement spawns (both write into the same session directory).
+        private Task _pendingShutdown;
+        private BorderWindow _border;
+        private RecordingFloatingButtons _toolbar;
+        private SettingsRecording _settings;
+        private ScreenRect _region;
+        // corner radius of _region, in _region's own space (0 = square): what the capturer
+        // measured on the picked window. Nothing here rounds anything — the recorder captures the
+        // raw region — it travels to the session so the video editor can seed the screen track's
+        // rounded-rect mask from it, exactly as the image editor seeds its image graphic.
+        private double _cornerRadius;
+        private string _binaryPath;
+        private string _sessionDir;
+        // the file the recorder writes into the session directory: video.mp4, or video.mkv for an
+        // Instant recording the user asked for as MKV (see SetOutputFile).
+        private string _outputFile;
+        private string _settingsPath;
+        // where the finished video actually ended up (§4.5 / issue #50): the user's output folder
+        // once MoveToOutputFolderAsync has run, and _outputFile while recording or if the move failed.
+        private string _savedPath;
+        private TimeSpan _lastStatusElapsed;
+
+        public async void Open(ScreenRect region, double cornerRadius, string sessionDir)
+        {
+            try
+            {
+                Dispatcher.UIThread.VerifyAccess();
+
+                if (ActiveInstance != null)
+                {
+                    // a recording session is already active — ignore this request (§4.2). The
+                    // freshly-captured dir would otherwise leak: nothing will ever use it.
+                    Debug.WriteLine("A recording session is already active; ignoring new video capture.");
+                    DeleteDirectory(sessionDir);
+                    RaiseClosed();
+                    return;
+                }
+
+                ActiveInstance = this;
+                _region = region;
+                _cornerRadius = cornerRadius;
+                _settings = SettingsRoot.Current.Recording;
+                _sessionDir = sessionDir;
+                // provisional: InitializeCapturerAsync settles the container once it knows what
+                // the recorder can write, but the crash/cancel paths read these before then.
+                SetOutputFile(VideoContainer.Mp4);
+                _settingsPath = Path.Combine(sessionDir, ObsArguments.SettingsFileName);
+
+                // normalize the configured output folder up-front (creating it, or falling back to
+                // Videos when it has gone away) and write it back, so the settings page the OPTIONS
+                // button opens always names the folder this recording will actually be saved to.
+                var outputDir = RecordingOutputPath.ResolveDirectory(_settings);
+                if (outputDir != null)
+                    _settings.OutputDirectory = outputDir;
+
+                var binary = ObsBinaryLocator.Resolve();
+                if (binary == null)
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
+                        $"The recording binary ({ObsBinaryLocator.BinaryFileName}) could not be found. " +
+                        $"Run 'cargo rec' in the Prisc repository, or set the {ObsBinaryLocator.EnvVarName} " +
+                        "environment variable to its location.",
+                        "Screen recording unavailable");
+                    DeleteDirectory(_sessionDir);
+                    Close();
+                    return;
+                }
+
+                Debug.WriteLine("Resolved recording binary: " + binary);
+                _binaryPath = binary;
+
+                _border = new BorderWindow(region);
+                _border.SetOverlayText("WAIT…");
+                _border.Show();
+
+                _toolbar = new RecordingFloatingButtons();
+                _toolbar.StartClicked += (s, e) => StartRecording();
+                _toolbar.PauseToggleClicked += (s, e) => TogglePauseRecording();
+                _toolbar.FinishClicked += (s, e) => FinishRecording();
+                _toolbar.CancelClicked += (s, e) => Cancel();
+                _toolbar.SettingsClicked += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsRecording);
+                // the tray item's and hotkey's entry point: opens the drawing toolbar, or points at the open one
+                _toolbar.DrawClicked += (s, e) => DrawOnScreen.DrawOnScreenSession.Toggle();
+                // live mutes only — the toolbar itself persists the toggle settings.
+                _toolbar.MicToggled += (s, enabled) => _obs?.SetMicrophoneMute(!enabled);
+                _toolbar.SpeakerToggled += (s, enabled) => _obs?.SetSpeakerMute(!enabled);
+                _toolbar.WebcamToggled += (s, enabled) => OnWebcamToggled(enabled);
+                _toolbar.SetWaiting(true);
+                _toolbar.ShowNear(region);
+
+                // subscribed before the first spawn so a change made during WAIT is not lost.
+                _settings.PropertyChanged += OnRecordingSettingChanged;
+
+                await InitializeCapturerAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to open recording session: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.open");
+                if (!_closing)
+                    OnCriticalError(this, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Spawns prisc_recorder with the current recording settings and waits for it to report
+        /// ready. Also the recovery path after a failed <c>configure</c>: the settings file is
+        /// rewritten here, so the replacement process starts from exactly the values the running
+        /// one refused to take.
+        /// </summary>
+        private async Task InitializeCapturerAsync()
+        {
+            _initializing = true;
+            _initialized = false;
+            SetPrimaryState(waiting: true, "WAIT…");
+            // a respawned capturer with audio removed never emits levels again — clear the
+            // stale meters rather than freezing the last values through the WAIT phase.
+            _toolbar?.SetAudioLevels(null, null);
+
+            try
+            {
+                // the replaced process holds video.mp4 open until it exits; spawning its
+                // successor first would race it for the file.
+                await AwaitPendingShutdownAsync();
+
+                // Cancel/quit during that wait has already deleted the session directory and
+                // disposed nothing (there is no process yet) — do not spawn one into it.
+                if (_closing)
+                    return;
+
+                // the recorder reads the file while parsing its command line, so it has to exist
+                // before the spawn. Written here rather than in Open so a change made during a
+                // respawn is picked up by the process it starts (hence the flag reset).
+                _configurePending = false;
+                ObsArguments.WriteSettingsFile(_settingsPath, _settings);
+                // the file just written is what this process is about to be built from.
+                _appliedWebcam = IsWebcamCaptured();
+                // …and so is the track layout, which is a command-line argument (the output object
+                // is built once), hence remembered here rather than reconfigured later.
+                _appliedMultiTrack = ObsArguments.UsesMultiTrack(_settings);
+                _appliedCaptureMethod = WantedCaptureMethod();
+
+                // …and whether this build of the recorder can write the window sidecar at all.
+                // Probed once per binary and cached; a recorder that cannot records exactly as
+                // before, and the editor's crop then offers Manual only.
+                _appliedWindowCapture = _appliedMultiTrack
+                    && await ObsCapabilities.SupportsWindowCaptureAsync(_binaryPath);
+
+                // …and whether it can write Matroska, which decides the extension of --output.
+                // Same probe cost model: an older recorder quietly records MP4, which is what it
+                // always did, rather than exit 2 on a path it does not accept.
+                _recorderSupportsMkv = await ObsCapabilities.SupportsMkvOutputAsync(_binaryPath);
+                if (_settings.Container == VideoContainer.Mkv && !_recorderSupportsMkv)
+                    Debug.WriteLine("The recorder does not accept an .mkv output; recording MP4 instead.");
+                SetOutputFile(WantedContainer());
+
+                // the first probe of a binary spawns `--help` and can take seconds, during which
+                // Cancel stays live — so re-assert the guard above rather than spawning into a
+                // session that has since been torn down (nothing would ever dispose that process:
+                // OnCriticalError returns early once _closing is set).
+                if (_closing)
+                    return;
+
+                _obs = new ObsCapturer();
+                _obs.CriticalError += OnCriticalError;
+                _obs.StatusReceived += OnStatusReceived;
+                _obs.LevelsReceived += OnLevelsReceived;
+
+                await _obs.InitializeAsync(
+                    ObsArguments.Build(_region, _outputFile, _settingsPath, _settings, _appliedWindowCapture),
+                    _binaryPath);
+            }
+            finally
+            {
+                _initializing = false;
+            }
+
+            if (_closing)
+                return;
+
+            _initialized = true;
+            // the button says Start; the border has room for the instruction that goes with it.
+            SetPrimaryState(waiting: false, "PRESS\nSTART");
+
+            // the settings file carries the devices, never the capture toggles — those are mutes.
+            ApplyCaptureMutes();
+
+            // a change that landed while the pipeline was being built missed the file write above.
+            if (_configurePending)
+                ApplySettingsChange();
+        }
+
+        /// <summary>Starts the recording. No-op unless initialized and not already recording
+        /// (the WAIT gate, §4.2/F6).</summary>
+        public async void StartRecording()
+        {
+            try
+            {
+                if (IsRecording || _starting || _initializing || _closing)
+                    return;
+
+                if (!_initialized)
+                    return;
+                _starting = true;
+
+                // the settings file always lists the devices; the Capture* toggles are runtime
+                // mutes, re-applied here in case a configure rebuilt the sources.
+                ApplyCaptureMutes();
+
+                // clear the overlay BEFORE writing "start": started_recording means frames are
+                // already flowing — text cleared after would be captured in the first frames.
+                _border.SetOverlayText(null);
+
+                await _obs.StartAsync();
+
+                if (_closing)
+                    return;
+
+                IsRecording = true;
+                _toolbar.SetRecordingState(true);
+                // OnStatusReceived feeds SetElapsed and SetActualFps from here on: the primary's
+                // timer and the FPS tile's readout.
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to start recording: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.start");
+                if (!_closing)
+                    OnCriticalError(this, ex.Message);
+            }
+            finally
+            {
+                _starting = false;
+            }
+        }
+
+        /// <summary>Pauses or resumes a rolling recording. Paused time is excluded from the output
+        /// (prisc_recorder pauses the encoder, not the pipeline: levels keep flowing, statuses stop).
+        /// No-op while a start/finish/another toggle is in flight.</summary>
+        public async void TogglePauseRecording()
+        {
+            try
+            {
+                if (!IsRecording || _pausing || _finishing || _closing)
+                    return;
+                _pausing = true;
+
+                if (IsPaused)
+                {
+                    await _obs.ResumeAsync();
+                    IsPaused = false;
+                }
+                else
+                {
+                    await _obs.PauseAsync();
+                    IsPaused = true;
+                }
+
+                _toolbar?.SetPausedState(IsPaused);
+                _border?.SetPausedIndicator(IsPaused);
+            }
+            catch (Exception ex)
+            {
+                // an unacked pause means a wedged or dead child, exactly like a failed start.
+                Debug.WriteLine("Failed to pause/resume recording: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.pause");
+                if (!_closing)
+                    OnCriticalError(this, ex.Message);
+            }
+            finally
+            {
+                _pausing = false;
+            }
+        }
+
+        /// <summary>Stops the recording, creates the recents session (§4.5) and closes.</summary>
+        public async void FinishRecording()
+        {
+            try
+            {
+                if (!IsRecording || _finishing || _closing)
+                    return;
+                _finishing = true;
+
+                HideWindows();
+
+                if (!await _obs.StopAsync())
+                    return; // CriticalError has already been raised; its handler owns cleanup
+
+                if (_closing)
+                    return;
+                _closing = true;
+
+                // the capturer process holds the mp4 open until it exits, so it has to be gone
+                // before the file can be moved out of the session directory.
+                await ShutdownCapturersAsync();
+
+                var moveError = await MoveToOutputFolderAsync();
+
+                var session = CreateSession();
+
+                // "Render automatically when recording finishes": the flattened video appears as its
+                // own Recents entry with a progress bar, exactly as a GIF conversion does. Started
+                // before the finish action so the row is already there when Recents opens; it runs
+                // in the background, so nothing here waits on it.
+                if (SettingsRoot.Current.Recording.RenderWhenFinished && session?.CanEditVideo == true)
+                    _ = Services.VideoRenderManager.StartAutoRenderAsync(session);
+
+                var finishAction = SettingsRoot.Current.Recording.OpenWhenFinished;
+
+                // A recording with a webcam is only half-finished: the camera was captured as a
+                // separate track and is composited nowhere until the user places it, so the editor
+                // *is* the "open when finished" action for those — it overrides the setting rather
+                // than dropping the user on a Recents row whose thumbnail shows no webcam at all.
+                // An input-capture recording is the same situation (the screen frames were recorded
+                // with no cursor baked in; only the editor draws it back from the jsonl sidecar).
+                // Recordings with neither honor the setting.
+                if (session != null && (session.HasWebcamTrack || !String.IsNullOrEmpty(session.InputCapturePath))
+                    && session.CanEditVideo)
+                    finishAction = RecordingFinishAction.VideoEditor;
+
+                // the editor cannot open every entry (it is Windows-only for now, CreateSession can
+                // return null, and a capture made with composition off has no tracks to compose),
+                // so that choice degrades to the Recents page rather than to nothing at all.
+                if (finishAction == RecordingFinishAction.VideoEditor && session?.CanEditVideo != true)
+                    finishAction = RecordingFinishAction.RecentsPage;
+
+                switch (finishAction)
+                {
+                    case RecordingFinishAction.VideoEditor:
+                        VideoEditor.VideoEditorWindow.ShowSession(session);
+                        break;
+                    case RecordingFinishAction.RecentsPage:
+                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
+                        break;
+                    case RecordingFinishAction.OutputFolder:
+                        // reveals the saved file in its folder — the same affordance as the
+                        // "Show in folder" item in Recents (WPF: OpenFinishedInExplorer).
+                        ShellHelper.RevealFileInFolder(_savedPath);
+                        break;
+                }
+
+                // this is a tray app with no MainWindow, so with nothing open there is simply
+                // nowhere to host the toast. That is deliberate now: opening a page the user did
+                // not ask for just to carry a toast would override the setting — revealing the
+                // folder is its own confirmation, and "None" means none.
+                var host = Toast.GetActiveOrMainWindow();
+                if (host != null)
+                    Toast.Show(host, "Recording saved");
+
+                // reported after the session exists and the toast has shown: the recording itself
+                // is safe either way, this only says it is not in the folder the user picked.
+                if (moveError != null)
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                        $"It was saved to {_savedPath} instead.{Environment.NewLine}{Environment.NewLine}" +
+                        $"Error:{Environment.NewLine}{moveError.Message}",
+                        "Unable to save the recording to your chosen folder");
+                }
+
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to finish recording: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.finish");
+                if (!_closing)
+                    OnCriticalError(this, ex.Message);
+            }
+        }
+
+        /// <summary>Aborts the session: stops any active recording, deletes the session
+        /// directory and closes.</summary>
+        public async void Cancel()
+        {
+            try
+            {
+                if (_closing)
+                    return;
+                _closing = true; // also suppresses CriticalError from the stop below
+
+                HideWindows();
+
+                if (IsRecording)
+                {
+                    try
+                    {
+                        await _obs.StopAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("Error stopping recording during cancel: " + ex.Message);
+                        SentryConfig.CaptureHandled(ex, "video.cancel-stop");
+                    }
+                }
+
+                // pre-start: writes "quit" → cancel-before-start, exit 0 (§1.2). Awaited so the
+                // directory delete below cannot race the process's open file handles, without
+                // ever blocking the UI thread (the old sync Dispose froze the app for up to 5 s
+                // when canceling during WAIT).
+                await ShutdownCapturersAsync();
+
+                DeleteDirectory(_sessionDir);
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Error canceling recording session: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.cancel");
+                Close();
+            }
+        }
+
+        /// <summary>Hotkey entry point (Start/Stop Recording): finish if recording, start if the
+        /// button would be actionable, ignore during WAIT (§4.2/F6 — WPF parity).</summary>
+        public void Toggle()
+        {
+            try
+            {
+                if (IsRecording)
+                    FinishRecording();
+                else if (_initialized)
+                    StartRecording();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Error toggling recording: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.toggle");
+            }
+        }
+
+        /// <summary>
+        /// App-exit path: without this, exiting Prisc during an active recording lets prisc_recorder
+        /// flush a valid video.mp4 (stdin EOF == quit, §1.2) but no session.json is ever written,
+        /// so the recording is invisible in Recents and the dir leaks forever. Stops the recording
+        /// (bounded by the capturer's stop timeout), registers the session — keeping a partial
+        /// video if the stop failed — and never shows UI (the app is exiting).
+        /// </summary>
+        internal async Task ShutdownAsync()
+        {
+            if (_closing)
+                return;
+            _closing = true; // suppresses OnCriticalError dialogs; cleanup is handled inline
+
+            HideWindows();
+
+            try
+            {
+                bool stoppedCleanly = false;
+                if (IsRecording)
+                {
+                    try
+                    {
+                        stoppedCleanly = await _obs.StopAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("Error stopping recording during app exit: " + ex.Message);
+                        SentryConfig.CaptureHandled(ex, "video.exit-stop");
+                    }
+                }
+
+                await ShutdownCapturersAsync();
+
+                if (IsRecording && (stoppedCleanly || HasPartialVideo()))
+                {
+                    await MoveToOutputFolderAsync();
+                    CreateSession();
+                }
+                else
+                {
+                    DeleteDirectory(_sessionDir); // WAIT state: nothing was recorded
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Error shutting down recording session: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.shutdown");
+            }
+
+            Close();
+        }
+
+        public void Close()
+        {
+            _closing = true;
+
+            if (ReferenceEquals(ActiveInstance, this))
+                ActiveInstance = null;
+
+            if (_settings != null)
+                _settings.PropertyChanged -= OnRecordingSettingChanged;
+
+            try { _border?.Close(); }
+            catch { }
+            try { _toolbar?.Close(); }
+            catch { }
+            _border = null;
+            _toolbar = null;
+
+            RaiseClosed();
+        }
+
+        /// <summary>
+        /// A recording setting changed while this session is open (from the settings page the
+        /// OPTIONS button opens, or from the toolbar's own toggles). Mutes are applied live;
+        /// anything the recorder reads from its settings file is pushed to the waiting process
+        /// with a <c>configure</c>.
+        /// </summary>
+        private void OnRecordingSettingChanged(object sender, PropertyChangedEventArgs e)
+        {
+            // once frames are flowing the recorder ignores these — the change applies to the next
+            // recording (the settings page says as much).
+            if (_closing || IsRecording || _starting)
+                return;
+
+            if (e.PropertyName is nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker))
+            {
+                // runtime mutes: the settings page and the toolbar buttons behave identically.
+                // CaptureWebcam deliberately does NOT belong here — there is no such thing as a
+                // muted camera; the recorder has to build or drop the source, so it falls through
+                // to the configure path below like any other pipeline setting.
+                ApplyCaptureMutes();
+
+                // …and the toggles ALSO drive the multi-track spawn decision (an enabled device is
+                // what earns a track), so fall through: ApplySettingsChange respawns the recorder
+                // when UsesMultiTrack changed — ticking the mic during WAIT must actually get it
+                // its own track — and is an acked no-op configure when the layout is unchanged.
+            }
+
+            if (!ReachesRecorder(e.PropertyName))
+                return;
+
+            ApplySettingsChange();
+        }
+
+        /// <summary>
+        /// True when changing <paramref name="propertyName"/> changes the settings file the
+        /// recorder reads. Deliberately a deny-list of the settings that never reach it: a setting
+        /// added to <see cref="ObsArguments.WriteSettingsFile"/> without touching this method costs
+        /// at worst a needless configure, never a recording made with the value the user just
+        /// changed away from — so a null or empty name ("everything changed") counts too.
+        /// </summary>
+        private static bool ReachesRecorder(string propertyName) => propertyName switch
+        {
+            // post-recording UI behavior; the capturer never sees it.
+            nameof(SettingsRecording.OpenWhenFinished) => false,
+            // raised alongside Mode (its dependent), which already configures; a second pass for
+            // the same change would only be a needless configure.
+            nameof(SettingsRecording.IsEnabled) => false,
+            // the capturer always writes video.mp4 into the session dir; these only decide where
+            // the finished file is moved to afterwards (issue #50), which happens at stop time.
+            nameof(SettingsRecording.OutputDirectory) => false,
+            nameof(SettingsRecording.FilenamePattern) => false,
+            // read by the GIF conversion tool long after a recording has finished; the recorder has
+            // never heard of them.
+            nameof(SettingsRecording.GifQuality) => false,
+            nameof(SettingsRecording.GifMaxWidth) => false,
+            nameof(SettingsRecording.GifMaxHeight) => false,
+            // spelled out rather than left to the default: both halves of the webcam decision feed
+            // the settings file's "webcam_device" key, and the recorder rebuilds its pipeline (source,
+            // track-1 encoder, obs_view mix) when it changes — so a change to either must configure.
+            nameof(SettingsRecording.CaptureWebcam) => true,
+            nameof(SettingsRecording.WebcamDeviceId) => true,
+            // not a settings-file key at all — it picks the recorder's --multi-track argument, which
+            // ApplySettingsChange turns into a respawn. It also gates "webcam_device", so a flip
+            // has to rewrite the settings file as well.
+            nameof(SettingsRecording.Mode) => true,
+            // likewise a command-line argument (--capture-method) rather than a settings-file key,
+            // and likewise turned into a respawn by ApplySettingsChange.
+            nameof(SettingsRecording.CaptureMethod) => true,
+            // and the extension of --output, which is how the recorder picks the container —
+            // respawned the same way.
+            nameof(SettingsRecording.Container) => true,
+            // applied as live mutes above, but ALSO part of the --multi-track decision (only an
+            // enabled device earns a track), so they must reach ApplySettingsChange too.
+            nameof(SettingsRecording.CaptureSpeaker) => true,
+            nameof(SettingsRecording.CaptureMicrophone) => true,
+            _ => true,
+        };
+
+        /// <summary>
+        /// Pushes the current settings onto the waiting (initialized but not recording) capturer:
+        /// rewrite the settings file, <c>configure</c>, wait for the ack. Replaces the old
+        /// tear-down-and-RESTART cycle — the user never sees the process being reconfigured.
+        /// A rejected, failed or timed-out configure leaves the recorder in a state we can no
+        /// longer reason about, so it is silently replaced with a fresh one instead.
+        /// Changes arriving while a configure (or the spawn itself) is in flight are coalesced
+        /// into a single follow-up pass.
+        /// </summary>
+        private async void ApplySettingsChange()
+        {
+            if (_closing || IsRecording || _starting)
+                return;
+
+            if (_configuring || _initializing || !_initialized)
+            {
+                _configurePending = true;
+                return;
+            }
+
+            _configuring = true;
+            try
+            {
+                while (!_closing && !IsRecording && !_starting && _initialized && _obs != null)
+                {
+                    _configurePending = false;
+                    var obs = _obs;
+
+                    // the track layout is a command-line argument, so a configure could not change
+                    // it — and the recorder refuses a webcam a single-track process cannot carry.
+                    // Replace the process instead, which rewrites the settings file anyway.
+                    if (ObsArguments.UsesMultiTrack(_settings) != _appliedMultiTrack
+                        || WantedCaptureMethod() != _appliedCaptureMethod
+                        || WantedContainer() != _appliedContainer)
+                    {
+                        await RespawnCapturerAsync();
+                        return;
+                    }
+
+                    // what this pass is asking the recorder to build, remembered across the await so
+                    // a rejection can be blamed on the webcam only when the webcam is what changed.
+                    var wantedWebcam = IsWebcamCaptured();
+
+                    ObsConfigureResult result = null;
+                    try
+                    {
+                        ObsArguments.WriteSettingsFile(_settingsPath, _settings);
+                        result = await obs.ConfigureAsync(_settingsPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("Failed to reconfigure the recording process: " + ex.Message);
+                        SentryConfig.CaptureHandled(ex, "video.configure");
+                    }
+
+                    // the capturer may have been replaced or shut down while we waited; whoever
+                    // did that owns the new one.
+                    if (_closing || !ReferenceEquals(_obs, obs))
+                        return;
+
+                    // Start is actionable throughout the (up to 10 s) wait for the ack, and the
+                    // recorder handles commands in order — so "start" is queued behind this
+                    // configure and by now frames may already be flowing. Respawning here would
+                    // quit that process and truncate video.mp4 while the toolbar offers Finish: the
+                    // recording wins, and the settings apply to the next one.
+                    if (IsRecording || _starting)
+                    {
+                        if (result == null || !result.Applied)
+                            Debug.WriteLine("Recorder did not apply the new settings, but a recording has since started; leaving it alone.");
+                        return;
+                    }
+
+                    if (result == null || !result.Applied)
+                    {
+                        Debug.WriteLine("Recorder did not apply the new settings" +
+                            (result == null ? "" : $" (fatal={result.Fatal}): {result.Message}") + "; respawning it.");
+
+                        // A camera the recorder refuses (unplugged, held by another app, or a
+                        // platform that has no webcam support at all) would otherwise be retried by
+                        // the respawn and fail it too, leaving the session with no recorder. Untick
+                        // the box first — that raises PropertyChanged, which the toolbar picks up to
+                        // unlight CAM and this method turns into a follow-up pass the respawn below
+                        // absorbs (InitializeCapturerAsync rewrites the settings file from scratch).
+                        if (wantedWebcam && !_appliedWebcam)
+                        {
+                            _settings.CaptureWebcam = false;
+                            NotifyWebcamRejected(result?.Message);
+                        }
+
+                        await RespawnCapturerAsync();
+                        return;
+                    }
+
+                    _appliedWebcam = wantedWebcam;
+
+                    // rebuilt audio sources come back unmuted.
+                    ApplyCaptureMutes();
+
+                    // the recorder only ignores keys once recording has started, which is not a
+                    // state this method runs in — worth knowing about, not worth acting on.
+                    if (result.IgnoredKeys.Length > 0)
+                        Debug.WriteLine("Recorder ignored settings: " + String.Join(", ", result.IgnoredKeys));
+
+                    if (!_configurePending)
+                        return;
+                }
+            }
+            catch (Exception ex)
+            {
+                // in practice the respawn above failing: there is no recorder left to record with,
+                // so this is the same dead end as any other capturer failure.
+                Debug.WriteLine("Failed to apply the new recording settings: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.apply-settings");
+                if (!_closing)
+                    OnCriticalError(this, ex.Message);
+            }
+            finally
+            {
+                _configuring = false;
+
+                // a change that arrived while this pass (or the respawn it triggered) was running
+                // and could not be serviced by the loop above; posted rather than called so it
+                // cannot re-enter through the frame that set the flag.
+                if (_configurePending && !_closing)
+                    Dispatcher.UIThread.Post(ApplySettingsChange);
+            }
+        }
+
+        /// <summary>
+        /// Replaces the capturer in place after it failed to accept new settings. The old process
+        /// is detached before disposal: its exit must not reach the page's critical-error path,
+        /// and its statuses must never drive the replacement's UI.
+        /// </summary>
+        private async Task RespawnCapturerAsync()
+        {
+            _initialized = false;
+
+            var obs = _obs;
+            _obs = null;
+            if (obs != null)
+            {
+                obs.CriticalError -= OnCriticalError;
+                obs.StatusReceived -= OnStatusReceived;
+                obs.LevelsReceived -= OnLevelsReceived;
+                _toolbar?.SetAudioLevels(null, null);
+                _pendingShutdown = obs.DisposeAsync();
+            }
+
+            await InitializeCapturerAsync();
+        }
+
+        /// <summary>True when the current settings will actually produce a webcam track — exactly
+        /// the condition <see cref="ObsArguments.WriteSettingsFile"/> uses to emit a non-empty
+        /// <c>webcam_device</c>.</summary>
+        private bool IsWebcamCaptured() => ObsArguments.UsesWebcam(_settings);
+
+        /// <summary>The capture API the current settings ask for — what
+        /// <see cref="ObsArguments.Build"/> would put on the next spawn's command line, compared
+        /// against <c>_appliedCaptureMethod</c> to decide whether a configure has to become a
+        /// respawn.</summary>
+        private ScreenCaptureMethod WantedCaptureMethod()
+            => _settings?.CaptureMethod ?? ScreenCaptureMethod.Auto;
+
+        /// <summary>The container the current settings ask for, narrowed to what can actually be
+        /// written: a multi-track recording is the hybrid MP4 whatever the setting says (the
+        /// recorder rejects an .mkv path with --multi-track), and a recorder that predates .mkv
+        /// support records MP4. Compared against <c>_appliedContainer</c> like the method above.</summary>
+        private VideoContainer WantedContainer()
+        {
+            if (_settings == null || ObsArguments.UsesMultiTrack(_settings) || !_recorderSupportsMkv)
+                return VideoContainer.Mp4;
+            return _settings.Container;
+        }
+
+        /// <summary>Points <c>_outputFile</c> (and, until a move relocates it, <c>_savedPath</c>)
+        /// at the session-directory file the recorder writes for <paramref name="container"/>.
+        /// Called before every spawn: the extension is what tells the recorder which container to
+        /// write, so it has to match the process about to be started.</summary>
+        private void SetOutputFile(VideoContainer container)
+        {
+            _appliedContainer = container;
+            _outputFile = Path.Combine(_sessionDir, "video" + container.ToExtension());
+            _savedPath = _outputFile;
+        }
+
+        /// <summary>
+        /// The CAM button was pressed. The toolbar has already written
+        /// <see cref="SettingsRecording.CaptureWebcam"/>, and <see cref="OnRecordingSettingChanged"/>
+        /// has already turned that into a <c>configure</c> — a webcam is a pipeline element, not a
+        /// mute, so there is nothing to apply live here. This only exists to say so in the log when
+        /// the click lands in a phase the recorder can no longer act on (a hotkey starting the
+        /// recording between the press and this callback).
+        /// </summary>
+        private void OnWebcamToggled(bool enabled)
+        {
+            if (IsRecording || _starting)
+                Debug.WriteLine($"Webcam toggled ({enabled}) after the recording started; it applies to the next recording.");
+        }
+
+        /// <summary>
+        /// Tells the user their camera did not make it into the pipeline, after the toggle has
+        /// already been reverted. Prefers a toast, but during the WAIT phase the only visible
+        /// windows are usually this session's own toolbar and border — a 50px transparent strip is
+        /// no place for a notification — so those are skipped and a notice takes over.
+        /// </summary>
+        private void NotifyWebcamRejected(string recorderMessage)
+        {
+            var message = "The webcam could not be added to this recording, so it has been turned off." +
+                (String.IsNullOrEmpty(recorderMessage) ? "" : Environment.NewLine + Environment.NewLine + recorderMessage);
+
+            var host = Toast.GetActiveOrMainWindow();
+            if (host != null && !ReferenceEquals(host, _toolbar) && !ReferenceEquals(host, _border))
+            {
+                Toast.Show(host, "Webcam capture unavailable — turned off");
+                Debug.WriteLine(message);
+                return;
+            }
+
+            _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning, message, "Webcam capture unavailable");
+        }
+
+        /// <summary>Applies the CaptureSpeaker/CaptureMicrophone toggles as live mutes — the
+        /// settings file lists the devices unconditionally, so these are the only thing deciding
+        /// whether audio is actually recorded.</summary>
+        private void ApplyCaptureMutes()
+        {
+            _obs?.SetSpeakerMute(!_settings.CaptureSpeaker);
+            _obs?.SetMicrophoneMute(!_settings.CaptureMicrophone);
+        }
+
+        /// <summary>Shuts the current capturer down AND waits out a process an in-flight
+        /// <see cref="RespawnCapturerAsync"/> is still killing — both hold the session's video.mp4
+        /// open, so measuring or deleting that file before this completes races a live
+        /// prisc_recorder.</summary>
+        private async Task ShutdownCapturersAsync()
+        {
+            if (_obs != null)
+                await _obs.DisposeAsync();
+
+            await AwaitPendingShutdownAsync();
+        }
+
+        /// <summary>Waits for the replaced process (if any) to exit. Read into a local first:
+        /// <see cref="RespawnCapturerAsync"/> and <see cref="ShutdownCapturersAsync"/> can both be
+        /// in flight, and the loser must not await a field the winner has already cleared.</summary>
+        private async Task AwaitPendingShutdownAsync()
+        {
+            var shutdown = _pendingShutdown;
+            if (shutdown == null)
+                return;
+
+            await shutdown;
+
+            if (ReferenceEquals(_pendingShutdown, shutdown))
+                _pendingShutdown = null;
+        }
+
+        /// <summary>Locks or frees the toolbar's primary button and writes the border overlay text
+        /// that goes with it. <paramref name="waiting"/> holds the button (and drops its pulse) for
+        /// as long as the recorder is being built — <see cref="StartRecording"/> would ignore a
+        /// press then anyway; the button's own label ("Wait…" / "Start") follows it, so only the
+        /// border's wording travels here.</summary>
+        private void SetPrimaryState(bool waiting, string borderText)
+        {
+            _border?.SetOverlayText(borderText);
+            _toolbar?.SetWaiting(waiting);
+        }
+
+        private void OnStatusReceived(object sender, ObsStatus status)
+        {
+            _lastStatusElapsed = status.Elapsed;
+            _toolbar?.SetElapsed(status.Elapsed);
+            // the measured rate, dropped frames and all: the FPS tile's readout once frames flow.
+            _toolbar?.SetActualFps(status.Fps);
+        }
+
+        private void OnLevelsReceived(object sender, ObsLevels levels)
+        {
+            // one device per source type (CLI index 0); an absent source sends an empty array.
+            _toolbar?.SetAudioLevels(
+                levels.Mic.Length > 0 ? levels.Mic[0] : null,
+                levels.Speaker.Length > 0 ? levels.Speaker[0] : null);
+        }
+
+        /// <summary>
+        /// The recording failed (nonzero stop code, unexpected process exit, or a timeout in one
+        /// of the entry points): write the process log to a stable location OUTSIDE the session
+        /// dir (§4.2 — the session dir is usually deleted below and the log must survive it),
+        /// offer to open it, and keep the session when a partial video exists (a crash after
+        /// minutes of recording isn't lost).
+        /// </summary>
+        private async void OnCriticalError(object sender, string message)
+        {
+            try
+            {
+                if (_closing)
+                    return;
+                _closing = true;
+
+                Debug.WriteLine("Recording critical error: " + message);
+                HideWindows();
+
+                var logPath = WriteErrorLog(message);
+
+                // shut the process down before touching its output file: the mp4 length check
+                // and the directory delete below must not race a still-live prisc_recorder.
+                await ShutdownCapturersAsync();
+
+                bool keepSession = HasPartialVideo();
+                if (keepSession)
+                {
+                    // a partial recording is still the user's recording — save it where they
+                    // expect it. A failure here only leaves it in the session directory, which
+                    // the message below already points at.
+                    await MoveToOutputFolderAsync();
+                    CreateSession();
+                }
+                else
+                {
+                    DeleteDirectory(_sessionDir);
+                }
+
+                var content = "The recording has failed:\n" + message;
+                if (keepSession)
+                    content += "\n\nThe partial recording was kept and is available in Recent Sessions.";
+
+                if (logPath != null)
+                {
+                    if (await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Error, content, "Recording failed", "Open Error Log"))
+                    {
+                        try
+                        {
+                            Process.Start(new ProcessStartInfo(logPath) { UseShellExecute = true });
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine("Failed to open error log: " + ex.Message);
+                            SentryConfig.CaptureHandled(ex, "video.open-error-log");
+                        }
+                    }
+                }
+                else
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, content, "Recording failed");
+                }
+
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Error handling recording failure: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.handle-failure");
+                Close();
+            }
+        }
+
+        /// <summary>Creates the recents session for the finished (or partially recorded)
+        /// video (§4.5). The poster frame (cropped.png) was written by the capture overlay at
+        /// region-confirm time (§4.1). Returns the session so the caller can act on it (the
+        /// webcam auto-open in <see cref="FinishRecording"/>).</summary>
+        private SessionInfo CreateSession()
+        {
+            var session = SessionManager.Current.CreateSessionInDirectory(_sessionDir);
+            // a composition capture is an editable project ("Screen Recording"); one captured with
+            // composition off is already the finished, playable thing ("Screen Video").
+            session.Name = _appliedMultiTrack ? "Screen Recording" : "Screen Video";
+            session.CreatedUtc = DateTime.UtcNow;
+            session.ContentKind = "video"; // IsUploadOnly=true → no *image* editor affordance (correct); the video editor is offered through CanEditVideo
+            // outside the session dir for a "Screen Video" (issue #50), so the recording survives
+            // the session being deleted here or expiring out of Recents — the user's file is
+            // theirs. A composition recording stays put; see MoveToOutputFolderAsync.
+            session.VideoPath = _savedPath;
+            session.DurationMs = (long)_lastStatusElapsed.TotalMilliseconds;
+            session.PreviewImgPath = Path.Combine(_sessionDir, "cropped.png");
+            session.OriginalBounds = _region;
+            session.CornerRadius = _cornerRadius;
+            session.WebcamTrack = ResolveWebcamTrack();
+            session.InputCapturePath = ResolveInputCapturePath();
+            session.WindowCapturePath = ResolveWindowCapturePath();
+            session.AudioTracks = ResolveAudioTracks();
+            // the track layout is fixed when the recorder is spawned, so this reports what the file
+            // actually got — not what the settings say now, which a mid-recording edit can no
+            // longer act on (a respawn is refused once frames are flowing).
+            session.SingleTrack = !_appliedMultiTrack;
+            // the recording is finished and every path on the session now points at a real file.
+            // Stamped explicitly rather than leaning on CreatedUtc above happening to be the same
+            // instant, which is only true while this stays one straight-line method.
+            session.NotifyContentChanged();
+            return session;
+        }
+
+        /// <summary>
+        /// What the recorder said each audio track of the recording carries, or null when it said
+        /// nothing (an older recorder, or a recording that never started). There is deliberately no
+        /// probe fallback: the file tells you how many audio streams it has, which the editor reads
+        /// for itself, but not which one is the microphone — and that is all this is for.
+        /// </summary>
+        private SessionAudioTrack[] ResolveAudioTracks()
+        {
+            var reported = _obs?.LastTracks?.Audio;
+            if (reported == null || reported.Count == 0)
+                return null;
+
+            var tracks = new SessionAudioTrack[reported.Count];
+            for (var i = 0; i < tracks.Length; i++)
+                tracks[i] = new SessionAudioTrack { Index = reported[i].Index, Kind = reported[i].Kind };
+
+            return tracks;
+        }
+
+        /// <summary>
+        /// The webcam track this recording ended up with, or null if it has none. Normally read
+        /// straight from the recorder's own <c>tracks</c> report (started_recording, refreshed on
+        /// stopped_recording); a recorder too old to send one falls back to probing the finished
+        /// file, which is the only way an existing recording can be classified at all. The probe is
+        /// deliberately best-effort: a missing FFmpeg only costs the auto-open, never the session.
+        /// </summary>
+        private SessionVideoTrack ResolveWebcamTrack()
+        {
+            try
+            {
+                var reported = _obs?.LastTracks;
+                if (reported != null)
+                {
+                    return reported.Webcam == null
+                        ? null
+                        : new SessionVideoTrack
+                        {
+                            Index = reported.Webcam.Index,
+                            Width = reported.Webcam.Width,
+                            Height = reported.Webcam.Height,
+                        };
+                }
+
+                if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+                    return null;
+
+                var info = MediaProbe.Probe(_savedPath);
+                // stream 0 is the screen, stream 1 (when present) is the webcam — the order the
+                // recorder writes the tracks in, and the order the editor reads them back in. Those
+                // two are the only video tracks a recording carries.
+                if (info?.VideoStreams == null || info.VideoStreams.Count < 2)
+                    return null;
+
+                var webcam = info.VideoStreams[1];
+
+                return new SessionVideoTrack
+                {
+                    Index = webcam.StreamIndex,
+                    Width = webcam.Width,
+                    Height = webcam.Height,
+                };
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Could not determine the recording's webcam track: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The input-capture jsonl this recording wrote, or null when there is none on disk —
+        /// report-first like the tracks, falling back to the well-known session path the recorder
+        /// was given (a recorder too old to echo it back never wrote one, but the check is free).
+        /// Existence is the test either way: a path the recorder claims but never flushed is no
+        /// better than no data, which is what the editor would degrade to anyway.
+        /// </summary>
+        private string ResolveInputCapturePath()
+        {
+            try
+            {
+                var reported = _obs?.LastTracks?.InputCapturePath;
+                if (!String.IsNullOrEmpty(reported) && File.Exists(reported))
+                    return reported;
+
+                var expected = ObsArguments.GetInputCapturePath(_sessionDir);
+                return File.Exists(expected) ? expected : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Could not determine the recording's input-capture file: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>The window-capture jsonl this recording wrote, or null when there is none on
+        /// disk. Report-first then the well-known session path, both existence-checked, exactly
+        /// like <see cref="ResolveInputCapturePath"/>. Existence is the only test: the recorder
+        /// creates the file when it constructs the writer, so a 0-byte file is a legitimate
+        /// outcome of a recording that never started, and emptiness is the parser's problem.</summary>
+        private string ResolveWindowCapturePath()
+        {
+            try
+            {
+                var reported = _obs?.LastTracks?.WindowCapturePath;
+                if (!String.IsNullOrEmpty(reported) && File.Exists(reported))
+                    return reported;
+
+                var expected = ObsArguments.GetWindowCapturePath(_sessionDir);
+                return File.Exists(expected) ? expected : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Could not determine the recording's window-capture file: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Production layout: the FFmpeg DLLs sit next to prisc_recorder; dev machines set
+        /// PRISC_FFMPEG_PATH, which FFmpegLoader checks before consulting this.</summary>
+        private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
+
+        /// <summary>
+        /// Moves the finished mp4 out of the session directory into the folder the user chose,
+        /// named with their filename pattern (issue #50 — WPF parity with
+        /// VideoCaptureWindow.StopRecording). Updates <see cref="_savedPath"/> to wherever the
+        /// video ended up and returns the failure, if any, so the caller can report it; a failed
+        /// move is never fatal — the video simply stays in the session directory, which is exactly
+        /// where the pre-#50 rewrite always left it. Callers must have shut the capturer down
+        /// first: prisc_recorder holds the file open until its process exits.
+        /// </summary>
+        private async Task<Exception> MoveToOutputFolderAsync()
+        {
+            try
+            {
+                if (!File.Exists(_outputFile))
+                    return null;
+
+                // a composition recording is a project, not a video: its mp4 carries one stream per
+                // track and nothing can play it back as the user recorded it. It stays in the
+                // session directory (which owns it, and which the render output is keyed to), and
+                // the file that reaches the user's output folder is the render.
+                if (_appliedMultiTrack)
+                    return null;
+
+                // the extension of the file actually written, not the setting: the container is
+                // fixed at spawn time and a mid-recording change no longer acts on it.
+                var target = RecordingOutputPath.GetSavePath(_settings, Path.GetExtension(_outputFile));
+                if (String.IsNullOrEmpty(target))
+                    return null; // no writable output folder at all; keep the session copy silently
+
+                // File.Move degrades to a full copy across volumes, which for a long recording is
+                // seconds of work — never on the UI thread.
+                await Task.Run(() => File.Move(_outputFile, target));
+
+                _savedPath = target;
+                Debug.WriteLine("Recording saved to " + target);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to move the recording to the output folder: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.move-output");
+                return ex;
+            }
+        }
+
+        /// <summary>True when the output mp4 exists with any content — a crash or forced stop
+        /// after minutes of recording should keep the partial file rather than delete it.</summary>
+        private bool HasPartialVideo()
+        {
+            try
+            {
+                var mp4 = new FileInfo(_outputFile);
+                return mp4.Exists && mp4.Length > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Writes the capturer's ring-buffer log next to the settings file
+        /// (%APPDATA%\Prisc), falling back to the Desktop (WPF parity). Returns null on
+        /// failure.</summary>
+        private string WriteErrorLog(string message)
+        {
+            try
+            {
+                string dir = null;
+                try
+                {
+                    dir = Path.GetDirectoryName(SettingsService.FilePath);
+                }
+                catch { }
+
+                if (String.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+                    dir = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+
+                var logPath = Path.Combine(dir, $"capture_error_log_{DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}.txt");
+                File.WriteAllText(logPath, message + Environment.NewLine + Environment.NewLine + (_obs?.GetLog() ?? ""));
+                return logPath;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to write recording error log: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "video.write-error-log");
+                return null;
+            }
+        }
+
+        private void HideWindows()
+        {
+            try { _border?.Hide(); }
+            catch { }
+            try { _toolbar?.Hide(); }
+            catch { }
+        }
+
+        private void RaiseClosed()
+        {
+            if (_closedRaised)
+                return;
+            _closedRaised = true;
+            Closed?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static void DeleteDirectory(string dir)
+        {
+            try
+            {
+                if (!String.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                    Directory.Delete(dir, true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to delete session directory: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "video.delete-session-dir");
+            }
+        }
+    }
+}

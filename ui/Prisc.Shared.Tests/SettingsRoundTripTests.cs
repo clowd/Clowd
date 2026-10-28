@@ -1,0 +1,928 @@
+﻿using System;
+using System.ComponentModel;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using Avalonia.Media;
+using Prisc.Config;
+using Xunit;
+
+namespace Prisc.Shared.Tests
+{
+    public class SettingsRoundTripTests : IDisposable
+    {
+        private readonly string _path = Path.Combine(Path.GetTempPath(), "PriscSettingsTests", Guid.NewGuid() + ".json");
+
+        // SettingsGeneral.DefaultRegisterAutoStart is compiled against Prisc.Shared's configuration,
+        // which is the same one this test assembly is built with.
+        private static bool IsDebugBuild =>
+#if DEBUG
+            true;
+#else
+            false;
+#endif
+
+        public void Dispose()
+        {
+            try
+            {
+                if (File.Exists(_path))
+                    File.Delete(_path);
+            }
+            catch { }
+        }
+
+        [Fact]
+        public void Load_WithMissingFile_ReturnsDefaults()
+        {
+            var loaded = SettingsService.Load(_path);
+
+            Assert.NotNull(loaded);
+            Assert.True(loaded.General.ConfirmClose);
+            Assert.Equal(new SettingsHotkey().CaptureRegionShortcut, loaded.Hotkeys.CaptureRegionShortcut); // per OS: Hotkeys_LoadedWithNoFile_AreThisOsDefaults
+            Assert.Equal(Colors.Transparent, loaded.Editor.CanvasBackground);
+            Assert.Equal(0.80, loaded.Capture.ObscuredWindowDetectionThreshold);
+            Assert.True(loaded.Capture.RoundedWindowCorners);
+            Assert.Empty(loaded.Editor.Tools);
+        }
+
+        [Fact]
+        public void SaveThenLoad_PreservesNonDefaultGraph()
+        {
+            // the Windows hotkey defaults on every OS, so the untouched ones checked below are not empty
+            var original = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.Windows) };
+
+            // strings / bools / numbers
+            original.General.LastSavePath = @"C:\Users\test\Pictures";
+            original.General.ConfirmClose = false;
+            original.Capture.ScreenshotWithCursor = true;
+            original.Capture.RoundedWindowCorners = false;
+            original.Capture.TipsMode = CapturerTipsMode.Off; // enum by name (non-default)
+            original.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Pixelate; // enum by name (non-default)
+            original.ShareRegion.ObscureStrength = 77;
+            original.ShareRegion.CaptureMethod = ScreenCaptureMethod.Dxgi; // enum by name (non-default)
+            original.Recording.CaptureMethod = ScreenCaptureMethod.Wgc;
+            original.Capture.ObscuredWindowDetectionThreshold = 0.55; // invariant double
+            original.Editor.StartupPadding = 42;
+            original.DrawOnScreen.Mode = DrawOnScreenMode.Off; // enum by name (non-default)
+            original.DrawOnScreen.Region = DrawKeystrokeRegion.TopRight;
+            original.DrawOnScreen.Margin = 12;
+            original.DrawOnScreen.ShowKeystrokes = true;
+            original.DrawOnScreen.FillColor = Color.FromArgb(0x33, 0x01, 0x02, 0x03);
+            original.DrawOnScreen.EntryKind = DrawKeystrokeAnimation.None;
+
+            // Color ("#AARRGGBB")
+            original.Editor.CanvasBackground = Color.FromArgb(0x80, 0x12, 0x34, 0x56);
+
+            // List<Color> — the configuration binder appends to the existing (empty) list
+            original.General.RecentColors = new System.Collections.Generic.List<Color>
+            {
+                Colors.Red,
+                Color.FromArgb(0x40, 0xAA, 0xBB, 0xCC),
+            };
+
+            // nested object (TimeOption)
+            original.Editor.DeleteSessionsAfter = new TimeOption(2, TimeOptionUnit.Weeks);
+
+            // Tools dictionary entry (enum key) with Color + font enums
+            var tool = original.Editor.GetToolSettings(ToolType.Text);
+            tool.ObjectColor = Colors.Lime;
+            tool.Scale = 1.7;
+            tool.LineWidth = 7.5;
+            tool.FontWeight = FontWeight.Bold;
+            tool.FontStyle = FontStyle.Italic;
+            tool.FontStretch = FontStretch.Condensed;
+            tool.FontFamily = "Consolas";
+
+            // gestures: modified, and cleared (must NOT resurrect the compiled-in default)
+            original.Hotkeys.CaptureRegionShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.S, HotkeyModifiers.Control | HotkeyModifiers.Shift));
+            original.Hotkeys.FileUploadShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.F12, HotkeyModifiers.Alt));
+            original.Hotkeys.CaptureFullscreenShortcut = GestureList.Empty; // default is Ctrl+PrtScr
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(@"C:\Users\test\Pictures", loaded.General.LastSavePath);
+            Assert.False(loaded.General.ConfirmClose);
+            Assert.True(loaded.Capture.ScreenshotWithCursor);
+            Assert.False(loaded.Capture.RoundedWindowCorners);
+            Assert.Equal(CapturerTipsMode.Off, loaded.Capture.TipsMode);
+            // the share-region obscure pair rides the already-registered JsonStringEnumConverter, so
+            // the style persists as the member name "Pixelate" and needs no converter of its own.
+            Assert.Equal(ShareRegionObscureStyle.Pixelate, loaded.ShareRegion.ObscureStyle);
+            Assert.Equal(77, loaded.ShareRegion.ObscureStrength);
+            // the shared capture-method enum persists by member name on both pages, and defaults to
+            // Auto — so a settings file written before the setting existed keeps today's behavior.
+            Assert.Equal(ScreenCaptureMethod.Dxgi, loaded.ShareRegion.CaptureMethod);
+            Assert.Equal(ScreenCaptureMethod.Wgc, loaded.Recording.CaptureMethod);
+            Assert.Equal(0.55, loaded.Capture.ObscuredWindowDetectionThreshold);
+            Assert.Equal(42, loaded.Editor.StartupPadding);
+            Assert.Equal(DrawOnScreenMode.Off, loaded.DrawOnScreen.Mode);
+            Assert.False(loaded.DrawOnScreen.IsEnabled);
+            Assert.Equal(DrawKeystrokeRegion.TopRight, loaded.DrawOnScreen.Region);
+            Assert.Equal(12, loaded.DrawOnScreen.Margin);
+            Assert.True(loaded.DrawOnScreen.ShowKeystrokes);
+            Assert.Equal(Color.FromArgb(0x33, 0x01, 0x02, 0x03), loaded.DrawOnScreen.FillColor);
+            Assert.Equal(DrawKeystrokeAnimation.None, loaded.DrawOnScreen.EntryKind);
+            Assert.False(loaded.DrawOnScreen.EntryAnimates);
+
+            Assert.Equal(Color.FromArgb(0x80, 0x12, 0x34, 0x56), loaded.Editor.CanvasBackground);
+
+            Assert.Equal(new[] { Colors.Red, Color.FromArgb(0x40, 0xAA, 0xBB, 0xCC) }, loaded.General.RecentColors);
+
+            Assert.Equal(2, loaded.Editor.DeleteSessionsAfter.Number);
+            Assert.Equal(TimeOptionUnit.Weeks, loaded.Editor.DeleteSessionsAfter.Unit);
+
+            var loadedTool = Assert.Contains(ToolType.Text, (System.Collections.Generic.IDictionary<ToolType, SavedToolSettings>)loaded.Editor.Tools);
+            Assert.Equal(Colors.Lime, loadedTool.ObjectColor);
+            Assert.Equal(1.7, loadedTool.Scale);
+            Assert.Equal(7.5, loadedTool.LineWidth);
+            Assert.Equal(FontWeight.Bold, loadedTool.FontWeight);
+            Assert.Equal(FontStyle.Italic, loadedTool.FontStyle);
+            Assert.Equal(FontStretch.Condensed, loadedTool.FontStretch);
+            Assert.Equal("Consolas", loadedTool.FontFamily);
+
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.S, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.Hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.F12, HotkeyModifiers.Alt)), loaded.Hotkeys.FileUploadShortcut);
+            Assert.Empty(loaded.Hotkeys.CaptureFullscreenShortcut);
+
+            // untouched values still come back as they were
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), loaded.Hotkeys.CaptureActiveShortcut);
+            Assert.True(loaded.Editor.RestoreSessionsOnPriscStart);
+        }
+
+        [Fact]
+        public void StartupOptions_DefaultToAutoStart_AndRoundTrip()
+        {
+            // auto-start is registered by the Velopack install hook on Windows only; elsewhere the
+            // user has to opt in.
+            var expected = SettingsGeneral.DefaultRegisterAutoStart;
+            Assert.Equal(OperatingSystem.IsWindows() && !IsDebugBuild, expected);
+
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(expected, loaded.General.RegisterAutoStart);
+
+            var original = new SettingsRoot();
+            original.General.RegisterAutoStart = !expected;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(!expected, loaded.General.RegisterAutoStart);
+        }
+
+        [Fact]
+        public void ExplorerContextMenu_DefaultsToWindowsOnly_AndRoundTrips()
+        {
+            // the verb is a Windows-only registry registration, and debug builds are never installed
+            // so they must not register a verb pointing into a bin directory.
+            var expected = SettingsGeneral.DefaultRegisterExplorerContextMenu;
+            Assert.Equal(OperatingSystem.IsWindows() && !IsDebugBuild, expected);
+
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(expected, loaded.General.RegisterExplorerContextMenu);
+
+            var original = new SettingsRoot();
+            original.General.RegisterExplorerContextMenu = !expected;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(!expected, loaded.General.RegisterExplorerContextMenu);
+        }
+
+        [Fact]
+        public void UpdateOptions_DefaultToCheckingEveryThreeHours_AndRoundTrip()
+        {
+            var loaded = SettingsService.Load(_path);
+            Assert.True(loaded.General.AutoDownloadUpdates);
+            Assert.Equal(UpdateInterval.ThreeHourly, loaded.General.UpdateCheckInterval);
+            Assert.True(loaded.General.AutoApplyUpdates);
+
+            // experimental builds are opt-in: stable-only until the user ticks the box.
+            Assert.False(loaded.General.IncludePrereleaseUpdates);
+
+            var original = new SettingsRoot();
+            original.General.AutoDownloadUpdates = false;
+            original.General.UpdateCheckInterval = UpdateInterval.Daily;
+            original.General.AutoApplyUpdates = false;
+            original.General.IncludePrereleaseUpdates = true;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.False(loaded.General.AutoDownloadUpdates);
+            Assert.Equal(UpdateInterval.Daily, loaded.General.UpdateCheckInterval);
+            Assert.False(loaded.General.AutoApplyUpdates);
+            Assert.True(loaded.General.IncludePrereleaseUpdates);
+        }
+
+        [Fact]
+        public void EditorFeatureFlags_Default_WhenAbsentFromFile()
+        {
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Null(loaded.Editor.ToolbarOrder);
+            Assert.Null(loaded.Editor.HiddenTools);
+        }
+
+        [Fact]
+        public void EditorFeatureFlags_And_ToolbarLists_RoundTrip()
+        {
+            var original = new SettingsRoot();
+            original.Editor.ToolbarOrder = new System.Collections.Generic.List<string> { "Rectangle", "Bogus", "Rectangle" };
+            original.Editor.HiddenTools = new System.Collections.Generic.List<string> { "Ellipse", "Pointer" };
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(new[] { "Rectangle", "Bogus", "Rectangle" }, loaded.Editor.ToolbarOrder);
+            Assert.Equal(new[] { "Ellipse", "Pointer" }, loaded.Editor.HiddenTools);
+
+            // the lenient resolver tolerates the stale/duplicate names loaded from disk
+            var resolved = ToolbarConfig.ResolveToolbarOrder(loaded.Editor);
+            var expected = new System.Collections.Generic.List<ToolType> { ToolType.Rectangle };
+            expected.AddRange(System.Linq.Enumerable.Where(ToolbarConfig.DefaultOrder, t => t != ToolType.Rectangle));
+            Assert.Equal(expected, resolved);
+        }
+
+        [Fact]
+        public void ToolSettings_FromBeforeTheToolRework_AreReset()
+        {
+            // the tool rework moved the per-tool settings and toolbar lists to "V2" keys so every
+            // user starts from defaults once. The pre-rework keys must be ignored on load and
+            // dropped from the file on the next save.
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, """
+                {
+                  "Editor": {
+                    "StartupPadding": 42,
+                    "ToolbarOrder": [ "Rectangle" ],
+                    "HiddenTools": [ "Ellipse" ],
+                    "Tools": {
+                      "Text": { "FontFamily": "Consolas" }
+                    }
+                  }
+                }
+                """);
+
+            var loaded = SettingsService.Load(_path);
+
+            // the section really did bind, so the resets below are not a skipped file
+            Assert.Equal(42, loaded.Editor.StartupPadding);
+            Assert.Empty(loaded.Editor.Tools);
+            Assert.Null(loaded.Editor.ToolbarOrder);
+            Assert.Null(loaded.Editor.HiddenTools);
+
+            loaded.Editor.GetToolSettings(ToolType.Text).FontFamily = "Arial";
+            loaded.Editor.ToolbarOrder = new System.Collections.Generic.List<string> { "Ellipse" };
+            loaded.Editor.HiddenTools = new System.Collections.Generic.List<string> { "Rectangle" };
+            SettingsService.Save(loaded, _path);
+
+            // other sections have their own ToolbarOrder, so look only at the Editor object
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(_path));
+            var editor = doc.RootElement.GetProperty("Editor");
+            Assert.True(editor.TryGetProperty("ToolsV2", out _));
+            Assert.True(editor.TryGetProperty("ToolbarOrderV2", out _));
+            Assert.True(editor.TryGetProperty("HiddenToolsV2", out _));
+            Assert.False(editor.TryGetProperty("Tools", out _));
+            Assert.False(editor.TryGetProperty("ToolbarOrder", out _));
+            Assert.False(editor.TryGetProperty("HiddenTools", out _));
+            Assert.DoesNotContain("Consolas", editor.GetRawText());
+        }
+
+        [Fact]
+        public void SidebarWidth_Default_WhenAbsentFromFile()
+        {
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(230d, loaded.Editor.SidebarWidth);
+        }
+
+        [Fact]
+        public void SidebarWidth_RoundTrips()
+        {
+            var original = new SettingsRoot();
+            original.Editor.SidebarWidth = 375;
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(375d, loaded.Editor.SidebarWidth);
+        }
+
+        [Fact]
+        public void RecordingOutput_DefaultsToTheVideosFolder_AndRoundTrips()
+        {
+            // issue #50: recordings used to land in a non-configurable file inside the session
+            // directory. The folder defaults to Videos so the setting page is truthful before the
+            // first recording, and the pattern matches the capture one.
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(SettingsRecording.DefaultOutputDirectory, loaded.Recording.OutputDirectory);
+            Assert.Equal("yyyy-MM-dd HH-mm-ss", loaded.Recording.FilenamePattern);
+            // a finished recording opens in the video editor by default — trimming it (and placing
+            // a webcam, when there is one) is the usual next step, not finding the file.
+            Assert.Equal(RecordingFinishAction.VideoEditor, loaded.Recording.OpenWhenFinished);
+            // MP4 by default: it is what every player and upload target accepts.
+            Assert.Equal(VideoContainer.Mp4, loaded.Recording.Container);
+
+            var original = new SettingsRoot();
+            original.Recording.OutputDirectory = @"C:\Users\test\Recordings";
+            original.Recording.FilenamePattern = "'prisc' yyyy-MM-dd";
+            original.Recording.OpenWhenFinished = RecordingFinishAction.OutputFolder; // enum by name
+            original.Recording.Container = VideoContainer.Mkv;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(@"C:\Users\test\Recordings", loaded.Recording.OutputDirectory);
+            Assert.Equal("'prisc' yyyy-MM-dd", loaded.Recording.FilenamePattern);
+            Assert.Equal(RecordingFinishAction.OutputFolder, loaded.Recording.OpenWhenFinished);
+            Assert.Equal(VideoContainer.Mkv, loaded.Recording.Container);
+        }
+
+        [Fact]
+        public void WebcamOptions_DefaultToOff_AndRoundTrip()
+        {
+            // the webcam is a second video track, never composited into the recording, so it is
+            // off until the user has both ticked the box and picked a camera. There is no
+            // "default" camera pseudo-device the way there is for audio: empty means none.
+            var loaded = SettingsService.Load(_path);
+
+            Assert.False(loaded.Recording.CaptureWebcam);
+            Assert.Equal("", loaded.Recording.WebcamDeviceId);
+
+            var original = new SettingsRoot();
+            original.Recording.CaptureWebcam = true;
+            original.Recording.WebcamDeviceId = @"\\?\usb#vid_0000&pid_0000#global";
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.True(loaded.Recording.CaptureWebcam);
+            Assert.Equal(@"\\?\usb#vid_0000&pid_0000#global", loaded.Recording.WebcamDeviceId);
+        }
+
+        [Fact]
+        public void RecordingMode_DefaultsToStudio_AndRoundTrips()
+        {
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(RecordingMode.Studio, loaded.Recording.Mode);
+
+            var original = new SettingsRoot();
+            original.Recording.Mode = RecordingMode.Off;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(RecordingMode.Off, loaded.Recording.Mode);
+
+            // the mode replaced the composition switch; a file saved by this build carries only
+            // the mode, so an old build can never read a stale "EnableComposition" back over it.
+            Assert.DoesNotContain("EnableComposition", File.ReadAllText(_path));
+        }
+
+        [Fact]
+        public void UploadsMode_DefaultsToOn_AndRoundTrips()
+        {
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(UploadsMode.On, loaded.Uploads.Mode);
+            Assert.True(loaded.Uploads.IsEnabled);
+
+            var original = new SettingsRoot();
+            original.Uploads.Mode = UploadsMode.Off;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(UploadsMode.Off, loaded.Uploads.Mode);
+            Assert.False(loaded.Uploads.IsEnabled);
+        }
+
+        [Fact]
+        public void ShareRegionMode_DefaultsToOn_AndRoundTrips()
+        {
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(ShareRegionMode.On, loaded.ShareRegion.Mode);
+            Assert.True(loaded.ShareRegion.IsEnabled);
+
+            var original = new SettingsRoot();
+            original.ShareRegion.Mode = ShareRegionMode.Off;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(ShareRegionMode.Off, loaded.ShareRegion.Mode);
+            Assert.False(loaded.ShareRegion.IsEnabled);
+        }
+
+        [Fact]
+        public void RecordingMode_ReadsLegacyCompositionSwitch()
+        {
+            // a settings file from before RecordingMode existed carries the bool it replaced:
+            // composition off was the single-track recording that is now Instant mode, and on
+            // (the default) is Studio.
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, """
+                {
+                  "Recording": {
+                    "EnableComposition": false
+                  }
+                }
+                """);
+
+            Assert.Equal(RecordingMode.Instant, SettingsService.Load(_path).Recording.Mode);
+
+            File.WriteAllText(_path, """
+                {
+                  "Recording": {
+                    "EnableComposition": true
+                  }
+                }
+                """);
+
+            Assert.Equal(RecordingMode.Studio, SettingsService.Load(_path).Recording.Mode);
+        }
+
+        [Fact]
+        public void VideoEditorViewState_Defaults_WhenAbsentFromFile()
+        {
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(300d, loaded.VideoEditor.SidebarWidth);
+            Assert.Null(loaded.VideoEditor.WindowBounds);
+            Assert.False(loaded.VideoEditor.WindowMaximized);
+        }
+
+        [Fact]
+        public void VideoEditorViewState_RoundTrips()
+        {
+            var original = new SettingsRoot();
+            original.VideoEditor.SidebarWidth = 315; // invariant double
+            original.VideoEditor.WindowBounds = "10,20,1280,720";
+            original.VideoEditor.WindowMaximized = true;
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(315d, loaded.VideoEditor.SidebarWidth);
+            Assert.Equal("10,20,1280,720", loaded.VideoEditor.WindowBounds);
+            Assert.True(loaded.VideoEditor.WindowMaximized);
+        }
+
+        [Fact]
+        public void GifOptions_DefaultToBalancedQualityAndNoSizeCap_AndRoundTrip()
+        {
+            // the size caps are passed to prisc_vid2gif only when non-zero (its parser rejects 0), so the
+            // default must stay 0 = "no limit" rather than some large sentinel.
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(GifQuality.Good, loaded.Recording.GifQuality);
+            Assert.Equal(0, loaded.Recording.GifMaxWidth);
+            Assert.Equal(0, loaded.Recording.GifMaxHeight);
+
+            var original = new SettingsRoot();
+            original.Recording.GifQuality = GifQuality.Fair; // enum by name
+            original.Recording.GifMaxWidth = 640;
+            original.Recording.GifMaxHeight = 480;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(GifQuality.Fair, loaded.Recording.GifQuality);
+            Assert.Equal(640, loaded.Recording.GifMaxWidth);
+            Assert.Equal(480, loaded.Recording.GifMaxHeight);
+
+            // the lowercase member name is the --quality value prisc_vid2gif accepts
+            Assert.Equal("fair", loaded.Recording.GifQuality.ToString().ToLowerInvariant());
+        }
+
+        [Fact]
+        public void ShareRegionObscureOptions_DefaultToBlurAtSeventyFive_ForASettingsFileThatPredatesThem()
+        {
+            // a settings file written before the shared-region section existed has no ShareRegion
+            // object at all. The binder must leave both compiled-in defaults alone rather
+            // than writing a zeroed value over them. The strength is the load-bearing half: 0 is a
+            // legal int, and ShareRegionProtocol.BuildObscureCommand clamps strength to 1..100, so a
+            // remembered 0 goes out as "obscure blur 1" — an invisible blur the user believes is on.
+            // (Blur is also member 0, so its assertion cannot tell a real default from a zeroed one;
+            // it is here to pin the documented default, and the strength catches the zeroing.)
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, """
+                {
+                  "Capture": {
+                    "TipsMode": "Off",
+                    "ScreenshotWithCursor": true
+                  }
+                }
+                """);
+
+            var loaded = SettingsService.Load(_path);
+
+            // the section really did bind — without this the two assertions below would also pass
+            // for a file the binder skipped entirely, which is a different test.
+            Assert.Equal(CapturerTipsMode.Off, loaded.Capture.TipsMode);
+            Assert.True(loaded.Capture.ScreenshotWithCursor);
+
+            Assert.Equal(ShareRegionObscureStyle.Blur, loaded.ShareRegion.ObscureStyle);
+            Assert.Equal(75, loaded.ShareRegion.ObscureStrength);
+        }
+
+        [Fact]
+        public void ShareRegionObscureUsesStrength_IsFalseOnlyForHide()
+        {
+            // [DisabledWhen] binds to this derived bool to grey out the strength row, and it is
+            // [Browsable(false)] — there is no row of its own, so nothing in the generated settings
+            // page fails visibly if it stops tracking the style. Hide is the one mode the helper's
+            // obscure command takes no strength for.
+            var settings = new SettingsRoot();
+
+            settings.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Blur;
+            Assert.True(settings.ShareRegion.ObscureUsesStrength);
+
+            settings.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Pixelate;
+            Assert.True(settings.ShareRegion.ObscureUsesStrength);
+
+            settings.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Hide;
+            Assert.False(settings.ShareRegion.ObscureUsesStrength);
+        }
+
+        [Fact]
+        public void Hotkeys_OnWindows_DefaultToThePrintScreenFamily_AndNothingElse()
+        {
+            var hotkeys = new SettingsHotkey(OSPlatform.Windows);
+
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen)), hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control)), hotkeys.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Alt)), hotkeys.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Shift)), hotkeys.StartStopRecordingShortcut);
+            AssertTheRestAreEmpty(hotkeys);
+        }
+
+        [Fact]
+        public void Hotkeys_OnMacOS_DefaultToCmdShiftDigitsAndF13_AndNothingElse()
+        {
+            // a Mac has no PrintScreen key code, so the Windows family would leave a fresh install
+            // with no working hotkey at all. F13 sits where PrintScreen does on a PC keyboard
+            // plugged into a Mac; Cmd+Shift+2 goes first, as the one the capture page's caption names.
+            const HotkeyModifiers CmdShift = HotkeyModifiers.Meta | HotkeyModifiers.Shift;
+            var hotkeys = new SettingsHotkey(OSPlatform.OSX);
+
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D2, CmdShift), new HotkeyGesture(HotkeyKey.F13)), hotkeys.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D1, CmdShift)), hotkeys.CaptureFullscreenShortcut);
+            Assert.Empty(hotkeys.CaptureActiveShortcut);
+            Assert.Empty(hotkeys.StartStopRecordingShortcut);
+            AssertTheRestAreEmpty(hotkeys);
+        }
+
+        [Theory]
+        [InlineData("WINDOWS")]
+        [InlineData("OSX")]
+        public void Hotkeys_Defaults_AreNeverReservedByTheirOs(string os)
+        {
+            // a reserved gesture is never bound (the recorder treats it as a cancel, and
+            // HotkeyManager refuses one already saved), so a default on that list would be dead
+            // on arrival
+            var platform = OSPlatform.Create(os);
+            var hotkeys = new SettingsHotkey(platform);
+            var all = TypeDescriptor.GetProperties(hotkeys).Cast<PropertyDescriptor>()
+                .Where(p => p.PropertyType == typeof(GestureList))
+                .SelectMany(p => (GestureList)p.GetValue(hotkeys))
+                .ToList();
+
+            Assert.NotEmpty(all);
+            Assert.All(all, g => Assert.False(HotkeyGesture.IsSystemReserved(g, platform), g.ToSerializedString()));
+        }
+
+        [Fact]
+        public void Hotkeys_LoadedWithNoFile_AreThisOsDefaults()
+        {
+            // the binder builds SettingsHotkey with its parameterless constructor
+            var loaded = SettingsService.Load(_path).Hotkeys;
+            var expected = new SettingsHotkey(OperatingSystem.IsMacOS() ? OSPlatform.OSX : OSPlatform.Windows);
+
+            foreach (PropertyDescriptor property in TypeDescriptor.GetProperties(typeof(SettingsHotkey)))
+            {
+                if (property.PropertyType == typeof(GestureList))
+                    Assert.Equal(property.GetValue(expected), property.GetValue(loaded));
+            }
+        }
+
+        [Theory]
+        [InlineData("WINDOWS", "PrintScreen", "Control+PrintScreen")]
+        [InlineData("OSX", "Shift+Meta+D2; F13", "Shift+Meta+D1")]
+        public void Hotkeys_DefaultsWrittenOnOneOs_LoadUnchangedOnAnother(string os, string region, string fullscreen)
+        {
+            // every gesture is written out, defaults included, so a file carries its gestures with
+            // it: loading never swaps in the other OS's defaults behind the user's back (a PrtScr
+            // brought to a Mac shows as unsupported on the Hotkeys page, rather than vanishing).
+            var original = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.Create(os)) };
+
+            SettingsService.Save(original, _path);
+            var json = File.ReadAllText(_path);
+            Assert.Contains($"\"CaptureRegionShortcut\": \"{region}\"", json);
+            Assert.Contains($"\"CaptureFullscreenShortcut\": \"{fullscreen}\"", json);
+
+            var loaded = SettingsService.Load(_path).Hotkeys;
+            foreach (PropertyDescriptor property in TypeDescriptor.GetProperties(typeof(SettingsHotkey)))
+            {
+                if (property.PropertyType == typeof(GestureList))
+                    Assert.Equal(property.GetValue(original.Hotkeys), property.GetValue(loaded));
+            }
+        }
+
+        [Theory]
+        [InlineData("Snapshot")]
+        [InlineData("PrintScreen")]
+        public void Hotkeys_WrittenBeforeTheMacDefaults_OnAMac_TradeThePrintScreenDefaultsForThem(string printScreen)
+        {
+            // what every Mac that ran an earlier build has on disk: the PrintScreen family, which a
+            // Mac cannot register, written out as the defaults it then was. Left alone, an upgrade
+            // would start with no working screenshot hotkey at all.
+            WriteFromBeforeTheMacDefaults(
+                $"\"CaptureRegionShortcut\": \"{printScreen}\"",
+                $"\"CaptureFullscreenShortcut\": \"Control+{printScreen}\"",
+                $"\"CaptureActiveShortcut\": \"Alt+{printScreen}\"",
+                $"\"StartStopRecordingShortcut\": \"Shift+{printScreen}\"",
+                "\"DrawOnScreenShortcut\": \"Control+Shift+D\"");
+
+            var loaded = SettingsService.Load(_path, OSPlatform.OSX).Hotkeys;
+
+            var mac = new SettingsHotkey(OSPlatform.OSX);
+            Assert.Equal(mac.CaptureRegionShortcut, loaded.CaptureRegionShortcut);
+            Assert.Equal(mac.CaptureFullscreenShortcut, loaded.CaptureFullscreenShortcut);
+            Assert.Empty(loaded.CaptureActiveShortcut);
+            Assert.Empty(loaded.StartStopRecordingShortcut);
+            // not a default: kept
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.DrawOnScreenShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_WrittenBeforeTheMacDefaults_KeepWhatTheUserChose()
+        {
+            // only a value that is exactly the old default moves: an edited one is the user's
+            WriteFromBeforeTheMacDefaults(
+                "\"CaptureRegionShortcut\": \"Control+Shift+Snapshot\"",
+                "\"CaptureFullscreenShortcut\": \"Snapshot; Control+Snapshot\"",
+                "\"CaptureActiveShortcut\": \"None\"",
+                "\"StartStopRecordingShortcut\": \"Shift+Meta+D7\"");
+
+            var loaded = SettingsService.Load(_path, OSPlatform.OSX).Hotkeys;
+
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.CaptureRegionShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen), new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control)), loaded.CaptureFullscreenShortcut);
+            Assert.Empty(loaded.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D7, HotkeyModifiers.Shift | HotkeyModifiers.Meta)), loaded.StartStopRecordingShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_WrittenBeforeTheMacDefaults_NeverGiveAMacDefaultTheUserBoundElsewhere()
+        {
+            // with the PrintScreen defaults dead on a Mac, the user bound F13 and Cmd+Shift+1 to
+            // other actions themselves: a gesture belongs to one action, and theirs keep it
+            WriteFromBeforeTheMacDefaults(
+                "\"CaptureRegionShortcut\": \"Snapshot\"",
+                "\"CaptureFullscreenShortcut\": \"Control+Snapshot\"",
+                "\"CaptureActiveShortcut\": \"F13\"",
+                "\"StartStopRecordingShortcut\": \"Shift+Meta+D1\"");
+
+            var loaded = SettingsService.Load(_path, OSPlatform.OSX).Hotkeys;
+
+            const HotkeyModifiers CmdShift = HotkeyModifiers.Meta | HotkeyModifiers.Shift;
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D2, CmdShift)), loaded.CaptureRegionShortcut);
+            Assert.Empty(loaded.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.F13)), loaded.CaptureActiveShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D1, CmdShift)), loaded.StartStopRecordingShortcut);
+            var all = TypeDescriptor.GetProperties(loaded).Cast<PropertyDescriptor>()
+                .Where(p => p.PropertyType == typeof(GestureList))
+                .SelectMany(p => (GestureList)p.GetValue(loaded))
+                .ToList();
+            Assert.Equal(all.Count, all.Distinct().Count());
+        }
+
+        [Fact]
+        public void Hotkeys_WrittenBeforeTheMacDefaults_LoadUnchangedOnWindows()
+        {
+            WriteFromBeforeTheMacDefaults(
+                "\"CaptureRegionShortcut\": \"Snapshot\"",
+                "\"CaptureFullscreenShortcut\": \"Control+Snapshot\"",
+                "\"CaptureActiveShortcut\": \"Alt+Snapshot\"",
+                "\"StartStopRecordingShortcut\": \"Shift+Snapshot\"");
+
+            var loaded = SettingsService.Load(_path, OSPlatform.Windows).Hotkeys;
+
+            var windows = new SettingsHotkey(OSPlatform.Windows);
+            Assert.Equal(windows.CaptureRegionShortcut, loaded.CaptureRegionShortcut);
+            Assert.Equal(windows.CaptureFullscreenShortcut, loaded.CaptureFullscreenShortcut);
+            Assert.Equal(windows.CaptureActiveShortcut, loaded.CaptureActiveShortcut);
+            Assert.Equal(windows.StartStopRecordingShortcut, loaded.StartStopRecordingShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_WrittenByThisBuild_AreNeverMigratedAgain()
+        {
+            // the trade happens once: a file this build wrote says so, and a PrintScreen in it —
+            // brought over from Windows, or put back by hand — is the user's from then on
+            var original = new SettingsRoot { Hotkeys = new SettingsHotkey(OSPlatform.Windows) };
+            SettingsService.Save(original, _path);
+
+            var loaded = SettingsService.Load(_path, OSPlatform.OSX).Hotkeys;
+
+            Assert.Equal(original.Hotkeys.CaptureRegionShortcut, loaded.CaptureRegionShortcut);
+            Assert.Equal(original.Hotkeys.StartStopRecordingShortcut, loaded.StartStopRecordingShortcut);
+
+            // and one that was migrated is written out as migrated
+            WriteFromBeforeTheMacDefaults("\"CaptureRegionShortcut\": \"Snapshot\"");
+            var migrated = SettingsService.Load(_path, OSPlatform.OSX);
+            SettingsService.Save(migrated, _path);
+            migrated.Hotkeys.CaptureRegionShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen));
+            SettingsService.Save(migrated, _path);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen)), SettingsService.Load(_path, OSPlatform.OSX).Hotkeys.CaptureRegionShortcut);
+        }
+
+        /// <summary>A settings file as builds before the per-OS defaults wrote it: a Hotkeys
+        /// section with these values and nothing to say which defaults it was written against.</summary>
+        private void WriteFromBeforeTheMacDefaults(params string[] values)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, "{ \"Hotkeys\": { " + String.Join(", ", values) + " } }");
+        }
+
+        private static void AssertTheRestAreEmpty(SettingsHotkey hotkeys)
+        {
+            Assert.Empty(hotkeys.FileUploadShortcut);
+            Assert.Empty(hotkeys.ClipboardUploadShortcut);
+            Assert.Empty(hotkeys.ShareRegionShortcut);
+            Assert.Empty(hotkeys.DrawOnScreenShortcut);
+            Assert.Empty(hotkeys.DrawOnScreenshotShortcut);
+            Assert.Empty(hotkeys.ColorWheelShortcut);
+            Assert.Empty(hotkeys.NewImageEditorShortcut);
+            Assert.Empty(hotkeys.NewVideoEditorShortcut);
+        }
+
+        [Fact]
+        public void Hotkeys_WithSeveralGestures_RoundTripInOrder_AndReplaceTheDefaults()
+        {
+            // the binder appends a bound collection's items to the compiled-in default list — which
+            // would put the default PrtScr in front of the saved pair. The list must come back as
+            // saved: these exact gestures, in this order, and no default in front of them.
+            var original = new SettingsRoot();
+            original.Hotkeys.CaptureRegionShortcut = GestureList.Of(
+                new HotkeyGesture(HotkeyKey.D1, HotkeyModifiers.Control | HotkeyModifiers.Shift),
+                new HotkeyGesture(HotkeyKey.PrintScreen));
+            original.Hotkeys.ColorWheelShortcut = GestureList.Of(
+                new HotkeyGesture(HotkeyKey.C, HotkeyModifiers.Control | HotkeyModifiers.Alt),
+                new HotkeyGesture(HotkeyKey.F9));
+            original.Hotkeys.NewImageEditorShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.I, HotkeyModifiers.Meta));
+            original.Hotkeys.NewVideoEditorShortcut = GestureList.Of(new HotkeyGesture(HotkeyKey.V, HotkeyModifiers.Alt | HotkeyModifiers.Shift));
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path).Hotkeys;
+
+            Assert.Equal(original.Hotkeys.CaptureRegionShortcut, loaded.CaptureRegionShortcut);
+            Assert.Equal(original.Hotkeys.ColorWheelShortcut, loaded.ColorWheelShortcut);
+            Assert.Equal(original.Hotkeys.NewImageEditorShortcut, loaded.NewImageEditorShortcut);
+            Assert.Equal(original.Hotkeys.NewVideoEditorShortcut, loaded.NewVideoEditorShortcut);
+            Assert.Equal(2, loaded.CaptureRegionShortcut.Count);
+
+            // ...and it is one string in the file, not an array the binder would merge
+            Assert.Contains("\"CaptureRegionShortcut\": \"Control+Shift+D1; PrintScreen\"", File.ReadAllText(_path));
+        }
+
+        [Fact]
+        public void Hotkeys_ClearedOfEveryGesture_StayCleared()
+        {
+            // the binder skips an empty array outright, so a list written as [] would load as the
+            // default again — the user's "remove all" silently undone on the next start.
+            var original = new SettingsRoot();
+            original.Hotkeys.CaptureRegionShortcut = GestureList.Empty;
+            original.Hotkeys.StartStopRecordingShortcut = null; // null clears too
+
+            Assert.Empty(original.Hotkeys.StartStopRecordingShortcut);
+
+            SettingsService.Save(original, _path);
+            Assert.Contains("\"CaptureRegionShortcut\": \"None\"", File.ReadAllText(_path));
+
+            var loaded = SettingsService.Load(_path).Hotkeys;
+            Assert.Empty(loaded.CaptureRegionShortcut);
+            Assert.Empty(loaded.StartStopRecordingShortcut);
+            Assert.NotEmpty(loaded.CaptureFullscreenShortcut); // has a default on every OS
+        }
+
+        [Fact]
+        public void Hotkeys_FromBeforeMultipleGestures_LoadAsOneOrNone()
+        {
+            // a settings file written when each action held a single gesture: one gesture string
+            // per property, and "None" for one the user cleared. Neither may lose anything, and a
+            // gesture never brings the default it replaced back alongside it.
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, """
+                {
+                  "Hotkeys": {
+                    "CaptureRegionShortcut": "Control+Snapshot",
+                    "CaptureFullscreenShortcut": "None",
+                    "DrawOnScreenShortcut": "Control+Shift+D"
+                  }
+                }
+                """);
+
+            var loaded = SettingsService.Load(_path).Hotkeys;
+
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control)), loaded.CaptureRegionShortcut);
+            Assert.Empty(loaded.CaptureFullscreenShortcut);
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.D, HotkeyModifiers.Control | HotkeyModifiers.Shift)), loaded.DrawOnScreenShortcut);
+
+            // absent from the old file: this OS's defaults, the new actions included
+            Assert.Equal(new SettingsHotkey().CaptureActiveShortcut, loaded.CaptureActiveShortcut);
+            Assert.Equal(new SettingsHotkey().StartStopRecordingShortcut, loaded.StartStopRecordingShortcut);
+            Assert.Empty(loaded.ColorWheelShortcut);
+            Assert.Empty(loaded.NewVideoEditorShortcut);
+        }
+
+        [Fact]
+        public void GestureList_SerializedString_RoundTrips_AndParsesTolerantly()
+        {
+            var list = GestureList.Of(
+                new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control),
+                new HotkeyGesture(HotkeyKey.F1, HotkeyModifiers.Alt | HotkeyModifiers.Shift));
+            Assert.Equal("Control+PrintScreen; Alt+Shift+F1", list.ToSerializedString());
+            Assert.Equal(list, GestureList.Parse(list.ToSerializedString()));
+            Assert.Equal("Ctrl+Del, Alt+Shift+F1", GestureList.Of(
+                new HotkeyGesture(HotkeyKey.Delete, HotkeyModifiers.Control),
+                new HotkeyGesture(HotkeyKey.F1, HotkeyModifiers.Alt | HotkeyModifiers.Shift)).ToString());
+
+            Assert.Equal("None", GestureList.Empty.ToSerializedString());
+            Assert.Empty(GestureList.Parse("None"));
+            Assert.Empty(GestureList.Parse(null));
+            Assert.Empty(GestureList.Parse(""));
+
+            // an entry it cannot read is dropped, not the whole list; repeats and None collapse
+            Assert.Equal(GestureList.Of(new HotkeyGesture(HotkeyKey.A), new HotkeyGesture(HotkeyKey.B)),
+                GestureList.Parse("A; NotAKey; None, A, B"));
+
+            // lists written with the comma separator, before the switch to ';', still load
+            Assert.Equal(list, GestureList.Parse("Control+PrintScreen, Alt+Shift+F1"));
+        }
+
+        [Fact]
+        public void GestureList_SerializedString_IsUnreadableToThePreMultiGestureParser()
+        {
+            // a list ending in an unmodified key is the dangerous case: a build from before actions
+            // held several gestures splits the value on '+' only and hands the last segment to
+            // Enum.TryParse<Key>, which reads "PrintScreen, F9" as PrintScreen|F9 — a made-up key
+            // it would register system-wide. That segment must fail to parse instead.
+            var serialized = GestureList.Of(
+                new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control),
+                new HotkeyGesture(HotkeyKey.F9)).ToSerializedString();
+            var parts = serialized.Split('+');
+
+            Assert.False(Enum.TryParse<Avalonia.Input.Key>(parts[^1], true, out _));
+            Assert.True(Enum.TryParse<Avalonia.Input.Key>("PrintScreen, F9", true, out _)); // why ',' is not used
+        }
+
+        [Fact]
+        public void GestureList_Edits_KeepOrder_AndNeverHoldAGestureTwice()
+        {
+            var a = new HotkeyGesture(HotkeyKey.A);
+            var b = new HotkeyGesture(HotkeyKey.B);
+            var c = new HotkeyGesture(HotkeyKey.C);
+            var list = GestureList.Of(a, b);
+
+            Assert.Equal(GestureList.Of(a, b, c), list.Add(c));
+            Assert.Same(list, list.Add(b)); // already there: a no-op
+            Assert.Same(list, list.Add(null));
+            Assert.Same(list, list.Add(new HotkeyGesture(HotkeyKey.None)));
+
+            Assert.Equal(GestureList.Of(c, b), list.SetItem(0, c));
+            Assert.Same(list, list.SetItem(0, b)); // held at another index: a no-op
+            Assert.Equal(GestureList.Of(b), list.SetItem(0, null));
+            Assert.Throws<ArgumentOutOfRangeException>(() => list.SetItem(2, c));
+
+            Assert.Equal(GestureList.Of(b), list.RemoveAt(0));
+            Assert.Equal(GestureList.Of(a), list.Except(new[] { b, c }));
+            Assert.Same(list, list.Except(new[] { c }));
+
+            // value equality, order included
+            Assert.Equal(GestureList.Of(a, b), list);
+            Assert.NotEqual(GestureList.Of(b, a), list);
+            Assert.Equal(GestureList.Of(a, b).GetHashCode(), list.GetHashCode());
+        }
+
+        [Fact]
+        public void HotkeyGesture_SerializedString_RoundTrips()
+        {
+            // note: "Snapshot" is an alias of PrintScreen (the two names shared a value in
+            // Avalonia's Key) — the canonical name is written, and both parse back to the same key.
+            var gesture = new HotkeyGesture(HotkeyKey.PrintScreen, HotkeyModifiers.Control | HotkeyModifiers.Shift);
+            Assert.Equal("Control+Shift+PrintScreen", gesture.ToSerializedString());
+            Assert.Equal(gesture, HotkeyGesture.Parse(gesture.ToSerializedString()));
+            Assert.Equal(gesture, HotkeyGesture.Parse("Control+Shift+Snapshot"));
+
+            Assert.Null(HotkeyGesture.Parse(null));
+            Assert.Null(HotkeyGesture.Parse(""));
+            Assert.Null(HotkeyGesture.Parse("NotAKey"));
+            Assert.Equal(new HotkeyGesture(HotkeyKey.None), HotkeyGesture.Parse("None"));
+        }
+    }
+}

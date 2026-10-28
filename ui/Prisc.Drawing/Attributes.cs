@@ -1,0 +1,57 @@
+using System;
+
+namespace Prisc.Drawing
+{
+    [Flags]
+    public enum Skill
+    {
+        None = 0,
+        Color = 1 << 0,
+
+        /// <summary>Picks the fill itself (a pastel cycle and a slight tilt for new text), in place
+        /// of the <see cref="Fill"/> setting.</summary>
+        AutoFill = 1 << 1,
+
+        Stroke = 1 << 2,
+        Font = 1 << 3,
+        Angle = 1 << 4,
+        CanvasBackground = 1 << 5,
+        Crop = 1 << 6,
+        Cursor = 1 << 7,
+        BlurRadius = 1 << 8,
+        Radius = 1 << 9,
+        DashStyle = 1 << 10,
+        ObscureMode = 1 << 12,
+
+        /// <summary>The font face alone, for graphics that size their own text.</summary>
+        FontFamily = 1 << 13,
+
+        /// <summary>A uniform size multiplier (sticky notes, measure labels).</summary>
+        Scale = 1 << 14,
+
+        /// <summary>A background fill color, separate from the (foreground) color.</summary>
+        Fill = 1 << 15,
+    }
+
+    /// <summary>
+    /// Marks a graphic field as transient (selection/editing state, caches): it is excluded from
+    /// graphics serialization (undo snapshots, session file, clipboard) by
+    /// <see cref="GraphicsSerializer"/> and resets to its constructed default on deserialization.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+    public sealed class TransientAttribute : Attribute
+    { }
+
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+    public class GraphicDescAttribute : Attribute
+    {
+        public string Name { get; }
+
+        public Skill Skills { get; set; }
+
+        public GraphicDescAttribute(string name)
+        {
+            Name = name;
+        }
+    }
+}

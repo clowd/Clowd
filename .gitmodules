@@ -1,0 +1,4 @@
+[submodule "obs-studio"]
+	path = crates/obs-studio
+	url = https://github.com/obsproject/obs-studio.git
+	ignore = dirty

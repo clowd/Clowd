@@ -1,0 +1,12 @@
+[package]
+name = "prisc_build_support"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+publish = false
+description = "Build-script helpers shared by the workspace's build.rs files (Linux runtime bundle)."
+
+# Deliberately dependency-free: it is a build-dependency of every crate that
+# links libobs or FFmpeg, so anything added here lands in each of their
+# build-script compiles.
+[dependencies]

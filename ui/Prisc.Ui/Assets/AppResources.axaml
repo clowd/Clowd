@@ -1,0 +1,242 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Prisc.UI.Controls"
+        xmlns:helpers="using:Prisc.UI.Helpers"
+        xmlns:tray="using:Prisc.UI.Controls.Tray">
+
+    <Styles.Resources>
+        <ResourceDictionary>
+            <!-- The floating tray's tooltip chip, keyed: StripToolTips asks for it by name for the
+                 tray and the "tipBridge" bars below, and nothing picks it up implicitly. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://Prisc.Ui/Controls/Tray/TrayTips.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <!-- Prisc brand color — single source for the logo (and anything else brand-tinted). -->
+            <Color x:Key="PriscAccentColor">#00AFF0</Color>
+            <SolidColorBrush x:Key="PriscAccentBrush" Color="#00AFF0" />
+            <!-- the "starred" gold. Not theme-split: it has to read as the same mark on the light
+                 and the dark background, and this one carries enough contrast on both. -->
+            <Color x:Key="PriscStarColor">#F5B31B</Color>
+            <SolidColorBrush x:Key="PriscStarBrush" Color="#F5B31B" />
+
+            <!-- The one monospace face the app's own UI uses (colour values, timecodes). Embedded
+                 rather than named, because Consolas only exists on Windows. Mono rather than
+                 Code: Code's ligatures would rewrite sequences like "->" and "==". -->
+            <FontFamily x:Key="MonoFontFamily">avares://Prisc.Ui/Assets/Fonts#Cascadia Mono</FontFamily>
+
+            <!--  The font preview button of the image editor and the video editor's inspector — the
+                  dark-chrome tool surfaces, whatever the app theme. Same chrome idiom as
+                  CompactSpinner: #454545 fill with a #666666 1px border, and the interactive surface
+                  drawn 1px inside the border (#33FFFFFF fading to #66FFFFFF on hover over 0.1s, like
+                  the spin buttons).  -->
+            <ControlTheme x:Key="InnerToolButtonTheme" TargetType="Button">
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="Height" Value="22" />
+                <Setter Property="Margin" Value="4,0,0,0" />
+                <Setter Property="Padding" Value="10,0" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1">
+                            <Border Name="_bg" Margin="1">
+                                <Border.Transitions>
+                                    <Transitions>
+                                        <BrushTransition Property="Background" Duration="0:0:0.1" />
+                                    </Transitions>
+                                </Border.Transitions>
+                                <Panel>
+                                    <Rectangle
+                                        Height="5"
+                                        VerticalAlignment="Top"
+                                        IsHitTestVisible="False">
+                                        <Rectangle.Fill>
+                                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                                <GradientStop Offset="0" Color="#30FFFFFF" />
+                                                <GradientStop Offset="1" Color="#00FFFFFF" />
+                                            </LinearGradientBrush>
+                                        </Rectangle.Fill>
+                                    </Rectangle>
+                                    <ContentPresenter
+                                        Name="PART_ContentPresenter"
+                                        Padding="{TemplateBinding Padding}"
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="Center"
+                                        RenderTransform="translateY(-1px)"
+                                        Content="{TemplateBinding Content}"
+                                        ContentTemplate="{TemplateBinding ContentTemplate}" />
+                                </Panel>
+                            </Border>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^ /template/ Border#_bg">
+                    <Setter Property="Background" Value="#33FFFFFF" />
+                </Style>
+                <Style Selector="^:pointerover /template/ Border#_bg">
+                    <Setter Property="Background" Value="#66FFFFFF" />
+                </Style>
+            </ControlTheme>
+
+            <!--  The editors' tool-strip tips are rich panels (controls:ToolTipCard: header,
+                  description, demo GIF) rather than a line of text, and they draw their own dark
+                  chrome, so the ToolTip around them is a bare presenter: no theme padding,
+                  background or border to double up on the panel's. App-wide because both the
+                  video editor (ve:TrackTip in VideoEditorWindow.axaml) and the image editor
+                  (EditorWindow.CreateToolButton) wear it.  -->
+            <ControlTheme x:Key="RichTipToolTipTheme" TargetType="ToolTip">
+                <!-- hidden from screen capture with the other tips (CaptureExclusion) -->
+                <Setter Property="helpers:CaptureExclusion.Role" Value="Tooltip" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <ContentPresenter
+                            Padding="{TemplateBinding Padding}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
+            <ResourceDictionary.ThemeDictionaries>
+                <!-- WPFUI exact theme colors replaced by hardcoded Light #FAFAFA / Dark #202020 (§6). -->
+                <ResourceDictionary x:Key="Light">
+                    <Color x:Key="ApplicationBackgroundColor">#FAFAFA</Color>
+                    <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#FAFAFA" />
+                    <!-- Semi's tooltip is an inverted chip (dark slab, white text); it reads as a
+                         stray dark-mode fragment on the light window. Restyled to the context
+                         menu's surface so the two popups match. Light only: on the dark theme
+                         the stock pale chip is fine as it is. -->
+                    <StaticResource x:Key="ToolTipBackground" ResourceKey="SemiColorBackground3" />
+                    <StaticResource x:Key="ToolTipForeground" ResourceKey="SemiColorText0" />
+                    <StaticResource x:Key="ToolTipBorderBrush" ResourceKey="SemiColorBorder" />
+                    <Thickness x:Key="ToolTipBorderThickness">1</Thickness>
+
+                    <!-- Semi's light-theme primary text is a soft near-black (its dark themes are
+                         the ones tuned for contrast); against #FAFAFA it reads washed out at the
+                         12-14px this app runs at. Restated app-wide rather than per page, so the
+                         whole shell shares one ink. Only the primary step moves — the secondary
+                         ones stay where Semi put them, which is what keeps the hierarchy. -->
+                    <SolidColorBrush x:Key="SemiColorText0" Color="#0D0D0F" />
+
+                    <!-- Tool-bar icon ink for the editors' Modern chrome. Not SemiColorText0: the
+                         icons are solid-filled glyphs, and full text weight makes a strip of them
+                         read heavier than the labels beside them. Split by variant rather than
+                         picked once, since the modern bars sit on the window background
+                         (#FAFAFA light / Mica dark). App-wide because both editors wear it. -->
+                    <SolidColorBrush x:Key="PriscEditorIconBrush" Color="#3C3F42" />
+
+                    <!-- The slab the editors' side panels sit on in the Modern chrome. Lighter
+                         than the window, not darker: SemiColorFill0 is a dark veil, which on the
+                         light theme sinks the panel into the page instead of raising it. Not
+                         quite opaque, so the backdrop reads through where there is one — harmless
+                         where there is not, since what shows through is then the window's own
+                         flat background. -->
+                    <SolidColorBrush x:Key="PriscEditorSidebarBrush" Color="#A6FFFFFF" />
+
+                    <!-- The surround the artwork or the video sits on, and the line along the lip
+                         of it where the tool bars meet it. Both are the editors', shared so the
+                         two windows cannot drift apart. Both edges are opaque, each one the colour the
+                         old translucent line composited to over its own canvas fill, so the line
+                         never changes weight with what happens to sit behind it. It stays faint
+                         in both themes: the shadow under it is doing most of the separating. -->
+                    <SolidColorBrush x:Key="PriscEditorCanvasBrush" Color="#E9E9E9" />
+                    <SolidColorBrush x:Key="PriscEditorSurfaceEdgeBrush" Color="#D3D3D3" />
+                    <!-- The lift under that surface. Far softer than the dark theme's: a shadow
+                         over a light ground is read as a grey halo rather than as depth, and over
+                         a dark one it barely registers until it is this strong. -->
+                    <BoxShadows x:Key="PriscEditorSurfaceShadow">0 0 9 0 #66000000</BoxShadows>
+
+                    <!-- The label of a badged nav entry (MainWindow.RenderNavBadges). The icon beside
+                         it carries the full-strength SemiColorDanger / SemiYellow5; the text is the
+                         same hue pulled toward the theme's ink, so a line of it is not as loud as
+                         the glyph — darker here, paler in the dark theme. -->
+                    <SolidColorBrush x:Key="PriscNavDangerTextBrush" Color="#A8372C" />
+                    <SolidColorBrush x:Key="PriscNavWarningTextBrush" Color="#866400" />
+
+                    <!-- Ink of the logo's "prisc" wordmark (PathLogoWordmark): the brand's own
+                         text colours, #12161C on light grounds and #F2F5F8 on dark. -->
+                    <SolidColorBrush x:Key="PriscWordmarkBrush" Color="#12161C" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <Color x:Key="ApplicationBackgroundColor">#202020</Color>
+                    <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="PriscEditorIconBrush" Color="White" />
+                    <!-- an alpha-white overlay already, so the backdrop reads through it as it stands -->
+                    <StaticResource x:Key="PriscEditorSidebarBrush" ResourceKey="SemiColorFill0" />
+                    <SolidColorBrush x:Key="PriscEditorCanvasBrush" Color="#1E1E1E" />
+                    <SolidColorBrush x:Key="PriscEditorSurfaceEdgeBrush" Color="#38383A" />
+                    <BoxShadows x:Key="PriscEditorSurfaceShadow">0 0 9 0 #A6000000</BoxShadows>
+                    <SolidColorBrush x:Key="PriscNavDangerTextBrush" Color="#FFA89C" />
+                    <SolidColorBrush x:Key="PriscNavWarningTextBrush" Color="#F8E39A" />
+                    <SolidColorBrush x:Key="PriscWordmarkBrush" Color="#F2F5F8" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+
+    <!-- Text styles ported from WpfUICustomStyles.xaml (keyed TextBlock styles -> classes).
+         Only the classes actually used by the shell remain; Semi's own classes (H1-H9 etc.)
+         cover everything else. -->
+    <Style Selector="TextBlock.Title">
+        <!-- WPF used numeric FontWeight 350. -->
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontWeight" Value="SemiLight" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.Subtitle">
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.Body">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.Base">
+        <!-- BaseTextBlockStyle: SemiBold 14 wrap. -->
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- Menus size their own window, and Win32 truncates that size to whole physical pixels, so at
+         125%/150% scaling a menu that fits perfectly well can end up a pixel short and sprout the
+         scroll chevrons. MenuScrollFix turns scrolling off when the overflow is that small. `:is()`
+         is deliberate: it also catches the Windows tray menu's internal presenter subclass. -->
+    <Style Selector=":is(ContextMenu)">
+        <Setter Property="controls:MenuScrollFix.Enabled" Value="True" />
+    </Style>
+    <Style Selector=":is(MenuFlyoutPresenter)">
+        <Setter Property="controls:MenuScrollFix.Enabled" Value="True" />
+    </Style>
+
+    <!-- "tipBridge": a button strip whose tooltip stays up while the pointer moves from one button to
+         the next, re-aimed and refilled in place rather than closed and reopened (StripToolTips says
+         why that matters). The panel takes a transparent fill so its gaps still count as the strip:
+         without one, a gap hit-tests to whatever is behind it and the tip closes there. -->
+    <Style Selector=":is(Panel).tipBridge">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="controls:StripToolTips.IsEnabled" Value="True" />
+    </Style>
+
+    <!-- A tipBridge bar's tips sit outside the bar on its free side (StripToolTips), on the tray's
+         delay; plain text ones wear the tray's chip. The owners are the bar's buttons and those in its
+         grouping StackPanels — named explicitly rather than as any descendant, because a button's
+         flyout is its logical child and the menu's own tips must keep their placement. A rich tip (a
+         ToolTip instance wearing RichTipToolTipTheme) sets its Placement and offset locally, and a
+         local value beats these setters, so it keeps its place beside the button. -->
+    <Style Selector=":is(Panel).tipBridge > :is(Control), :is(Panel).tipBridge > StackPanel > :is(Control)">
+        <Setter Property="ToolTip.Placement" Value="Custom" />
+        <Setter Property="ToolTip.CustomPopupPlacementCallback" Value="{x:Static controls:StripToolTips.Placement}" />
+        <Setter Property="ToolTip.HorizontalOffset" Value="0" />
+        <Setter Property="ToolTip.VerticalOffset" Value="0" />
+        <Setter Property="ToolTip.ShowDelay" Value="{x:Static tray:TrayTokens.ToolTipShowDelayMs}" />
+    </Style>
+
+</Styles>

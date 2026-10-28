@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sparse (external-content) MSIX manifest for the Windows 11 modern context menu.
+  The package contains only this manifest and the two logos; the COM dll and the
+  app executable live in the Prisc install root, which is passed to
+  Add-AppxPackage as -ExternalLocation at registration time (SparsePackageManager).
+  {{VERSION}} and {{ARCH}} are substituted during packaging (ci.yml).
+-->
+<Package
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+    xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+    xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+    xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+    xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+    IgnorableNamespaces="uap uap10 rescap desktop4 desktop5 com">
+
+  <Identity Name="Prisc.ShellExtension"
+            Publisher="CN=Tidewater Technology Ltd, O=Tidewater Technology Ltd, L=Middleton, C=GB"
+            Version="{{VERSION}}"
+            ProcessorArchitecture="{{ARCH}}" />
+
+  <Properties>
+    <DisplayName>Prisc Shell Extension</DisplayName>
+    <PublisherDisplayName>Caelan Sayler</PublisherDisplayName>
+    <Logo>Assets\Square150x150Logo.png</Logo>
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+  </Properties>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+
+  <Applications>
+    <!--
+      A sparse package must declare an Application; the Velopack root launcher is a harmless
+      target (it only relaunches current\Prisc.Ui.exe through Update.exe, and Prisc itself
+      never activates it). vpk names that root stub after packTitle (Prisc.exe), not after the
+      main exe; SparsePackageManager.RootStubFileName must name the same file. Which exe is declared here does NOT decide package identity: on
+      the Windows 11 builds measured, any process that a packaged process (Explorer's dllhost
+      surrogate hosting the COM server) creates from inside the external location - the whole
+      install root - gets this package's identity, breakaway attribute or not. That is why the
+      shell extension launches Prisc.Ui.exe through Explorer's own shell object instead
+      (crates/prisc_shell_ext/src/broker.rs, priscapp/Prisc#83).
+    -->
+    <Application Id="Prisc" Executable="Prisc.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Prisc Shell Extension"
+                          Description="Adds an 'Upload with Prisc' command to the File Explorer context menu."
+                          AppListEntry="none"
+                          BackgroundColor="transparent"
+                          Square150x150Logo="Assets\Square150x150Logo.png"
+                          Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="Prisc Shell Extension">
+              <com:Class Id="51C48F28-F0DF-43AB-9815-0541BE51DFD8" Path="PriscShellExt_{{EXTVERSION}}.dll" ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb Id="PriscUpload" Clsid="51C48F28-F0DF-43AB-9815-0541BE51DFD8" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="PriscUpload" Clsid="51C48F28-F0DF-43AB-9815-0541BE51DFD8" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>

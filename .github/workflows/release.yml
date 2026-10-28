@@ -138,10 +138,10 @@ jobs:
 
           if [ "${{ runner.os }}" = "macOS" ]; then
             # The macOS artifact is a zip, which preserves unix file modes.
-            gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n clowd-${{ matrix.rid }} -D package
-            unzip -q "package/clowd-${{ matrix.rid }}.zip" -d publish
+            gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n prisc-${{ matrix.rid }} -D package
+            unzip -q "package/prisc-${{ matrix.rid }}.zip" -d publish
           else
-            gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n clowd-${{ matrix.rid }} -D publish
+            gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n prisc-${{ matrix.rid }} -D publish
           fi
           echo "Publishing version $VERSION to channel $CHANNEL"
         shell: bash
@@ -168,25 +168,28 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           # A build from before the shell extension existed has no msix, and the pack below still works without one.
-          if (-not (Test-Path publish/ClowdShellExt.msix)) {
-            Write-Warning "publish/ClowdShellExt.msix not found - skipping shell extension signing."
+          if (-not (Test-Path publish/PriscShellExt.msix)) {
+            Write-Warning "publish/PriscShellExt.msix not found - skipping shell extension signing."
             exit 0
           }
           $tools = Split-Path (Get-Command vpk).Source
           $signing = (Resolve-Path "$tools/.store/vpk/*/vpk/*/vendor/signing" | Select-Object -Last 1).Path
           & (Join-Path $signing signtool.exe) sign /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 `
             /dlib (Join-Path $signing Azure.CodeSigning.Dlib.dll) /dmdf .github/azure-trusted-sign.json `
-            publish/ClowdShellExt.msix
+            publish/PriscShellExt.msix
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
 
+      # vpk names the install root's launcher stub after --packTitle (Prisc.exe), not after
+      # --mainExe; SparsePackageManager.RootStubFileName and the sparse MSIX manifest's
+      # Application Executable (crates/prisc_shell_ext/msix) must name that same file.
       - name: Pack (Windows)
         if: runner.os == 'Windows'
         run: >
-          vpk pack --packId Clowd --packTitle Clowd --packAuthors "Caelan Sayler"
-          --packVersion "$VERSION" --packDir publish --mainExe Clowd.Ui.exe
+          vpk pack --packId Prisc --packTitle Prisc --packAuthors "Caelan Sayler"
+          --packVersion "$VERSION" --packDir publish --mainExe Prisc.Ui.exe
           --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
-          --icon clowd_ui/Clowd.Ui/Assets/clowd-default.ico
+          --icon ui/Prisc.Ui/Assets/prisc-default.ico
           --shortcuts Desktop,StartMenuRoot
           --azureTrustedSignFile .github/azure-trusted-sign.json
         shell: bash
@@ -241,18 +244,19 @@ jobs:
         run: |
           SHORT_VERSION="$(echo "$VERSION" | sed 's/-.*//').0"
           sed -e "s/{{VERSION}}/$VERSION/" -e "s/{{SHORT_VERSION}}/$SHORT_VERSION/" \
-            clowd_ui/Clowd.Ui/Assets/Info.plist > "$RUNNER_TEMP/Info.plist"
+            ui/Prisc.Ui/Assets/Info.plist > "$RUNNER_TEMP/Info.plist"
           cat "$RUNNER_TEMP/Info.plist"
         shell: bash
 
       - name: Pack (macOS)
         if: runner.os == 'macOS'
         run: >
-          vpk pack --packId Clowd --packTitle Clowd --packAuthors "Caelan Sayler"
-          --packVersion "$VERSION" --packDir publish --mainExe Clowd.Ui
+          vpk pack --packId Prisc --packTitle Prisc --packAuthors "Caelan Sayler"
+          --packVersion "$VERSION" --packDir publish --mainExe Prisc.Ui
           --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
-          --icon clowd_ui/Clowd.Ui/Assets/clowd-default.icns
+          --icon ui/Prisc.Ui/Assets/prisc-default.icns
           --plist "$RUNNER_TEMP/Info.plist"
+          --signEntitlements ui/Prisc.Ui/Assets/Prisc.entitlements
           --signAppIdentity "$APP_IDENTITY" --signInstallIdentity "$INSTALL_IDENTITY"
           --notaryProfile velopack-profile --keychain "$KEYCHAIN_PATH"
         shell: bash

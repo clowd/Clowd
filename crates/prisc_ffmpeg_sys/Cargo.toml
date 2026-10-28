@@ -1,0 +1,22 @@
+[package]
+name = "prisc_ffmpeg_sys"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+# Exports the resolved obs-deps bundle to dependents as DEP_FFMPEG_DEPS_ROOT /
+# _LIB / _BIN. The `links` key also makes cargo run this crate's build script
+# BEFORE any dependent's, which prisc_vid2gif relies on: without that ordering its
+# script can run before the OBS build has downloaded the bundle at all.
+links = "ffmpeg"
+
+[lib]
+# The bindgen output carries FFmpeg's C header comments; rustdoc would try to
+# run their embedded C examples as doctests.
+doctest = false
+
+[dependencies]
+libc = { workspace = true }
+
+[build-dependencies]
+prisc_build_support = { workspace = true }
+bindgen = { workspace = true }

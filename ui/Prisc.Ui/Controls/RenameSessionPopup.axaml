@@ -1,0 +1,65 @@
+﻿<UserControl
+    x:Class="Prisc.UI.Controls.RenameSessionPopup"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--  The "Rename session" flyout, shared by the image editor, the video editor and the Recent
+          page: one field holding the session's name, Cancel and Save. The same card as the image
+          editor's measure units flyout — it wears the app theme rather than either chrome, so it
+          states its own ink (a popup inherits the owning window's Foreground, which is white in
+          the Compact chrome). Right-aligned under its button: every button that opens it sits at
+          the right of its bar or row, so a left-aligned card would hang off that edge. The
+          offsets cancel the 10px shadow margin, so the visible edge lines up with the button's
+          right edge and sits 2px under it.  -->
+    <Popup
+        x:Name="popup"
+        HorizontalOffset="10"
+        IsLightDismissEnabled="True"
+        Placement="BottomEdgeAlignedRight"
+        VerticalOffset="-8">
+        <Border
+            x:Name="popupRoot"
+            Width="280"
+            Margin="10"
+            Padding="12"
+            Background="{DynamicResource ApplicationBackgroundBrush}"
+            BorderBrush="{DynamicResource SemiColorBorder}"
+            BorderThickness="1"
+            BoxShadow="0 2 8 0 #80000000"
+            CornerRadius="8"
+            TextElement.Foreground="{DynamicResource SemiColorText0}">
+            <Border.Styles>
+                <!--  a name Save refused  -->
+                <Style Selector="TextBox.error">
+                    <Setter Property="BorderBrush" Value="{DynamicResource SemiColorDanger}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </Style>
+            </Border.Styles>
+            <StackPanel Spacing="8">
+                <TextBlock
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Text="Rename session" />
+                <TextBox
+                    x:Name="txtName"
+                    MaxLength="200"
+                    PlaceholderText="Session name" />
+                <Grid ColumnDefinitions="*,8,*">
+                    <Button
+                        x:Name="btnCancel"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Content="Cancel" />
+                    <Button
+                        x:Name="btnSave"
+                        Grid.Column="2"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Classes="Primary"
+                        Content="Save"
+                        Theme="{StaticResource SolidButton}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Popup>
+</UserControl>

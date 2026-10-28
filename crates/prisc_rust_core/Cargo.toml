@@ -1,0 +1,25 @@
+[package]
+name = "prisc_rust_core"
+version = "1.0.0"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+# Only what the Rust binaries genuinely share: the coordinate space, the session.json
+# contract, the exit codes the shell reads, and the Sentry setup that puts them all in one
+# project under one release.
+# app.manifest sits here for the same reason — it is what makes a process per-monitor DPI
+# aware, and a drifted copy would silently make one binary photograph the wrong pixels.
+
+[dependencies]
+anyhow.workspace = true
+euclid.workspace = true
+image = { workspace = true, features = ["png"] }
+log.workspace = true
+sentry.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

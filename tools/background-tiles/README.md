@@ -48,14 +48,14 @@ and belongs nowhere near that.
 | What | Path |
 | --- | --- |
 | Generator (this program) | `tools/background-tiles/Program.cs` |
-| Frame grid, frame count rule, phase-to-frame map, cover-crop | `clowd_ui/Clowd.VideoSDK/Composition/Backgrounds/BackgroundTileSheet.cs` |
-| Output sheets, embedded as Avalonia resources | `clowd_ui/Clowd.Ui/Assets/BackgroundTiles/<style>.webp` |
-| The decode-once cache the tiles read them through | `clowd_ui/Clowd.Ui/VideoEditor/Inspector/BackgroundTileLoop.cs` |
-| The tile control (clock, gating, draw) | `clowd_ui/Clowd.Ui/VideoEditor/Inspector/BackgroundStylePreview.cs` |
-| Where the tiles are placed in the panel | `clowd_ui/Clowd.Ui/VideoEditor/Inspector/InspectorPanel.axaml` (the BACKGROUND section) |
-| The wallpapers themselves | `clowd_ui/Clowd.VideoSDK/Composition/Backgrounds/Art/<style>/source.svg` |
+| Frame grid, frame count rule, phase-to-frame map, cover-crop | `ui/Prisc.VideoSDK/Composition/Backgrounds/BackgroundTileSheet.cs` |
+| Output sheets, embedded as Avalonia resources | `ui/Prisc.Ui/Assets/BackgroundTiles/<style>.webp` |
+| The decode-once cache the tiles read them through | `ui/Prisc.Ui/VideoEditor/Inspector/BackgroundTileLoop.cs` |
+| The tile control (clock, gating, draw) | `ui/Prisc.Ui/VideoEditor/Inspector/BackgroundStylePreview.cs` |
+| Where the tiles are placed in the panel | `ui/Prisc.Ui/VideoEditor/Inspector/InspectorPanel.axaml` (the BACKGROUND section) |
+| The wallpapers themselves | `ui/Prisc.VideoSDK/Composition/Backgrounds/Art/<style>/source.svg` |
 | The catalog that declares which styles animate and for how long | `.../Backgrounds/BackgroundCatalog.cs` |
-| Tests | `clowd_ui/Clowd.VideoSDK.Tests/BackgroundTileTests.cs` |
+| Tests | `ui/Prisc.VideoSDK.Tests/BackgroundTileTests.cs` |
 
 `BackgroundTileSheet` is in the SDK rather than beside the control on purpose: the frame grid has to
 mean the same thing to the generator, to the tile and to the test, and a disagreement between any
@@ -66,7 +66,7 @@ two of them shows up as art sliced at the wrong offsets rather than as a build e
 - .NET only, no Python and no Pillow: the frames have to come from `BackgroundRenderer`, the same
   public entry point `FrameComposer` and the tiles call, so that a sheet cannot drift from what the
   canvas paints. Nothing here reimplements any part of the wallpaper drawing.
-- Run from anywhere (it finds the repo by walking up to `Clowd.slnx`):
+- Run from anywhere (it finds the repo by walking up to `Prisc.slnx`):
   - `dotnet run --project tools/background-tiles` regenerates all three into the assets folder.
   - `dotnet run --project tools/background-tiles breathing` regenerates only the styles whose id
     contains that word.

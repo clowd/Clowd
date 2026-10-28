@@ -1,0 +1,284 @@
+<UserControl
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="using:Prisc.UI.Converters"
+    xmlns:controls="using:Prisc.UI.Controls"
+    x:Class="Prisc.UI.Pages.UploadSettingsPage">
+
+    <UserControl.Resources>
+        <conv:StreamToBitmapConverter x:Key="Stream2Bitmap" />
+        <conv:EnumMatchToBooleanConverter x:Key="HasEnum2Bool" />
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- setting/caption rhythm copied from SystemSettingsPage so the options group above
+             the provider list matches the rest of the settings pages: 24px between one setting
+             and the next, 2px between a control and its own caption -->
+        <Style Selector="StackPanel.SettingsGroup">
+            <Setter Property="Spacing" Value="24" />
+        </Style>
+        <Style Selector="StackPanel.Setting">
+            <Setter Property="Spacing" Value="2" />
+        </Style>
+        <Style Selector="TextBlock.Caption">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="560" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="Border.providerItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
+        <Style Selector="Grid.dimmed">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <!-- Semi's switch template keeps the label margin even when OnContent/OffContent are
+             empty. Remove it for this icon-only provider toggle so the logo gap stays even. -->
+        <Style Selector="ToggleSwitch.iconOnly /template/ ContentPresenter#PART_OnContentPresenter">
+            <Setter Property="Margin" Value="0" />
+        </Style>
+        <Style Selector="ToggleSwitch.iconOnly /template/ ContentPresenter#PART_OffContentPresenter">
+            <Setter Property="Margin" Value="0" />
+        </Style>
+        <!-- "supports" chips: outlined toggles when merely supported, accent-filled with a
+             check glyph when this provider is the default destination for that upload type.
+             Click toggles the default. -->
+        <Style Selector="Button.chip">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+        </Style>
+        <Style Selector="Button.chip Path.chipCheck">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Button.chip.isDefault">
+            <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorWhite}" />
+        </Style>
+        <Style Selector="Button.chip.isDefault Path.chipCheck">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <!-- accelerate toggle: bare lightning bolt, gray when off,
+             orange when routing uploads through the accelerate server -->
+        <Style Selector="ToggleButton.lightning">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="ToggleButton.lightning:pointerover, ToggleButton.lightning:checked, ToggleButton.lightning:checked:pointerover, ToggleButton.lightning:disabled">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleButton.lightning Path">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText2}" />
+        </Style>
+        <Style Selector="ToggleButton.lightning:pointerover Path">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="ToggleButton.lightning:checked Path">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorWarning}" />
+        </Style>
+    </UserControl.Styles>
+
+    <controls:FadeEdgeScrollViewer>
+        <StackPanel Margin="0,0,16,16" Spacing="16">
+            <!-- The On/Off mode banner (SettingsUpload.Mode), built by the settings factory from
+                 the enum so this page and the generated ones share one control; everything under
+                 it is hidden while uploads are off (UploadSettingsPage.ApplyMode). -->
+            <ContentControl x:Name="ModeHost" />
+
+            <StackPanel x:Name="Body" Spacing="4">
+                <!-- The page's own options, framed like the groups on the System page
+                     (HeaderedContentControl + Semi's keyed GroupBox theme); the provider list below
+                     is the page's real subject and stays unframed. -->
+                <HeaderedContentControl Header="Upload Options"
+                                        Margin="0,0,0,12"
+                                        Theme="{StaticResource GroupBox}">
+                    <StackPanel Classes="SettingsGroup">
+                        <StackPanel Classes="Setting">
+                            <CheckBox IsChecked="{Binding WrapDangerousUploadsInZip}">
+                                <TextBlock Text="Zip risky file types before uploading" TextWrapping="Wrap" />
+                            </CheckBox>
+                            <TextBlock Classes="Caption"
+                                       Text="Wrap executables and scripts in a zip, since browsers block downloading them directly." />
+                        </StackPanel>
+
+                        <!-- The shell entry only ever starts an upload, so it belongs to this page and is
+                             torn down with it: the whole Body is hidden while uploads are off, and App
+                             unregisters the verb at the same time (SettingsRoot.ShouldRegisterExplorerContextMenu).
+                             Bound in code-behind — the checkbox reads SettingsGeneral, not this page's
+                             DataContext. -->
+                        <StackPanel Classes="Setting">
+                            <CheckBox x:Name="ContextMenuCheck">
+                                <TextBlock Text="Add 'Upload with Prisc' to the Explorer context menu" TextWrapping="Wrap" />
+                            </CheckBox>
+                            <TextBlock x:Name="ContextMenuCaption" Classes="Caption" />
+                            <Button x:Name="ContextMenuSettingsButton" IsVisible="False" Content="Open System Settings"
+                                    Click="OnContextMenuSettingsClick" />
+                        </StackPanel>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <TextBlock Classes="Body"
+                           IsVisible="{Binding !Providers.Length}"
+                           Text="No upload providers available." />
+
+                <ItemsControl ItemsSource="{Binding Providers}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Classes="providerItem" DoubleTapped="ProviderDoubleTapped">
+                                <DockPanel>
+                                    <!-- the switch stays outside the dimmed part: it is the control
+                                         that un-dims the row -->
+                                    <ToggleSwitch Classes="iconOnly"
+                                                  DockPanel.Dock="Left"
+                                                  VerticalAlignment="Center"
+                                                  OnContent=""
+                                                  OffContent=""
+                                                  IsChecked="{Binding IsEnabled}"
+                                                  ToolTip.Tip="Enable this upload destination"
+                                                  AutomationProperties.Name="{Binding Provider.Name}" />
+
+                                    <Grid Margin="12,0,0,0"
+                                          ColumnDefinitions="40,12,*,Auto"
+                                          RowDefinitions="Auto,Auto,Auto"
+                                          Classes.dimmed="{Binding !IsEnabled}">
+
+                                        <!-- rounded mask: several provider logos are full-bleed squares, and their hard corners
+                                             read as harsher than the rounded row they sit in -->
+                                        <Border Grid.RowSpan="3"
+                                                Width="32"
+                                                Height="32"
+                                                VerticalAlignment="Center"
+                                                CornerRadius="7"
+                                                ClipToBounds="True">
+                                            <Image Stretch="Uniform"
+                                                   Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
+                                        </Border>
+
+                                        <TextBlock Grid.Column="2"
+                                                   Grid.Row="0"
+                                                   FontWeight="Bold"
+                                                   Text="{Binding Provider.Name}" />
+                                        <TextBlock Grid.Column="2"
+                                                   Grid.Row="1"
+                                                   Opacity="0.8"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding Provider.Description}" />
+
+                                        <StackPanel Grid.Column="2"
+                                                    Grid.Row="2"
+                                                    IsVisible="{Binding IsEnabled}"
+                                                    Margin="0,6,0,0"
+                                                    Orientation="Horizontal"
+                                                    Spacing="6">
+                                            <Button Classes="chip"
+                                                    Tag="Image"
+                                                    Click="DefaultChipClicked"
+                                                    IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
+                                                    Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
+                                                    ToolTip.Tip="Use this provider as the default destination for images">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <Path Classes="chipCheck"
+                                                          Width="10" Height="10"
+                                                          Stretch="Uniform"
+                                                          VerticalAlignment="Center"
+                                                          Fill="{DynamicResource SemiColorWhite}"
+                                                          Data="{StaticResource IconCheckmark}" />
+                                                    <TextBlock VerticalAlignment="Center" Text="Image" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Classes="chip"
+                                                    Tag="Video"
+                                                    Click="DefaultChipClicked"
+                                                    IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
+                                                    Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
+                                                    ToolTip.Tip="Use this provider as the default destination for videos">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <Path Classes="chipCheck"
+                                                          Width="10" Height="10"
+                                                          Stretch="Uniform"
+                                                          VerticalAlignment="Center"
+                                                          Fill="{DynamicResource SemiColorWhite}"
+                                                          Data="{StaticResource IconCheckmark}" />
+                                                    <TextBlock VerticalAlignment="Center" Text="Video" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Classes="chip"
+                                                    Tag="Text"
+                                                    Click="DefaultChipClicked"
+                                                    IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
+                                                    Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
+                                                    ToolTip.Tip="Use this provider as the default destination for text">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <Path Classes="chipCheck"
+                                                          Width="10" Height="10"
+                                                          Stretch="Uniform"
+                                                          VerticalAlignment="Center"
+                                                          Fill="{DynamicResource SemiColorWhite}"
+                                                          Data="{StaticResource IconCheckmark}" />
+                                                    <TextBlock VerticalAlignment="Center" Text="Text" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Classes="chip"
+                                                    Tag="Binary"
+                                                    Click="DefaultChipClicked"
+                                                    IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
+                                                    Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
+                                                    ToolTip.Tip="Use this provider as the default destination for other files">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <Path Classes="chipCheck"
+                                                          Width="10" Height="10"
+                                                          Stretch="Uniform"
+                                                          VerticalAlignment="Center"
+                                                          Fill="{DynamicResource SemiColorWhite}"
+                                                          Data="{StaticResource IconCheckmark}" />
+                                                    <TextBlock VerticalAlignment="Center" Text="File" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="3"
+                                                    Grid.RowSpan="3"
+                                                    Orientation="Horizontal"
+                                                    VerticalAlignment="Center"
+                                                    Margin="10,0,0,0"
+                                                    Spacing="8">
+                                            <ToggleButton Classes="lightning"
+                                                          IsVisible="{Binding SupportsAcceleration}"
+                                                          IsChecked="{Binding Provider.AccelerateUploads}"
+                                                          ToolTip.Tip="Route uploads through clwd.app so the link is ready instantly"
+                                                          AutomationProperties.Name="Accelerate uploads">
+                                                <!-- no explicit Width: Avalonia pins uniformly-stretched geometry to the
+                                                     top-left of a fixed box, so a square box leaves this narrow glyph
+                                                     off-center; height-only sizing measures at the true aspect ratio -->
+                                                <Path Height="14"
+                                                      Stretch="Uniform"
+                                                      Data="{StaticResource IconLightning}" />
+                                            </ToggleButton>
+                                            <Button Content="Settings"
+                                                    Click="ProviderSettingsClicked"
+                                                    ToolTip.Tip="Edit this provider's settings" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+    </controls:FadeEdgeScrollViewer>
+</UserControl>

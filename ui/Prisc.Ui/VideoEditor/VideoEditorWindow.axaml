@@ -1,0 +1,1311 @@
+﻿<local:SystemThemedWindow
+    x:Class="Prisc.UI.VideoEditor.VideoEditorWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Prisc.UI.Controls"
+    xmlns:insp="clr-namespace:Prisc.UI.VideoEditor.Inspector"
+    xmlns:local="clr-namespace:Prisc.UI"
+    xmlns:tl="clr-namespace:Prisc.UI.VideoEditor.Timeline"
+    xmlns:ve="clr-namespace:Prisc.UI.VideoEditor"
+    DragDrop.AllowDrop="True"
+    Title="Edit Video - Prisc"
+    Width="1100"
+    Height="720"
+    MinWidth="640"
+    MinHeight="480"
+    FontSize="13"
+    UseLayoutRounding="True"
+    WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <!--  transport icons not in VectorIcons: frame-step (bar + triangle)  -->
+        <StreamGeometry x:Key="IconFrameNext">M2,2 L2,14 L11,8 Z M12,2 L14,2 L14,14 L12,14 Z</StreamGeometry>
+        <StreamGeometry x:Key="IconFramePrev">M14,2 L14,14 L5,8 Z M2,2 L4,2 L4,14 L2,14 Z</StreamGeometry>
+        <!--  jump-to-end / jump-to-start: bar + two overlapping triangles (fast-forward style). The
+              ink bounds are the frame-step icons' 12x12 exactly — ToolButton stretches the icon
+              Uniform over its ink, so a wider box would scale the whole glyph down and sit visibly
+              short next to them.  -->
+        <StreamGeometry x:Key="IconJumpEnd">M2,2 L2,14 L7.5,8 Z M5.5,2 L5.5,14 L11,8 Z M12,2 L14,2 L14,14 L12,14 Z</StreamGeometry>
+        <StreamGeometry x:Key="IconJumpStart">M14,2 L14,14 L8.5,8 Z M10.5,2 L10.5,14 L5,8 Z M2,2 L4,2 L4,14 L2,14 Z</StreamGeometry>
+
+        <!--  a local instance so the ring geometry resolves from this window's scope: the shared one
+              lives in ToolButton.axaml, which is merged into the app resources at runtime.  -->
+        <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
+
+        <!--  The playback-speed picker: a ToolButton is icon-only, and this one has to show which
+              speed is active, so it is a labeled button wearing the same transparent fill and
+              white hover veil as the transport buttons beside it.  -->
+        <ControlTheme x:Key="SpeedButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="54" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid>
+                        <Border
+                            Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                        <StackPanel
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="5">
+                            <ContentPresenter VerticalAlignment="Center" Content="{TemplateBinding Content}" />
+                            <Path
+                                Width="8"
+                                Height="5"
+                                VerticalAlignment="Center"
+                                Data="M0,0 L8,0 L4,5 Z"
+                                Fill="{TemplateBinding Foreground}"
+                                Stretch="None" />
+                        </StackPanel>
+                        <Border
+                            Name="_hover"
+                            Background="#33FFFFFF"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                                </Transitions>
+                            </Border.Transitions>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^ /template/ Border#_hover">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#_hover">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#_hover">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.5" />
+            </Style>
+        </ControlTheme>
+
+        <!--  Render is the window's primary action, so it is a labeled accent button rather than
+              another 30x30 icon. It stays a ToolButton to keep the progress ring the code-behind
+              drives (btnRender.Progress / ShowProgress), drawn here in place of the icon.  -->
+        <ControlTheme x:Key="RenderButtonTheme" TargetType="controls:ToolButton">
+            <Setter Property="Width" Value="NaN" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Background="{DynamicResource SemiColorPrimary}"
+                        ClipToBounds="True"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                        <Panel>
+                            <!--  hover/press read as a white veil over the accent fill, like the
+                                  30x30 ToolButtons, rather than a second accent token  -->
+                            <Rectangle Name="_veil" Fill="#26FFFFFF">
+                                <Rectangle.Transitions>
+                                    <Transitions>
+                                        <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                                    </Transitions>
+                                </Rectangle.Transitions>
+                            </Rectangle>
+                            <StackPanel
+                                Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="7">
+                                <Panel Width="16" Height="16">
+                                    <Path
+                                        Name="_icon"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Data="{TemplateBinding IconPath}"
+                                        Fill="{TemplateBinding Foreground}"
+                                        Stretch="Uniform" />
+                                    <!--  same 16x16 absolute-coordinate ring as ToolButton's  -->
+                                    <Grid Name="_progress" IsVisible="False">
+                                        <Ellipse
+                                            Width="14"
+                                            Height="14"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Stroke="#55FFFFFF"
+                                            StrokeThickness="2" />
+                                        <Path
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
+                                            Data="{TemplateBinding Progress, Converter={StaticResource progressToArc}}"
+                                            Stretch="None"
+                                            Stroke="{TemplateBinding Foreground}"
+                                            StrokeLineCap="Round"
+                                            StrokeThickness="2" />
+                                    </Grid>
+                                </Panel>
+                                <ContentPresenter
+                                    VerticalAlignment="Center"
+                                    Content="{TemplateBinding Content}"
+                                    FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^ /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^:pressed /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:disabled /template/ Border#_bg">
+                <Setter Property="Opacity" Value="0.5" />
+            </Style>
+            <Style Selector="^[ShowProgress=True] /template/ Path#_icon">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+            <Style Selector="^[ShowProgress=True] /template/ Grid#_progress">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+        </ControlTheme>
+
+        <!--  A row of the Render flyout: a menu item in all but name — a full-width button with a
+              title, a caption under it and room on the right for the check mark on the preset that
+              rendered last. It is a Button so Enter and Space activate the focused row for free;
+              the popup's own key handler adds Up/Down and Escape.  -->
+        <ControlTheme x:Key="RenderPresetRowTheme" TargetType="Button">
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="6">
+                        <!--  Foreground is relayed explicitly: the editor window sets a white
+                              Foreground for its dark chrome and popup content inherits it, which
+                              would be invisible on this themed panel.  -->
+                        <ContentPresenter
+                            HorizontalAlignment="Stretch"
+                            Content="{TemplateBinding Content}"
+                            Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            </Style>
+            <!--  the flyout is opened by keyboard as often as by mouse, so the focused row has to
+                  look like the hovered one does  -->
+            <Style Selector="^:focus-visible /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            </Style>
+        </ControlTheme>
+
+        <!--  The X on a user preset's flyout row: a small borderless target inside the row button,
+              dimmed until hovered so a list of presets does not read as a list of warnings.  -->
+        <ControlTheme x:Key="RenderPresetDeleteTheme" TargetType="Button">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="4">
+                        <Path
+                            Width="9"
+                            Height="9"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="{StaticResource IconClose}"
+                            Fill="{TemplateBinding Foreground}"
+                            Stretch="Uniform" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+            </Style>
+        </ControlTheme>
+
+    </Window.Resources>
+
+    <!--  Classes selects the editor chrome and ApplyChrome sets it from Editor.EditorLayout,
+          exactly as the image editor does (live — a window already open follows the setting).
+          "compact" is the legacy look this window has always had (30px square buttons on opaque
+          #535353 chrome); "modern" floats the two tool bars on the window's own background (Mica
+          on Win11) with 32px rounded buttons, and lifts the preview off it on a rounded, shadowed
+          surface. The transport bar, the timeline and the properties panel are still the legacy
+          dark slabs in both chromes — they pin their own white ink below, since the window's ink
+          follows the theme once the bars stop being dark.  -->
+    <Grid x:Name="rootGrid">
+        <Grid.Styles>
+            <!--  ===== Modern chrome =====  -->
+
+            <!--  The tool bar buttons, shared with the image editor.  -->
+            <StyleInclude Source="avares://Prisc.Ui/Assets/EditorChromeStyles.axaml" />
+
+            <!--  Render is a labeled accent button, so it takes the bar's height and radius but
+                  not its square footprint. After the rule above on purpose — in Avalonia the last
+                  matching style wins, and this one is restating what that rule just set.  -->
+            <Style Selector="Grid.modern controls|ToolButton#btnRender">
+                <Setter Property="Width" Value="NaN" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="14,0" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+
+            <!--  The strips: a 32px item lane with 5px either side of it. The preview-facing 5 is
+                  4 of gutter plus 1 for the preview's shadow, which falls across the rest of it;
+                  the window-facing edge carries the same 5 so the lane sits centred in the strip
+                  rather than a pixel off it. The buttons carry 2px of their own on the flow axis,
+                  which is the gap between one item and the next.  -->
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar">
+                <Setter Property="ItemHeight" Value="32" />
+                <Setter Property="Margin" Value="4,5,4,5" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar &gt; controls|ToolButton">
+                <Setter Property="Margin" Value="1,0" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar &gt; StackPanel">
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Margin" Value="6,0,6,0" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar">
+                <Setter Property="ItemWidth" Value="32" />
+                <Setter Property="Margin" Value="5,0,5,4" />
+            </Style>
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#ToolBar &gt; controls|ToolButton">
+                <Setter Property="Margin" Value="0,1" />
+            </Style>
+
+            <!--  Semi's ComboBox carries its own chevron and padding, so it needs more room than
+                  the compact picker for the same words.  -->
+            <Style Selector="Grid.modern controls|ThemedDropDown#ddAspectRatio">
+                <Setter Property="IsModern" Value="True" />
+                <Setter Property="MinWidth" Value="96" />
+            </Style>
+
+            <!--  The readout's dim white has no contrast left once the bar is the window's own
+                  background. One step under the label beside it, not two: it is a value, so it
+                  should read as quietly subordinate rather than as a caption.  -->
+            <Style Selector="Grid.modern TextBlock#txtZoom">
+                <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+            </Style>
+
+            <!--  Grows with the rest of the bar, and takes the same radius family as the buttons.
+                  Both values are in the box's own units — the template scales it into a Viewbox,
+                  so the radius shrinks along with it.  -->
+            <Style Selector="Grid.modern controls|CaptionedCheckBox">
+                <Setter Property="CornerRadius" Value="4" />
+                <!--  the bar is the window's own background here, so the box follows the app's
+                      variant instead of the Compact chrome's fixed dark  -->
+                <Setter Property="BoxVariant" Value="{x:Null}" />
+            </Style>
+            <Style Selector="Grid.modern controls|CaptionedCheckBox /template/ Viewbox#PART_Box">
+                <Setter Property="Width" Value="14" />
+                <Setter Property="Height" Value="14" />
+            </Style>
+            <Style Selector="Grid.modern controls|CaptionedCheckBox /template/ TextBlock#PART_Caption">
+                <Setter Property="FontSize" Value="11" />
+            </Style>
+
+            <!--  The hairline divided one flat surface from another; on the backdrop there are no
+                  surfaces left to divide, and the gap does the work instead.  -->
+            <Style Selector="Grid.modern Rectangle.chromeRule">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+
+            <!--  The preview block is the one thing that is still a surface: it sits on top of the
+                  backdrop, rounded on the corner where the two bars meet it and lifted off it by a
+                  shadow alone. The shadow is cast by the whole block (preview plus properties
+                  panel) so that opening the panel does not cut it short halfway along the top
+                  edge.  -->
+            <Style Selector="Grid.modern Border#contentSurface">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+                <Setter Property="BoxShadow" Value="{DynamicResource PriscEditorSurfaceShadow}" />
+            </Style>
+            <Style Selector="Grid.modern Border#previewSurface">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+            </Style>
+            <Style Selector="Grid.modern Border#previewClip">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+            </Style>
+
+            <!--  The surface's edge. A border on contentSurface itself would never be seen: the
+                  canvas and the sidebar cover it exactly, so the line is a sibling laid over them
+                  instead, and hit-test invisible so the canvas underneath still takes every
+                  pointer event. Top and left only — those are the two edges the bars face, and
+                  the other two run into the window frame.  -->
+            <Style Selector="Grid.modern Border#contentOutline">
+                <Setter Property="CornerRadius" Value="12,0,0,0" />
+                <Setter Property="BorderThickness" Value="1,1,0,0" />
+            </Style>
+
+            <!--  The properties sidebar joins the bars on the backdrop: no dark slab of its own,
+                  a themed header, and rows the panel styles itself (see InspectorPanel.axaml).  -->
+            <Style Selector="Grid.modern insp|InspectorPanel">
+                <Setter Property="IsModern" Value="True" />
+            </Style>
+            <Style Selector="Grid.modern Border#sidebarBorder">
+                <Setter Property="Background" Value="{DynamicResource PriscEditorSidebarBrush}" />
+            </Style>
+            <Style Selector="Grid.modern Border#sidebarHeader">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+                <Setter Property="Padding" Value="14,8" />
+            </Style>
+            <Style Selector="Grid.modern Border#sidebarHeader TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+            </Style>
+
+            <!--  Render sits a little further off than one button does from the next.  -->
+            <Style Selector="Grid.modern controls|DockAndWrapPanel#TopBar &gt; controls|ToolButton.gapAfter">
+                <Setter Property="Margin" Value="1,0,7,0" />
+            </Style>
+
+            <!--  The transport and the timeline keep their dark slabs and their 30px/20px
+                  footprints for now; rounding their buttons is what carries the modern chrome
+                  through the bottom half of the window. Two radii, not one: 6 on the 30px
+                  transport buttons is the same proportion 8 is on a 36px tool button, and the
+                  timeline's 20px buttons take 4 for the same reason. Compact keeps the square
+                  originals — every rule here is on the class.  -->
+            <Style Selector="Grid.modern DockPanel.transportBar controls|ToolButton">
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style Selector="Grid.modern DockPanel.transportBar Button#btnSpeed">
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <!--  The corner cell's cluster (snap, split at the playhead, the two zoom escapes),
+                  which are ToolButtons, and the track headers' row buttons, which are plain
+                  Buttons wearing RowIconButtonTheme — both built in code, so they are reached by
+                  type rather than by name.  -->
+            <Style Selector="Grid.modern tl|TimelineControl controls|ToolButton">
+                <Setter Property="CornerRadius" Value="4" />
+            </Style>
+            <Style Selector="Grid.modern tl|TimelineControl Button">
+                <Setter Property="CornerRadius" Value="4" />
+            </Style>
+
+            <!--  ===== Compact chrome ===== (the legacy look; every value is the original)  -->
+
+            <Style Selector="Grid.compact controls|DockAndWrapPanel#TopBar">
+                <Setter Property="ItemHeight" Value="30" />
+            </Style>
+            <Style Selector="Grid.compact controls|DockAndWrapPanel#TopBar &gt; StackPanel">
+                <Setter Property="Height" Value="30" />
+                <Setter Property="Margin" Value="4,0,4,0" />
+            </Style>
+            <Style Selector="Grid.compact controls|DockAndWrapPanel#ToolBar">
+                <Setter Property="ItemWidth" Value="30" />
+                <Setter Property="Margin" Value="0,4,0,0" />
+            </Style>
+            <!--  The sidebar's own fills, and the white ink its hand-painted chrome needs. On
+                  the elements they would be local values, which no chrome style could override.  -->
+            <Style Selector="Grid.compact Border#sidebarBorder">
+                <Setter Property="Background" Value="#454545" />
+                <Setter Property="TextElement.Foreground" Value="White" />
+            </Style>
+            <Style Selector="Grid.compact Border#sidebarHeader">
+                <Setter Property="Background" Value="#3d3d3d" />
+            </Style>
+            <Style Selector="Grid.compact Border#sidebarHeader TextBlock">
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+            <Style Selector="Grid.compact controls|DockAndWrapPanel#TopBar &gt; controls|ToolButton.gapAfter">
+                <Setter Property="Margin" Value="0,0,6,0" />
+            </Style>
+            <Style Selector="Grid.compact controls|ThemedDropDown#ddAspectRatio">
+                <Setter Property="MinWidth" Value="76" />
+            </Style>
+            <Style Selector="Grid.compact TextBlock#txtZoom">
+                <Setter Property="Foreground" Value="#CCCCCC" />
+            </Style>
+        </Grid.Styles>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <controls:DockAndWrapPanel
+            x:Name="TopBar"
+            HorizontalAlignment="Stretch"
+            Background="Transparent"
+            Classes="chromeBar tipBridge"
+            Orientation="Horizontal">
+            <controls:DockAndWrapPanel.Styles>
+                <!--  Height and margin are the chrome's to say (see the root grid's styles); what
+                      is left here holds for both, and reaches nested panels the chrome's
+                      direct-child rules deliberately do not.  -->
+                <Style Selector="StackPanel">
+                    <Setter Property="Orientation" Value="Horizontal" />
+                </Style>
+
+                <!--  A starred session's star is gold — the same mark the Recent page's rows carry,
+                      so the state reads identically wherever it is shown. Unstarred keeps the
+                      strip's white and the outline glyph (both set in SyncStarButton).  -->
+                <Style Selector="controls|ToolButton.starOn">
+                    <Setter Property="Foreground" Value="{DynamicResource PriscStarBrush}" />
+                </Style>
+            </controls:DockAndWrapPanel.Styles>
+
+            <!--  Clears the macOS traffic lights, which float over this bar once the client
+                  area is extended, and leaves bare strip to drag the window by. Zero-width off
+                  macOS.  -->
+            <Border Width="{DynamicResource MacTitleBarGutterHorz}" />
+
+            <StackPanel>
+                <TextBlock
+                    x:Name="txtSessionName"
+                    VerticalAlignment="Center"
+                    FontWeight="Bold" />
+            </StackPanel>
+
+            <StackPanel>
+                <controls:ThemedDropDown x:Name="ddAspectRatio" />
+                <!--  swaps the canvas's width and height: 16:9 <-> 9:16, and the native shape too  -->
+                <controls:ToolButton
+                    x:Name="btnRotateAspect"
+                    Margin="2,0,0,0"
+                    VerticalAlignment="Center"
+                    Classes="wide"
+                    Click="rotateAspect_Click"
+                    IconPath="{StaticResource IconRotateOrientation}"
+                    ToolTip.Tip="Rotate aspect ratio (swap width and height)" />
+                <!--  sizes the canvas to the cropped picture (FitCanvasToContent), remembered as the Custom size  -->
+                <controls:ToolButton
+                    x:Name="btnFitToContent"
+                    Margin="2,0,0,0"
+                    VerticalAlignment="Center"
+                    Classes="wide"
+                    Click="fitToContent_Click"
+                    IconPath="{StaticResource IconFitToContent}"
+                    ToolTip.Tip="Resize video canvas to selected clip" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock VerticalAlignment="Center" Text="Zoom" />
+                <!--  the ink is the chrome's (see the root grid's styles): written here it would
+                      be a local value, which no chrome style can restate  -->
+                <TextBlock
+                    x:Name="txtZoom"
+                    Margin="4,0,0,0"
+                    MinWidth="34"
+                    VerticalAlignment="Center" />
+                <controls:CaptionedCheckBox
+                    x:Name="chkFit"
+                    Margin="2,0,8,0"
+                    Caption="Fit"
+                    IsChecked="{Binding ElementName=preview, Path=FitToWindow, Mode=TwoWay}"
+                    ToolTip.Tip="Scale the preview to fill the window; off caps it at 100%" />
+            </StackPanel>
+
+            <!--  Rename this session (renamePopup) — first in the docked group so it lands
+                  leftmost in the right-hand cluster, beside the star. The tooltip names the
+                  session, so it is pushed from code (SyncSessionName) like the star's.  -->
+            <controls:ToolButton
+                x:Name="btnRename"
+                Classes="wide"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Click="rename_Click"
+                IconPath="{StaticResource IconRenameSession}" />
+
+            <!--  Star/unstar this session — the same toggle as the Recent page's row star. Glyph,
+                  tint and tooltip are pushed from code (SyncStarButton) rather than bound: this
+                  window is its own DataContext and does not raise PropertyChanged.  -->
+            <controls:ToolButton
+                x:Name="btnStar"
+                Classes="wide"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Click="star_Click" />
+
+            <controls:ToolButton
+                x:Name="btnInspector"
+                Classes="wide"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                CanToggle="True"
+                IconPath="{StaticResource IconProperties}"
+                IsChecked="{Binding SidebarVisible, Mode=TwoWay}"
+                ToolTip.Tip="Properties panel" />
+
+            <controls:ToolButton
+                Classes="wide gapAfter"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                CanToggle="True"
+                IconPath="{StaticResource IconPinned}"
+                IsChecked="{Binding Topmost, Mode=TwoWay}"
+                ToolTip.Tip="Always on top" />
+
+            <controls:ToolButton
+                x:Name="btnRender"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{Binding CommandRender}"
+                Content="Render"
+                IconPath="{StaticResource IconProcess}"
+                Theme="{StaticResource RenderButtonTheme}"
+                ToolTip.Tip="Render edited video" />
+
+        </controls:DockAndWrapPanel>
+
+        <Grid x:Name="contentGrid" Grid.Row="1">
+            <Grid.Styles>
+                <!--  The splitter is an invisible 8px grab zone straddling the sidebar's edge (its
+                      column is 2px wide; negative margins overlap the neighbors) drawing only the
+                      2px edge line — resizing should feel like grabbing the panel edge, not a
+                      separate handle. Hover/drag brighten the line.  -->
+                <Style Selector="GridSplitter#sidebarSplitter /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#666666" />
+                </Style>
+                <Style Selector="GridSplitter#sidebarSplitter:pointerover /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#999999" />
+                </Style>
+                <Style Selector="GridSplitter#sidebarSplitter:pressed /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#B8B8B8" />
+                </Style>
+            </Grid.Styles>
+
+            <!--  Column 3 is the resizable property sidebar (reached in code as SidebarColumn); its
+                  pixel Width/MinWidth are driven by ApplySidebarVisible, MaxWidth bounds the drag.  -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition
+                    Width="300"
+                    MinWidth="300"
+                    MaxWidth="600" />
+            </Grid.ColumnDefinitions>
+
+            <Rectangle
+                Grid.Column="0"
+                Height="1"
+                Margin="4,0,4,0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                Classes="chromeRule"
+                Fill="#666666" />
+
+            <!--  the same left tool strip as the image editor: ItemWidth is required for DockToEnd
+                  to work in a vertical panel (see DockAndWrapPanel.canDock), and it — like the
+                  strip's margin and the buttons' size — is the chrome's to set.  -->
+            <controls:DockAndWrapPanel
+                x:Name="ToolBar"
+                Grid.Column="0"
+                Classes="chromeBar tipBridge"
+                Orientation="Vertical"
+                UseLayoutRounding="True">
+
+                <!--  Each add button carries a rich tip (ve:TrackTip: header, description, demo
+                      GIF, and a reason when the button is disabled) in place of a line of text.
+                      The Tip is a ToolTip instance, which the tooltip service uses as-is, so it can
+                      wear the bare RichTipToolTipTheme (AppResources.axaml, shared with the image
+                      editor's tool tips). Placed to the right of the strip, and shown on disabled
+                      buttons too: the speed and input-overlay buttons set the tip's DisabledReason
+                      from code-behind (RefreshAddSpeedButton, RefreshInputOverlayButtons) to say
+                      why.  -->
+                <controls:ToolButton
+                    x:Name="btnImportMedia"
+                    Classes="wide"
+                    Command="{Binding CommandImportMedia}"
+                    IconPath="{StaticResource IconVideoClip}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipImportMedia"
+                                DemoName="video"
+                                Description="Imports a video file, including its audio, and places it on a new track at the playhead. The clip plays over your recording and can be moved, trimmed and resized like any other item."
+                                Header="Add Video Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnImportAudio"
+                    Classes="wide"
+                    Command="{Binding CommandImportAudio}"
+                    IconPath="{StaticResource IconMusicNote}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipImportAudio"
+                                DemoName="audio"
+                                Description="Imports an audio file and places it on a new track at the playhead. Use it for music, narration or sound effects layered under your recording."
+                                Header="Add Audio Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddImage"
+                    Classes="wide"
+                    Command="{Binding CommandAddImage}"
+                    IconPath="{StaticResource IconImage}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddImage"
+                                DemoName="image"
+                                Description="Places an image on a new track at the playhead. Handy for logos, screenshots or callouts, which you can then move and resize in the preview."
+                                Header="Add Image Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddText"
+                    Command="{Binding CommandAddText}"
+                    IconPath="{StaticResource IconToolText}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddText"
+                                DemoName="text"
+                                Description="Adds a text card at the playhead and opens it for editing. Type a title or caption, then style and position it in the preview."
+                                Header="Add Text Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddShape"
+                    Classes="wide"
+                    Command="{Binding CommandAddShape}"
+                    IconPath="{StaticResource IconShapes}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddShape"
+                                DemoName="shape"
+                                Description="Adds a rectangle at the playhead that you can turn into an ellipse, star, arrow or another shape. Drag it in the preview to place it, and drag an arrow's middle handle to curve it."
+                                Header="Add Shape Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddObscure"
+                    Classes="wide"
+                    Command="{Binding CommandAddObscure}"
+                    IconPath="{StaticResource IconToolPixelate}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddObscure"
+                                DemoName="obscure"
+                                Description="Hides part of the frame behind a mosaic, blur or blackout box at the playhead. Drag and resize it in the preview; anything on a track above it stays visible."
+                                Header="Add Obscure Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddZoom"
+                    Classes="wide"
+                    Command="{Binding CommandAddZoomEffect}"
+                    IconPath="{StaticResource IconZoomEffect}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddZoom"
+                                DemoName="zoom"
+                                Description="Zooms in on part of the frame for a stretch of the timeline, easing in and out so attention lands where you want it. Drag the focus point in the preview to choose what gets magnified."
+                                Header="Add Zoom Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddSpeed"
+                    Classes="wide"
+                    Command="{Binding CommandAddSpeedEffect}"
+                    IconPath="{StaticResource IconSpeedEffect}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddSpeed"
+                                DemoName="speed"
+                                Description="Speeds up or slows down the stretch of the recording under the item. Great for skipping past waiting and loading, or slowing down a moment that matters."
+                                Header="Add Speed Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddCursor"
+                    Classes="wide"
+                    Command="{Binding CommandAddCursorTrack}"
+                    IconPath="{StaticResource IconCursorArrow}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddCursor"
+                                DemoName="cursor"
+                                Description="Draws the recorded mouse cursor over the video, with click highlights and a pointer style of your choosing. Available when the recording captured input."
+                                Header="Add Cursor Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddKeyboard"
+                    Classes="wide"
+                    Command="{Binding CommandAddKeyboardTrack}"
+                    IconPath="{StaticResource IconKeyboard}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddKeyboard"
+                                DemoName="keyboard"
+                                Description="Shows the keys you pressed as an overlay while the recording plays, so shortcuts are easy to follow. Available when the recording captured input."
+                                Header="Add Keyboard Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <!--  The voice-over recorder is a toggle, not an add: checked shows the recorder
+                      overlay on the preview (VoiceRecorderOverlay), unchecked hides it, and neither
+                      touches the project. Takes are started from the overlay itself. The code-behind
+                      disables it (with the tip's footer saying why) where there is no microphone to
+                      record from (RefreshVoiceRecorderButton).  -->
+                <controls:ToolButton
+                    x:Name="btnVoice"
+                    Classes="wide"
+                    CanToggle="True"
+                    IconPath="{StaticResource IconMic}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipVoice"
+                                DemoName="voice"
+                                Description="Opens the recorder over the preview so you can check your mic. Recording counts down, plays the project from the playhead, and drops the take on a Voice audio track you can move and trim like any other clip."
+                                Header="Record Voice-over" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddBackground"
+                    Classes="wide"
+                    Command="{Binding CommandAddBackground}"
+                    IconPath="{StaticResource IconBackground}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource RichTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddBackground"
+                                DemoName="background"
+                                Description="Lays a wallpaper on a new track behind everything else, so a shrunken recording sits on a backdrop instead of black. Pick the style in the properties panel, then move, resize and round it off like any other picture."
+                                Header="Add Background Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <!--  Shown by the panel only when overflow is set to Hide and some tools did not
+                      fit: it follows the last tool that did, and opens the rest as a menu.  -->
+                <controls:ToolButton
+                    x:Name="btnMoreTools"
+                    Classes="tight"
+                    controls:DockAndWrapPanel.IsOverflowButton="True"
+                    Click="moreTools_Click"
+                    IconPath="{StaticResource IconDotsHorizontal}"
+                    ToolTip.Tip="More tools" />
+
+                <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
+                <controls:ToolButton
+                    controls:DockAndWrapPanel.DockToEnd="True"
+                    Command="{Binding CommandUndo}"
+                    IconPath="{StaticResource IconUndo}"
+                    ToolTip.Tip="Undo (Ctrl+Z)" />
+
+                <controls:ToolButton
+                    controls:DockAndWrapPanel.DockToEnd="True"
+                    Command="{Binding CommandRedo}"
+                    IconPath="{StaticResource IconRedo}"
+                    ToolTip.Tip="Redo (Ctrl+Y)" />
+
+                <controls:ToolButton
+                    x:Name="btnCustomize"
+                    Classes="wide"
+                    controls:DockAndWrapPanel.DockToEnd="True"
+                    Click="customize_Click"
+                    IconPath="{StaticResource IconCustomize}"
+                    ToolTip.Tip="Customize toolbar…" />
+
+            </controls:DockAndWrapPanel>
+
+            <!--  The surface the editor's content sits on: the preview and, when it is open,
+                  the properties panel. It is what casts the modern chrome's shadow, so the panel
+                  does not punch a hole in it by being a separate slab beside the preview, and it
+                  fills the 2px the splitter column takes between the two.  -->
+            <Border
+                x:Name="contentSurface"
+                Grid.Column="1"
+                Grid.ColumnSpan="3"
+                Background="{DynamicResource PriscEditorCanvasBrush}" />
+
+            <!--  Two borders, not one: ClipToBounds is what rounds the preview off at the corner,
+                  and it clips the control's own drawing too — so this pair cannot be collapsed
+                  into contentSurface above, which has to draw a shadow outside its own bounds.
+                  The outer also carries the fill, so the 1px seam between the two rounded curves
+                  has the surround's colour behind it rather than the backdrop.  -->
+            <Border
+                x:Name="previewSurface"
+                Grid.Column="1"
+                Background="{DynamicResource PriscEditorCanvasBrush}">
+                <Border
+                    x:Name="previewClip"
+                    Background="{DynamicResource PriscEditorCanvasBrush}"
+                    ClipToBounds="True">
+                    <Panel>
+                        <!--  the same checker the image editor draws behind the artwork; the preview
+                              sits on top of it and the letterbox shows it through. The brush is
+                              set from code (ApplyPreviewChecker): it is tinted white over the dark
+                              surround and black over the light one, which a static reference
+                              cannot say.  -->
+                        <Panel x:Name="previewChecker" IsHitTestVisible="False" />
+                        <ve:VideoPreviewControl x:Name="preview" />
+                        <!--  the voice-over recorder's pill and countdown: over the preview and its
+                              gizmo, under the status notice, shown while btnVoice is checked  -->
+                        <ve:VoiceRecorderOverlay x:Name="voiceRecorder" IsVisible="False" />
+                        <Border
+                            x:Name="statusOverlay"
+                            Padding="14,10"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="#B0000000"
+                            CornerRadius="6"
+                            IsVisible="False">
+                            <TextBlock
+                                x:Name="txtStatus"
+                                MaxWidth="420"
+                                Foreground="#E0FFFFFF"
+                                TextWrapping="Wrap" />
+                        </Border>
+                    </Panel>
+                </Border>
+            </Border>
+
+            <GridSplitter
+                x:Name="sidebarSplitter"
+                Grid.Column="2"
+                Width="8"
+                Margin="-3,0"
+                ZIndex="1"
+                Background="Transparent"
+                DragCompleted="sidebarSplitter_DragCompleted"
+                IsVisible="False"
+                ResizeBehavior="PreviousAndNext"
+                ResizeDirection="Columns">
+                <GridSplitter.Template>
+                    <ControlTemplate>
+                        <Panel Name="splitterZone" Background="{TemplateBinding Background}">
+                            <Rectangle
+                                Name="splitterLine"
+                                Width="2"
+                                HorizontalAlignment="Center" />
+                        </Panel>
+                    </ControlTemplate>
+                </GridSplitter.Template>
+            </GridSplitter>
+
+            <Border
+                x:Name="sidebarBorder"
+                Grid.Column="3"
+                IsVisible="False">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border
+                        x:Name="sidebarHeader"
+                        Grid.Row="0"
+                        Padding="10,6">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="Bold"
+                            Text="PROPERTIES" />
+                    </Border>
+
+                    <insp:InspectorPanel
+                        x:Name="inspectorPanel"
+                        Grid.Row="1"
+                        DataContext="{Binding Inspector}" />
+                </Grid>
+            </Border>
+
+            <!--  The line along the content surface's lip, over the preview and the properties
+                  panel rather than under them (see the chrome style). Above the splitter too, so
+                  the top edge runs unbroken across the gap between the two.  -->
+            <Border
+                x:Name="contentOutline"
+                Grid.Column="1"
+                Grid.ColumnSpan="3"
+                ZIndex="2"
+                BorderBrush="{DynamicResource PriscEditorSurfaceEdgeBrush}"
+                IsHitTestVisible="False" />
+
+        </Grid>
+
+        <!--  transport bar. Dark in both chromes for now (the modern chrome has only reached
+              the two tool bars and the preview), so it pins the white ink it used to inherit.  -->
+        <Border
+            Grid.Row="2"
+            Background="#454545"
+            BorderBrush="#666666"
+            BorderThickness="0,1,0,0"
+            TextElement.Foreground="White">
+            <DockPanel
+                Height="30"
+                Margin="8,4"
+                Classes="transportBar"
+                LastChildFill="True">
+
+                <StackPanel
+                    DockPanel.Dock="Left"
+                    Orientation="Horizontal"
+                    Spacing="2">
+                    <!--  the four secondary transport buttons carry a dimmed icon (Foreground alpha,
+                          not Opacity, so the hover veil stays full strength) — play/pause is the
+                          one the eye should land on.  -->
+                    <controls:ToolButton
+                        x:Name="btnJumpStart"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandJumpStart}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconJumpStart}"
+                        ToolTip.Tip="Jump to start (Home)" />
+                    <controls:ToolButton
+                        x:Name="btnStepBack"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandStepBack}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconFramePrev}"
+                        ToolTip.Tip="Previous frame (Left)" />
+                    <controls:ToolButton
+                        x:Name="btnPlayPause"
+                        Width="30"
+                        Height="30"
+                        Padding="6"
+                        Command="{Binding CommandPlayPause}"
+                        IconPath="{StaticResource IconPlay}"
+                        ToolTip.Tip="Play (Space)" />
+                    <controls:ToolButton
+                        x:Name="btnStepForward"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandStepForward}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconFrameNext}"
+                        ToolTip.Tip="Next frame (Right)" />
+                    <controls:ToolButton
+                        x:Name="btnJumpEnd"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandJumpEnd}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconJumpEnd}"
+                        ToolTip.Tip="Jump to end (End)" />
+
+                    <!--  the extra top margin is an optical centering nudge: digits have no
+                          descenders, so centering the font's full line box (ascent + a descent
+                          nothing here uses) leaves the readout visibly riding high next to the
+                          30x30 buttons.  -->
+                    <TextBlock
+                        x:Name="txtPosition"
+                        Margin="10,2,6,0"
+                        VerticalAlignment="Center"
+                        FontFamily="{StaticResource MonoFontFamily}"
+                        Text="00:00.0 / 00:00.0" />
+
+                    <Button
+                        x:Name="btnSpeed"
+                        Content="1x"
+                        Theme="{StaticResource SpeedButtonTheme}"
+                        ToolTip.Tip="Playback speed" />
+
+                </StackPanel>
+
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="4">
+                    <!--  icon + tooltip swap in code-behind with the mute state  -->
+                    <controls:ToolButton
+                        x:Name="btnMute"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconSpeakerEnabled}"
+                        ToolTip.Tip="Mute" />
+                    <Slider
+                        x:Name="volumeSlider"
+                        Width="100"
+                        VerticalAlignment="Center"
+                        Maximum="1"
+                        Minimum="0" />
+                    <!--  icon + tooltip swap in code-behind with the timeline's shown state  -->
+                    <controls:ToolButton
+                        x:Name="btnTimelineCollapse"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconChevronDown}"
+                        ToolTip.Tip="Hide the timeline" />
+                </StackPanel>
+
+                <!--  the stretch between the transport (left) and the volume cluster (right):
+                      what the timeline is doing right now, when there is something to say. Only
+                      a group drag speaks here today ("Dragging N grouped clips"), in the group
+                      badge's orange so the text and the highlighted clips read as one cue.  -->
+                <Panel>
+                    <TextBlock
+                        x:Name="txtGroupDrag"
+                        Margin="12,2,12,0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Foreground="#FF9F43"
+                        IsVisible="False" />
+                </Panel>
+            </DockPanel>
+        </Border>
+
+        <!--  timeline: sized to its rows (ruler + one row per track + scrollbar), capped so a
+              project with many rows scrolls vertically instead of eating the preview. The
+              transport bar's collapse button hides this whole border (the preview takes the
+              space).  -->
+        <Border
+            x:Name="timelineBorder"
+            Grid.Row="3"
+            Background="#3a3a3a"
+            BorderBrush="#666666"
+            BorderThickness="0,1,0,0"
+            TextElement.Foreground="White">
+            <!--  The editor's chrome is hard-coded dark whatever the app theme, and the timeline
+                  reads its palette (and themes its buttons and menus) off the variant it sits in —
+                  so pin it to Dark, or the light theme paints pale rows into the dark chrome.  -->
+            <ThemeVariantScope RequestedThemeVariant="Dark">
+                <tl:TimelineControl
+                    x:Name="timeline"
+                    MaxHeight="320"
+                    Margin="0,2,0,0" />
+            </ThemeVariantScope>
+        </Border>
+
+        <!--  The shared customize flyout (Controls/CustomizeToolbarPopup), the same one the
+              image editor hangs off its strip — minus the reset-settings button, since these
+              tools carry no saved settings of their own.  -->
+        <controls:CustomizeToolbarPopup x:Name="customizePopup" ShowEditDefaults="False" />
+
+        <!--  The shared rename flyout (Controls/RenameSessionPopup), opened from btnRename.  -->
+        <controls:RenameSessionPopup x:Name="renamePopup" />
+
+        <!--  The Render button's presets. Same chrome as the image editor's two popups (commit
+              a4b42d07): the 10px margin is room for the shadow and the offsets cancel it, so the
+              visible edge lines up with the button's right edge and sits 2px under it. Colours are
+              theme tokens rather than the editor chrome's fixed darks — this is a menu hanging off
+              the window, and it should read like the render dialog it opens.
+              Keyboard: the popup takes focus on open with the last-used row focused, Up/Down move,
+              Enter activates and Escape closes (see InitRenderPopup).  -->
+        <Popup
+            x:Name="renderPopup"
+            HorizontalOffset="10"
+            IsLightDismissEnabled="True"
+            Placement="BottomEdgeAlignedRight"
+            VerticalOffset="-8">
+            <Border
+                x:Name="renderPopupRoot"
+                Width="248"
+                Margin="10"
+                Padding="6"
+                Background="{DynamicResource ApplicationBackgroundBrush}"
+                BorderBrush="{DynamicResource SemiColorBorder}"
+                BorderThickness="1"
+                BoxShadow="0 2 8 0 #80000000"
+                CornerRadius="8">
+                <StackPanel x:Name="renderPresetRows">
+                    <Button x:Name="btnPresetShare" Theme="{StaticResource RenderPresetRowTheme}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Share" />
+                                <TextBlock
+                                    x:Name="captionPresetShare"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource SemiColorText2}"
+                                    Text="Plays everywhere, sensible size · max 1080p"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Path
+                                x:Name="checkPresetShare"
+                                Grid.Column="1"
+                                Width="11"
+                                Height="11"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconCheckmark}"
+                                Fill="{DynamicResource SemiColorPrimary}"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Grid>
+                    </Button>
+
+                    <Button x:Name="btnPresetBest" Theme="{StaticResource RenderPresetRowTheme}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Best quality" />
+                                <TextBlock
+                                    x:Name="captionPresetBest"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource SemiColorText2}"
+                                    Text="For YouTube or keeping a master"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Path
+                                x:Name="checkPresetBest"
+                                Grid.Column="1"
+                                Width="11"
+                                Height="11"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconCheckmark}"
+                                Fill="{DynamicResource SemiColorPrimary}"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Grid>
+                    </Button>
+
+                    <Button x:Name="btnPresetSmall" Theme="{StaticResource RenderPresetRowTheme}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Small file" />
+                                <TextBlock
+                                    x:Name="captionPresetSmall"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource SemiColorText2}"
+                                    Text="Fits chat upload limits · max 720p"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Path
+                                x:Name="checkPresetSmall"
+                                Grid.Column="1"
+                                Width="11"
+                                Height="11"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconCheckmark}"
+                                Fill="{DynamicResource SemiColorPrimary}"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Grid>
+                    </Button>
+
+                    <!--  the user's own presets (saved from the render dialog), built in code by
+                          RebuildUserPresetRows: a separator, then one row each with an X  -->
+                    <StackPanel x:Name="userPresetRows" />
+
+                    <Border
+                        Height="1"
+                        Margin="6,5"
+                        Background="{DynamicResource SemiColorBorder}" />
+
+                    <Button x:Name="btnRenderMore" Theme="{StaticResource RenderPresetRowTheme}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="More options…" />
+                            <Path
+                                x:Name="checkRenderMore"
+                                Grid.Column="1"
+                                Width="11"
+                                Height="11"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconCheckmark}"
+                                Fill="{DynamicResource SemiColorPrimary}"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Grid>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+    </Grid>
+</local:SystemThemedWindow>

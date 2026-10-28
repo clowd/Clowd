@@ -18,7 +18,7 @@
 </p>
 
 > [!NOTE]
-> **Clowd is now Prisc.** Same app, new name. Existing Clowd installs keep updating automatically, and your settings and captures stay where they are.
+> **Clowd is now Prisc.** Same app, new name. Existing installs keep updating automatically, and your settings and captures carry over.
 
 https://github.com/user-attachments/assets/9aa1b37f-cd94-4b0a-ac25-0c002d3c4f4a
 
@@ -46,10 +46,10 @@ Capture it, annotate it, record it, edit it, share it. Every feature is a switch
 
 | Platform | Installer | Portable |
 | --- | --- | --- |
-| Windows x64 | [Clowd-win-x64-Setup.exe](https://github.com/priscapp/Prisc/releases/latest/download/Clowd-win-x64-Setup.exe) | [Clowd-win-x64-Portable.zip](https://github.com/priscapp/Prisc/releases/latest/download/Clowd-win-x64-Portable.zip) |
-| Windows arm64 | [Clowd-win-arm64-Setup.exe](https://github.com/priscapp/Prisc/releases/latest/download/Clowd-win-arm64-Setup.exe) | [Clowd-win-arm64-Portable.zip](https://github.com/priscapp/Prisc/releases/latest/download/Clowd-win-arm64-Portable.zip) |
-| macOS Apple Silicon | [Clowd-osx-arm64-Setup.pkg](https://github.com/priscapp/Prisc/releases/latest/download/Clowd-osx-arm64-Setup.pkg) | [Clowd-osx-arm64-Portable.zip](https://github.com/priscapp/Prisc/releases/latest/download/Clowd-osx-arm64-Portable.zip) |
-| macOS Intel | [Clowd-osx-x64-Setup.pkg](https://github.com/priscapp/Prisc/releases/latest/download/Clowd-osx-x64-Setup.pkg) | [Clowd-osx-x64-Portable.zip](https://github.com/priscapp/Prisc/releases/latest/download/Clowd-osx-x64-Portable.zip) |
+| Windows x64 | [Prisc-win-x64-Setup.exe](https://github.com/priscapp/Prisc/releases/latest/download/Prisc-win-x64-Setup.exe) | [Prisc-win-x64-Portable.zip](https://github.com/priscapp/Prisc/releases/latest/download/Prisc-win-x64-Portable.zip) |
+| Windows arm64 | [Prisc-win-arm64-Setup.exe](https://github.com/priscapp/Prisc/releases/latest/download/Prisc-win-arm64-Setup.exe) | [Prisc-win-arm64-Portable.zip](https://github.com/priscapp/Prisc/releases/latest/download/Prisc-win-arm64-Portable.zip) |
+| macOS Apple Silicon | [Prisc-osx-arm64-Setup.pkg](https://github.com/priscapp/Prisc/releases/latest/download/Prisc-osx-arm64-Setup.pkg) | [Prisc-osx-arm64-Portable.zip](https://github.com/priscapp/Prisc/releases/latest/download/Prisc-osx-arm64-Portable.zip) |
+| macOS Intel | [Prisc-osx-x64-Setup.pkg](https://github.com/priscapp/Prisc/releases/latest/download/Prisc-osx-x64-Setup.pkg) | [Prisc-osx-x64-Portable.zip](https://github.com/priscapp/Prisc/releases/latest/download/Prisc-osx-x64-Portable.zip) |
 
 Requires Windows 10+ or macOS 13+.
 
@@ -197,3 +197,9 @@ Requires Windows 10+ or macOS 13+.
 - **Off until you want it.** One switch turns uploads off and every upload button disappears.
 
 **[Learn more about Upload & Share →](https://prisc.app/features/upload-share)**
+
+---
+
+## License
+
+Prisc is [MIT licensed](LICENSE), with two exceptions that each run as their own process: the recorder crates (`crates/prisc_recorder`, `crates/prisc_share_region`, `crates/prisc_vid2gif` and the OBS crates they build on) are GPL-2.0 because they link libobs, and the on-device AI binary (`crates/prisc_ai`) is GPL-3.0 because it embeds the RobustVideoMatting weights. Building from source is covered in [BUILDING.md](BUILDING.md).

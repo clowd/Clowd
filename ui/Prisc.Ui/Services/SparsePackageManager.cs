@@ -1,0 +1,448 @@
+﻿using System;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.Versioning;
+using System.Security.Cryptography;
+using Velopack.Locators;
+
+namespace Prisc.UI
+{
+    /// <summary>
+    /// Backs the Windows 11 half of "Add 'Upload with Prisc' to the Explorer context menu"
+    /// (<see cref="Prisc.Config.SettingsGeneral.RegisterExplorerContextMenu"/>, gated on uploads
+    /// being on at all — see <see cref="Prisc.Config.SettingsRoot.ShouldRegisterExplorerContextMenu"/>).
+    ///
+    /// Windows 11 only shows packaged apps in its compact right-click menu, so alongside the
+    /// legacy registry verb (<see cref="ExplorerContextMenuManager"/>, which Win11 files under
+    /// "Show more options") this registers a sparse MSIX package: an unpackaged manifest-only
+    /// package whose ExternalLocation points at the Velopack install root, declaring the
+    /// IExplorerCommand COM server in <c>prisc_shell_ext.dll</c>. Both registrations are driven by
+    /// the same setting; on Windows 10 and in dev builds this manager is simply unsupported and
+    /// every operation is a quiet no-op.
+    ///
+    /// Registration goes through <c>powershell.exe</c> (Add-AppxPackage/Get-AppxPackage): the
+    /// plain net10.0 TFM has no WinRT projection for the PackageManager API, and shelling out
+    /// keeps it that way. The DLL ships named for the extension crate's own version
+    /// (<c>PriscShellExt_1.0.0.dll</c>, independent of the app version) and is copied out of
+    /// <c>current\</c> to the install root under that same name: Explorer's file lock can never
+    /// block Velopack's directory swap, an unchanged extension needs no copy at all across app
+    /// updates, and a changed one arrives under a fresh filename that a lock on the old copy
+    /// cannot block. Stale copies are swept opportunistically once nothing references them.
+    /// </summary>
+    public static class SparsePackageManager
+    {
+        private const string PackageName = "Prisc.ShellExtension";
+        private const string MsixFileName = "PriscShellExt.msix";
+
+        // CI names the shipped dll PriscShellExt_<crate version>.dll and stamps the same name
+        // into the manifest's com:Class Path; this pattern must match both (it also catches the
+        // unversioned name from pre-1.0 development builds, so those get swept too).
+        private const string DllSearchPattern = "PriscShellExt*.dll";
+
+        // the manifest's Application Executable, resolved against ExternalLocation (the install
+        // root): Velopack's root launcher stub. vpk names that stub after --packTitle (falling back
+        // to --packId), NOT after --mainExe, so it is Prisc.exe; keep this, the manifest's
+        // Executable and release.yml's --packTitle in step. Velopack runs the --veloapp-updated
+        // hook before it extracts the new root stub, so on a root upgraded from the old name the
+        // stub does not exist yet during that hook; registration then waits for the next startup.
+        public const string RootStubFileName = "Prisc.exe";
+
+        // Velopack fast-callback hooks are killed after 15s, but the interactive paths (settings
+        // checkbox, startup sync) can afford to wait out a slow deployment service.
+        private const int PowerShellTimeoutMs = 90_000;
+
+        // Deployment refuses concurrent operations on one package, and the settings checkbox can
+        // be toggled faster than a registration takes: serialize the work behind this lock and
+        // let whichever state was requested last be the one that ends up applied.
+        private static readonly object _packageLock = new object();
+        private static volatile bool _requestedEnabled;
+
+        /// <summary>Raised after every <see cref="TrySetEnabled"/> (and whenever a read changes
+        /// <see cref="LastKnownIsEnabled"/>), so the settings page can show <see cref="LastError"/>
+        /// or update its caption.</summary>
+        public static event EventHandler StateChanged;
+
+        /// <summary>The error from the most recent failed apply, or null if the last one worked.</summary>
+        public static string LastError { get; private set; }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, ExactSpelling = true)]
+        private static extern int GetCurrentPackageFullName(ref uint length, char[] fullName);
+
+        private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
+
+        /// <summary>
+        /// Records this process's package identity (Sentry tag <c>package_identity</c> plus a
+        /// debug line): "none" for a normal launch, the sparse package's full name when the
+        /// process was created as that package's application. The latter is the priscapp/Prisc#83
+        /// failure — the shell extension's surrogate carries the package identity, and Windows
+        /// hands it to any child a packaged process creates inside the package's external
+        /// location (the install root) regardless of the breakaway attribute, which is why the
+        /// extension launches the app through Explorer instead (prisc_shell_ext broker.rs).
+        /// Never throws.
+        /// </summary>
+        [SupportedOSPlatform("windows")]
+        public static void ReportProcessIdentity()
+        {
+            string identity;
+            try
+            {
+                // package full names are capped well below this; 122 (insufficient buffer) would
+                // surface as an error value rather than being mistaken for "none"
+                uint length = 512;
+                var buffer = new char[length];
+                var result = GetCurrentPackageFullName(ref length, buffer);
+                identity = result switch
+                {
+                    0 => new string(buffer, 0, Math.Max(0, (int)length - 1)),
+                    APPMODEL_ERROR_NO_PACKAGE => "none",
+                    _ => "error " + result,
+                };
+            }
+            catch (Exception ex)
+            {
+                identity = "error " + ex.GetType().Name;
+            }
+
+            Debug.WriteLine("SparsePackageManager: process package identity: " + identity);
+            SentryConfig.SetTag("package_identity", identity);
+        }
+
+        /// <summary>The registration state as of the last read or apply. UI code renders this —
+        /// <see cref="IsEnabled"/> shells out to PowerShell and must stay off the UI thread.</summary>
+        public static bool LastKnownIsEnabled { get; private set; }
+
+        /// <summary>Sparse packages need Win11, a real Velopack install to point ExternalLocation
+        /// at, and the MSIX shipped next to the executable — dev builds fail all three, so nothing
+        /// here ever spawns PowerShell in a debug session.</summary>
+        public static bool IsSupported
+        {
+            get
+            {
+                if (!OperatingSystem.IsWindows() || !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+                    return false;
+
+                var locator = VelopackLocator.Current;
+                if (locator == null || locator.CurrentlyInstalledVersion == null || String.IsNullOrEmpty(locator.RootAppDir))
+                    return false;
+
+                return File.Exists(Path.Combine(AppContext.BaseDirectory, MsixFileName));
+            }
+        }
+
+        /// <summary>Whether the sparse package is currently registered. Returns false (rather than
+        /// throwing) if the state can't be read. Spawns PowerShell — never call on the UI thread;
+        /// UI code should render <see cref="LastKnownIsEnabled"/> instead.</summary>
+        public static bool IsEnabled() => GetRegisteredVersion() != null;
+
+        /// <summary>The version of the registered package (e.g. "4.1.5.0"), or null when it is not
+        /// registered or the state can't be read. Spawns PowerShell — never call on the UI thread.</summary>
+        public static string GetRegisteredVersion()
+        {
+            try
+            {
+                // the platform analyzer only flows OperatingSystem.IsWindows() guards written out
+                // in full, so this cannot be phrased as a check against IsSupported alone.
+                if (OperatingSystem.IsWindows() && IsSupported)
+                    return GetRegisteredVersionWindows();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("SparsePackageManager: failed to read sparse package state: " + ex);
+                SentryConfig.CaptureHandled(ex, "shellreg.read-sparse-package");
+            }
+
+            return null;
+        }
+
+        /// <summary>Registers or unregisters the sparse package. Returns false and sets
+        /// <see cref="LastError"/> on failure; the modern context menu is a convenience, so no
+        /// call site treats a failure as fatal. Spawns PowerShell — never call on the UI thread.</summary>
+        public static bool TrySetEnabled(bool enabled)
+        {
+            try
+            {
+                if (!OperatingSystem.IsWindows())
+                    return false;
+
+                // Win10, dev builds and loose builds quietly do nothing rather than error — the
+                // legacy registry verb already covers those machines.
+                if (!IsSupported)
+                    return false;
+
+                // publish the request before queueing so a caller that overtakes us in the lock
+                // can see it, and re-read it inside: an older request must not undo a newer one.
+                _requestedEnabled = enabled;
+                bool applied, completed;
+                lock (_packageLock)
+                {
+                    applied = _requestedEnabled;
+                    completed = SetEnabledWindows(applied);
+                }
+
+                // a deferred registration leaves the state as it was; the next Sync retries it
+                if (completed)
+                    UpdateLastKnown(applied);
+                LastError = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("SparsePackageManager: failed to apply sparse package: " + ex);
+                SentryConfig.CaptureHandled(ex, "shellreg.apply-sparse-package");
+                LastError = ex.Message;
+                return false;
+            }
+            finally
+            {
+                StateChanged?.Invoke(null, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>Reconciles the deployment state with the saved setting — at startup and after
+        /// every update, since the package version tracks the app version and a stale registration
+        /// keeps launching whatever the manifest was generated against. Never throws. Spawns
+        /// PowerShell — call from a background thread (or a Velopack hook).</summary>
+        public static void Sync(bool enabled)
+        {
+            if (!IsSupported)
+                return;
+
+            // hold the gate across the read and the apply so a toggle cannot land between them
+            // and get reverted by a decision made from the older state (the lock is reentrant,
+            // so the TrySetEnabled calls below re-enter it on this thread).
+            lock (_packageLock)
+            {
+                var registered = GetRegisteredVersion();
+
+                if (enabled)
+                {
+                    if (registered == null || registered != ExpectedPackageVersion())
+                        TrySetEnabled(true);
+                }
+                else if (registered != null)
+                {
+                    TrySetEnabled(false);
+                }
+            }
+        }
+
+        /// <summary>Applies the requested state. Returns false when a registration was deferred
+        /// because the install root has no <see cref="RootStubFileName"/> yet.</summary>
+        [SupportedOSPlatform("windows")]
+        private static bool SetEnabledWindows(bool enabled)
+        {
+            var root = VelopackLocator.Current.RootAppDir;
+
+            if (!enabled)
+            {
+                RunPowerShell("Get-AppxPackage -Name '" + PackageName + "' | Remove-AppxPackage");
+
+                // best-effort: Explorer/dllhost may still have the extension loaded; a leftover
+                // DLL is inert once the package is gone and is swept again on the next apply.
+                SweepStaleDllsWindows(root, null);
+                return true;
+            }
+
+            if (!File.Exists(Path.Combine(root, RootStubFileName)))
+            {
+                Debug.WriteLine("SparsePackageManager: " + RootStubFileName + " is not in " + root
+                                + " yet; registration deferred to the next startup");
+                return false;
+            }
+
+            var sourceDll = FindShippedDllWindows();
+            var installedDll = Path.Combine(root, Path.GetFileName(sourceDll));
+
+            // same filename = same extension version = same bytes in any real install, so app
+            // updates that don't touch the extension never write (or fight a lock on) the root
+            // copy at all; the hash check only matters for dev builds rebuilt without a bump.
+            CopyExtensionDll(sourceDll, installedDll);
+
+            // the copy tolerates a locked target because the DLL already there still works, but
+            // with no DLL at all the registration would only produce a menu entry that does
+            // nothing — fail loudly instead, so the settings page reports it.
+            if (!File.Exists(installedDll))
+                throw new FileNotFoundException("The shell extension could not be copied to " + installedDll
+                                                + ", so the context menu was not registered.", installedDll);
+
+            // Add-AppxPackage updates in place when the version went up, but re-adding the same
+            // version is an error — and the DLL refresh above is all a same-version apply needs.
+            var registered = GetRegisteredVersionWindows();
+            if (registered != ExpectedPackageVersion())
+            {
+                // opting out of experimental builds can move the app *down* a version, which a
+                // plain Add-AppxPackage refuses; sideloaded packages take this in either direction.
+                var force = registered == null ? "" : " -ForceUpdateFromAnyVersion";
+
+                // Explorer's dllhost surrogate keeps the extension loaded long after a
+                // right-click, and an update of an in-use package either fails (0x80073D02) or
+                // waits on it indefinitely; shutting the surrogate down is harmless — the menu
+                // handler just reloads on the next right-click.
+                RunPowerShell("Add-AppxPackage -Path '" + EscapePowerShellLiteral(Path.Combine(AppContext.BaseDirectory, MsixFileName))
+                              + "' -ExternalLocation '" + EscapePowerShellLiteral(root) + "' -ForceApplicationShutdown" + force);
+            }
+
+            // only sweep once the fresh registration is in force, so a failed apply never
+            // deletes the copy an older still-active registration is pointing at
+            SweepStaleDllsWindows(root, Path.GetFileName(installedDll));
+            return true;
+        }
+
+        /// <summary>The version-named extension DLL shipped in <c>current\</c> next to the app
+        /// (e.g. <c>PriscShellExt_1.0.0.dll</c>). Its filename doubles as the install-root target
+        /// name and matches the manifest's <c>com:Class Path</c>, both stamped by CI from the
+        /// crate version.</summary>
+        [SupportedOSPlatform("windows")]
+        private static string FindShippedDllWindows()
+        {
+            string best = null;
+            foreach (var candidate in Directory.EnumerateFiles(AppContext.BaseDirectory, DllSearchPattern))
+            {
+                if (best == null || String.CompareOrdinal(candidate, best) > 0)
+                    best = candidate;
+            }
+
+            if (best == null)
+                throw new FileNotFoundException("No " + DllSearchPattern + " found next to the app; the package ships one per build.");
+
+            return best;
+        }
+
+        /// <summary>Best-effort removal of extension DLLs at the install root other than
+        /// <paramref name="keepFileName"/> (null keeps nothing). Locked files — an old copy still
+        /// loaded in Explorer's surrogate — simply survive until a later sweep; once nothing
+        /// references them they are inert.</summary>
+        [SupportedOSPlatform("windows")]
+        private static void SweepStaleDllsWindows(string root, string keepFileName)
+        {
+            foreach (var dll in Directory.EnumerateFiles(root, DllSearchPattern))
+            {
+                if (keepFileName != null && String.Equals(Path.GetFileName(dll), keepFileName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                try
+                {
+                    File.Delete(dll);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("SparsePackageManager: could not delete " + dll + ": " + ex.Message);
+                }
+            }
+        }
+
+        [SupportedOSPlatform("windows")]
+        private static string GetRegisteredVersionWindows()
+        {
+            var output = RunPowerShell("(Get-AppxPackage -Name '" + PackageName + "').Version");
+            var version = String.IsNullOrWhiteSpace(output) ? null : output.Trim();
+            UpdateLastKnown(version != null);
+            return version;
+        }
+
+        /// <summary>The package version the MSIX shipped with this build carries: the app's
+        /// three-part Velopack version with the mandatory fourth component pinned to 0 (CI
+        /// generates the manifest from the same nbgv version).</summary>
+        private static string ExpectedPackageVersion()
+        {
+            var version = VelopackLocator.Current?.CurrentlyInstalledVersion;
+            return version == null ? null : version.Major + "." + version.Minor + "." + version.Patch + ".0";
+        }
+
+        /// <summary>Refreshes the install-root copy of the extension DLL from <c>current\</c>.
+        /// A locked target is logged and ignored: the old DLL's only job is spawning the exe, so
+        /// it keeps working until Explorer lets go and a later apply refreshes it.</summary>
+        private static void CopyExtensionDll(string sourceDll, string targetDll)
+        {
+            try
+            {
+                if (File.Exists(targetDll) && FilesAreIdentical(sourceDll, targetDll))
+                    return;
+
+                File.Copy(sourceDll, targetDll, true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("SparsePackageManager: could not refresh " + targetDll + ": " + ex.Message);
+            }
+        }
+
+        private static bool FilesAreIdentical(string pathA, string pathB)
+        {
+            var infoA = new FileInfo(pathA);
+            var infoB = new FileInfo(pathB);
+            if (infoA.Length != infoB.Length)
+                return false;
+
+            using var sha = SHA256.Create();
+            using var streamA = File.OpenRead(pathA);
+            var hashA = sha.ComputeHash(streamA);
+
+            using var streamB = File.OpenRead(pathB);
+            return hashA.AsSpan().SequenceEqual(sha.ComputeHash(streamB));
+        }
+
+        private static void UpdateLastKnown(bool registered)
+        {
+            if (LastKnownIsEnabled == registered)
+                return;
+
+            LastKnownIsEnabled = registered;
+            StateChanged?.Invoke(null, EventArgs.Empty);
+        }
+
+        /// <summary>Escapes a value for embedding in a single-quoted PowerShell string literal
+        /// (user profile paths can contain apostrophes).</summary>
+        internal static string EscapePowerShellLiteral(string value) => value.Replace("'", "''");
+
+        /// <summary>Runs a script via <c>powershell.exe</c> and returns its stdout. Throws on a
+        /// non-zero exit or timeout, with the process output in the message. Errors are promoted
+        /// to terminating so a failed cmdlet cannot exit 0. Also used by
+        /// <see cref="Legacy.LegacyClowdShellCleanup.RunPackageCleanup"/>.</summary>
+        [SupportedOSPlatform("windows")]
+        internal static string RunPowerShell(string script)
+        {
+            var psi = new ProcessStartInfo("powershell.exe")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+
+            psi.ArgumentList.Add("-NoProfile");
+            psi.ArgumentList.Add("-NonInteractive");
+            psi.ArgumentList.Add("-ExecutionPolicy");
+            psi.ArgumentList.Add("Bypass");
+            psi.ArgumentList.Add("-Command");
+            psi.ArgumentList.Add("$ErrorActionPreference = 'Stop'; " + script);
+
+            using var process = Process.Start(psi)
+                                ?? throw new InvalidOperationException("Failed to start powershell.exe.");
+
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+
+            if (!process.WaitForExit(PowerShellTimeoutMs))
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch { }
+
+                throw new TimeoutException("PowerShell did not finish within " + (PowerShellTimeoutMs / 1000) + "s: " + script);
+            }
+
+            // the timed overload returns as soon as the process exits; this blocks until the
+            // redirected streams have drained so stdout/stderr below are complete.
+            process.WaitForExit();
+
+            if (process.ExitCode != 0)
+            {
+                var detail = (stderr.Result + "\n" + stdout.Result).Trim();
+                throw new InvalidOperationException("PowerShell exited with code " + process.ExitCode
+                                                    + (detail.Length > 0 ? ": " + detail : "."));
+            }
+
+            return stdout.Result;
+        }
+    }
+}

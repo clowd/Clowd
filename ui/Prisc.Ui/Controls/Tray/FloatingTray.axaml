@@ -1,0 +1,126 @@
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tray="using:Prisc.UI.Controls.Tray">
+
+    <!-- Spec §1 / §9. The tray's 4 px padding is spent as a 1 px highlight ring plus 3 px of inner
+         padding, so the outer box is exactly 48 px tall in a row and 48 px wide in a column while the
+         ring still reads as an inner edge on a dark desktop. The corner radius is the buttons' own
+         (TrayTokens.Corner), by request, rather than the geometric inner + padding.
+
+         Fill and ring are two stacked Borders rather than one Border with Background + BorderThickness:
+         Avalonia deflates a Border's background by half its border thickness, which leaves the
+         outermost pixel row of a 1 px ring roughly half transparent, so on a dark desktop it reads as
+         a blend with whatever is behind the window instead of the ring's opaque graphite-plus-10 %
+         (and picks up a tint over a coloured taskbar). Drawing the fill at full size underneath and the
+         ring on top of it means the edge pixel is exactly the ring colour.
+
+         The shadow is a property of the control rather than a literal here because the owning window
+         reserves transparent room for it and turns it off when the platform cannot composite a
+         transparent window at all.
+
+         The items panel is the one-dimensional layout the spec asks for: every child is a
+         StackPanel child with the spec's 4 px gap, and the axis follows the tray's Orientation
+         through a template binding — the ItemsPresenter hands its own templated parent to the panel
+         it builds, so the binding resolves to the tray. -->
+    <ControlTheme x:Key="{x:Type tray:FloatingTray}" TargetType="tray:FloatingTray">
+        <Setter Property="Background" Value="{x:Static tray:TrayTokens.TrayBrush}" />
+        <Setter Property="BorderBrush" Value="{x:Static tray:TrayTokens.Ring}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.Corner}" />
+        <!-- ItemsControl defaults ClipToBounds to true, which clipped the shadow to the tray's own box:
+             the window's reserve was empty and the strip looked hard-edged. The shadow is painted
+             OUTSIDE these bounds by design; nothing else in the tray needs clipping. -->
+        <Setter Property="ClipToBounds" Value="False" />
+        <!-- The owning window places (and rotates) the strip from Tray.Bounds synchronously right after
+             Show(), before size-to-content has shrunk the Win32 default client area, so the tray must
+             never inherit a stale client size: left/top alignment inside the window's root Panel makes
+             its Bounds equal its desired size on the very first layout pass. -->
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="{TemplateBinding Orientation}"
+                            Spacing="{x:Static tray:TrayTokens.Gap}" />
+            </ItemsPanelTemplate>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <!-- The shadow and the glows are shadow-only layers (an outer box shadow is clipped
+                         to outside its own rect, so none of them tints the tray), kept apart from the fill
+                         so the engaged frame can fade the drop shadow out without fading the fill. -->
+                    <Border Name="_shadow"
+                            Background="Transparent"
+                            BoxShadow="{TemplateBinding Shadow}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                    <!-- the glow burst (FloatingTray.PlayGlowBurst): its opacity is animated 0 → 1 → 0 -->
+                    <Border Name="PART_Burst"
+                            Background="Transparent"
+                            BoxShadow="{DynamicResource TrayBurstGlow}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False"
+                            Opacity="0" />
+                    <Border Name="_fill"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Border Name="_ring"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            IsHitTestVisible="False" />
+                    <!-- The engaged frame: the tray filled with the accent, and a rounded graphite panel
+                         laid over it that leaves the accent showing as a 1.5 px ring round the edge and a
+                         spine over the grip, the panel's own corners rounding off where it meets the spine.
+                         Only the accent (and its glow) fades: the panel is always drawn, graphite on graphite
+                         while the strip is not engaged, because Avalonia fades a panel's children one by one
+                         rather than as a group, and a fading panel let the accent show through mid-fade.
+                         Over the graphite ring and under the items, so the grip's dots and rotate glyph sit
+                         on the spine. -->
+                    <Panel Name="_engaged" IsHitTestVisible="False" Opacity="0">
+                        <Panel.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                            </Transitions>
+                        </Panel.Transitions>
+                        <Border Background="Transparent"
+                                BoxShadow="{DynamicResource TrayEngagedGlow}"
+                                CornerRadius="{TemplateBinding CornerRadius}" />
+                        <Border Background="{DynamicResource TrayAccentBrush}"
+                                CornerRadius="{TemplateBinding CornerRadius}" />
+                    </Panel>
+                    <Border Name="_panel"
+                            Background="{TemplateBinding Background}"
+                            Margin="{x:Static tray:TrayTokens.EngagedInsetRow}"
+                            CornerRadius="{x:Static tray:TrayTokens.EngagedPanelCorner}"
+                            IsHitTestVisible="False" />
+                    <!-- TrayPad 4 = 1 px ring + 3 px inner padding, spec §1 -->
+                    <ItemsPresenter Name="PART_ItemsPresenter"
+                                    Margin="{x:Static tray:TrayTokens.TrayPadding}"
+                                    ItemsPanel="{TemplateBinding ItemsPanel}" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <!-- engaged: the frame fades in and the drop shadow out, both on the tray's fill transition, so
+             the grip's dots brighten in step with the spine under them -->
+        <Style Selector="^[IsEngaged=True] /template/ Border#_shadow">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^[IsEngaged=True] /template/ Panel#_engaged">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <!-- a column's grip edge is its top -->
+        <Style Selector="^[Orientation=Vertical] /template/ Border#_panel">
+            <Setter Property="Margin" Value="{x:Static tray:TrayTokens.EngagedInsetColumn}" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

@@ -1,0 +1,194 @@
+using System;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
+using Avalonia.Media;
+using Microsoft.Extensions.Configuration;
+using Prisc.Legacy;
+
+namespace Prisc.Config
+{
+    /// <summary>
+    /// Loads and saves <see cref="SettingsRoot"/> as JSON using the standard .NET configuration
+    /// stack. <see cref="Load(string)"/> is a pure parse with no side effects: it returns a fully
+    /// populated defaults instance when the file (or any section/value) is missing.
+    /// <see cref="Load()"/> first copies the pre-rename settings file forward when this build has
+    /// none yet (<see cref="LegacyClowd.MigrateSettingsFile"/>), and otherwise does the same. Persistence
+    /// is explicit — nothing in the settings object graph saves itself; UI code calls
+    /// <see cref="Save(SettingsRoot)"/> after a user-visible mutation.
+    /// </summary>
+    public static class SettingsService
+    {
+        /// <summary>Both paths (Microsoft.Extensions.Configuration in, System.Text.Json out) share
+        /// one representation: enums by name, Color as "#AARRGGBB", a hotkey's GestureList as
+        /// "Modifier+Key; Modifier+Key" (see <see cref="GestureList.ToSerializedString"/>).</summary>
+        static SettingsService()
+        {
+            // the M.E.C binder converts string values via TypeDescriptor — register a converter
+            // for the external Avalonia Color struct (GestureList carries its own
+            // [TypeConverter] attribute).
+            TypeDescriptor.AddAttributes(typeof(Color), new TypeConverterAttribute(typeof(ColorTypeConverter)));
+        }
+
+        public static string FilePath =>
+#if DEBUG
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Prisc", "Prisc.DEBUG.Settings.json");
+#else
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Prisc", "Prisc.Settings.json");
+#endif
+
+        /// <summary>
+        /// Parses the settings file into a new <see cref="SettingsRoot"/>. Missing file, sections
+        /// or values fall back to the compiled-in defaults, and defaults an older file was written
+        /// with are brought forward where they no longer work (see
+        /// <see cref="SettingsHotkey.MigrateDefaults"/>; nothing is written). Throws only when the file exists but
+        /// cannot be parsed (malformed JSON / unconvertible value) — callers may then offer a reset.
+        /// This overload reads <see cref="FilePath"/>, first copying the settings of a pre-rename install
+        /// forward when that file does not exist yet (the only write it ever makes; the Velopack
+        /// update hook relies on it too).
+        /// </summary>
+        public static SettingsRoot Load()
+        {
+            LegacyClowd.MigrateSettingsFile(FilePath);
+            return Load(FilePath);
+        }
+
+        public static SettingsRoot Load(string path) => Load(path, HotkeyGesture.CurrentPlatform);
+
+        /// <summary><see cref="Load(string)"/> as it runs on <paramref name="platform"/>, whose
+        /// default changes are carried into an older file (<see cref="SettingsHotkey.MigrateDefaults"/>),
+        /// so each OS's can be tested on any one.</summary>
+        public static SettingsRoot Load(string path, OSPlatform platform)
+        {
+            return WithSharingVioRetry(() =>
+            {
+                var config = new ConfigurationBuilder()
+                             .AddJsonFile(path, optional: true)
+                             .Build();
+
+                var settings = config.Get<SettingsRoot>() ?? new SettingsRoot();
+
+                // read from the file itself: the bound object always reports this build's version.
+                // A file with no Hotkeys section got this OS's defaults from the binder already.
+                var hotkeys = config.GetSection(nameof(SettingsRoot.Hotkeys));
+                if (hotkeys.Exists())
+                {
+                    var writtenWith = hotkeys.GetValue(nameof(SettingsHotkey.DefaultsVersion), 0);
+                    settings.Hotkeys.MigrateDefaults(writtenWith, platform);
+                }
+
+                Debug.WriteLine("Settings were loaded from " + path);
+                return settings;
+            });
+        }
+
+        /// <summary>Writes the settings as indented JSON, atomically (temp file + move-overwrite).</summary>
+        public static void Save(SettingsRoot settings) => Save(settings, FilePath);
+
+        public static void Save(SettingsRoot settings, string path)
+        {
+            if (settings == null)
+                throw new ArgumentNullException(nameof(settings));
+
+            var json = JsonSerializer.Serialize(settings, CreateJsonOptions());
+
+            // unique temp name: a fixed name races when two instances save concurrently
+            var tempPath = path + "." + Path.GetRandomFileName() + ".~tmp";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+
+            WithSharingVioRetry<object>(() =>
+            {
+                File.WriteAllText(tempPath, json);
+                try
+                {
+                    File.Move(tempPath, path, overwrite: true);
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    // the atomic replace is denied while another process (editor tab, file
+                    // watcher, AV scan) holds the settings file open without delete sharing.
+                    // Fall back to writing in place — open handles normally share read/write.
+                    File.WriteAllText(path, json);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (File.Exists(tempPath))
+                            File.Delete(tempPath);
+                    }
+                    catch {; }
+                }
+
+                return null;
+            });
+        }
+
+        public static JsonSerializerOptions CreateJsonOptions()
+        {
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                // local settings file read back by this app — keep '+' etc. human-readable
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            };
+            options.Converters.Add(new JsonStringEnumConverter());
+            options.Converters.Add(new ColorJsonConverter());
+            options.Converters.Add(new GestureListJsonConverter());
+            return options;
+        }
+
+        /// <summary>Simple retry loop for sharing violations (another process holding the settings
+        /// file).</summary>
+        private static T WithSharingVioRetry<T>(Func<T> func)
+        {
+            const int ERROR_SHARING_VIOLATION = unchecked((int)0x80070020);
+            const int ERROR_LOCK_VIOLATION = unchecked((int)0x80070021);
+
+            var sw = Stopwatch.StartNew();
+            while (true)
+            {
+                try
+                {
+                    return func();
+                }
+                catch (IOException ex) when ((ex.HResult == ERROR_SHARING_VIOLATION || ex.HResult == ERROR_LOCK_VIOLATION)
+                                             && sw.Elapsed < TimeSpan.FromSeconds(5))
+                {
+                    Thread.Sleep(50);
+                }
+            }
+        }
+
+        /// <summary>Color ↔ "#AARRGGBB" for the M.E.C binder (load path).</summary>
+        private sealed class ColorTypeConverter : TypeConverter
+        {
+            public override bool CanConvertFrom(ITypeDescriptorContext context, Type sourceType) =>
+                sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+
+            public override object ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value) =>
+                value is string s ? Color.Parse(s) : base.ConvertFrom(context, culture, value);
+        }
+
+        /// <summary>GestureList ↔ "Control+Shift+S; Alt+F1" for System.Text.Json (save path; the
+        /// load path uses the [TypeConverter] on GestureList). Always one JSON string, never an
+        /// array, and an empty list is written as "None" rather than "" or null — see GestureList
+        /// for what the configuration binder does with the alternatives.</summary>
+        private sealed class GestureListJsonConverter : JsonConverter<GestureList>
+        {
+            public override bool HandleNull => true;
+
+            public override GestureList Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+                GestureList.Parse(reader.GetString());
+
+            public override void Write(Utf8JsonWriter writer, GestureList value, JsonSerializerOptions options) =>
+                writer.WriteStringValue((value ?? GestureList.Empty).ToSerializedString());
+        }
+    }
+}

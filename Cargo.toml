@@ -1,11 +1,16 @@
 [workspace]
 resolver = "2"
 members = [
-    "clowd_ai",
-    "clowd_capture",
-    "clowd_rust_core",
-    "clowd_scroll_driver",
-    "clowd_shell_ext",
+    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_rust_core",
+    "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
+    "crates/prisc_build_support", "crates/prisc_ffmpeg_sys", "crates/prisc_obs", "crates/prisc_obs_platform",
+    "crates/prisc_obs_sys", "crates/prisc_recorder", "crates/prisc_share_region", "crates/prisc_vid2gif",
+]
+# Plain `cargo build/test` stays fast and toolchain-light: the recorder stack (libobs via CMake,
+# 20-40 min cold, needs the obs-studio submodule + cmake + LLVM) builds only when asked: `cargo rec`.
+default-members = [
+    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_rust_core",
+    "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
 ]
 
 [workspace.package]
@@ -19,10 +24,30 @@ edition = "2021"
 rust-version = "1.89"
 
 [workspace.dependencies]
-# Shared by clowd_capture and clowd_scroll_driver: geometry, the session.json
+# Shared by prisc_capture and prisc_scroll_driver: geometry, the session.json
 # contract, exit codes, Sentry setup.
-clowd_rust_core = { path = "clowd_rust_core" }
+prisc_rust_core = { path = "crates/prisc_rust_core" }
+# The global hotkey hook: linked into prisc_capture, and built as prisc_hotkeys.dll / .dylib for Prisc.Ui.
+prisc_hotkeys = { path = "crates/prisc_hotkeys" }
+# The recorder stack's internal crates (libobs/FFmpeg bindings and the platform layer).
+prisc_obs_sys = { path = "crates/prisc_obs_sys" }
+prisc_obs = { path = "crates/prisc_obs" }
+prisc_obs_platform = { path = "crates/prisc_obs_platform" }
+prisc_ffmpeg_sys = { path = "crates/prisc_ffmpeg_sys" }
+# Build-dependency only: the Linux FFmpeg pin and staging helpers shared by the
+# build scripts (crates/prisc_build_support).
+prisc_build_support = { path = "crates/prisc_build_support" }
 anyhow = "1.0"
+# base64 + png: the input-capture sidecar's `cursor_image` rows carry sprite
+# planes as base64-encoded PNG (crates/prisc_recorder/src/cursor_sprite.rs).
+base64 = "0.23"
+# 0.72+ required: bindgen 0.71 + libclang 22 intermittently emitted opaque
+# 1-byte structs (vec2/vec3/vec4/obs_transform_info/obs_audio_data/
+# obs_source_frame) whose layout asserts then fail with E0080. See the
+# assert_no_opaque_regressions guard in crates/prisc_obs_sys/build.rs.
+bindgen = "0.72"
+ctrlc = { version = "3", features = ["termination"] }
+png = "0.18"
 clap = "4.6"
 image = { version = "0.25", default-features = false }
 libblur = "0.24"
@@ -31,16 +56,15 @@ libc = "0.2"
 log = "0.4"
 simplelog = "0.12"
 winit = "0.30"
-handy-keys = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# clowd_ai's inference runtime. Default features: ort-sys downloads
+# prisc_ai's inference runtime. Default features: ort-sys downloads
 # pyke's prebuilt, attested ONNX Runtime binaries per target and links the
 # runtime statically; execution-provider features (directml/coreml) are
-# enabled per target in clowd_ai's own manifest, since no one binary
+# enabled per target in prisc_ai's own manifest, since no one binary
 # build carries every EP. copy-dylibs stages the EP helper dylib
 # (DirectML.dll) beside the built exe; CI packages it from there.
-# NOTE: pyke's libs are compiled /MD — clowd_ai's build.rs swaps that
+# NOTE: pyke's libs are compiled /MD — prisc_ai's build.rs swaps that
 # one binary off this workspace's `+crt-static` at link time (see there).
 # Default features minus `tracing`: with `tracing` on and no subscriber
 # installed, ONNX Runtime's own log lines (EP registration failures, nodes
@@ -54,7 +78,7 @@ ort = { version = "2.0.0-rc.13", default-features = false, features = [
     "copy-dylibs",
     "api-27",
 ] }
-# clowd_ai's STFT/ISTFT for the 48 kHz denoiser.
+# prisc_ai's STFT/ISTFT for the 48 kHz denoiser.
 realfft = "3.5"
 bytemuck = "1"
 # System-font lookup for the OCR bubbles' glyph fallback: fontdb finds and memory-maps the
@@ -75,13 +99,15 @@ foreign-types = "0.5"
 core-graphics = "0.25"
 core-foundation = "0.10"
 objc2 = "0.6"
+objc2-core-foundation = "0.3"
 objc2-core-graphics = "0.3"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
 objc2-metal = "0.3"
 objc2-quartz-core = "0.3"
 block2 = "0.6"
-# build-time shader precompilation (clowd_capture/build.rs): WGSL to HLSL on
+dispatch2 = "0.3"
+# build-time shader precompilation (crates/prisc_capture/build.rs): WGSL to HLSL on
 # Windows, WGSL to MSL source on macOS. Build time only; never in a binary.
 naga = "30.0"
 libloading = "0.9"
