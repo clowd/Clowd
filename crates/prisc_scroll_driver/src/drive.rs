@@ -614,7 +614,7 @@ fn drive(cfg: DriveArgs, signals: &Signals) -> Result<Outcome, Failure> {
     Ok((outcome, frames, height_px))
 }
 
-/// How the rewind ended. Only a `quit` aborts the run — every other
+/// How the rewind ended. Only a `quit` aborts the run; every other
 /// ending, including hitting a cap, just means "start capturing here".
 enum Rewind {
     Finished(String),

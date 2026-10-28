@@ -80,7 +80,7 @@ Standby mode intentionally reverses creation ownership. With
 repeatable, one occurrence per gesture in the action's list order (less any
 combination the OS reserves for itself, which the shell never binds), and zero
 occurrences means that action has no hotkey (hotkeys take effect when the
-first settings snapshot arrives — see below). The capturer emits `ready` and
+first settings snapshot arrives; see below). The capturer emits `ready` and
 waits event-driven without initializing capture/GPU
 resources (the main loop is fully blocked, and so is the Windows hook thread
 between key events; on macOS the hook thread and a permission watcher wake
@@ -546,8 +546,8 @@ Runtime build — Windows x64/arm64 and Apple Silicon, **not** Intel macOS,
 where the spawn fails and the overlay shows OCR as unavailable — which is
 where `src/ocr/client.rs` looks for it, through `prisc_ipc::locate::sibling`
 (each directory of `PRISC_HELPERS_DIR` first, for tests and local development,
-then beside `current_exe()`). It needs no window, no event loop, no GPU, and — because it is
-handed pixels rather than taking them — no screen-recording permission.
+then beside `current_exe()`). It needs no window, no event loop, no GPU, and (because it is
+handed pixels rather than taking them) no screen-recording permission.
 
 ### 3.1 Spawn
 
@@ -565,7 +565,7 @@ Stdio, all three of which the capturer sets deliberately:
 | Stream | Setting | Why |
 |---|---|---|
 | stdin | pipe | Carries the request (§3.2). |
-| stdout | **null** | The `ocr` subcommand writes nothing to stdout — the answer is the `--out` file, which doubles as the session's `ocr.json` artifact, and a native runtime that printed to stdout (the original MNN engine did) could never corrupt a file. The overlay's own stdout is its helper protocol channel, so the child's is nulled rather than inherited; a pipe would work but one nobody drains can eventually block the child. |
+| stdout | **null** | The `ocr` subcommand writes nothing to stdout: the answer is the `--out` file, which doubles as the session's `ocr.json` artifact, and a native runtime that printed to stdout (the original MNN engine did) could never corrupt a file. The overlay's own stdout is its helper protocol channel, so the child's is nulled rather than inherited; a pipe would work but one nobody drains can eventually block the child. |
 | stderr | inherited | Log chatter, by the same convention §2.2 follows. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
 
 On Windows the child is spawned with `CREATE_NO_WINDOW` — the overlay is a

@@ -1,8 +1,8 @@
 //! Speech denoising via DPDFNet2 (48 kHz high-resolution variant).
 //!
 //! The protocol is a sample pump: f32le interleaved N-channel PCM at 48 kHz
-//! arrives on stdin until EOF and leaves on the `payload` writer — this
-//! process's real stdout, claimed by `prisc_ipc::claim_stdout` — in the
+//! arrives on stdin until EOF and leaves on the `payload` writer (this
+//! process's real stdout, claimed by `prisc_ipc::claim_stdout`) in the
 //! same layout with the same total sample count. Each channel runs through its own
 //! independent model state — DPDFNet is single-channel, and tying a stereo
 //! pair through one state would smear the channels together.
