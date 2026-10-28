@@ -1,35 +1,39 @@
 //! Global input hooks feeding `--input-capture` (DESIGN §2).
 //!
-//! A dedicated thread installs the OS-wide listener and runs the event loop it
-//! requires — `WH_KEYBOARD_LL` + `WH_MOUSE_LL` behind a `GetMessageW` pump on
-//! Windows, a listen-only `CGEventTap` on a `CFRunLoop` on macOS. The callbacks
-//! maintain a lock-free snapshot of the current input state (button bitmask +
-//! keys-down bitset, sampled once per rendered frame by the input-capture tick
-//! callback) and hand every edge — key down/up, button down/up — to the
-//! caller's sink as a [`RawEvent`] stamped with `os_gettime_ns()`, the same
-//! monotonic clock behind `obs_get_video_frame_time`, so events and frame rows
-//! share one timebase. The sink runs on the hook thread and must only do a
-//! channel send.
+//! Keys come from `prisc_hotkeys`, Prisc's one keyboard hook (`WH_KEYBOARD_LL`
+//! on Windows, a `CGEventTap` on macOS), through its observe stream: no gesture
+//! is ever registered, so it passes every key, and a forwarder thread drains
+//! the stream. Mouse buttons come from this module's own hook thread, because
+//! `prisc_hotkeys` is keyboard only — `WH_MOUSE_LL` behind a `GetMessageW` pump
+//! on Windows, a listen-only mouse `CGEventTap` on a `CFRunLoop` on macOS.
 //!
-//! Auto-repeat key-downs are suppressed at the source: the bitset already
-//! records the key as down, so only real edges reach the channel.
+//! Both halves maintain one lock-free snapshot of the current input state
+//! (button bitmask + keys-down bitset, sampled once per rendered frame by the
+//! input-capture tick callback) and hand every edge — key down/up, button
+//! down/up — to the caller's sink as a [`RawEvent`] stamped with
+//! `os_gettime_ns()`, the same monotonic clock behind
+//! `obs_get_video_frame_time`, so events and frame rows share one timebase. A
+//! key edge is stamped when the forwarder receives it, one queue hop after the
+//! hook saw it (microseconds; well under a frame). The sink runs on the hook
+//! and forwarder threads and must only do a channel send.
+//!
+//! Auto-repeat key-downs are suppressed here: the bitset already records the
+//! key as down, so only real edges reach the channel.
 //!
 //! `RawEventKind::{KeyDown, KeyUp}` carry the platform's native key numbering —
-//! Win32 virtual-key codes on Windows, `CGKeyCode` on macOS. The two spaces do
-//! not agree, which is what the header's `platform` field is for: consumers key
-//! their interpretation of `vk` off it.
+//! Win32 virtual-key codes on Windows, `CGKeyCode` on macOS (`prisc_hotkeys`
+//! passes its `raw_code` through unmapped). The two spaces do not agree, which
+//! is what the header's `platform` field is for: consumers key their
+//! interpretation of `vk` off it.
 //!
-//! macOS needs the Input Monitoring grant (System Settings › Privacy &
-//! Security). Without it `CGEventTapCreate` returns null and [`InputHook::start`]
-//! fails with an actionable message rather than silently recording nothing.
-//!
-//! Two macOS behaviors are worth knowing about because they look like bugs:
-//! while *secure input* is active — any focused password field, and the whole
-//! time the screen is locked — the OS withholds key events from every event tap
-//! in the session. Mouse buttons and modifier flag changes still arrive, so a
+//! macOS needs the Accessibility grant (System Settings › Privacy & Security),
+//! the one `prisc_hotkeys` requires; without it [`InputHook::start`] fails with
+//! an actionable message rather than silently recording nothing. While *secure
+//! input* is active — any focused password field, and the whole time the
+//! screen is locked — the OS withholds key events from every event tap in the
+//! session. Mouse buttons and modifier flag changes still arrive, so a
 //! recording made over a login prompt legitimately shows clicks and modifiers
-//! but no keys. And a tap the OS has disabled (`kCGEventTapDisabledBy*`) stays
-//! dead until re-armed, which the tap callback does on the spot.
+//! but no keys.
 
 // Linux has no hook (see its `imp` below), so the event model here — the
 // button bits, `RawEventKind`, `InputState` — has no producer there. It stays
@@ -38,6 +42,10 @@
 #![cfg_attr(target_os = "linux", allow(dead_code))]
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::OnceLock;
+use std::thread::JoinHandle;
+
+use prisc_hotkeys::{Event, Events, Hotkeys, KeyEvent};
 
 /// Mouse button bits of the frame-row `b` bitmask and the event-row `btn`
 /// values (wire contract).
@@ -47,7 +55,7 @@ pub const BTN_MIDDLE: u32 = 4;
 pub const BTN_X1: u32 = 8;
 pub const BTN_X2: u32 = 16;
 
-/// One input edge from the hook thread, stamped with `os_gettime_ns()`.
+/// One input edge, stamped with `os_gettime_ns()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RawEvent {
     pub t_ns: u64,
@@ -57,8 +65,8 @@ pub struct RawEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RawEventKind {
     /// A real key press edge (auto-repeats never reach the channel). `ch` is
-    /// the best-effort translated character (`ToUnicodeEx`), absent for
-    /// control/non-printable results.
+    /// the best-effort character it types under the foreground layout, absent
+    /// for control/non-printable results.
     KeyDown {
         vk: u32,
         ch: Option<char>,
@@ -80,7 +88,7 @@ pub enum RawEventKind {
     },
 }
 
-/// Current input state, written by the hook procs and snapshotted per frame.
+/// Current input state, written by the hooks and snapshotted per frame.
 /// Pure and lock-free: a button bitmask plus a 256-bit keys-down bitset.
 #[derive(Default)]
 pub struct InputState {
@@ -105,21 +113,6 @@ impl InputState {
     pub fn key_up(&self, vk: u32) {
         let (word, bit) = (vk as usize / 64 % 4, vk % 64);
         self.keys[word].fetch_and(!(1 << bit), Ordering::Relaxed);
-    }
-
-    /// Whether `vk` is currently recorded as down. Used by the macOS
-    /// flags-changed path, which has to decide per key whether a shared
-    /// modifier bit clearing is a release it still owes an event for.
-    ///
-    /// Windows has no such path — `WH_KEYBOARD_LL` reports real up/down edges
-    /// for modifiers like any other key — so there the method is genuinely
-    /// unused outside the tests, which dead-code analysis does not count. The
-    /// allow is narrowed to those targets rather than blanket, so that dropping
-    /// the last macOS caller still warns.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    pub fn is_down(&self, vk: u32) -> bool {
-        let (word, bit) = (vk as usize / 64 % 4, vk % 64);
-        self.keys[word].load(Ordering::Relaxed) & (1 << bit) != 0
     }
 
     pub fn button_down(&self, btn: u32) {
@@ -158,24 +151,6 @@ pub fn xbutton_bit(hiword: u16) -> Option<u32> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// macOS event decoding (pure; the tap callback in `imp` is the only caller)
-// ---------------------------------------------------------------------------
-
-/// `CGEventFlags` bits for the modifier keys we track, as the bare `u64`s the
-/// `MODIFIER_KEYS` mask arithmetic runs on.
-#[cfg(target_os = "macos")]
-mod cg_flags {
-    use objc2_core_graphics::CGEventFlags;
-
-    pub const ALPHA_SHIFT: u64 = CGEventFlags::MaskAlphaShift.bits(); // caps lock
-    pub const SHIFT: u64 = CGEventFlags::MaskShift.bits();
-    pub const CONTROL: u64 = CGEventFlags::MaskControl.bits();
-    pub const ALTERNATE: u64 = CGEventFlags::MaskAlternate.bits(); // option
-    pub const COMMAND: u64 = CGEventFlags::MaskCommand.bits();
-    pub const SECONDARY_FN: u64 = CGEventFlags::MaskSecondaryFn.bits();
-}
-
 /// `kCGMouseEventButtonNumber` → the `BTN_*` bit. macOS numbers buttons 0..31;
 /// the wire contract only names the five Windows exposes, so higher buttons
 /// are dropped rather than invented.
@@ -191,150 +166,152 @@ pub fn cg_button_bit(button: i64) -> Option<u32> {
     }
 }
 
-/// The modifier `CGKeyCode`s, each paired with the `CGEventFlags` bit it
-/// drives. Left/right twins deliberately share a bit — that is how the OS
-/// reports them, and [`modifier_twins`] exists to undo the ambiguity.
-#[cfg(target_os = "macos")]
-pub const MODIFIER_KEYS: [(u32, u64); 10] = [
-    (54, cg_flags::COMMAND),      // right command
-    (55, cg_flags::COMMAND),      // left command
-    (56, cg_flags::SHIFT),        // left shift
-    (60, cg_flags::SHIFT),        // right shift
-    (58, cg_flags::ALTERNATE),    // left option
-    (61, cg_flags::ALTERNATE),    // right option
-    (59, cg_flags::CONTROL),      // left control
-    (62, cg_flags::CONTROL),      // right control
-    (57, cg_flags::ALPHA_SHIFT),  // caps lock
-    (63, cg_flags::SECONDARY_FN), // fn
-];
-
-/// The flag bit a modifier `CGKeyCode` drives, or `None` for a normal key.
-#[cfg(target_os = "macos")]
-pub fn modifier_mask(keycode: u32) -> Option<u64> {
-    MODIFIER_KEYS
-        .iter()
-        .find(|(kc, _)| *kc == keycode)
-        .map(|(_, mask)| *mask)
-}
-
-/// Every keycode sharing `mask`. `kCGEventFlagsChanged` reports the new flag
-/// set, not an up/down, so a bit that has gone clear means *both* twins are
-/// now up — releasing left shift while right shift is held reports the bit
-/// still set, and only the final release clears it. Sweeping the pair on the
-/// clearing edge is what keeps a twin from being stranded down forever.
-#[cfg(target_os = "macos")]
-pub fn modifier_twins(mask: u64) -> impl Iterator<Item = u32> {
-    MODIFIER_KEYS
-        .iter()
-        .filter(move |(_, m)| *m == mask)
-        .map(|(kc, _)| *kc)
-}
-
-pub use imp::InputHook;
-
-/// Where the hook thread delivers edge events (a channel send in practice).
+/// Where edge events are delivered (a channel send in practice).
 pub type EventSink = Box<dyn Fn(RawEvent) + Send + Sync>;
+
+/// Hook procs get no context parameter, so the state and event sink live in a
+/// process-wide static, shared by the mouse hook and the key forwarder. One
+/// hook per process: the recorder creates it once and it lives until
+/// `exit_process`.
+struct HookCtx {
+    state: InputState,
+    sink: EventSink,
+}
+
+static CTX: OnceLock<HookCtx> = OnceLock::new();
+
+fn send(kind: RawEventKind) {
+    if let Some(ctx) = CTX.get() {
+        let t_ns = unsafe { prisc_obs_sys::os_gettime_ns() };
+        (ctx.sink)(RawEvent { t_ns, kind });
+    }
+}
+
+/// Owns both hooks. Exit paths that skip Drop are fine: the hooks die with
+/// the process.
+pub struct InputHook {
+    _keys: KeyHook,
+    _mouse: imp::MouseHook,
+}
+
+impl InputHook {
+    /// Installs the mouse hook and the keyboard hook. Edge events flow into
+    /// `sink`; the state snapshot is read via [`InputHook::snapshot`]. One per
+    /// process (the context static is set once).
+    pub fn start(sink: EventSink) -> Result<InputHook, String> {
+        if CTX
+            .set(HookCtx {
+                state: InputState::new(),
+                sink,
+            })
+            .is_err()
+        {
+            return Err("input hooks are already installed in this process".to_string());
+        }
+        let mouse = imp::MouseHook::start()?;
+        let keys = KeyHook::start()?;
+        Ok(InputHook {
+            _keys: keys,
+            _mouse: mouse,
+        })
+    }
+
+    /// Current `(button bitmask, sorted key codes down)` — VKs on Windows,
+    /// CGKeyCodes on macOS.
+    pub fn snapshot(&self) -> (u32, Vec<u32>) {
+        match CTX.get() {
+            Some(ctx) => {
+                #[cfg(target_os = "macos")]
+                imp::release_stranded_keys(ctx);
+                ctx.state.snapshot()
+            }
+            None => (0, Vec::new()),
+        }
+    }
+}
+
+/// The keyboard half: `prisc_hotkeys`' observe stream, drained by a forwarder
+/// thread into the shared state and sink.
+struct KeyHook {
+    /// `Some` until Drop: stopping the hook closes its event queue, which is
+    /// what ends the forwarder.
+    hotkeys: Option<Hotkeys>,
+    forwarder: Option<JoinHandle<()>>,
+}
+
+impl KeyHook {
+    fn start() -> Result<KeyHook, String> {
+        let (hotkeys, events) = Hotkeys::start().map_err(|e| match e {
+            prisc_hotkeys::Error::PermissionDenied => {
+                "the keyboard hook needs the Accessibility permission — grant it under System \
+                 Settings › Privacy & Security, then retry"
+                    .to_string()
+            }
+            e => e.to_string(),
+        })?;
+        hotkeys.set_observe(true);
+        let forwarder = std::thread::Builder::new()
+            .name("input-keys".to_string())
+            .spawn(move || forward_keys(events))
+            .map_err(|e| format!("failed to spawn the key forwarder thread: {e}"))?;
+        Ok(KeyHook {
+            hotkeys: Some(hotkeys),
+            forwarder: Some(forwarder),
+        })
+    }
+}
+
+impl Drop for KeyHook {
+    fn drop(&mut self) {
+        drop(self.hotkeys.take());
+        if let Some(forwarder) = self.forwarder.take() {
+            let _ = forwarder.join();
+        }
+    }
+}
+
+/// Runs until the hook stops and its queue is drained.
+fn forward_keys(events: Events) {
+    while let Some(event) = events.recv() {
+        match event {
+            Event::Key(key) => on_key(key),
+            Event::Stopped(reason) => {
+                eprintln!("Warning: the keyboard hook stopped ({reason}); keys are no longer recorded");
+            }
+            // No gesture is registered and no recording armed: nothing else arrives.
+            _ => {}
+        }
+    }
+}
+
+fn on_key(key: KeyEvent) {
+    let Some(ctx) = CTX.get() else { return };
+    let vk = key.raw_code;
+    if key.down {
+        // A repeat finds the bit already set — state only.
+        if !ctx.state.key_down(vk) {
+            send(RawEventKind::KeyDown { vk, ch: key.ch });
+        }
+    } else {
+        ctx.state.key_up(vk);
+        send(RawEventKind::KeyUp { vk });
+    }
+}
 
 #[cfg(windows)]
 mod imp {
     use std::sync::mpsc;
-    use std::sync::OnceLock;
 
     use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::Threading::GetCurrentThreadId;
-    use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, GetKeyState, GetKeyboardLayout, ToUnicodeEx, VK_CAPITAL, VK_CONTROL,
-        VK_MENU, VK_SHIFT,
-    };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW,
-        GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, SetWindowsHookExW,
-        UnhookWindowsHookEx, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, WH_KEYBOARD_LL,
-        WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN,
-        WM_MBUTTONUP, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
-        WM_XBUTTONDOWN, WM_XBUTTONUP,
+        CallNextHookEx, DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
+        SetWindowsHookExW, UnhookWindowsHookEx, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, WH_MOUSE_LL,
+        WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_QUIT, WM_RBUTTONDOWN,
+        WM_RBUTTONUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
     };
 
-    use super::{
-        xbutton_bit, EventSink, InputState, RawEvent, RawEventKind, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT,
-    };
-
-    /// Hook procs get no context parameter, so the state and event sink live
-    /// in a process-wide static. One hook per process: the recorder creates it
-    /// once and it lives until `exit_process`.
-    struct HookCtx {
-        state: InputState,
-        sink: EventSink,
-    }
-
-    static CTX: OnceLock<HookCtx> = OnceLock::new();
-
-    fn send(kind: RawEventKind) {
-        if let Some(ctx) = CTX.get() {
-            let t_ns = unsafe { prisc_obs_sys::os_gettime_ns() };
-            (ctx.sink)(RawEvent { t_ns, kind });
-        }
-    }
-
-    /// Best-effort character for a key press (DESIGN §1: dead-key
-    /// imperfection accepted). The keyboard state is rebuilt from the async
-    /// modifier state — the hook thread's own input queue never sees the
-    /// keystrokes, so `GetKeyboardState` would be stale. Flag 0x4 keeps
-    /// `ToUnicodeEx` from clobbering the foreground app's dead-key state
-    /// (Win10 1607+; older systems accept the bit and ignore it).
-    fn translate_char(vk: u32, scan_code: u32) -> Option<char> {
-        let mut key_state = [0u8; 256];
-        for m in [VK_SHIFT, VK_CONTROL, VK_MENU] {
-            if unsafe { GetAsyncKeyState(m.0 as i32) } as u16 & 0x8000 != 0 {
-                key_state[m.0 as usize] = 0x80;
-            }
-        }
-        // Toggle state (low bit) — capitalization.
-        if unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 1 != 0 {
-            key_state[VK_CAPITAL.0 as usize] = 1;
-        }
-        let layout = unsafe {
-            let fg = GetForegroundWindow();
-            let tid = GetWindowThreadProcessId(fg, None);
-            GetKeyboardLayout(tid)
-        };
-        // The crate derives cchBuff from the slice length.
-        let mut buf = [0u16; 8];
-        let n = unsafe { ToUnicodeEx(vk, scan_code, &key_state, &mut buf, 0x4, Some(layout)) };
-        if n < 1 {
-            return None;
-        }
-        char::decode_utf16(buf[..n as usize].iter().copied())
-            .next()
-            .and_then(Result::ok)
-            .filter(|c| !c.is_control())
-    }
-
-    unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        if code >= 0 {
-            if let Some(ctx) = CTX.get() {
-                let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-                let vk = kb.vkCode;
-                match wparam.0 as u32 {
-                    WM_KEYDOWN | WM_SYSKEYDOWN => {
-                        // A repeat finds the bit already set — state only.
-                        if !ctx.state.key_down(vk) {
-                            send(RawEventKind::KeyDown {
-                                vk,
-                                ch: translate_char(vk, kb.scanCode),
-                            });
-                        }
-                    }
-                    WM_KEYUP | WM_SYSKEYUP => {
-                        ctx.state.key_up(vk);
-                        send(RawEventKind::KeyUp { vk });
-                    }
-                    _ => {}
-                }
-            }
-        }
-        CallNextHookEx(None, code, wparam, lparam)
-    }
+    use super::{send, xbutton_bit, RawEventKind, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, CTX};
 
     unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         if code >= 0 {
@@ -368,29 +345,16 @@ mod imp {
         CallNextHookEx(None, code, wparam, lparam)
     }
 
-    /// Owns the hook thread. Dropping posts `WM_QUIT` to its pump and joins —
-    /// the thread unhooks on the way out. Exit paths that skip Drop are fine:
-    /// the hooks die with the process.
-    pub struct InputHook {
+    /// Owns the mouse hook thread. Dropping posts `WM_QUIT` to its pump and
+    /// joins — the thread unhooks on the way out.
+    pub struct MouseHook {
         thread_id: u32,
         thread: Option<std::thread::JoinHandle<()>>,
     }
 
-    impl InputHook {
-        /// Installs the hooks on a fresh pump thread. Edge events flow into
-        /// `sink`; the state snapshot is read via [`InputHook::snapshot`].
-        /// One per process (the context static is set once).
-        pub fn start(sink: EventSink) -> Result<InputHook, String> {
-            if CTX
-                .set(HookCtx {
-                    state: InputState::new(),
-                    sink,
-                })
-                .is_err()
-            {
-                return Err("input hooks are already installed in this process".to_string());
-            }
-
+    impl MouseHook {
+        /// Installs the hook on a fresh pump thread.
+        pub fn start() -> Result<MouseHook, String> {
             let (ready_tx, ready_rx) = mpsc::channel::<Result<u32, String>>();
             let thread = std::thread::Builder::new()
                 .name("input-hook".to_string())
@@ -398,19 +362,11 @@ mod imp {
                     unsafe {
                         // Low-level hooks deliver through the installing
                         // thread's message queue, so install + pump here.
-                        let kb = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), None, 0);
-                        let ms = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), None, 0);
-                        let (kb, ms) = match (kb, ms) {
-                            (Ok(kb), Ok(ms)) => (kb, ms),
-                            // Unhook whichever half made it in.
-                            (kb, ms) => {
-                                for h in [kb, ms].into_iter().flatten() {
-                                    let _ = UnhookWindowsHookEx(h);
-                                }
-                                let _ = ready_tx
-                                    .send(Err("SetWindowsHookExW failed (LL hooks)".to_string()));
-                                return;
-                            }
+                        let Ok(hook) = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), None, 0)
+                        else {
+                            let _ = ready_tx
+                                .send(Err("SetWindowsHookExW failed (WH_MOUSE_LL)".to_string()));
+                            return;
                         };
 
                         // Force the message queue into existence so the
@@ -426,14 +382,13 @@ mod imp {
                             DispatchMessageW(&msg);
                         }
 
-                        let _ = UnhookWindowsHookEx(kb);
-                        let _ = UnhookWindowsHookEx(ms);
+                        let _ = UnhookWindowsHookEx(hook);
                     }
                 })
                 .map_err(|e| format!("failed to spawn the input-hook thread: {e}"))?;
 
             match ready_rx.recv() {
-                Ok(Ok(thread_id)) => Ok(InputHook {
+                Ok(Ok(thread_id)) => Ok(MouseHook {
                     thread_id,
                     thread: Some(thread),
                 }),
@@ -444,17 +399,9 @@ mod imp {
                 Err(_) => Err("the input-hook thread died during startup".to_string()),
             }
         }
-
-        /// Current `(button bitmask, sorted VK codes down)`.
-        pub fn snapshot(&self) -> (u32, Vec<u32>) {
-            match CTX.get() {
-                Some(ctx) => ctx.state.snapshot(),
-                None => (0, Vec::new()),
-            }
-        }
     }
 
-    impl Drop for InputHook {
+    impl Drop for MouseHook {
         fn drop(&mut self) {
             let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
             if let Some(thread) = self.thread.take() {
@@ -466,11 +413,11 @@ mod imp {
 
 #[cfg(target_os = "macos")]
 mod imp {
-    use std::ffi::{c_ulong, c_void};
+    use std::ffi::c_void;
     use std::ptr::NonNull;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::mpsc;
-    use std::sync::{Arc, OnceLock};
+    use std::sync::Arc;
 
     use objc2_core_foundation::{
         kCFRunLoopCommonModes, kCFRunLoopDefaultMode, CFMachPort, CFRetained, CFRunLoop,
@@ -480,18 +427,13 @@ mod imp {
         CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventTapProxy, CGEventType,
     };
 
-    use super::{
-        cg_button_bit, modifier_mask, modifier_twins, EventSink, InputState, RawEvent, RawEventKind,
-    };
+    use super::{cg_button_bit, send, HookCtx, RawEventKind};
 
     const fn ev(t: CGEventType) -> CGEventMask {
         1 << t.0
     }
 
-    const EVENT_MASK: CGEventMask = ev(CGEventType::KeyDown)
-        | ev(CGEventType::KeyUp)
-        | ev(CGEventType::FlagsChanged)
-        | ev(CGEventType::LeftMouseDown)
+    const EVENT_MASK: CGEventMask = ev(CGEventType::LeftMouseDown)
         | ev(CGEventType::LeftMouseUp)
         | ev(CGEventType::RightMouseDown)
         | ev(CGEventType::RightMouseUp)
@@ -506,53 +448,12 @@ mod imp {
     /// `platform::macos::get_mouse_info` samples button state from.
     const COMBINED_SESSION_STATE: CGEventSourceStateID = CGEventSourceStateID::CombinedSessionState;
 
-    /// The tap callback gets a `user_info` pointer, but the sink must outlive
-    /// any in-flight callback, so the context lives in a process-wide static
-    /// exactly as on Windows. One hook per process.
-    struct HookCtx {
-        state: InputState,
-        sink: EventSink,
-        /// The tap's `CFMachPort`, published once `CGEventTapCreate` returns so
-        /// the callback can re-arm itself. 0 until then.
-        tap: AtomicUsize,
-    }
-
-    static CTX: OnceLock<HookCtx> = OnceLock::new();
-
-    fn send(kind: RawEventKind) {
-        if let Some(ctx) = CTX.get() {
-            let t_ns = unsafe { prisc_obs_sys::os_gettime_ns() };
-            (ctx.sink)(RawEvent { t_ns, kind });
-        }
-    }
-
-    /// Best-effort character for a key press (DESIGN §1: dead-key imperfection
-    /// accepted). `CGEventKeyboardGetUnicodeString` applies the active keyboard
-    /// layout and the event's own modifier flags, so unlike the Windows path
-    /// there is no keyboard state to rebuild by hand.
-    fn translate_char(event: &CGEvent) -> Option<char> {
-        let mut buf = [0u16; 8];
-        let mut len: c_ulong = 0;
-        unsafe {
-            CGEvent::keyboard_get_unicode_string(
-                Some(event),
-                buf.len() as c_ulong,
-                &mut len,
-                buf.as_mut_ptr(),
-            )
-        };
-        let len = (len as usize).min(buf.len());
-        if len == 0 {
-            return None;
-        }
-        char::decode_utf16(buf[..len].iter().copied())
-            .next()
-            .and_then(Result::ok)
-            .filter(|c| !c.is_control())
-    }
+    /// The tap's `CFMachPort`, published once `CGEventTapCreate` returns so the
+    /// callback can re-arm itself. 0 until then.
+    static TAP: AtomicUsize = AtomicUsize::new(0);
 
     /// Drops keys the OS no longer reports as held, emitting the up edge the
-    /// tap never got.
+    /// keyboard tap never got.
     ///
     /// A key pressed just before secure input engages — the screen locking
     /// mid-keystroke is the easy way to reproduce it — never delivers its up
@@ -563,7 +464,7 @@ mod imp {
     /// Keys only: secure input withholds key events specifically, while mouse
     /// events keep flowing, so buttons have no equivalent stranding path.
     /// Called once per rendered frame, and typically iterates nothing.
-    fn release_stranded_keys(ctx: &HookCtx) {
+    pub(super) fn release_stranded_keys(ctx: &HookCtx) {
         let (_, keys) = ctx.state.snapshot();
         for vk in keys {
             // Reads true key state without a tap — so it stays truthful even
@@ -583,7 +484,7 @@ mod imp {
     ) -> *mut CGEvent {
         // Listen-only: the event is passed through untouched.
         let pass = event.as_ptr();
-        let Some(ctx) = CTX.get() else { return pass };
+        let Some(ctx) = super::CTX.get() else { return pass };
         let event = event.as_ref();
 
         // A slow callback — or a burst the OS decides to protect itself from —
@@ -592,80 +493,34 @@ mod imp {
         if etype == CGEventType::TapDisabledByTimeout
             || etype == CGEventType::TapDisabledByUserInput
         {
-            let tap = ctx.tap.load(Ordering::Acquire) as *const CFMachPort;
+            let tap = TAP.load(Ordering::Acquire) as *const CFMachPort;
             if !tap.is_null() {
                 CGEvent::tap_enable(&*tap, true);
             }
             return pass;
         }
 
-        match etype {
-            CGEventType::KeyDown => {
-                let vk =
-                    CGEvent::integer_value_field(Some(event), CGEventField::KeyboardEventKeycode)
-                        as u32;
-                // A repeat finds the bit already set — state only.
-                if !ctx.state.key_down(vk) {
-                    send(RawEventKind::KeyDown {
-                        vk,
-                        ch: translate_char(event),
-                    });
-                }
+        let down = match etype {
+            CGEventType::LeftMouseDown
+            | CGEventType::RightMouseDown
+            | CGEventType::OtherMouseDown => true,
+            CGEventType::LeftMouseUp | CGEventType::RightMouseUp | CGEventType::OtherMouseUp => {
+                false
             }
-            CGEventType::KeyUp => {
-                let vk =
-                    CGEvent::integer_value_field(Some(event), CGEventField::KeyboardEventKeycode)
-                        as u32;
-                ctx.state.key_up(vk);
-                send(RawEventKind::KeyUp { vk });
-            }
-            // Modifiers never produce key up/down; they report the new flag set.
-            // Caps lock therefore reads as held for as long as the lock is on,
-            // which is the state a consumer actually wants to render.
-            CGEventType::FlagsChanged => {
-                let vk =
-                    CGEvent::integer_value_field(Some(event), CGEventField::KeyboardEventKeycode)
-                        as u32;
-                if let Some(mask) = modifier_mask(vk) {
-                    if CGEvent::flags(Some(event)).bits() & mask != 0 {
-                        if !ctx.state.key_down(vk) {
-                            send(RawEventKind::KeyDown { vk, ch: None });
-                        }
-                    } else {
-                        for kc in modifier_twins(mask) {
-                            if ctx.state.is_down(kc) {
-                                ctx.state.key_up(kc);
-                                send(RawEventKind::KeyUp { vk: kc });
-                            }
-                        }
-                    }
-                }
-            }
-            _ => {
-                let down = match etype {
-                    CGEventType::LeftMouseDown
-                    | CGEventType::RightMouseDown
-                    | CGEventType::OtherMouseDown => true,
-                    CGEventType::LeftMouseUp
-                    | CGEventType::RightMouseUp
-                    | CGEventType::OtherMouseUp => false,
-                    _ => return pass,
-                };
-                let n =
-                    CGEvent::integer_value_field(Some(event), CGEventField::MouseEventButtonNumber);
-                if let Some(btn) = cg_button_bit(n) {
-                    // Global display points, top-left origin — the same space
-                    // as `CGDisplayBounds`, hence as frame-row x/y (§1.1).
-                    let p = CGEvent::location(Some(event));
-                    let (x, y) = (p.x as i32, p.y as i32);
-                    if down {
-                        ctx.state.button_down(btn);
-                        send(RawEventKind::MouseDown { btn, x, y });
-                    } else {
-                        ctx.state.button_up(btn);
-                        send(RawEventKind::MouseUp { btn, x, y });
-                    }
-                }
+            _ => return pass,
+        };
+        let n = CGEvent::integer_value_field(Some(event), CGEventField::MouseEventButtonNumber);
+        if let Some(btn) = cg_button_bit(n) {
+            // Global display points, top-left origin — the same space as
+            // `CGDisplayBounds`, hence as frame-row x/y (§1.1).
+            let p = CGEvent::location(Some(event));
+            let (x, y) = (p.x as i32, p.y as i32);
+            if down {
+                ctx.state.button_down(btn);
+                send(RawEventKind::MouseDown { btn, x, y });
+            } else {
+                ctx.state.button_up(btn);
+                send(RawEventKind::MouseUp { btn, x, y });
             }
         }
 
@@ -673,9 +528,8 @@ mod imp {
     }
 
     /// Owns the tap thread. Dropping asks its run loop to stop and joins — the
-    /// thread releases the tap on the way out. Exit paths that skip Drop are
-    /// fine: the tap dies with the process.
-    pub struct InputHook {
+    /// thread releases the tap on the way out.
+    pub struct MouseHook {
         /// The tap thread's `CFRunLoop`, retained (a raw +1 from
         /// `CFRetained::into_raw`) for the lifetime of this handle so the
         /// wake-up in Drop cannot race the thread's teardown.
@@ -684,23 +538,10 @@ mod imp {
         thread: Option<std::thread::JoinHandle<()>>,
     }
 
-    impl InputHook {
-        /// Installs a listen-only `CGEventTap` on a fresh run-loop thread. Edge
-        /// events flow into `sink`; the state snapshot is read via
-        /// [`InputHook::snapshot`]. One per process (the context static is set
-        /// once).
-        pub fn start(sink: EventSink) -> Result<InputHook, String> {
-            if CTX
-                .set(HookCtx {
-                    state: InputState::new(),
-                    sink,
-                    tap: AtomicUsize::new(0),
-                })
-                .is_err()
-            {
-                return Err("input hooks are already installed in this process".to_string());
-            }
-
+    impl MouseHook {
+        /// Installs a listen-only mouse `CGEventTap` on a fresh run-loop
+        /// thread.
+        pub fn start() -> Result<MouseHook, String> {
             let stop = Arc::new(AtomicBool::new(false));
             let thread_stop = stop.clone();
             let (ready_tx, ready_rx) = mpsc::channel::<Result<usize, String>>();
@@ -720,20 +561,14 @@ mod imp {
                         Some(tap_callback),
                         std::ptr::null_mut(),
                     ) else {
-                        let _ = ready_tx.send(Err(
-                            "CGEventTapCreate failed — grant this binary Input Monitoring under \
-                             System Settings › Privacy & Security, then retry"
-                                .to_string(),
-                        ));
+                        let _ = ready_tx
+                            .send(Err("CGEventTapCreate failed for the mouse tap".to_string()));
                         return;
                     };
                     // Publish before the source goes live: the first event can
                     // arrive immediately, and the callback needs the port to
                     // re-arm itself.
-                    if let Some(ctx) = CTX.get() {
-                        ctx.tap
-                            .store(CFRetained::as_ptr(&tap).as_ptr() as usize, Ordering::Release);
-                    }
+                    TAP.store(CFRetained::as_ptr(&tap).as_ptr() as usize, Ordering::Release);
 
                     // `tap` is CFRetained: the early-return drop here (and the
                     // fall-off-the-end drop below) replaces the manual
@@ -775,7 +610,7 @@ mod imp {
                 .map_err(|e| format!("failed to spawn the input-hook thread: {e}"))?;
 
             match ready_rx.recv() {
-                Ok(Ok(runloop)) => Ok(InputHook {
+                Ok(Ok(runloop)) => Ok(MouseHook {
                     runloop,
                     stop,
                     thread: Some(thread),
@@ -787,20 +622,9 @@ mod imp {
                 Err(_) => Err("the input-hook thread died during startup".to_string()),
             }
         }
-
-        /// Current `(button bitmask, sorted CGKeyCodes down)`.
-        pub fn snapshot(&self) -> (u32, Vec<u32>) {
-            match CTX.get() {
-                Some(ctx) => {
-                    release_stranded_keys(ctx);
-                    ctx.state.snapshot()
-                }
-                None => (0, Vec::new()),
-            }
-        }
     }
 
-    impl Drop for InputHook {
+    impl Drop for MouseHook {
         fn drop(&mut self) {
             self.stop.store(true, Ordering::Release);
             // Cut the current turn short; if the loop is not running yet the
@@ -819,30 +643,20 @@ mod imp {
 }
 
 /// Linux: no global input hook. Wayland gives a non-focused client no access
-/// to other clients' input by design, and the input-capture sidecar that
-/// consumes this hook is rejected by `Cli::validate` on Linux, so `start`
-/// always fails with an explanation rather than recording nothing.
+/// to other clients' input by design (and `prisc_hotkeys` has no Linux backend
+/// either), and the input-capture sidecar that consumes this hook is rejected
+/// by `Cli::validate` on Linux, so `start` always fails with an explanation
+/// rather than recording nothing.
 ///
-/// The hook type is uninhabited (it wraps [`std::convert::Infallible`]): since
-/// `start` can never produce one, the compiler proves `snapshot` unreachable
-/// instead of the stub returning a made-up empty state.
+/// The hook type is uninhabited: since `start` can never produce one, no
+/// [`InputHook`] can exist on Linux either.
 #[cfg(target_os = "linux")]
 mod imp {
-    use std::convert::Infallible;
+    pub enum MouseHook {}
 
-    use super::EventSink;
-
-    pub struct InputHook {
-        never: Infallible,
-    }
-
-    impl InputHook {
-        pub fn start(_sink: EventSink) -> Result<InputHook, String> {
+    impl MouseHook {
+        pub fn start() -> Result<MouseHook, String> {
             Err("global input capture is not supported on Linux".to_string())
-        }
-
-        pub fn snapshot(&self) -> (u32, Vec<u32>) {
-            match self.never {}
         }
     }
 }
@@ -905,18 +719,6 @@ mod tests {
         assert_eq!(s.snapshot().1, vec![65]);
     }
 
-    #[test]
-    fn is_down_tracks_the_bitset() {
-        let s = InputState::new();
-        assert!(!s.is_down(56));
-        s.key_down(56);
-        assert!(s.is_down(56));
-        // A key 64 apart must not read as down through word aliasing.
-        assert!(!s.is_down(120));
-        s.key_up(56);
-        assert!(!s.is_down(56));
-    }
-
     #[cfg(windows)]
     #[test]
     fn xbutton_hiword_maps_to_the_bitmask() {
@@ -938,65 +740,5 @@ mod tests {
         assert_eq!(cg_button_bit(5), None);
         assert_eq!(cg_button_bit(31), None);
         assert_eq!(cg_button_bit(-1), None);
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn modifier_keycodes_map_to_their_flag_bits() {
-        // Left/right twins share a bit — that sharing is the whole reason
-        // `modifier_twins` exists, so pin it.
-        assert_eq!(modifier_mask(56), modifier_mask(60)); // shift
-        assert_eq!(modifier_mask(54), modifier_mask(55)); // command
-        assert_eq!(modifier_mask(58), modifier_mask(61)); // option
-        assert_eq!(modifier_mask(59), modifier_mask(62)); // control
-                                                          // Distinct modifiers must not collide.
-        assert_ne!(modifier_mask(56), modifier_mask(59));
-        assert_ne!(modifier_mask(57), modifier_mask(63));
-        // A normal key (kVK_ANSI_A) is not a modifier.
-        assert_eq!(modifier_mask(0), None);
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn modifier_twins_covers_both_sides_of_a_shared_bit() {
-        let shift = modifier_mask(56).unwrap();
-        let mut twins: Vec<u32> = modifier_twins(shift).collect();
-        twins.sort_unstable();
-        assert_eq!(twins, vec![56, 60]);
-
-        // Caps lock and fn are unpaired: sweeping them must not touch anything
-        // else.
-        let caps = modifier_mask(57).unwrap();
-        assert_eq!(modifier_twins(caps).collect::<Vec<_>>(), vec![57]);
-        let func = modifier_mask(63).unwrap();
-        assert_eq!(modifier_twins(func).collect::<Vec<_>>(), vec![63]);
-    }
-
-    /// Releasing one shift while the other is held reports the shared bit as
-    /// still set, so only the final release clears it — at which point both
-    /// twins must come up. Without the sweep the first-released key stays down
-    /// for the rest of the session.
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn shared_modifier_bit_clearing_releases_both_twins() {
-        let s = InputState::new();
-        let shift = modifier_mask(56).unwrap();
-
-        s.key_down(56); // left shift down
-        s.key_down(60); // right shift down
-        assert_eq!(s.snapshot().1, vec![56, 60]);
-
-        // Left released, bit still set (right held): the flags-changed arm
-        // treats a set bit as a press, which the bitset suppresses as a repeat.
-        assert!(s.key_down(56));
-        assert_eq!(s.snapshot().1, vec![56, 60]);
-
-        // Right released, bit now clear: sweep the pair.
-        for kc in modifier_twins(shift) {
-            if s.is_down(kc) {
-                s.key_up(kc);
-            }
-        }
-        assert!(s.snapshot().1.is_empty());
     }
 }

@@ -5,7 +5,7 @@
 //!
 //! Threading: a libobs tick callback (graphics thread, `tracker.rs` pattern)
 //! samples the frame time, cursor and hook-state snapshot once per rendered
-//! frame; the hook thread delivers edge events. Both only *send* on a channel
+//! frame; the input hooks deliver edge events. Both only *send* on a channel
 //! — all serialization and file I/O happen on a dedicated writer thread (no
 //! blocking I/O on the graphics thread, DESIGN §2). The tick also rasterizes
 //! the live cursor (`platform::take_cursor_sprite`, cheap steady state) and
@@ -424,7 +424,7 @@ fn drain_pending(
     }
 }
 
-/// The hook thread only sends. Its existing pause gate and encoder-offset
+/// The input hooks only send. The pause gate and encoder-offset
 /// read happen on initial writer receipt, never when a buffered event drains.
 /// Frames already carry the pause offset sampled on their graphics tick.
 fn writer_loop(
@@ -665,7 +665,7 @@ impl InputCapture {
             })
             .map_err(|e| format!("failed to spawn the input-capture writer: {e}"))?;
 
-        // The hook thread forwards edges into the writer channel; timestamp
+        // The input hooks forward edges into the writer channel; timestamp
         // mapping and the pause gate run on the writer thread.
         let hook_tx = tx.clone();
         let hook = InputHook::start(Box::new(move |ev| {

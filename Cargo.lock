@@ -3634,6 +3634,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "png 0.18.1",
  "prisc_build_support",
+ "prisc_hotkeys",
  "prisc_obs",
  "prisc_obs_platform",
  "prisc_obs_sys",

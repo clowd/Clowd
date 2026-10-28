@@ -8,6 +8,9 @@ license = "GPL-2.0-or-later"
 prisc_obs = { workspace = true }
 prisc_obs_sys = { workspace = true }
 prisc_obs_platform = { workspace = true }
+# The keyboard half of --input-capture: the observe stream of Prisc's one keyboard hook
+# (src/input_hook.rs). The mouse hook stays local; prisc_hotkeys is keyboard only.
+prisc_hotkeys = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
