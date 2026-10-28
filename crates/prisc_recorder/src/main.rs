@@ -6,9 +6,7 @@ mod encoder_config;
 mod frame_clock;
 mod input_capture;
 mod input_hook;
-mod platform;
 mod recorder;
-mod region;
 mod settings;
 mod status;
 mod tracker;
@@ -17,6 +15,11 @@ mod webcam;
 mod window_capture;
 
 use clap::Parser;
+// The platform layer and the region math live in prisc_obs_platform, shared with
+// prisc_share_region; every module here reaches them as `crate::platform` and
+// `crate::region`.
+use prisc_obs_platform::region;
+use prisc_obs_platform as platform;
 
 fn main() {
     // Route every libobs log line to stderr before anything else can touch

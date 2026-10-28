@@ -60,20 +60,31 @@ windows = { workspace = true, features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { workspace = true }
+# Cursor classification and sprite capture (macos.rs cursor_shape): the stock
+# NSCursor set, the representation ladder, and the PNG encode via
+# representationUsingType:properties:. NSApplication is bootstrapped because
+# +[NSCursor arrowCursor] returns nil without one.
+objc2-app-kit = { workspace = true, features = [
+    "NSApplication",
+    "NSResponder",
+    "NSCursor",
+    "NSImage",
+    "NSImageRep",
+    "NSBitmapImageRep",
+    # Methods taking CGFloat / NSSize are cfg-gated on this in the generated
+    # bindings.
+    "objc2-core-foundation",
+] }
 objc2-core-foundation = { workspace = true, features = [
     "CFCGTypes",
     "CFString",
     "CFUUID",
-    # Window capture (platform/macos.rs): CGWindowListCopyWindowInfo hands back
-    # a CFArray of CFDictionary window descriptions whose values are CFNumbers.
+    # Window capture: CGWindowListCopyWindowInfo hands back a CFArray of
+    # CFDictionary window descriptions whose values are CFNumbers.
     "CFArray",
     "CFDictionary",
     "CFNumber",
-    # Input hook (input_hook.rs): the event tap's CFMachPort + run-loop plumbing;
-    # CFDate gates CFRunLoopRunInMode (CFTimeInterval lives in CFDate.h).
-    "CFMachPort",
-    "CFRunLoop",
-    "CFDate",
 ] }
 objc2-core-graphics = { workspace = true, features = [
     "CGDirectDisplay",
@@ -86,10 +97,14 @@ objc2-core-graphics = { workspace = true, features = [
     # only public answer; the binding also needs `libc` (boolean_t return).
     "CGRemoteOperation",
     # CGWindowListCopyWindowInfo + the kCGWindow* description keys: the
-    # --window-capture enumerator (platform/macos.rs).
+    # --window-capture enumerator.
     "CGWindow",
     "libc",
 ] }
+# The cursor hash (TIFF NSData bytes) and the sprite PNG encode (NSData plus the
+# empty properties NSDictionary it takes; the representation list is an
+# NSArray).
+objc2-foundation = { workspace = true, features = ["NSArray", "NSData", "NSDictionary", "NSGeometry", "NSString"] }
 
 [build-dependencies]
 prisc_build_support = { workspace = true }

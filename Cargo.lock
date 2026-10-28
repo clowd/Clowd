@@ -3602,8 +3602,11 @@ name = "prisc_obs_platform"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
  "prisc_build_support",
  "prisc_obs",
  "prisc_obs_sys",
@@ -3627,11 +3630,8 @@ dependencies = [
  "clap",
  "ctrlc",
  "libc",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-core-graphics",
- "objc2-foundation 0.3.2",
  "png 0.18.1",
  "prisc_build_support",
  "prisc_hotkeys",

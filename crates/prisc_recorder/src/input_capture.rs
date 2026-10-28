@@ -44,7 +44,8 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use crate::cursor_sprite::{self, SpriteEvent};
+use crate::cursor_sprite;
+use prisc_obs_platform::cursor_sprite::SpriteEvent;
 use crate::frame_clock::FrameClock;
 use crate::input_hook::{InputHook, RawEvent, RawEventKind};
 use crate::platform::{self, MonitorInfo};
@@ -1085,7 +1086,7 @@ mod tests {
 
     // -- writer sprite cache -------------------------------------------------
 
-    use crate::cursor_sprite::{RawSprite, SpritePixels};
+    use prisc_obs_platform::cursor_sprite::{RawSprite, SpritePixels};
 
     /// A 1x1 sprite whose content is controlled by `seed`, so distinct seeds
     /// dedupe apart and equal seeds dedupe together.
