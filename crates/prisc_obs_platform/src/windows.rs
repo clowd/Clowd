@@ -262,11 +262,11 @@ pub const WEBCAM_SOURCE_ID: &str = "dshow_input";
 /// The `WEBCAM_SOURCE_ID` settings key (and property) holding the device id.
 pub const WEBCAM_DEVICE_KEY: &str = "video_device_id";
 
-/// Cursor position (physical px — the process is per-monitor-v2 DPI aware),
+/// Cursor position (physical px; the process is per-monitor-v2 DPI aware),
 /// button state, and the DPI zoom of the monitor under the cursor.
 ///
 /// `GetAsyncKeyState`'s high bit is the *current* physical down state, so a
-/// click is caught as long as the button is still held on some tick — the same
+/// click is caught as long as the button is still held on some tick, the same
 /// sampling the C++ original does.
 pub fn get_mouse_info() -> MouseInfo {
     let Some(p) = desktop::cursor_position() else {
@@ -295,13 +295,13 @@ pub fn get_mouse_info() -> MouseInfo {
 /// constants (LoadCursorW with a null module returns the same shared handle
 /// every call), so caching once is sound. Entries whose cursor fails to load
 /// are skipped (IDC_PERSON / IDC_PIN are Win10-era additions and may be
-/// absent from some cursor themes) — an unmatched handle reads as `custom`.
+/// absent from some cursor themes); an unmatched handle reads as `custom`.
 fn stock_cursor_table() -> &'static Vec<(isize, CursorKind)> {
     use std::sync::OnceLock;
     static TABLE: OnceLock<Vec<(isize, CursorKind)>> = OnceLock::new();
     TABLE.get_or_init(|| {
         // IDC_PIN (the Win10 "location/pin" cursor) is the closest stock match
-        // for the wire contract's `pen` kind — there is no IDC_PEN.
+        // for the wire contract's `pen` kind; there is no IDC_PEN.
         let ids: [(windows::core::PCWSTR, CursorKind); 16] = [
             (IDC_ARROW, CursorKind::Arrow),
             (IDC_IBEAM, CursorKind::IBeam),
@@ -331,7 +331,7 @@ fn stock_cursor_table() -> &'static Vec<(isize, CursorKind)> {
 
 /// Cursor position + classified shape in one `GetCursorInfo` call (position,
 /// showing flag and the live HCURSOR come from the same snapshot, so the
-/// classification — and the sprite rasterized from `handle` — can never
+/// classification (and the sprite rasterized from `handle`) can never
 /// disagree with the sampled position).
 pub fn get_cursor_state() -> CursorState {
     let Some(cursor) = desktop::cursor_snapshot() else {
@@ -359,7 +359,7 @@ pub fn get_cursor_state() -> CursorState {
     }
 }
 
-/// Rasterizes the sampled cursor into a sprite event — see [`sprite`] for the
+/// Rasterizes the sampled cursor into a sprite event; see [`sprite`] for the
 /// mechanics. Called once per tick with the state returned by
 /// [`get_cursor_state`] on the same tick.
 pub fn take_cursor_sprite(state: &CursorState) -> SpriteEvent {
@@ -372,11 +372,11 @@ pub fn take_cursor_sprite(state: &CursorState) -> SpriteEvent {
 /// The tick thread calls [`take`] once per rendered frame with the same
 /// `GetCursorInfo` snapshot the frame row records. Steady state is a handle
 /// comparison plus one `GetCursorFrameInfo` probe; pixels are only read when
-/// the handle changes or the cursor is animated (~50–150 µs — the writer
+/// the handle changes or the cursor is animated (~50–150 µs; the writer
 /// thread's content-hash dedupe keeps repeated animation frames to one row
 /// each).
 ///
-/// DPI: `GetIconInfo` yields the size the shared handle holds — the system
+/// DPI: `GetIconInfo` yields the size the shared handle holds: the system
 /// cursor size (logon DPI × the accessibility size multiplier), which is
 /// physical pixels on uniform-DPI machines. Mixed-DPI parity is an open
 /// verification item, deliberately not compensated for here.
@@ -407,7 +407,7 @@ mod sprite {
     pub fn take(state: &CursorState) -> SpriteEvent {
         if state.kind == CursorKind::Hidden || state.handle == 0 {
             // A `Hidden` event makes the writer drop its `ci` ref, and only a
-            // fresh `Candidate` can restore it — so the tracker must forget
+            // fresh `Candidate` can restore it, so the tracker must forget
             // the handle too. Otherwise a cursor that auto-hides and comes
             // back as the same HCURSOR (typing, fullscreen video) would read
             // as `Unchanged` and pin the ref absent until the shape changes.
@@ -425,7 +425,7 @@ mod sprite {
         let hcur = HCURSOR(state.handle as *mut std::ffi::c_void);
         let event = match frame_info(hcur) {
             // A static cursor whose handle did not change is byte-identical to
-            // what the writer already holds — skip the pixel work entirely.
+            // what the writer already holds, so skip the pixel work entirely.
             AnimInfo::Static if !changed => return SpriteEvent::Unchanged,
             AnimInfo::Static => rasterize_copied(hcur, state.kind),
             AnimInfo::Animated {
@@ -440,7 +440,7 @@ mod sprite {
                 rasterize_copied(frame, state.kind)
             }
             // `GetCursorFrameInfo` unavailable: animation cannot be detected,
-            // so degrade to rasterizing every tick — the writer's dedupe makes
+            // so degrade to rasterizing every tick; the writer's dedupe makes
             // the steady state one hash per frame, no extra rows.
             AnimInfo::Unknown => rasterize_copied(hcur, state.kind),
         };
@@ -484,7 +484,7 @@ mod sprite {
         },
     }
 
-    /// `user32!GetCursorFrameInfo` — undocumented but stable since XP (prior
+    /// `user32!GetCursorFrameInfo`: undocumented but stable since XP (prior
     /// art in OBS-adjacent recorders). Returns the HCURSOR of animation step
     /// `istep` and reports the step rate (jiffies) and step count. The export
     /// has no `windows`-crate binding, so it stays a GetProcAddress-resolved
@@ -522,7 +522,7 @@ mod sprite {
     }
 
     /// The HCURSOR of animation step `istep`, owned by the cursor (not
-    /// destroyed here — only its `CopyIcon` copy is).
+    /// destroyed here; only its `CopyIcon` copy is).
     fn animation_frame(hcur: HCURSOR, istep: u32) -> Option<HCURSOR> {
         let f = frame_info_fn()?;
         let mut rate: u32 = 0;
@@ -542,7 +542,7 @@ pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
 
 /// Settings for a `WEBCAM_SOURCE_ID` instance capturing `device_id` (a value
 /// exactly as printed by `--list-cameras`, i.e. win-dshow's escaped
-/// `<name>:<path>` form — no re-escaping happens here).
+/// `<name>:<path>` form; no re-escaping happens here).
 pub fn webcam_settings(device_id: &str) -> ObsData {
     let settings = ObsData::new();
     settings.set_string(WEBCAM_DEVICE_KEY, device_id);
@@ -604,7 +604,7 @@ mod endpoint_volume {
 
     /// Per-thread one-time CoInitializeEx. `RPC_E_CHANGED_MODE` (already
     /// initialized STA by someone else) still leaves COM usable. Never
-    /// uninitialized — callers are process-lifetime threads and the process
+    /// uninitialized: callers are process-lifetime threads and the process
     /// exits via `ExitProcess` anyway.
     fn com_ready() -> bool {
         thread_local! {
@@ -621,7 +621,7 @@ mod endpoint_volume {
         })
     }
 
-    /// The endpoint's master volume in dB — but only when Windows applies that
+    /// The endpoint's master volume in dB, but only when Windows applies that
     /// volume in software (no `ENDPOINT_HARDWARE_SUPPORT_VOLUME`), which is
     /// exactly when it lands inside the loopback stream. `None` means "do not
     /// compensate": hardware volume, muted (the capture is silent anyway),
@@ -635,7 +635,7 @@ mod endpoint_volume {
                 CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
 
             let device = if device_id == "default" {
-                // eConsole — the role win-wasapi resolves "default" with, so
+                // eConsole: the role win-wasapi resolves "default" with, so
                 // both sides always talk about the same device.
                 enumerator.GetDefaultAudioEndpoint(eRender, eConsole).ok()?
             } else {
@@ -714,7 +714,6 @@ mod tests {
             CaptureMethod::Wgc
         );
     }
-
 
     #[test]
     fn compensation_inverts_the_master_volume() {

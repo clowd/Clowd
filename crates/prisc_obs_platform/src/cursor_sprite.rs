@@ -2,7 +2,7 @@
 //! sidecar rows (DESIGN §1, jsonl v2). The recorder's writer thread turns a
 //! [`RawSprite`] into its wire row (`prisc_recorder::cursor_sprite`).
 //!
-//! The platform modules rasterize the live cursor into a [`RawSprite`] — an
+//! The platform modules rasterize the live cursor into a [`RawSprite`]: an
 //! alpha color plane plus, for legacy XOR cursors, a separate mask plane so
 //! the editor can recompute screen inversion against the actual underlying
 //! pixels. Everything here is pure and unit-testable: decomposing Windows
@@ -20,15 +20,15 @@
 //! white/black, so near-white colors (all channels ≥ 0xC0) become a white
 //! (invert) mask pixel and anything else degrades to an opaque `bmp` pixel of
 //! that color. Such cursors are vanishingly rare; white (exact invert) and
-//! black (exact no-op) — the cases that actually occur — are lossless.
+//! black (exact no-op), the cases that actually occur, are lossless.
+
+use prisc_rust_core::desktop::{mono_bit, mono_stride, IconBitmap, IconPixels};
 
 /// A rasterized cursor, straight off the platform capture. Pixel planes are
 /// raw and unencoded (except where noted on [`SpritePixels`]); the writer
 /// thread turns a deduped sprite into its wire row.
-use prisc_rust_core::desktop::{mono_bit, mono_stride, IconBitmap, IconPixels};
-
 pub struct RawSprite {
-    /// The CursorKind wire string classified at capture time — the same value
+    /// The CursorKind wire string classified at capture time, the same value
     /// the frame row's `c` carries (kind is an attribute of the shape).
     pub kind: &'static str,
     /// Native size in physical pixels.
@@ -58,7 +58,7 @@ pub enum SpritePixels {
 }
 
 impl SpritePixels {
-    /// The payload bytes, whichever encoding — the dedupe hash input.
+    /// The payload bytes, whichever encoding: the dedupe hash input.
     pub fn bytes(&self) -> &[u8] {
         match self {
             SpritePixels::Bgra(b) | SpritePixels::Png(b) => b,
@@ -79,7 +79,7 @@ impl RawSprite {
         h
     }
 
-    /// Total payload size — the dedupe key's length component, and what the
+    /// Total payload size: the dedupe key's length component, and what the
     /// writer's cumulative sprite-bytes cap counts.
     pub fn byte_len(&self) -> usize {
         self.bmp.bytes().len() + self.mask.as_ref().map_or(0, |m| m.len())
@@ -91,7 +91,7 @@ impl RawSprite {
 /// (`--input-capture` is rejected there), so nothing constructs it on Linux.
 #[cfg_attr(target_os = "linux", allow(dead_code))]
 pub enum SpriteEvent {
-    /// Same cursor as last tick — keep the current sprite id.
+    /// Same cursor as last tick: keep the current sprite id.
     Unchanged,
     /// No sprite available (cursor hidden, or capture failed/degraded): frame
     /// rows drop their `ci` reference until a new candidate lands.
@@ -105,7 +105,7 @@ pub enum SpriteEvent {
 // Hashing
 // ---------------------------------------------------------------------------
 
-/// FNV-1a 64 offset basis — the same constants as the macOS cursor
+/// FNV-1a 64 offset basis, the same constants as the macOS cursor
 /// classifier (`macos.rs`). Note its prime carries one hex zero more than
 /// textbook FNV-1a; the value never leaves the process (dedupe keys only), so
 /// internal consistency is the whole contract.
@@ -197,8 +197,8 @@ fn decompose_mono(and: &[u8], xor: &[u8], w: u32, h: u32, stride: usize) -> (Vec
 /// ownership. `color` is `w * h * 4` top-down BGRA.
 ///
 /// AND=0 → the color plane owns the pixel (opaque). AND=1 → an XOR pixel:
-/// black is a no-op (mask black), white — and near-white, all channels ≥
-/// 0xC0 — is a screen invert (mask white), anything else is approximated as
+/// black is a no-op (mask black), white (and near-white, all channels ≥
+/// 0xC0) is a screen invert (mask white), anything else is approximated as
 /// an opaque `bmp` pixel (see the module docs). The mask is `None` when no
 /// pixel needed it.
 fn decompose_masked_color(
@@ -293,7 +293,7 @@ mod tests {
         // AND=1 XOR=0: transparent, mask black (the preserved no-op).
         assert_eq!(px(&bmp, 4, 2, 0), TRANSPARENT);
         assert_eq!(px(&mask, 4, 2, 0), BLACK);
-        // AND=1 XOR=1: transparent, mask white (screen invert — the I-beam).
+        // AND=1 XOR=1: transparent, mask white (screen invert, the I-beam).
         assert_eq!(px(&bmp, 4, 3, 0), TRANSPARENT);
         assert_eq!(px(&mask, 4, 3, 0), WHITE);
     }
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn mono_respects_the_dword_aligned_stride() {
         // 33 px wide: 1bpp rows need 5 bytes but the DIB stride is 8. Pixel
-        // (32, 1) lives at row_offset + byte 4, bit 0x80 — misreading the
+        // (32, 1) lives at row_offset + byte 4, bit 0x80; misreading the
         // stride as ceil(33/8)=5 would land it in the wrong row.
         let w = 33u32;
         let stride = mono_stride(w);
@@ -378,7 +378,7 @@ mod tests {
     fn fnv1a64_is_consistent_and_chains() {
         // Empty input leaves the state untouched (true of any FNV variant).
         assert_eq!(fnv1a64(FNV_OFFSET_BASIS, b""), FNV_OFFSET_BASIS);
-        // One xor-multiply round, spelled out — guards both constants. (The
+        // One xor-multiply round, spelled out, guards both constants. (The
         // prime is macos.rs's, not textbook FNV; see the constant's docs.)
         assert_eq!(
             fnv1a64(FNV_OFFSET_BASIS, b"a"),

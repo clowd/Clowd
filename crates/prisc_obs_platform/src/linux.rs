@@ -19,8 +19,7 @@
 //!
 //! The X11, Xrandr, wayland-client and glib-2.0 libraries are linked by this
 //! crate's build script; the handful of entry points used are declared by hand
-//! below (the same approach as the macOS module's CoreGraphics externs), which
-//! is far smaller than pulling in bindgen for eight functions.
+//! below, which is far smaller than pulling in bindgen for eight functions.
 
 use std::env;
 use std::ffi::{c_char, c_int, c_ulong, c_void, CStr};
@@ -524,15 +523,15 @@ pub fn exit_process(code: i32) -> ! {
 //   is accepted and has no effect.
 
 /// Microphone capture (plugins/linux-pulseaudio). Works unchanged on PipeWire
-/// desktops through pipewire-pulse. Its device key is `device_id` — the same
-/// key the recorder sets for every platform — and `"default"` resolves to the
+/// desktops through pipewire-pulse. Its device key is `device_id` (the same
+/// key the recorder sets for every platform), and `"default"` resolves to the
 /// server's default source when capture starts.
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "pulse_input_capture";
 /// Speaker capture: records a sink's monitor source.
 const AUDIO_OUTPUT_CAPTURE_ID: &str = "pulse_output_capture";
 /// Webcam capture source (`--webcam` / `--list-cameras`): Video4Linux2.
 pub const WEBCAM_SOURCE_ID: &str = "v4l2_input";
-/// The `WEBCAM_SOURCE_ID` settings key (and property) holding the device — a
+/// The `WEBCAM_SOURCE_ID` settings key (and property) holding the device: a
 /// `/dev/videoN` path, exactly as `--list-cameras` prints it.
 pub const WEBCAM_DEVICE_KEY: &str = "device_id";
 
@@ -562,7 +561,7 @@ pub fn enumerate_windows() -> Vec<WindowInfo> {
 /// Source id + settings for a speaker (output) capture source.
 /// `pulse_output_capture` records a *monitor source*: `"default"` resolves to
 /// `<default sink>.monitor` when capture starts, and every other value is a
-/// monitor source name — which is what the plugin's own device list offers as
+/// monitor source name, which is what the plugin's own device list offers as
 /// values, so ids a client discovered through OBS pass straight through.
 pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
     let settings = ObsData::new();

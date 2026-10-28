@@ -515,7 +515,7 @@ impl Recorder {
             && !source::is_registered(platform::WEBCAM_SOURCE_ID)
         {
             fail(format_args!(
-                "Webcam source '{}' is not registered — the camera capture plugin failed \
+                "Webcam source '{}' is not registered: the camera capture plugin failed \
                  to load.\n  module bin:  {}\n  module data: {}",
                 platform::WEBCAM_SOURCE_ID,
                 paths.module_bin,

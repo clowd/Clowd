@@ -197,7 +197,7 @@ pub fn get_cursor_state() -> CursorState {
     // where macOS was drawing nothing.
     //
     // `CGCursorIsVisible` is deprecated since 10.9 but still the only public
-    // answer, and it needs no permission — the alternative is private CGS SPI.
+    // answer, and it needs no permission; the alternative is private CGS SPI.
     #[allow(deprecated)]
     let visible = objc2_core_graphics::CGCursorIsVisible();
     let kind = if visible {
@@ -206,7 +206,7 @@ pub fn get_cursor_state() -> CursorState {
         CursorKind::Hidden
     };
     // Points are fractional here (Windows' GetCursorInfo is integral), so round
-    // rather than truncate — truncation biases toward zero and would skew
+    // rather than truncate: truncation biases toward zero and would skew
     // negative coordinates on displays left of / above the primary.
     CursorState {
         x: x.round() as i32,
@@ -232,7 +232,7 @@ pub fn take_cursor_sprite(state: &CursorState) -> SpriteEvent {
 ///
 /// Windows gets a comparable `HCURSOR` straight from `GetCursorInfo`; macOS has
 /// no such handle, so the only reliable identity is the cursor's own bitmap.
-/// Hashing it costs ~470 µs — far too much to repeat every rendered frame — so
+/// Hashing it costs ~470 µs, far too much to repeat every rendered frame, so
 /// the work is gated on `CGSCurrentCursorSeed`, a change counter that costs
 /// ~2 ns to read. Steady state is therefore a couple of nanoseconds per frame,
 /// and the full classify runs only on the frames where the cursor actually
@@ -274,8 +274,8 @@ mod cursor_shape {
 
     /// Runs `f` inside an autorelease pool (`objc2::rc::autoreleasepool`).
     ///
-    /// Nothing here executes on an AppKit-managed thread — the tick callback is
-    /// libobs's graphics thread — so there is no ambient pool to catch what
+    /// Nothing here executes on an AppKit-managed thread (the tick callback is
+    /// libobs's graphics thread), so there is no ambient pool to catch what
     /// AppKit autoreleases. `TIFFRepresentation` and the PNG encode return
     /// autoreleased objects holding the cursor bitmap at every representation
     /// size; without a pool each capture strands them. Measured at ~750 KB per
@@ -286,7 +286,7 @@ mod cursor_shape {
     }
 
     /// AppKit needs an `NSApplication` to exist before `+[NSCursor
-    /// arrowCursor]` and `IBeamCursor` will resolve — they return nil in a bare
+    /// arrowCursor]` and `IBeamCursor` will resolve: they return nil in a bare
     /// CLI process, while the other stock cursors work either way. Those two
     /// are the most common cursors on screen, so the bootstrap is not optional.
     ///
@@ -297,7 +297,7 @@ mod cursor_shape {
         static INIT: OnceLock<()> = OnceLock::new();
         INIT.get_or_init(|| {
             // objc2 gates `NSApplication` behind `MainThreadMarker`, but this
-            // runs on the OBS graphics thread — where the pre-objc2 msgSend
+            // runs on the OBS graphics thread, where the pre-objc2 msgSend
             // always made this call, measured safe (module doc). Mint the
             // marker unchecked off-main rather than introduce a panic or skip
             // path the hand-rolled version did not have.
@@ -333,7 +333,7 @@ mod cursor_shape {
     /// Only unambiguous mappings are listed. macOS has no stock cursor for
     /// `Wait`/`AppStarting` (the beachball is not an `NSCursor`), `Help`,
     /// `Pen`, `Person` or `UpArrow`, and exposes the diagonal resize cursors
-    /// only as private SPI, so `SizeNwse`/`SizeNesw` are unreachable too —
+    /// only as private SPI, so `SizeNwse`/`SizeNesw` are unreachable too;
     /// anything unmatched falls through to `Custom`, which is exactly what
     /// those cases are from the wire contract's point of view.
     //
@@ -415,14 +415,14 @@ mod cursor_shape {
             // than invent a shape.
             //
             // This is the path Apple has signposted. `currentSystemCursor` is
-            // deprecated, and the AppKit header is unusually blunt about it —
+            // deprecated, and the AppKit header is unusually blunt about it:
             // "This property will always be `nil` in a future version of
             // macOS". The suggested replacement is ScreenCaptureKit's
             // `SCStreamConfiguration.showsCursor`, which composites the cursor
             // into the captured pixels and reports no shape at all, so there is
             // no supported successor for classification. When that day comes
             // this falls back to reporting `arrow` for every visible sample,
-            // which is precisely the behavior this function replaced — a
+            // which is precisely the behavior this function replaced: a
             // degradation, not a break.
             None => CursorKind::Arrow,
         }
@@ -476,7 +476,7 @@ mod cursor_shape {
     pub fn take_sprite(kind: CursorKind) -> SpriteEvent {
         if kind == CursorKind::Hidden {
             // A `Hidden` event makes the writer drop its `ci` ref, and only a
-            // fresh `Candidate` can restore it — so the seed cache must be
+            // fresh `Candidate` can restore it, so the seed cache must be
             // dropped too. The seed does not necessarily change across a
             // hide/unhide, and a stale cache would read as `Unchanged` and
             // pin the ref absent until the cursor next changes shape.
@@ -518,7 +518,7 @@ mod cursor_shape {
 
     /// Reads `currentSystemCursor` into a PNG sprite. AppKit's own PNG encode
     /// (`representationUsingType:`) yields canonical straight-alpha bytes, so
-    /// unlike Windows there is no raw plane for the writer to encode — and the
+    /// unlike Windows there is no raw plane for the writer to encode, and the
     /// cost sits behind the seed gate, exactly like the classify. macOS
     /// cursors are plain alpha bitmaps: `mask` is always `None`.
     fn capture_sprite(kind: CursorKind) -> Option<RawSprite> {
@@ -582,7 +582,7 @@ mod cursor_shape {
     }
 
     /// The densest backing scale in use, matching `region::plan_region`'s
-    /// `canvas_scale` — the factor the canvas (and therefore the sprite) is
+    /// `canvas_scale`: the factor the canvas (and therefore the sprite) is
     /// sized by.
     fn target_backing_scale() -> f64 {
         super::enumerate_monitors()
@@ -593,7 +593,7 @@ mod cursor_shape {
 
     /// The `NSImageRep` whose pixel width is closest to `target_px`.
     ///
-    /// A cursor `NSImage` carries a whole ladder of representations — 17x23,
+    /// A cursor `NSImage` carries a whole ladder of representations: 17x23,
     /// 34x46, 85x115 and 170x230 for the stock arrow on macOS 15.7, the upper
     /// rungs feeding the accessibility pointer-size slider. `TIFFRepresentation`
     /// serializes all of them and `imageRepWithData:` then returns the *first*,
@@ -668,7 +668,7 @@ pub fn enumerate_windows() -> Vec<WindowInfo> {
 /// after modules are loaded (the registration probe reads plugin state).
 ///
 /// Prefers ScreenCaptureKit system-audio capture (macOS 13+), which captures
-/// all system output — `device_id` is ignored on that path. Falls back to
+/// all system output; `device_id` is ignored on that path. Falls back to
 /// coreaudio_output_capture on macOS 12.
 pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
     if prisc_obs::source::is_registered("sck_audio_capture") {
@@ -699,7 +699,7 @@ pub fn webcam_settings(device_id: &str) -> ObsData {
 
 /// System-audio capture on macOS (ScreenCaptureKit) taps upstream of the
 /// output volume, so the Windows software-master-volume problem does not
-/// exist here — compensation is always unity.
+/// exist here: compensation is always unity.
 pub fn speaker_compensation_gain(_device_id: &str) -> f32 {
     1.0
 }

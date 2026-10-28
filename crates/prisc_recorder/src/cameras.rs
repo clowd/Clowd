@@ -10,7 +10,6 @@
 //! Windows, an `AVCaptureDevice.uniqueID` on macOS — and is passed to
 //! `--webcam` verbatim.
 
-
 use prisc_obs::audio::AudioInfo;
 use prisc_obs::context::ObsContext;
 use prisc_obs::video::VideoInfo;

@@ -190,7 +190,7 @@ pub struct ObsPaths {
 /// Live pointer state, sampled once per rendered frame by the click tracker.
 #[derive(Debug, Clone, Copy)]
 pub struct MouseInfo {
-    /// Cursor position in the platform capture coordinate space (§1.1) — the
+    /// Cursor position in the platform capture coordinate space (§1.1), the
     /// same space as `MonitorInfo::x/y` and `--region`.
     pub x: f64,
     pub y: f64,
@@ -198,14 +198,14 @@ pub struct MouseInfo {
     pub pressed: bool,
     /// Density factor for the highlight's on-screen size, so a click looks the
     /// same physical size on every display. Windows: the cursor monitor's
-    /// DPI / 96, because capture coords are physical pixels. macOS: 1.0 —
+    /// DPI / 96, because capture coords are physical pixels. macOS: 1.0, because
     /// capture coords are points, which are already density-independent.
     pub scale: f64,
 }
 
 /// What the system cursor currently looks like, classified against the stock
 /// cursor set. The string forms are the input-capture wire contract (`c` in
-/// frame rows) — the editor keys its themed cursor assets off them, so the
+/// frame rows); the editor keys its themed cursor assets off them, so the
 /// list is append-only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 // The variant list is the full wire contract; only the Windows classifier
@@ -264,11 +264,11 @@ impl CursorKind {
 /// One on-screen top-level window, sampled by `--window-capture`.
 ///
 /// Windows are reported topmost-first (the platform z-order), and the bounds
-/// are the *visible* frame in the platform capture coordinate space — the same
+/// are the *visible* frame in the platform capture coordinate space, the same
 /// space as `MonitorInfo::x/y`, `CursorState::x/y` and `--region`. On Windows
 /// that means the DWM extended frame bounds (physical px) rather than
 /// `GetWindowRect`, whose invisible resize border would inflate every window by
-/// several pixels; on macOS it is `kCGWindowBounds` (points, top-left origin —
+/// several pixels; on macOS it is `kCGWindowBounds` (points, top-left origin,
 /// the same convention as `CGDisplayBounds`).
 #[derive(Debug, Clone)]
 pub struct WindowInfo {
@@ -283,8 +283,8 @@ pub struct WindowInfo {
     pub y: i32,
     pub w: u32,
     pub h: u32,
-    /// Window title as the user sees it; may be empty (a titleless window, or
-    /// — on macOS — no Screen Recording permission).
+    /// Window title as the user sees it; may be empty (a titleless window, or,
+    /// on macOS, no Screen Recording permission).
     pub title: String,
     /// Executable file name (Windows) or application name (macOS); empty when
     /// it cannot be resolved.
