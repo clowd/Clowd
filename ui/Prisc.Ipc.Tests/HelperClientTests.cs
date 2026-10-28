@@ -289,6 +289,31 @@ namespace Prisc.Ipc.Tests
         }
 
         [Fact]
+        public async Task A_stop_kills_a_child_whose_stdin_is_full()
+        {
+            var (client, child) = await StartRecorderAsync();
+            // a child that stopped reading: the write blocks, holding the stdin lock, until the
+            // process dies
+            using var killed = new ManualResetEventSlim();
+            child.OnCommand = _ => killed.Wait();
+            child.OnKill = () =>
+            {
+                killed.Set();
+                child.Exit(-9);
+            };
+
+            var blocked = Task.Run(() => client.Send(new RecorderCommand.Start()));
+            await Task.Delay(Short);
+            Assert.False(blocked.IsCompleted);
+
+            var outcome = await client.StopAsync().WaitAsync(Generous);
+            Assert.True(child.Killed);
+            Assert.Equal(HelperFailure.Timeout, outcome.Failure);
+            await blocked.WaitAsync(Generous);
+            await client.DisposeAsync();
+        }
+
+        [Fact]
         public async Task A_held_open_pipe_does_not_hang_completion()
         {
             var (client, child) = await StartRecorderAsync();

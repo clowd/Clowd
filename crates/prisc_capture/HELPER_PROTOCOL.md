@@ -796,7 +796,9 @@ Behaviour:
 
 `StopAsync`: send `{"type":"quit"}`, close stdin, wait `spec.QuitGrace` for exit, then
 kill it (with its tree unless `KillEntireTree = false`, §7.4) and record that a kill was needed (Completion reports `Timeout`
-from then on, §7.2), wait 2 s more, then give up. Durations come from the catalog: recorder
+from then on, §7.2), wait 2 s more, then give up. The grace starts before the quit is written,
+and the write happens off the stopping thread: a `Send` blocked on a full stdin pipe holds the
+stdin lock, and must not keep the kill (which is what unblocks it) from firing. Durations come from the catalog: recorder
 65 s (§4.1: stop signal plus mp4 flush), everything else 5 s. This replaces the 2/5/10/45 s
 constants in the runners. Helper-specific readiness timeouts (recorder `initialized` 30 s,
 share `initialized` 30 s, configure/pause acks 10 s) stay in the runners as `SendAndWaitAsync`

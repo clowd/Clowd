@@ -309,10 +309,17 @@ namespace Prisc.Ipc
             // after Kill() there is nobody left to ask
             if (!_child.Exit.IsCompleted && !_killRequested)
             {
-                SendLine(IpcCodec.QuitLine);
-                CloseStdin();
+                // the grace starts before the write, and the write runs off this thread: a Send
+                // blocked on a full pipe holds the stdin lock, and must not keep the kill from firing.
+                // The kill is what unblocks that write.
+                var grace = Task.Delay(QuitGrace);
+                _ = Task.Run(() =>
+                {
+                    SendLine(IpcCodec.QuitLine);
+                    CloseStdin();
+                });
 
-                if (await Task.WhenAny(_child.Exit, Task.Delay(QuitGrace)).ConfigureAwait(false) != _child.Exit)
+                if (await Task.WhenAny(_child.Exit, grace).ConfigureAwait(false) != _child.Exit)
                 {
                     Debug.WriteLine($"Helper {_spec.Catalog} did not stop within {QuitGrace.TotalSeconds:0} s; killing it.");
                     _killedByStop = true;
