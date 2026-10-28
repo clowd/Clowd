@@ -1148,8 +1148,8 @@ unsafe fn drain_commands(app: *mut App) {
                             park_offscreen((*app).mirror, applied, SET_WINDOW_POS_FLAGS(0));
                         }
                         crate::status::out().emit(&prisc_ipc::catalog::share_region::Event::RegionChanged {
-            region: crate::status::wire_rect(applied),
-        });
+                            region: crate::status::wire_rect(applied),
+                        });
                     }
                     // Refused: nothing moved, so there is no region to ack and
                     // an echo of the unchanged one would read as a successful

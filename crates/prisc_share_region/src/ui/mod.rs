@@ -135,7 +135,7 @@ pub trait AppEvents {
     /// region would look exactly like a successful move to that region.
     fn set_region(&mut self, region: Rect) -> Result<Rect, String>;
 
-    /// Apply a new obscure mode (an `obscure`/`unobscure` command from stdin).
+    /// Apply a new obscure mode (an `obscure` command from stdin; mode `none` clears it).
     /// Purely a preview-side effect: the region and the window are unchanged.
     fn set_obscure(&mut self, mode: crate::obscure::Mode);
 

@@ -974,8 +974,8 @@ fn apply_move(request: Rect) {
     // is not fully applied until then, and this line is what Prisc resizes its
     // border to.
     crate::status::out().emit(&prisc_ipc::catalog::share_region::Event::RegionChanged {
-            region: crate::status::wire_rect(applied),
-        });
+        region: crate::status::wire_rect(applied),
+    });
 }
 
 /// `NSApplicationDidChangeScreenParametersNotification`: a display was
