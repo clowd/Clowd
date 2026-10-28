@@ -71,9 +71,18 @@ case "$(uname -s)" in
         ;;
 esac
 TRIPLE="$(rid_triple "$RID")"
-# An explicit --target, as CI builds, so both halves land in one profile dir
-# whatever the host toolchain's default target is.
-PROFILE="$ROOT/target/$TRIPLE/release"
+# Both halves land in one profile dir whatever the host toolchain's default
+# target is. --target only when the RID differs from that default: with it,
+# cargo builds into target/<triple>/, and on macOS (where libobs builds in
+# prisc_obs_sys's OUT_DIR) that would cost a second cold libobs build beside
+# the one `cargo recr` keeps in target/release.
+if [ "$TRIPLE" = "$(rustc -vV | sed -n 's/^host: //p')" ]; then
+    TARGET_ARGS=()
+    PROFILE="$ROOT/target/release"
+else
+    TARGET_ARGS=(--target "$TRIPLE")
+    PROFILE="$ROOT/target/$TRIPLE/release"
+fi
 OUT="$ROOT/build/$VERSION/$RID"
 
 echo "==> Publishing Prisc.Ui and Prisc.VideoRender ($RID, version $VERSION)"
@@ -91,7 +100,7 @@ echo "==> Building the Rust binaries (release)"
 # PRISC_VERSION stamps the Sentry release name so the Rust binaries report
 # against the same release as the shell (crates/prisc_rust_core/src/telemetry.rs).
 # shellcheck disable=SC2046 # word-split `-p <crate>` pairs
-PRISC_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml" --target "$TRIPLE" \
+PRISC_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml" ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} \
     $("$STAGING/stage-app.sh" packages "$RID")
 
 echo "==> Staging the Rust binaries beside Prisc.Ui"
@@ -103,7 +112,7 @@ echo "==> Building the recorder stack (release; libobs via CMake, 20-40 min cold
 # Needs the obs-studio submodule, cmake >= 3.28 and LLVM/libclang
 # (LIBCLANG_PATH on Windows); see BUILDING.md.
 # shellcheck disable=SC2046 # word-split `-p <crate>` pairs
-cargo build --release --manifest-path "$ROOT/Cargo.toml" --target "$TRIPLE" \
+cargo build --release --manifest-path "$ROOT/Cargo.toml" ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} \
     $(recorder_packages "$RID" | as_cargo_args)
 
 echo "==> Staging the recorder runtime into recorder/"
