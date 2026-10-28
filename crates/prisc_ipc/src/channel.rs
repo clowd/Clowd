@@ -32,7 +32,7 @@ pub fn open<E: Event>(helper: &'static str) -> Channel<E> {
             channel
         }
     };
-    channel.write(&hello(E::SPEC, helper));
+    channel.write_line(&hello(E::SPEC, helper), false);
     channel
 }
 
@@ -60,6 +60,8 @@ pub struct Channel<E> {
 struct Inner {
     out: Mutex<Box<dyn Write + Send>>,
     closed: AtomicBool,
+    /// Set under the lock once a terminal line (§1.4) is out: nothing follows it.
+    finished: AtomicBool,
     lifetime: &'static Lifetime,
 }
 
@@ -78,6 +80,7 @@ impl<E: Event> Channel<E> {
             inner: Arc::new(Inner {
                 out: Mutex::new(out),
                 closed: AtomicBool::new(false),
+                finished: AtomicBool::new(false),
                 lifetime,
             }),
             _event: PhantomData,
@@ -87,8 +90,12 @@ impl<E: Event> Channel<E> {
     /// Writes one event as one line and flushes it. Never panics. Returns false once the pipe is
     /// gone: the first failed write marks the channel closed (later emits are no-ops) and, after
     /// the lock is released, fires the quit path with [`QuitReason::StdoutClosed`].
+    ///
+    /// The first terminal event (or fatal `error`) to be written finishes the run: every emit
+    /// after it, from any thread, is dropped and returns false, so the terminal line is always
+    /// the last line on the wire even while other threads are still winding down.
     pub fn emit(&self, event: &E) -> bool {
-        self.write(event)
+        self.write_line(event, event.is_terminal())
     }
 
     /// Emits `error`, after collapsing `message` onto one line, and logs it to stderr. A fatal
@@ -113,7 +120,12 @@ impl<E: Event> Channel<E> {
         self.inner.closed.load(Ordering::SeqCst)
     }
 
-    fn write(&self, message: &impl Serialize) -> bool {
+    /// Whether a terminal line has gone out; later emits are dropped.
+    pub fn is_finished(&self) -> bool {
+        self.inner.finished.load(Ordering::SeqCst)
+    }
+
+    fn write_line(&self, message: &impl Serialize, terminal: bool) -> bool {
         let mut line = match serde_json::to_vec(message) {
             Ok(line) => line,
             Err(e) => {
@@ -128,8 +140,11 @@ impl<E: Event> Channel<E> {
                 .out
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            if self.is_closed() {
+            if self.is_closed() || self.is_finished() {
                 return false;
+            }
+            if terminal {
+                self.inner.finished.store(true, Ordering::SeqCst);
             }
             match out
                 .write_all(&line)
@@ -204,6 +219,33 @@ mod tests {
             "{\"type\":\"progress\",\"percent\":1}\n{\"type\":\"error\",\"code\":\"bad_command\",\"message\":\"unknown command \
              'x'\",\"fatal\":false}\n"
         );
+    }
+
+    #[test]
+    fn nothing_follows_the_terminal_line() {
+        let (mut reader, writer) = std::io::pipe().unwrap();
+        let (lifetime, _) = crate::lifetime::tests::counting();
+        let channel = Channel::<job::Event>::new(Box::new(writer), lifetime);
+        assert!(channel.emit(&progress(1)));
+        assert!(channel.emit(&job::Event::Done {
+            result: job::JobResult::Cancelled,
+            path: None,
+            bytes: None,
+        }));
+        assert!(channel.is_finished());
+        // A late progress line, a second terminal and a non-fatal error are all dropped.
+        assert!(!channel.emit(&progress(2)));
+        assert!(!channel.emit(&job::Event::Done {
+            result: job::JobResult::Ok,
+            path: None,
+            bytes: None,
+        }));
+        channel.error(ErrorCode::Failed, "late", false);
+        assert!(!channel.is_closed());
+        drop(channel);
+        let mut text = String::new();
+        reader.read_to_string(&mut text).unwrap();
+        assert_eq!(text, "{\"type\":\"progress\",\"percent\":1}\n{\"type\":\"done\",\"result\":\"cancelled\"}\n");
     }
 
     #[test]

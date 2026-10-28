@@ -174,12 +174,15 @@ impl<E: catalog::Event> Channel<E> {
     /// Serialize, then one write_all(json + "\n") + flush under the lock. Never panics.
     /// Returns false once the pipe is gone. The first EPIPE/broken-pipe error marks the
     /// channel closed (later emits are no-ops) and, **after the lock is released**, fires
-    /// lifetime::trigger(StdoutClosed).
+    /// lifetime::trigger(StdoutClosed). The first terminal event or fatal `error` written
+    /// finishes the channel: later emits from any thread are dropped (return false), so the
+    /// terminal line is always the last line even while other threads wind down.
     pub fn emit(&self, event: &E) -> bool;
     /// Emits `error`. `message` is passed through single_line. If `fatal`, then calls
     /// lifetime::exit(2) for ErrorCode::Usage and lifetime::exit(exit::FAILED) otherwise.
     pub fn error(&self, code: catalog::ErrorCode, message: impl Display, fatal: bool);
     pub fn is_closed(&self) -> bool;
+    pub fn is_finished(&self) -> bool;
 }
 
 /// The guard alone: duplicate the real stdout into a private, non-inheritable handle and

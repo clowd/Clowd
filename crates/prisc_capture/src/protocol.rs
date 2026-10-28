@@ -28,7 +28,8 @@ pub fn out() -> &'static Channel<Event> {
 /// Called once on the way to the terminal line. The quit path ends a capture
 /// from a thread of its own while the main thread may be finishing too: the
 /// first one to get here writes the run's one terminal line and exits, and
-/// any later one parks until that exit takes the process down.
+/// any later one parks until that exit takes the process down. Events the
+/// other threads emit after the terminal line are dropped by the channel.
 pub fn claim_terminal() {
     static CLAIMED: AtomicBool = AtomicBool::new(false);
     if CLAIMED.swap(true, Ordering::SeqCst) {

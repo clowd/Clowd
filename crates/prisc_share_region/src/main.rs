@@ -208,6 +208,11 @@ impl AppEvents for App {
         // `mirror_ready` in the same breath as `sharing_started` is emitted, so
         // the two lines can never disagree about whether sharing began. Both
         // this read and that write are on the UI thread.
+        //
+        // The 1 Hz status thread and the obscure retraction keep running until
+        // the process is gone (the exit hook can take a while to flush
+        // telemetry), but `done` finishes the channel, so anything they emit
+        // after it is dropped and `done` stays the last line.
         let result = if status::sharing() {
             ShareRegionResult::Stopped
         } else {
