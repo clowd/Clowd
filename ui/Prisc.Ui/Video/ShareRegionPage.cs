@@ -173,8 +173,8 @@ namespace Prisc.UI
         private bool _resizeHideSent;
 
         // Exactly one move may be in flight (the acks carry no request id, so a second could not be
-        // matched to its own request). This is the guard, and every path out of the wait — the ack,
-        // a refusal error, the backstop timer and teardown — clears it.
+        // matched to its own request). This is the guard, and every path out of the wait (the ack,
+        // a refusal error, the backstop timer and teardown) clears it.
         private bool _movePending;
 
         // 2000 ms backstop on the move, because a refusal arrives as an error that carries
@@ -1078,7 +1078,7 @@ namespace Prisc.UI
             // bootstrap and never re-enumerates, so a move onto a display rearranged mid-session is
             // refused with "The capture region does not intersect any display" and nothing has
             // changed.
-            // the error carries no correlation id, so consuming one here is an inference — safe
+            // the error carries no correlation id, so consuming one here is an inference, safe
             // because the only commands this page sends during Exiting are the move and nothing
             // else. OnHideToggled and OnShareSettingChanged both refuse while resize is running,
             // which is what keeps that true; anything added here that writes a command mid-move
