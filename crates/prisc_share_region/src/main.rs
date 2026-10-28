@@ -188,7 +188,7 @@ impl AppEvents for App {
     fn set_region(&mut self, region: Rect) -> Result<Rect, String> {
         // On `Err` nothing changed — `Mirror::set_region` plans before it
         // mutates — so the cached region is deliberately left alone and the
-        // caller turns the reason into `command_error` instead of an ack.
+        // caller turns the reason into `error{code:"failed"}` instead of an ack.
         let applied = self.mirror.set_region(region)?;
         self.region = applied;
         Ok(applied)
