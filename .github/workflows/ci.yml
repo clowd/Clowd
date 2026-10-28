@@ -235,14 +235,6 @@ jobs:
         run: dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj -c Release --nologo
         shell: bash
 
-      - name: "TEMP: repeat the cancel tests"
-        run: |
-          for i in $(seq 1 10); do
-            dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj -c Release --nologo --no-build \
-              --filter "FullyQualifiedName~JobRunnerTests|FullyQualifiedName~Quit_cancels"
-          done
-        shell: bash
-
   # Merges the three builds for one rid: the UI publish is the package directory, the Rust
   # binaries go beside Prisc.Ui, and the recorder goes in recorder/. Pure file shuffling, so it
   # runs on Linux for every rid; Info-ZIP's unzip and zip there keep the macOS execute bits
