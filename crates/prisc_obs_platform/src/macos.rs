@@ -6,16 +6,13 @@ use std::ffi::CStr;
 use std::path::Path;
 use std::ptr::NonNull;
 
-use std::ffi::c_void;
-
-use objc2_core_foundation::{CFDictionary, CFNumber, CFNumberType, CFRetained, CFString, CFUUID};
+use objc2_core_foundation::{CFRetained, CFUUID};
 use objc2_core_graphics::{
-    kCGWindowAlpha, kCGWindowBounds, kCGWindowLayer, kCGWindowName, kCGWindowNumber,
-    kCGWindowOwnerName, kCGWindowOwnerPID, CGDisplayBounds, CGDisplayCopyDisplayMode,
-    CGDisplayMode, CGError, CGEvent, CGEventSource, CGEventSourceStateID, CGGetActiveDisplayList,
-    CGMainDisplayID, CGMouseButton, CGWindowListCopyWindowInfo, CGWindowListOption,
+    CGDisplayBounds, CGDisplayCopyDisplayMode, CGDisplayMode, CGError, CGEvent, CGEventSource,
+    CGEventSourceStateID, CGGetActiveDisplayList, CGMainDisplayID, CGMouseButton,
 };
 use prisc_obs::data::ObsData;
+use prisc_rust_core::desktop;
 
 use super::cursor_sprite::SpriteEvent;
 use super::region::{Rect, RegionPlan};
@@ -686,208 +683,42 @@ mod cursor_shape {
 // Window enumeration (--window-capture)
 // ---------------------------------------------------------------------------
 
-/// The `kCGWindowLayer` range a real, user-facing application window lives in:
-/// `kCGNormalWindowLevel` (0) through `kCGModalPanelWindowLevel` (8), which
-/// also covers `kCGFloatingWindowLevel` / `kCGTornOffMenuWindowLevel` (both 3).
-///
-/// The upper bound is what excludes the chrome: the Dock (20), the menu bar
-/// (24), status items (25), pop-up menus (101), overlays (102), tooltips
-/// (200), drag images (500), the screen saver (1000) and the cursor. The
-/// desktop picture and its icon layer sit far below 0 and are already dropped
-/// by `ExcludeDesktopElements`.
-///
-/// Floating panels (3) are deliberately INSIDE the range, for the same reason
-/// the Windows enumerator deliberately does not filter `WS_EX_TOOLWINDOW`: a
-/// floating tool palette — the Fonts and Colors panels, a Photoshop panel, an
-/// IDE float dock — is plainly visible in the recording and must be tracked.
-/// Restricting this to layer 0 would silently drop every one of them.
-const WINDOW_LAYERS: std::ops::RangeInclusive<i64> = 0..=8;
-
-/// Minimum dimension (points) for a window to be worth reporting; the mirror
-/// of the Windows `MIN_WINDOW_SIZE`, and the same value Prisc's
-/// `mac_walker.rs` uses.
-const MIN_WINDOW_SIZE: f64 = 25.0;
-
-/// The four `kCGWindowBounds` sub-keys, built once per enumeration rather than
-/// once per window — `CFString::from_str` allocates, and the poll runs up to
-/// 60 times a second over every window on screen.
-struct BoundsKeys {
-    x: CFRetained<CFString>,
-    y: CFRetained<CFString>,
-    width: CFRetained<CFString>,
-    height: CFRetained<CFString>,
-}
-
-impl BoundsKeys {
-    fn new() -> BoundsKeys {
-        BoundsKeys {
-            x: CFString::from_str("X"),
-            y: CFString::from_str("Y"),
-            width: CFString::from_str("Width"),
-            height: CFString::from_str("Height"),
-        }
-    }
-}
-
-/// Reads a `CFNumber` out of a window-description dictionary. `None` when the
-/// key is absent or holds something else — every caller then skips the window
-/// rather than inventing a coordinate.
-///
-/// # Safety
-/// `dict` must be a Core Graphics window description (or its `kCGWindowBounds`
-/// sub-dictionary), whose schema guarantees the value type behind each key.
-unsafe fn dict_i64(dict: &CFDictionary, key: &CFString) -> Option<i64> {
-    let value = dict.value(key as *const CFString as *const c_void);
-    if value.is_null() {
-        return None;
-    }
-    let number = &*(value as *const CFNumber);
-    let mut out: i64 = 0;
-    number
-        .value(
-            CFNumberType::SInt64Type,
-            &mut out as *mut i64 as *mut c_void,
-        )
-        .then_some(out)
-}
-
-/// # Safety
-/// As [`dict_i64`].
-unsafe fn dict_f64(dict: &CFDictionary, key: &CFString) -> Option<f64> {
-    let value = dict.value(key as *const CFString as *const c_void);
-    if value.is_null() {
-        return None;
-    }
-    let number = &*(value as *const CFNumber);
-    let mut out: f64 = 0.0;
-    number
-        .value(
-            CFNumberType::Float64Type,
-            &mut out as *mut f64 as *mut c_void,
-        )
-        .then_some(out)
-}
-
-/// Reads a `CFString` out of a window-description dictionary; empty when
-/// absent.
-///
-/// `kCGWindowName` is absent for *every* window unless the process holds
-/// Screen Recording permission — which a recording session does. Without it
-/// the whole sidecar carries `title: ""`, indistinguishable from a genuinely
-/// titleless window. `title` is left faithful rather than falling back to the
-/// app name: `app` is a separate field the consumer already has, and folding
-/// them would hide the permission failure instead of exposing it.
-///
-/// # Safety
-/// As [`dict_i64`].
-unsafe fn dict_string(dict: &CFDictionary, key: &CFString) -> String {
-    let value = dict.value(key as *const CFString as *const c_void);
-    if value.is_null() {
-        return String::new();
-    }
-    (*(value as *const CFString)).to_string()
-}
-
-/// `kCGWindowBounds` is a nested dictionary of `X`/`Y`/`Width`/`Height`
-/// doubles in the same global, top-left-origin point space as
-/// `CGDisplayBounds` — i.e. the §1.1 capture space, so nothing but rounding
-/// happens here.
-///
-/// # Safety
-/// As [`dict_i64`].
-unsafe fn window_bounds(dict: &CFDictionary, keys: &BoundsKeys) -> Option<(i32, i32, u32, u32)> {
-    let value = dict.value(kCGWindowBounds as *const CFString as *const c_void);
-    if value.is_null() {
-        return None;
-    }
-    let bounds = &*(value as *const CFDictionary);
-    let x = dict_f64(bounds, &keys.x)?;
-    let y = dict_f64(bounds, &keys.y)?;
-    let w = dict_f64(bounds, &keys.width)?;
-    let h = dict_f64(bounds, &keys.height)?;
-    // Written as a positive test so a NaN extent falls out here too.
-    if !(w >= MIN_WINDOW_SIZE && h >= MIN_WINDOW_SIZE) {
-        return None;
-    }
-    // Points are fractional; round rather than truncate so displays left of /
-    // above the primary do not skew toward zero (the same rule the cursor
-    // sampler applies).
-    Some((
-        x.round() as i32,
-        y.round() as i32,
-        w.round() as u32,
-        h.round() as u32,
-    ))
-}
-
-/// Visible application windows, topmost first — `CGWindowListCopyWindowInfo`
-/// returns the on-screen list in front-to-back order.
+/// Visible application windows other than the recorder's own, topmost first
+/// (`prisc_rust_core::desktop::window_list`). Floating panels are kept
+/// ([`desktop::APPLICATION_WINDOW_LAYERS`]), and anything under 25 points a
+/// side is dropped: the editor could not draw it, and each one costs a wire id
+/// out of the session's identity budget.
 ///
 /// Coordinates are global display points (the §1.1 capture space), the same
-/// space as `MonitorInfo::x/y` and `--region`.
+/// space as `MonitorInfo::x/y` and `--region`. `title` is empty for every
+/// window without Screen Recording permission, which a recording session
+/// holds; it is left faithful rather than falling back to the app name, so the
+/// permission failure stays visible.
 pub fn enumerate_windows() -> Vec<WindowInfo> {
-    let mut out = Vec::new();
-
-    // ExcludeDesktopElements drops the desktop picture and its icon layer,
-    // which cover the whole desktop and would otherwise be reported for every
-    // capture region.
-    let options =
-        CGWindowListOption::OptionOnScreenOnly | CGWindowListOption::ExcludeDesktopElements;
-    // 0 = kCGNullWindowID: not relative to any window.
-    let Some(list) = CGWindowListCopyWindowInfo(options, 0) else {
-        return out;
+    let filter = desktop::WindowFilter {
+        layers: desktop::APPLICATION_WINDOW_LAYERS,
+        exclude_own_process: true,
+        min_size: desktop::MIN_WINDOW_SIZE as f64,
     };
-
-    let keys = BoundsKeys::new();
-    let self_pid = std::process::id() as i64;
-    for index in 0..list.count() {
-        unsafe {
-            let entry = list.value_at_index(index);
-            if entry.is_null() {
-                continue;
+    desktop::window_list(&filter)
+        .into_iter()
+        .map(|w| {
+            let b = w.bounds;
+            // Points are fractional; round rather than truncate so displays
+            // left of / above the primary do not skew toward zero (the same
+            // rule the cursor sampler applies).
+            WindowInfo {
+                id: w.id as u64,
+                pid: w.pid as u32,
+                x: b.origin.x.round() as i32,
+                y: b.origin.y.round() as i32,
+                w: b.size.width.round() as u32,
+                h: b.size.height.round() as u32,
+                title: w.title,
+                app: w.owner_name,
             }
-            let dict = &*(entry as *const CFDictionary);
-
-            // An absent layer is treated as "not a normal window": the key is
-            // always present in practice, so its absence means this entry is
-            // not what we think it is.
-            if !WINDOW_LAYERS.contains(&dict_i64(dict, kCGWindowLayer).unwrap_or(i64::MIN)) {
-                continue;
-            }
-            // Fully transparent helper surfaces draw nothing. An *absent*
-            // alpha counts as opaque here, where Prisc's `mac_walker.rs` drops
-            // the window: this sidecar wants geometry for anything that might
-            // be on screen, and a missing key is not evidence of invisibility.
-            if dict_f64(dict, kCGWindowAlpha).unwrap_or(1.0) <= 0.0 {
-                continue;
-            }
-            let Some(pid) = dict_i64(dict, kCGWindowOwnerPID) else {
-                continue;
-            };
-            if pid <= 0 || pid == self_pid {
-                continue;
-            }
-            let Some(id) = dict_i64(dict, kCGWindowNumber) else {
-                continue;
-            };
-            let Some((x, y, w, h)) = window_bounds(dict, &keys) else {
-                continue;
-            };
-
-            out.push(WindowInfo {
-                id: id as u64,
-                pid: pid as u32,
-                x,
-                y,
-                w,
-                h,
-                title: dict_string(dict, kCGWindowName),
-                app: dict_string(dict, kCGWindowOwnerName),
-            });
-        }
-    }
-
-    out
+        })
+        .collect()
 }
 
 /// Source id + settings for a speaker (output) capture source. Must be called
@@ -932,36 +763,4 @@ pub fn webcam_settings(device_id: &str) -> ObsData {
 /// exist here — compensation is always unity.
 pub fn speaker_compensation_gain(_device_id: &str) -> f32 {
     1.0
-}
-
-#[cfg(test)]
-mod tests {
-    use super::WINDOW_LAYERS;
-
-    /// The window-capture layer filter is the only thing separating real
-    /// windows from the system chrome, and both ends of the range are
-    /// load-bearing — narrowing it back to layer 0 (its first form) silently
-    /// drops every floating tool palette, and widening it past the modal-panel
-    /// level pulls the Dock and menu bar in as full-screen "windows".
-    #[test]
-    fn the_layer_filter_admits_panels_and_excludes_the_chrome() {
-        // kCGNormalWindowLevel, kCGFloatingWindowLevel /
-        // kCGTornOffMenuWindowLevel, kCGModalPanelWindowLevel.
-        for level in [0, 3, 8] {
-            assert!(
-                WINDOW_LAYERS.contains(&level),
-                "layer {level} must be tracked"
-            );
-        }
-        // kCGDockWindowLevel, kCGMainMenuWindowLevel, kCGStatusWindowLevel,
-        // kCGPopUpMenuWindowLevel, kCGOverlayWindowLevel, kCGHelpWindowLevel,
-        // kCGDraggingWindowLevel, kCGScreenSaverWindowLevel, and the desktop
-        // levels below zero.
-        for level in [-2_147_483_623, -1, 20, 24, 25, 101, 102, 200, 500, 1000] {
-            assert!(
-                !WINDOW_LAYERS.contains(&level),
-                "layer {level} must be skipped"
-            );
-        }
-    }
 }

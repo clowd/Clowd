@@ -3610,6 +3610,7 @@ dependencies = [
  "prisc_build_support",
  "prisc_obs",
  "prisc_obs_sys",
+ "prisc_rust_core",
  "windows",
 ]
 

@@ -20,22 +20,18 @@
 //! executable (the shell documents the chain in `MacPermissions`), so the
 //! grant the app already asks for covers the driver.
 
-use std::ffi::c_void;
 use std::time::Instant;
 
-use core_foundation::base::TCFType;
-use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
-use core_foundation::number::{CFNumber, CFNumberRef};
-use core_foundation::string::{CFString, CFStringRef};
 use core_graphics::access::ScreenCaptureAccess;
 use core_graphics::display::CGDisplay;
 use core_graphics::event::{CGEvent, CGEventTapLocation, ScrollEventUnit};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-use core_graphics::geometry::{CGPoint, CGRect};
-use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly, CGWindowID};
+use core_graphics::geometry::CGPoint;
+use core_graphics::window::CGWindowID;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 
 use super::{WheelDir, RAISE_POLL, RAISE_TIMEOUT};
+use prisc_rust_core::desktop::{self, WindowFilter, NORMAL_WINDOW_LAYERS};
 use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Lines of scrolling per notch, and *line* units rather than pixel ones.
@@ -394,48 +390,24 @@ fn event_source() -> Option<CGEventSource> {
 /// since the last step. It costs a millisecond or so beside a settle loop
 /// that photographs the region twenty times a second.
 ///
-/// The filter is the overlay walker's (`mac_walker::evaluate_window`): layer
-/// 0 and non-zero alpha, desktop elements excluded. Agreeing with it matters
-/// — the marker id this module validates was resolved by exactly that walk,
-/// so a window it considers real and this one does not would look to the
-/// driver like a window that had closed.
+/// The layer filter is the overlay walker's ([`NORMAL_WINDOW_LAYERS`]).
+/// Agreeing with it matters: the marker id this module validates was resolved
+/// by exactly that walk, so a window it considers real and this one does not
+/// would look to the driver like a window that had closed.
 fn on_screen_windows() -> Vec<WindowEntry> {
-    let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
-    let Some(list) = window::copy_window_info(options, kCGNullWindowID) else {
-        warn!("CGWindowListCopyWindowInfo returned null");
-        return Vec::new();
+    let filter = WindowFilter {
+        layers: NORMAL_WINDOW_LAYERS,
+        exclude_own_process: false,
+        min_size: 0.0,
     };
-
-    list.get_all_values()
+    desktop::window_list(&filter)
         .into_iter()
-        .filter_map(|ptr| {
-            let dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(ptr as CFDictionaryRef) };
-            window_entry(&dict)
+        .map(|w| WindowEntry {
+            id: w.id,
+            pid: w.pid,
+            rect: rect_from_cg(w.bounds),
         })
         .collect()
-}
-
-/// One `CGWindowListCopyWindowInfo` dictionary as a [`WindowEntry`], or
-/// `None` for anything that is not a normal visible window.
-fn window_entry(dict: &CFDictionary) -> Option<WindowEntry> {
-    let id = number_i64(dict, unsafe { window::kCGWindowNumber })? as CGWindowID;
-    if number_i64(dict, unsafe { window::kCGWindowLayer })? != 0 {
-        return None;
-    }
-    if number_f64(dict, unsafe { window::kCGWindowAlpha })? <= 0.0 {
-        return None;
-    }
-    let pid = number_i64(dict, unsafe { window::kCGWindowOwnerPID })? as i32;
-
-    let bounds_ptr = raw_value(dict, unsafe { window::kCGWindowBounds })?;
-    let bounds_dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
-    let cg_rect = CGRect::from_dict_representation(&bounds_dict)?;
-
-    Some(WindowEntry {
-        id,
-        pid,
-        rect: rect_from_cg(cg_rect),
-    })
 }
 
 /// A `CGRect` of CG points as the integer rect the rest of the driver uses.
@@ -443,7 +415,7 @@ fn window_entry(dict: &CFDictionary) -> Option<WindowEntry> {
 /// window at a fractional position keeps both of its edges where they are —
 /// this rect is compared for equality on every step to detect a window that
 /// moved.
-fn rect_from_cg(rect: CGRect) -> ScreenRect {
+fn rect_from_cg(rect: desktop::CGRect) -> ScreenRect {
     ScreenRect::from_exact(
         rect.origin.x.round() as i32,
         rect.origin.y.round() as i32,
@@ -454,38 +426,6 @@ fn rect_from_cg(rect: CGRect) -> ScreenRect {
 
 fn as_cg_point(point: ScreenPoint) -> CGPoint {
     CGPoint::new(point.x as f64, point.y as f64)
-}
-
-/// Get a raw value out of a CFDictionary by `CFStringRef` key. Same helper as
-/// `mac_walker`'s; the window list is a dictionary-of-anything and there is
-/// no typed accessor for it.
-fn raw_value(dict: &CFDictionary, key: CFStringRef) -> Option<*const c_void> {
-    let key_cfstr: CFString = unsafe { TCFType::wrap_under_get_rule(key) };
-    unsafe {
-        let mut value: *const c_void = std::ptr::null();
-        if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
-            dict.as_concrete_TypeRef(),
-            key_cfstr.as_concrete_TypeRef() as *const c_void,
-            &mut value,
-        ) != 0
-        {
-            Some(value)
-        } else {
-            None
-        }
-    }
-}
-
-fn number_i64(dict: &CFDictionary, key: CFStringRef) -> Option<i64> {
-    let ptr = raw_value(dict, key)?;
-    let number: CFNumber = unsafe { TCFType::wrap_under_get_rule(ptr as CFNumberRef) };
-    number.to_i64()
-}
-
-fn number_f64(dict: &CFDictionary, key: CFStringRef) -> Option<f64> {
-    let ptr = raw_value(dict, key)?;
-    let number: CFNumber = unsafe { TCFType::wrap_under_get_rule(ptr as CFNumberRef) };
-    number.to_f64()
 }
 
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -573,9 +513,9 @@ mod tests {
         // A window at a fractional origin must not lose or gain a point of
         // width, or `stop_requested` reads it as having been resized on the
         // very first step.
-        let rect = rect_from_cg(CGRect::new(
-            &CGPoint::new(10.5, 20.4),
-            &core_graphics::geometry::CGSize::new(100.0, 200.0),
+        let rect = rect_from_cg(desktop::CGRect::new(
+            desktop::CGPoint::new(10.5, 20.4),
+            desktop::CGSize::new(100.0, 200.0),
         ));
         assert_eq!(rect, ScreenRect::from_xy_size(11, 20, 100, 200));
     }
