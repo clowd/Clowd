@@ -69,6 +69,15 @@ record() {
     kill "$pid" 2> /dev/null || true
     cat "$out/$name.out"; tail -40 "$out/$name.err"; exit 1
   fi
+  # started_recording only means the output started; on a slow runner the
+  # encoder can take seconds more to produce its first frame (one ubuntu-22.04
+  # run got 26 frames out of a 3 s window). Wait for a status line reporting a
+  # non-zero frame rate so the 3 s are 3 s of actual frames.
+  for _ in $(seq 1 300); do
+    grep '"type":"status"' "$out/$name.out" 2> /dev/null | grep -q '"fps":[1-9]' && break
+    kill -0 "$pid" 2> /dev/null || break
+    sleep 0.1
+  done
   sleep 3
   echo quit >&"$w"
   exec {w}>&-
@@ -85,7 +94,7 @@ streams() {
 record single --output "$out/single.mp4" --fps 30 --speaker default --microphone default
 s=$(streams "$out/single.mp4"); echo "single.mp4:"; echo "$s"
 grep -Eq '^h264,1280,720,([3-9][0-9]|[1-9][0-9]{2,})$' <<< "$s" \
-  || { echo "::error::single.mp4: expected >= 30 frames of 1280x720 h264"; exit 1; }
+  || { echo "::error::single.mp4: expected >= 30 frames of 1280x720 h264"; cat "$out/single.out"; tail -40 "$out/single.err"; exit 1; }
 grep -q '^aac' <<< "$s" || { echo "::error::single.mp4: no AAC track"; exit 1; }
 
 record multi --output "$out/multi.mp4" --region 100,50,640,480 --fps 30 \
