@@ -862,7 +862,9 @@ to fd 1, the same class of problem as the prisc_ai CoreML incident:
   so a dead parent would never surface as a failed write.
 - Windows: `DuplicateHandle` of `GetStdHandle(STD_OUTPUT_HANDLE)` with `bInheritHandle =
   FALSE` into the private stream, `SetStdHandle(STD_OUTPUT_HANDLE, stderr)`, and `_dup2(2, 1)`
-  in `ucrtbase.dll`, with the shared-UCRT assumption of §3.2.
+  in `ucrtbase.dll`, with the shared-UCRT assumption of §3.2. As in §3.2, the original
+  handle is first made non-inheritable with `SetHandleInformation`, because it stays open if
+  `_dup2` fails; a failure of either call is logged to stderr, not thrown.
 - Then `Console.SetOut(Console.Error)` so managed `Console.WriteLine` follows.
 
 `IpcWriter.Emit` writes one line under a lock and flushes; it never throws (an `IOException`

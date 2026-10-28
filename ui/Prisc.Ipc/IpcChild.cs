@@ -264,12 +264,20 @@ namespace Prisc.Ipc
                     throw new IOException("DuplicateHandle(stdout) failed (error " + Marshal.GetLastWin32Error() + ")");
 
                 stream = new FileStream(new SafeFileHandle(duplicate, ownsHandle: true), FileAccess.Write, 1);
+
+                // The original handle is closed only by a successful _dup2 below; if that fails it stays
+                // open, so it must at least not be inherited by a grandchild (§3.2).
+                if (!SetHandleInformation(original, HandleFlagInherit, 0))
+                    Console.Error.WriteLine("ipc: could not make the original stdout non-inheritable (error "
+                                            + Marshal.GetLastWin32Error() + ")");
+
                 SetStdHandle(StdOutputHandle, GetStdHandle(StdErrorHandle));
                 try
                 {
                     // the CRT's fd 1, so native printf follows; assumes every native library shares the
                     // dynamic UCRT (§3.2).
-                    UcrtDup2(2, 1);
+                    if (UcrtDup2(2, 1) != 0)
+                        Console.Error.WriteLine("ipc: _dup2(2, 1) failed; the CRT's stdout still points at the pipe");
                 }
                 catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
                 {
@@ -297,6 +305,11 @@ namespace Prisc.Ipc
         private const int StdOutputHandle = -11;
         private const int StdErrorHandle = -12;
         private const uint DuplicateSameAccess = 2;
+        private const uint HandleFlagInherit = 1;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern bool SetHandleInformation(IntPtr hObject, uint dwMask, uint dwFlags);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
