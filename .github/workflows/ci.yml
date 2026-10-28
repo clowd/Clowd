@@ -4,7 +4,7 @@ name: CI
 # Each package is the published Prisc.Ui app (build-ui.yml) with the Rust binaries
 # beside it (build-rust.yml) and the recorder (prisc_recorder + libobs,
 # build-recorder.yml) in a recorder/ subdirectory, the layout
-# ScreenCaptureService/ObsBinaryLocator expects. Every package except osx-x64 (which
+# HelperLocator expects. Every package except osx-x64 (which
 # upstream ONNX Runtime no longer supports) also carries the prisc_ai inference binary
 # (OCR, matting, denoising) with its execution-provider dylibs.
 #
@@ -186,11 +186,11 @@ jobs:
 
       # The video editor's suite needs FFmpeg 8.1 natives to run its decode/encode/render tests;
       # without them ~100 of them skip. Take them from the recorder payload this run built, the
-      # same one a shipped build carries, so what CI exercises is what users get — including
-      # ObsBinaryLocator's own resolution of it, which is why this points PRISC_RECORDER_PATH at
-      # the binary rather than PRISC_FFMPEG_PATH at a directory: the layout differs per platform
-      # (beside the exe on Windows, Frameworks/ on macOS) and working that out is the thing under
-      # test.
+      # same one a shipped build carries, so what CI exercises is what users get, including
+      # HelperLocator's own resolution of it: this points PRISC_HELPERS_DIR at the directory
+      # holding recorder/, exactly the release layout, rather than PRISC_FFMPEG_PATH at a library
+      # directory, because the layout differs per platform (beside the exe on Windows, Frameworks/
+      # on macOS) and working that out is the thing under test.
       #
       # Deliberately non-fatal: if the recorder build failed, the variable stays unset, those
       # tests skip, and the other ~3300 still run.
@@ -210,7 +210,7 @@ jobs:
           fi
           exe="recorder/prisc_recorder${{ matrix.exe }}"
           if [ -f "$exe" ]; then
-            echo "PRISC_RECORDER_PATH=$(pwd)/$exe" >> "$GITHUB_ENV"
+            echo "PRISC_HELPERS_DIR=$(pwd)" >> "$GITHUB_ENV"
           else
             echo "::warning::recorder payload unavailable; the FFmpeg-backed tests will skip"
           fi
