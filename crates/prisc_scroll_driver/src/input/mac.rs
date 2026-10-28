@@ -22,15 +22,14 @@
 
 use std::time::Instant;
 
-use core_graphics::access::ScreenCaptureAccess;
-use core_graphics::event::{CGEvent, CGEventTapLocation, ScrollEventUnit};
-use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-use core_graphics::geometry::CGPoint;
-use core_graphics::window::CGWindowID;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+use objc2_core_foundation::CFRetained;
+use objc2_core_graphics::{
+    CGEvent, CGEventSource, CGEventSourceStateID, CGEventTapLocation, CGPreflightScreenCaptureAccess, CGScrollEventUnit, CGWindowID,
+};
 
 use super::{WheelDir, RAISE_POLL, RAISE_TIMEOUT};
-use prisc_rust_core::desktop::{self, WindowFilter, NORMAL_WINDOW_LAYERS};
+use prisc_rust_core::desktop::{self, CGPoint, WindowFilter, NORMAL_WINDOW_LAYERS};
 use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Lines of scrolling per notch, and *line* units rather than pixel ones.
@@ -98,7 +97,7 @@ impl WindowEntry {
 /// live, so the next run picks it up. The message travels to the user as the `fatal_error`
 /// event's text, so it is written for them and not for a log.
 pub fn preflight() -> anyhow::Result<()> {
-    if !ScreenCaptureAccess.preflight() {
+    if !CGPreflightScreenCaptureAccess() {
         bail!(
             "Prisc needs Screen Recording permission to photograph the page while it scrolls. Enable Prisc under Privacy & \
              Security → Screen & System Audio Recording, then restart Prisc."
@@ -291,7 +290,7 @@ pub fn park_cursor(point: ScreenPoint) {
     // physical movement continues from the parked point instead of snapping
     // back to where their hand left it, which the driver would then read as
     // drift and pause over.
-    if let Err(e) = desktop::warp_cursor(desktop::CGPoint::new(point.x as f64, point.y as f64)) {
+    if let Err(e) = desktop::warp_cursor(as_cg_point(point)) {
         warn!(
             "CGWarpMouseCursorPosition({}, {}) failed: {e:?}; wheel events may land elsewhere",
             point.x, point.y
@@ -315,7 +314,7 @@ pub fn cursor_pos() -> Option<ScreenPoint> {
 /// reading — the HUD's FINISH button and the automatic end detection both
 /// still end the run.
 pub fn escape_pressed() -> bool {
-    unsafe { CGEventSourceKeyState(CGEventSourceStateID::CombinedSessionState as i32, KEY_CODE_ESCAPE) }
+    CGEventSource::key_state(CGEventSourceStateID::CombinedSessionState, KEY_CODE_ESCAPE)
 }
 
 /// Inject `ticks` wheel notches at `point`.
@@ -353,17 +352,14 @@ fn post_notches(point: ScreenPoint, ticks: u32, dir: WheelDir, to_pid: Option<i3
 
     for _ in 0..ticks.max(1) {
         // wheel1 is the vertical axis; the other two (horizontal, Z) stay 0.
-        let event = match CGEvent::new_scroll_event(source.clone(), ScrollEventUnit::LINE, 1, lines, 0, 0) {
-            Ok(event) => event,
-            Err(()) => {
-                warn!("CGEventCreateScrollWheelEvent2 failed; the target will not have moved");
-                return false;
-            }
+        let Some(event) = CGEvent::new_scroll_wheel_event2(Some(&source), CGScrollEventUnit::Line, 1, lines, 0, 0) else {
+            warn!("CGEventCreateScrollWheelEvent2 failed; the target will not have moved");
+            return false;
         };
-        event.set_location(location);
+        CGEvent::set_location(Some(&event), location);
         match to_pid {
-            Some(pid) => event.post_to_pid(pid),
-            None => event.post(CGEventTapLocation::HID),
+            Some(pid) => CGEvent::post_to_pid(pid, Some(&event)),
+            None => CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&event)),
         }
     }
     true
@@ -372,8 +368,8 @@ fn post_notches(point: ScreenPoint, ticks: u32, dir: WheelDir, to_pid: Option<i3
 /// An event source for the events we create and the state we read. Failure
 /// is only plausible under resource exhaustion, and every caller degrades
 /// rather than dying.
-fn event_source() -> Option<CGEventSource> {
-    CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()
+fn event_source() -> Option<CFRetained<CGEventSource>> {
+    CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
 }
 
 /// Every visible, normal, on-screen window in front-to-back Z-order.
@@ -426,12 +422,6 @@ extern "C" {
     /// Whether this process may drive other applications — the Accessibility
     /// permission. Without it `CGEventPost` is a no-op (see [`preflight`]).
     fn AXIsProcessTrusted() -> bool;
-}
-
-#[link(name = "CoreGraphics", kind = "framework")]
-extern "C" {
-    /// Level-read of one key's state. Not bound by the `core-graphics` crate.
-    fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
 }
 
 #[cfg(test)]

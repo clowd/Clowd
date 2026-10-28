@@ -1,15 +1,15 @@
 use std::sync::Mutex;
 
 use anyhow::Result;
-use core_graphics::access::ScreenCaptureAccess;
-use core_graphics::display::CGDisplay;
-use core_graphics::geometry::{CGPoint, CGRect, CGSize};
-use core_graphics::image::CGImage;
-use core_graphics::window::{
-    self, kCGWindowImageBestResolution, kCGWindowImageBoundsIgnoreFraming, kCGWindowListOptionIncludingWindow, CGWindowID,
+use objc2_core_foundation::CFRetained;
+#[allow(deprecated)]
+use objc2_core_graphics::{
+    CGDisplayCreateImage, CGImage, CGPreflightScreenCaptureAccess, CGWindowID, CGWindowImageOption, CGWindowListCreateImage,
+    CGWindowListOption,
 };
 
 use crate::system::MonitorInfo;
+use prisc_rust_core::desktop::{self, CGPoint, CGRect, CGSize, ImageBytes};
 use prisc_rust_core::geometry::ScreenRect;
 
 pub struct DesktopBitmap {
@@ -23,7 +23,7 @@ pub struct DesktopBitmap {
 /// `CapturedDesktop`, which is `Arc`'d from the screenshot thread to the main
 /// thread and to every render worker. The objects themselves are immutable and
 /// refcounted atomically, which is precisely the case `unsafe impl Send` is for.
-struct DisplayImage(CGImage);
+struct DisplayImage(CFRetained<CGImage>);
 unsafe impl Send for DisplayImage {}
 
 /// Per-display images from the most recent [`capture_bitmap`], keyed by the
@@ -41,7 +41,7 @@ static DISPLAY_IMAGES: Mutex<Vec<(ScreenRect, DisplayImage)>> = Mutex::new(Vec::
 ///
 /// Ordering is guaranteed by the screenshot latch: nothing has a
 /// `CapturedDesktop` to ask about until `capture_bitmap` has returned.
-pub fn take_display_image(bounds: ScreenRect) -> Option<CGImage> {
+pub fn take_display_image(bounds: ScreenRect) -> Option<CFRetained<CGImage>> {
     let mut images = DISPLAY_IMAGES.lock().ok()?;
     let idx = images
         .iter()
@@ -54,7 +54,7 @@ pub fn take_display_image(bounds: ScreenRect) -> Option<CGImage> {
 /// Settings, because Screen Recording is the shell's to explain and request
 /// (Settings → System → Permissions).
 pub fn has_screen_recording_permission() -> bool {
-    ScreenCaptureAccess.preflight()
+    CGPreflightScreenCaptureAccess()
 }
 
 /// Capture the desktop bitmap using pre-enumerated monitors for
@@ -72,7 +72,11 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
 
     let mut bgra = vec![0u8; vd_w * vd_h * 4];
 
-    let display_ids = CGDisplay::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
+    let display_ids: Vec<u32> = desktop::active_displays()
+        .map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?
+        .into_iter()
+        .map(|d| d.id)
+        .collect();
 
     // Zip monitors with display_ids; truncate to the shorter list in
     // case a display connected/disconnected between enumeration and capture.
@@ -81,27 +85,32 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
     let mut display_images: Vec<(ScreenRect, DisplayImage)> = Vec::with_capacity(count);
     for i in 0..count {
         let monitor = &monitors[i];
-        let display = CGDisplay::new(display_ids[i]);
-        let image = match display.image() {
+        // Deprecated in favor of ScreenCaptureKit, which the capture has not
+        // moved to.
+        #[allow(deprecated)]
+        let image = match CGDisplayCreateImage(display_ids[i]) {
             Some(img) => img,
             None => {
                 warn!("CGDisplayCreateImage returned null for display {} — skipping", display_ids[i]);
                 continue;
             }
         };
+        let Some(pixels) = ImageBytes::of(&image) else {
+            warn!("Display {} image has no readable pixels, skipping", display_ids[i]);
+            continue;
+        };
 
-        let img_w = image.width();
-        let img_h = image.height();
-        let bpr = image.bytes_per_row();
-        let bpp = image.bits_per_pixel();
+        let img_w = pixels.width;
+        let img_h = pixels.height;
+        let bpr = pixels.bytes_per_row;
+        let bpp = pixels.bits_per_pixel;
 
         if bpp != 32 {
             warn!("Display {} has unexpected bits_per_pixel={}, skipping", display_ids[i], bpp);
             continue;
         }
 
-        let data = image.data();
-        let src = data.bytes();
+        let src = pixels.bytes();
 
         let dest_x = (monitor.bounds.min_x() - vd.min_x()) as usize;
         let dest_y = (monitor.bounds.min_y() - vd.min_y()) as usize;
@@ -152,19 +161,22 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
 /// Capture a single window's image via CGWindowListCreateImage.
 /// Returns BGRA pixel bytes and dimensions, or None on failure.
 pub fn capture_window_image(window_id: CGWindowID) -> Option<(Vec<u8>, u32, u32)> {
-    let cg_null = CGRect::new(&CGPoint::new(f64::INFINITY, f64::INFINITY), &CGSize::new(0.0, 0.0));
+    let cg_null = CGRect::new(CGPoint::new(f64::INFINITY, f64::INFINITY), CGSize::new(0.0, 0.0));
 
-    let image = window::create_image(
+    // Deprecated in favor of ScreenCaptureKit, like CGDisplayCreateImage.
+    #[allow(deprecated)]
+    let image = CGWindowListCreateImage(
         cg_null,
-        kCGWindowListOptionIncludingWindow,
+        CGWindowListOption::OptionIncludingWindow,
         window_id,
-        kCGWindowImageBestResolution | kCGWindowImageBoundsIgnoreFraming,
+        CGWindowImageOption::BestResolution | CGWindowImageOption::BoundsIgnoreFraming,
     )?;
+    let pixels = ImageBytes::of(&image)?;
 
-    let width = image.width();
-    let height = image.height();
-    let bpr = image.bytes_per_row();
-    let bpp = image.bits_per_pixel();
+    let width = pixels.width;
+    let height = pixels.height;
+    let bpr = pixels.bytes_per_row;
+    let bpp = pixels.bits_per_pixel;
 
     if bpp != 32 || width == 0 || height == 0 {
         warn!(
@@ -174,8 +186,7 @@ pub fn capture_window_image(window_id: CGWindowID) -> Option<(Vec<u8>, u32, u32)
         return None;
     }
 
-    let data = image.data();
-    let src = data.bytes();
+    let src = pixels.bytes();
 
     let mut bgra = vec![0u8; width * height * 4];
     for row in 0..height {

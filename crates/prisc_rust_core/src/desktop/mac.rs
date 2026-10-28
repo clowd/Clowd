@@ -5,13 +5,13 @@ use std::ffi::c_void;
 use std::ops::RangeInclusive;
 use std::ptr::NonNull;
 
-use objc2_core_foundation::{CFDictionary, CFNumber, CFNumberType, CFRetained, CFString, CFUUID};
+use objc2_core_foundation::{CFData, CFDictionary, CFNumber, CFNumberType, CFRetained, CFString, CFUUID};
 pub use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_core_graphics::{
     kCGWindowAlpha, kCGWindowBounds, kCGWindowLayer, kCGWindowName, kCGWindowNumber, kCGWindowOwnerName, kCGWindowOwnerPID,
-    CGAssociateMouseAndMouseCursorPosition, CGDirectDisplayID, CGDisplayBounds, CGDisplayCopyDisplayMode, CGDisplayMode,
-    CGDisplayPixelsHigh, CGDisplayPixelsWide, CGError, CGEvent, CGGetActiveDisplayList, CGMainDisplayID, CGWarpMouseCursorPosition,
-    CGWindowID, CGWindowListCopyWindowInfo, CGWindowListOption,
+    CGAssociateMouseAndMouseCursorPosition, CGDataProvider, CGDirectDisplayID, CGDisplayBounds, CGDisplayCopyDisplayMode, CGDisplayMode,
+    CGDisplayPixelsHigh, CGDisplayPixelsWide, CGError, CGEvent, CGGetActiveDisplayList, CGImage, CGMainDisplayID,
+    CGWarpMouseCursorPosition, CGWindowID, CGWindowListCopyWindowInfo, CGWindowListOption,
 };
 
 // ---------------------------------------------------------------------------
@@ -309,6 +309,39 @@ pub fn active_displays() -> Result<Vec<Display>, CGError> {
             is_main: id == main,
         })
         .collect())
+}
+
+// ---------------------------------------------------------------------------
+// Images
+// ---------------------------------------------------------------------------
+
+/// A `CGImage`'s pixels, copied out once (`CGDataProviderCopyData`). Rows are
+/// `bytes_per_row` apart, which is rarely `width * 4`: the graphics stack pads
+/// them to its own alignment.
+pub struct ImageBytes {
+    pub width: usize,
+    pub height: usize,
+    pub bytes_per_row: usize,
+    pub bits_per_pixel: usize,
+    data: CFRetained<CFData>,
+}
+
+impl ImageBytes {
+    pub fn of(image: &CGImage) -> Option<ImageBytes> {
+        let provider = CGImage::data_provider(Some(image))?;
+        Some(ImageBytes {
+            width: CGImage::width(Some(image)),
+            height: CGImage::height(Some(image)),
+            bytes_per_row: CGImage::bytes_per_row(Some(image)),
+            bits_per_pixel: CGImage::bits_per_pixel(Some(image)),
+            data: CGDataProvider::data(Some(&provider))?,
+        })
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        // SAFETY: the data is this struct's own immutable copy.
+        unsafe { self.data.as_bytes_unchecked() }
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -40,13 +40,15 @@ windows = { workspace = true, features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-core-foundation = { workspace = true, features = ["CFArray", "CFCGTypes", "CFDictionary", "CFNumber", "CFString", "CFUUID"] }
+objc2-core-foundation = { workspace = true, features = ["CFArray", "CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString", "CFUUID"] }
 objc2-core-graphics = { workspace = true, features = [
+    "CGDataProvider",
     "CGDirectDisplay",
     "CGError",
     "CGEvent",
     "CGEventSource",
     "CGEventTypes",
+    "CGImage",
     # CGWarpMouseCursorPosition / CGAssociateMouseAndMouseCursorPosition; the
     # latter's binding also needs `libc` (boolean_t argument).
     "CGRemoteOperation",

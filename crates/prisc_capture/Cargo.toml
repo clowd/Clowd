@@ -65,10 +65,20 @@ windows = { workspace = true, features = [
 libc.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-foreign-types.workspace = true
-objc2-core-graphics = { workspace = true, features = ["objc2", "CGImage"] }
-core-graphics.workspace = true
-core-foundation.workspace = true
+# Screen and window capture (system/mac_capture.rs, mac_corners.rs), the cursor
+# bitmap draw (mac_cursor.rs), the backdrop crop and hardware cursor hide
+# (render/window.rs).
+objc2-core-foundation = { workspace = true, features = ["CFCGTypes"] }
+objc2-core-graphics = { workspace = true, features = [
+    "objc2",
+    "CGBitmapContext",
+    "CGColorSpace",
+    "CGContext",
+    "CGDirectDisplay",
+    "CGError",
+    "CGImage",
+    "CGWindow",
+] }
 objc2.workspace = true
 objc2-app-kit.workspace = true
 objc2-foundation.workspace = true

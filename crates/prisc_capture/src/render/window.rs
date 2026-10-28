@@ -124,7 +124,7 @@ impl WindowHandle {
         };
         if let Some(layer) = bg_view.layer() {
             unsafe {
-                let cg_ptr: *const std::ffi::c_void = *(&image as *const _ as *const *const std::ffi::c_void);
+                let cg_ptr = objc2_core_foundation::CFRetained::as_ptr(&image).as_ptr();
                 layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
                 layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
             }
@@ -474,21 +474,21 @@ pub(crate) fn set_hardware_cursor_visible(visible: bool) {
 }
 
 /// See the Windows variant: idempotent global cursor show/hide. Never
-/// called from `WindowHandle::new` — `CGDisplay::hide_cursor` is global, so
+/// called from `WindowHandle::new` — `CGDisplayHideCursor` is global, so
 /// it is bracketed by the capture rather than by window creation.
 #[cfg(target_os = "macos")]
 pub(crate) fn set_hardware_cursor_visible(visible: bool) {
-    use core_graphics::display::{CGDisplay, CGMainDisplayID};
+    use objc2_core_graphics::{CGDisplayHideCursor, CGDisplayShowCursor, CGMainDisplayID};
     use std::sync::atomic::{AtomicBool, Ordering};
 
     static HIDDEN: AtomicBool = AtomicBool::new(false);
 
     let currently_hidden = HIDDEN.load(Ordering::Relaxed);
     if visible && currently_hidden {
-        unsafe { CGDisplay::new(CGMainDisplayID()).show_cursor() }.ok();
+        let _ = CGDisplayShowCursor(CGMainDisplayID());
         HIDDEN.store(false, Ordering::Relaxed);
     } else if !visible && !currently_hidden {
-        unsafe { CGDisplay::new(CGMainDisplayID()).hide_cursor() }.ok();
+        let _ = CGDisplayHideCursor(CGMainDisplayID());
         HIDDEN.store(true, Ordering::Relaxed);
     }
 }
@@ -496,9 +496,8 @@ pub(crate) fn set_hardware_cursor_visible(visible: bool) {
 // ── Platform: screenshot crop (private) ────────────────────────────
 
 #[cfg(target_os = "macos")]
-fn crop_screenshot_to_cgimage(screenshot: &CapturedDesktop, monitor_bounds: ScreenRect) -> Option<core_graphics::image::CGImage> {
-    use core_graphics::color_space::CGColorSpace;
-    use core_graphics::context::CGContext;
+fn crop_screenshot_to_cgimage(screenshot: &CapturedDesktop, monitor_bounds: ScreenRect) -> Option<gxi::BackdropImage> {
+    use objc2_core_graphics::{CGBitmapContextCreate, CGBitmapContextCreateImage, CGColorSpace};
 
     // CoreGraphics already produced a CGImage for this display while capturing;
     // `mac_capture` parks it instead of dropping it, so the common case is a
@@ -531,16 +530,20 @@ fn crop_screenshot_to_cgimage(screenshot: &CapturedDesktop, monitor_bounds: Scre
         }
     }
 
-    let color_space = CGColorSpace::create_device_rgb();
+    let color_space = CGColorSpace::new_device_rgb()?;
     let bitmap_info: u32 = (2 << 12) | 6;
-    let ctx = CGContext::create_bitmap_context(
-        Some(crop_buf.as_mut_ptr() as *mut _),
-        crop_w,
-        crop_h,
-        8,
-        crop_w * 4,
-        &color_space,
-        bitmap_info,
-    );
-    ctx.create_image()
+    // SAFETY: `crop_buf` holds `crop_w * 4 * crop_h` bytes and outlives the
+    // context; `CGBitmapContextCreateImage` copies the pixels out.
+    let ctx = unsafe {
+        CGBitmapContextCreate(
+            crop_buf.as_mut_ptr() as *mut _,
+            crop_w,
+            crop_h,
+            8,
+            crop_w * 4,
+            Some(&color_space),
+            bitmap_info,
+        )
+    }?;
+    CGBitmapContextCreateImage(Some(&ctx))
 }
