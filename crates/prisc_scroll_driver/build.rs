@@ -10,9 +10,6 @@ const SHARED_MANIFEST: &str = "../prisc_rust_core/app.manifest";
 
 fn main() {
     println!("cargo:rerun-if-changed={SHARED_MANIFEST}");
-    // baked into the Sentry release name via option_env! (prisc_rust_core's
-    // telemetry::release), so a version bump has to invalidate the cached build
-    println!("cargo:rerun-if-env-changed=PRISC_VERSION");
 
     #[cfg(windows)]
     {
