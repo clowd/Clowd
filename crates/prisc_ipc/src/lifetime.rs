@@ -161,7 +161,8 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 ///
 /// `on_quit` must only enqueue or set a flag: it must never block, never emit, and never take a
 /// lock the emitting threads hold (trigger can run on any thread, including one that just failed
-/// an emit).
+/// an emit). The one exception is a helper with no exit hooks and [`exit_now`] as its exit fn
+/// (prisc_ai), which may call [`exit`] from it directly.
 pub fn install(on_quit: impl Fn(QuitReason) + Send + Sync + 'static, grace: Duration) {
     GLOBAL.set_on_quit(Arc::new(on_quit), grace);
     static SIGNALS: Once = Once::new();
@@ -182,6 +183,24 @@ pub fn triggered() -> Option<QuitReason> {
 /// skips libobs's broken static destructors). Default `std::process::exit`.
 pub fn set_exit_fn(f: fn(i32) -> !) {
     GLOBAL.set_exit_fn(f);
+}
+
+/// An exit fn for [`set_exit_fn`] that ends the process on the spot: no atexit handlers, no C++
+/// static destructors, no DLL teardown. For helpers whose native libraries cannot survive being
+/// torn down while another thread is still inside them (prisc_ai mid-inference). Anything that
+/// must reach a file or pipe has to be flushed before it is called.
+pub fn exit_now(code: i32) -> ! {
+    #[cfg(unix)]
+    unsafe {
+        libc::_exit(code)
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Threading::{GetCurrentProcess, TerminateProcess};
+        // TerminateProcess on our own process does not return once it succeeds.
+        let _ = unsafe { TerminateProcess(GetCurrentProcess(), code as u32) };
+        std::process::abort()
+    }
 }
 
 /// Registers a hook that [`exit`] runs before the exit fn. Each hook is expected to bound itself

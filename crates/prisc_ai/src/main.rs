@@ -136,6 +136,16 @@ fn main() {
     // EPIPE on the payload writes, which fails the job. A signal ends the
     // process at once: nothing in here can stop cleanly mid-job, and the parent
     // discards a partial result anyway.
+    //
+    // Every exit is a raw one. The signal path exits from the signal thread
+    // while the main thread may be inside ONNX Runtime, and running C++ static
+    // destructors (its thread pools, CoreML) under it would turn exit 1 into a
+    // crash. With no exit hooks and a raw exit fn, exiting from `on_quit`
+    // neither blocks nor touches a lock the main thread holds. The normal exits
+    // lose nothing by it: the payload writers flush per frame, the OCR result
+    // file is closed before `ocr::run` returns, and the log lines are written
+    // unbuffered (stderr) or line-buffered (the log file).
+    prisc_ipc::lifetime::set_exit_fn(prisc_ipc::lifetime::exit_now);
     prisc_ipc::lifetime::install(
         |reason| {
             log::warn!("quitting ({reason:?})");

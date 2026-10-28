@@ -212,8 +212,12 @@ pub mod lifetime {
     /// Fire the quit path. First call runs on_quit and arms the timer; later calls no-op.
     pub fn trigger(reason: QuitReason);
     /// Overrides the final exit primitive (recorder/share_region: platform::exit_process,
-    /// which skips libobs's broken static destructors). Default std::process::exit.
+    /// which skips libobs's broken static destructors; prisc_ai: exit_now). Default
+    /// std::process::exit.
     pub fn set_exit_fn(f: fn(i32) -> !);
+    /// A raw exit (_exit / TerminateProcess): no atexit handlers, static destructors or DLL
+    /// teardown.
+    pub fn exit_now(code: i32) -> !;
     /// Registers a hook that `exit` runs before the exit fn. Helpers register
     /// prisc_rust_core::telemetry::shutdown here (§3.4).
     pub fn on_exit(f: fn(i32));
@@ -476,7 +480,10 @@ Payload protocols unchanged (OCR header + BGRA through `--out`; matte/denoise fr
 stdout). It adopts: `claim_stdout()` (replacing `claim_payload_stdout`, matte/denoise only, as
 today), `lifetime::install` for signals and the hard-exit timer (stdin EOF is end-of-input
 here, not quit, so `read_commands` is not used; a dead parent shows up as EPIPE on its payload
-writes), `exit::*` constants, stderr logging. No `hello`: stdout is payload. prisc_capture
+writes), `exit::*` constants, stderr logging. Its exit fn is `lifetime::exit_now`, and its `on_quit`
+exits with `FAILED` on the spot: nothing in it can stop cleanly mid-job, and the raw exit keeps
+ONNX Runtime's static destructors from running under a thread still inferring. No `hello`:
+stdout is payload. prisc_capture
 spawns it via `locate::sibling("prisc_ai")`.
 
 ## 5. Exit codes (`prisc_ipc::exit`)
