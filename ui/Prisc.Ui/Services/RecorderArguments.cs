@@ -127,7 +127,7 @@ namespace Prisc.UI
         /// <see cref="VideoContainer"/> and VideoCapturePage's WantedContainer.
         /// </summary>
         public static IReadOnlyList<string> Build(ScreenRect region, string outputPath, string settingsPath,
-            SettingsRecording settings, bool windowCapture = false)
+            SettingsRecording settings)
         {
             var args = new List<string>
             {
@@ -159,13 +159,9 @@ namespace Prisc.UI
 
                 // window capture rides with input capture for the same reason (only the editor
                 // reads it) and shares its timebase, so the editor can line the two up with no
-                // cross-referencing. Gated separately because it is younger than the recorders in
-                // the field.
-                if (windowCapture)
-                {
-                    args.Add(WindowCaptureArg);
-                    args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputPath)));
-                }
+                // cross-referencing.
+                args.Add(WindowCaptureArg);
+                args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputPath)));
             }
 
             return args;

@@ -40,8 +40,8 @@ namespace Prisc.VideoSDK.Tests
                 WebcamDeviceId = webcam ? "cam-1" : "",
             };
 
-        private static string[] Build(SettingsRecording settings, bool windowCapture = false)
-            => RecorderArguments.Build(new ScreenRect(10, 20, 640, 480), TestPath.Native(@"C:\out\video.mp4"), TestPath.Native(@"C:\out\obs.json"), settings, windowCapture)
+        private static string[] Build(SettingsRecording settings)
+            => RecorderArguments.Build(new ScreenRect(10, 20, 640, 480), TestPath.Native(@"C:\out\video.mp4"), TestPath.Native(@"C:\out\obs.json"), settings)
                            .ToArray();
 
         [Fact]
@@ -156,39 +156,26 @@ namespace Prisc.VideoSDK.Tests
             Assert.DoesNotContain("--input-capture", Build(Settings(composition: false)));
         }
 
-        /// <summary>Window capture rides with multi-track the same way, but only when the caller has
-        /// established that the recorder understands the flag — hence the explicit opt-in rather
-        /// than the switch deciding on its own. The jsonl lands in the session directory beside the
-        /// other sidecar.</summary>
+        /// <summary>Window capture rides with multi-track the same way: the shipped recorder always
+        /// understands the flag, and the jsonl lands in the session directory beside the other
+        /// sidecar.</summary>
         [Fact]
-        public void Multi_track_recordings_also_capture_windows_when_the_recorder_can()
+        public void Multi_track_recordings_always_capture_windows()
         {
-            var args = Build(Settings(), windowCapture: true);
+            var args = Build(Settings());
             var i = Array.IndexOf(args, "--window-capture");
 
             Assert.True(i >= 0);
             Assert.Equal(TestPath.Native(@"C:\out\window-capture.jsonl"), args[i + 1]);
-        }
-
-        /// <summary>The opt-in defaults to off. An older recorder rejects an unknown argument with a
-        /// usage error before it writes a line of protocol, so a flag passed on faith would cost
-        /// the whole recording, not just the sidecar — the input-capture flag it has always
-        /// understood must keep arriving without it.</summary>
-        [Fact]
-        public void A_recorder_without_window_capture_is_never_given_the_flag()
-        {
-            var args = Build(Settings());
-
             Assert.Contains("--input-capture", args);
-            Assert.DoesNotContain("--window-capture", args);
         }
 
-        /// <summary>A single-track recording has no editor to read either sidecar, so even a
-        /// recorder that could write the window jsonl is not asked for it.</summary>
+        /// <summary>A single-track recording has no editor to read either sidecar, so neither is
+        /// asked for.</summary>
         [Fact]
         public void Single_track_recordings_ask_for_neither_sidecar()
         {
-            var args = Build(Settings(composition: false), windowCapture: true);
+            var args = Build(Settings(composition: false));
 
             Assert.DoesNotContain("--input-capture", args);
             Assert.DoesNotContain("--window-capture", args);
@@ -199,7 +186,7 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public void The_two_sidecars_are_different_files()
         {
-            var args = Build(Settings(), windowCapture: true);
+            var args = Build(Settings());
             var input = args[Array.IndexOf(args, "--input-capture") + 1];
             var window = args[Array.IndexOf(args, "--window-capture") + 1];
 

@@ -65,10 +65,6 @@ namespace Prisc.UI
         // the capture source built during bootstrap, so a change means a respawn too.
         private ScreenCaptureMethod _appliedCaptureMethod;
 
-        // whether the recorder currently running was spawned with --window-capture (every
-        // multi-track one is), remembered for the same reason as the flag above.
-        private bool _appliedWindowCapture;
-
         // the container the recorder currently running was spawned to write, i.e. the extension of
         // _outputFile: --output is a command-line argument like the two above, so a change means a
         // respawn. Always Mp4 for a multi-track recording, whatever the setting says.
@@ -119,8 +115,8 @@ namespace Prisc.UI
                 _cornerRadius = cornerRadius;
                 _settings = SettingsRoot.Current.Recording;
                 _sessionDir = sessionDir;
-                // provisional: InitializeCapturerAsync settles the container once it knows what
-                // the recorder can write, but the crash/cancel paths read these before then.
+                // provisional: InitializeCapturerAsync settles the container from the settings it
+                // spawns with, but the crash/cancel paths read these before then.
                 SetOutputFile(VideoContainer.Mp4);
                 _settingsPath = Path.Combine(sessionDir, RecorderArguments.SettingsFileName);
 
@@ -218,8 +214,6 @@ namespace Prisc.UI
                 _appliedMultiTrack = RecorderArguments.UsesMultiTrack(_settings);
                 _appliedCaptureMethod = WantedCaptureMethod();
 
-                // …and so is the window sidecar, which every multi-track recording writes.
-                _appliedWindowCapture = _appliedMultiTrack;
                 SetOutputFile(WantedContainer());
 
                 _recorder = new RecorderDriver();
@@ -228,7 +222,7 @@ namespace Prisc.UI
                 _recorder.LevelsReceived += OnLevelsReceived;
 
                 await _recorder.InitializeAsync(
-                    RecorderArguments.Build(_region, _outputFile, _settingsPath, _settings, _appliedWindowCapture),
+                    RecorderArguments.Build(_region, _outputFile, _settingsPath, _settings),
                     _binaryPath);
             }
             finally
