@@ -1,0 +1,53 @@
+name: Set up the OBS build caches
+description: >
+  Restores the cargo registry and the native OBS build tree plus its downloaded
+  dependencies (crates/obs-studio/.deps) for one recorder leg of
+  build-recorder.yml. Runs after a checkout with recursive submodules (a local
+  action cannot check out the repository it lives in).
+
+  libobs is 20-40 min cold, so its build tree is cached per OS and arch, keyed
+  by the obs-studio submodule SHA and the build inputs. There are no
+  restore-keys: a partial match would be a stale CMake tree. The build tree and
+  .deps share one entry so they can never evict independently.
+
+inputs:
+  arch:
+    description: The leg's architecture (x64 or arm64). runner.os is the same for both arches of an OS, so it must be in every key.
+    required: true
+  obs-build-path:
+    description: Where prisc_obs_sys leaves the OBS build tree on this OS (newline-separated paths and globs).
+    required: true
+  key-suffix:
+    description: Further inputs of the native build that no hashed file covers (Linux's dependency pins).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Record OBS submodule SHA
+      id: obs
+      shell: bash
+      run: |
+        sha=$(git -C crates/obs-studio rev-parse HEAD)
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+        echo "OBS submodule SHA: $sha"
+
+    # Registry and git sources only (cache-targets: false). target/ holds the
+    # OBS build tree, which the cache below owns under its own key, and
+    # rust-cache's target cleanup would prune it. On Linux cargo runs in the
+    # build image with the host's ~/.cargo mounted (run-in-image.sh), so the
+    # same host-side cache serves it.
+    - name: Cache cargo registry
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.arch }}
+        cache-targets: "false"
+
+    - name: Cache OBS native build + prebuilt deps
+      uses: actions/cache@v6
+      with:
+        path: |
+          ${{ inputs.obs-build-path }}
+          crates/obs-studio/.deps
+        key: ${{ runner.os }}-${{ inputs.arch }}-obs-${{ steps.obs.outputs.sha }}-${{ hashFiles('crates/prisc_obs_sys/build.rs', 'crates/prisc_obs_sys/cmake/**', 'crates/prisc_build_support/src/**') }}${{ inputs.key-suffix }}

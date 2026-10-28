@@ -150,16 +150,16 @@ so this part needs a full native toolchain:
 Then, from the repository root:
 
 ```sh
-git -C crates/obs-studio tag -f 32.2.2   # once per clone, see below
 cargo rec                         # = cargo build -p prisc_recorder -p prisc_share_region -p prisc_vid2gif
 cargo recr                        # the same, --release
 ```
 
 The first build compiles libobs and takes 20–40 minutes; later builds reuse it. OBS derives its
-version from `git describe --tags`, and a submodule checkout usually has no tags, so the local
-lightweight tag above (HEAD is the 32.2.2 release commit) keeps it from falling back to a commit
-hash. On Windows, where OBS's child configures need it most, the build script adds that tag itself
-when HEAD has none. `OBS_VERSION_OVERRIDE` sets the version stamped into the OBS build directly.
+version from `git describe --tags`, and a submodule checkout usually has no tags, so the build
+passes the version itself (`OBS_VERSION_OVERRIDE`, default the pinned 32.2.2, sets it). On
+Windows, OBS's child configures for the 32-bit helpers ignore that and still run `git describe`,
+so before configuring, the build script gives HEAD a local lightweight tag of that version when it
+has none. No manual tagging is needed, in CI or locally.
 
 The build tree records a successful configure, together with the checkout and the submodule commit
 it was for, so a failed configure, a moved clone or a submodule bump configures again on the next
