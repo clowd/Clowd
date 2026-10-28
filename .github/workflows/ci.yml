@@ -17,7 +17,7 @@ name: CI
 #   recorder-linux  build-recorder-linux.yml   check only, nothing consumes it
 #   rust            build-rust.yml             -> rust-<rid>
 #   ui              build-ui.yml               -> ui-<rid>
-#   test                                       Rust gate + Shared/Drawing dotnet tests (no needs)
+#   test                                       Rust gate + Shared/Drawing/Ipc dotnet tests (no needs)
 #   test-video      needs recorder             runs even if it fails; the FFmpeg tests then skip
 #   package         needs recorder, rust, ui   -> prisc-<rid>
 
@@ -147,6 +147,7 @@ jobs:
         run: |
           dotnet test ui/Prisc.Shared.Tests/Prisc.Shared.Tests.csproj -c Release --nologo
           dotnet test ui/Prisc.Drawing.Tests/Prisc.Drawing.Tests.csproj -c Release --nologo
+          dotnet test ui/Prisc.Ipc.Tests/Prisc.Ipc.Tests.csproj -c Release --nologo
         shell: bash
 
   # Prisc.VideoSDK.Tests is the video editor's suite — the playback engine, the compositor,

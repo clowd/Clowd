@@ -12,3 +12,6 @@ pub const PROTOCOL: u32 = 1;
 
 pub mod catalog;
 pub mod exit;
+
+#[cfg(test)]
+mod csharp;

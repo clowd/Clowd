@@ -508,22 +508,30 @@ ipc_catalog! {
     catalog job;
     helpers ["prisc_vid2gif", "Prisc.VideoRender"];
     quit_grace_ms 5000;
-    strings JobResult { ok, cancelled }
+    strings JobResult { Ok, Cancelled }
     events {
-        progress { percent: u32 }
+        event Progress { percent: u32 }
             sample r#"{"type":"progress","percent":42}"#;
-        terminal done { result: JobResult, path: Option<String>, bytes: Option<u64> }
+        terminal Done { result: JobResult, path: Option<String>, bytes: Option<u64> }
             sample r#"{"type":"done","result":"ok","path":"/tmp/a.gif","bytes":1024}"#;
     }
     commands {}
 }
 ```
 
-Field types the macro accepts: `bool u32 u64 i32 i64 f64 String Vec<T> Option<T>`, a
-`strings Name { a, b | alias, .. }` string enum (an `| alias` is accepted on decode only), and a
-`record Name { .. }` struct declared in the same invocation. Nothing else (no
-`serde_json::Value`, no maps). `hello`, `error` and `quit` are injected into every catalog by
-the macro.
+Message and string-enum value names are written in PascalCase (they are the Rust variants and
+the C# record and enum member names) and go on the wire in snake_case (`MaxReached` is
+`max_reached`); field names are written as they go on the wire. Each event starts with `event`
+or `terminal`. Field types the macro accepts: `bool u32 u64 i32 i64 f64 String`, a
+`strings Name { A, B | Alias, .. }` string enum (an `| Alias` is accepted on decode only), a
+`record Name { .. }` struct declared in the same invocation, and `Vec<T>` / `Option<T>` of one
+of those (not nested). Nothing else (no `serde_json::Value`, no maps). `hello`, `error` and
+`quit` are common to every catalog: `error` is a variant of every `Event` enum, `hello` and
+`quit` are the `catalog::Hello` and `catalog::Quit` structs, and all three are part of every
+catalog's hash. C# type names are the catalog's PascalCase name plus the Rust name, unless the
+Rust name already starts with it (`VideoTrack` is `RecorderVideoTrack`, `JobResult` stays); a
+field whose C# property would share its record's name is renamed `Items` (a list) or `Value`
+(`RecorderEvent.Cameras(Items)`).
 
 (Considered and declined: hand-written serde types plus a const `SPEC` table checked by the
 samples. The samples only exercise the fields they contain, so a field added to the serde type
@@ -556,7 +564,7 @@ public static class HelperExit { public const int Ok = 0, Failed = 1, Usage = 2,
     NoScreenPermission = 3, CaptureFailed = 4, QuitTimeout = 6, InferenceUnavailable = 7, RustPanic = 101; }
 public static class IpcErrorCodes { public const string BadCommand = "bad_command"; /* ... */ }
 
-public sealed record IpcHello(int Protocol, string Catalog, string CatalogHash, string Helper, string Version, int Pid);
+public sealed record IpcHello(uint Protocol, string Catalog, string CatalogHash, string Helper, string Version, uint Pid);
 
 public abstract record JobEvent
 {
@@ -571,16 +579,20 @@ public static partial class HelperSpecs
 {
     public static readonly HelperSpec<JobEvent, JobCommand> Job = new(
         catalog: "job", catalogHash: "<generated>", quitGrace: TimeSpan.FromMilliseconds(5000),
-        decode: JobCodec.Decode, encode: JobCodec.Encode,
+        decode: JobCodec.DecodeEvent, encode: JobCodec.EncodeCommand,
+        encodeEvent: JobCodec.EncodeEvent, decodeCommand: JobCodec.DecodeCommand,
         isTerminal: e => e is JobEvent.Done || e is IIpcError { Fatal: true });
 }
 ```
 
 The codec is generated straight-line `Utf8JsonReader`/`Utf8JsonWriter` code (no reflection, no
-`JsonSerializerContext`), so it is trim-safe and independent of `PriscUiJsonContext`. The
+`JsonSerializerContext`, over the hand-written `IpcJson` primitives), so it is trim-safe and
+independent of `PriscUiJsonContext`. `IpcCodec` holds the common `DecodeHello` / `EncodeHello`,
+`QuitLine` and `ReadType`. The
 writer is created with `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`, so non-ASCII and
 `+ < > & '` go out literally, as serde_json writes them. Decode returns null for an unknown
-`type` (the client logs and skips it). Enum values decode from the snake_case string; an
+`type` (the client logs and skips it) and throws `JsonException` for a line that is not JSON or
+has a field of the wrong JSON type. Enum values decode from the snake_case string; an
 unknown string decodes to the generated `Unknown` member rather than failing the line.
 
 **Golden samples**: every event and command in the macro carries a required `sample` line;

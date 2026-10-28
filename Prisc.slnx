@@ -2,6 +2,8 @@
   <Project Path="ui/Prisc.Drawing/Prisc.Drawing.csproj" />
   <Project Path="ui/Prisc.Drawing.Tests/Prisc.Drawing.Tests.csproj" />
   <Project Path="ui/Prisc.Geometry/Prisc.Geometry.csproj" />
+  <Project Path="ui/Prisc.Ipc/Prisc.Ipc.csproj" />
+  <Project Path="ui/Prisc.Ipc.Tests/Prisc.Ipc.Tests.csproj" />
   <Project Path="ui/Prisc.Shared/Prisc.Shared.csproj" />
   <Project Path="ui/Prisc.Shared.Tests/Prisc.Shared.Tests.csproj" />
   <Project Path="ui/Prisc.Ui/Prisc.Ui.csproj" />
