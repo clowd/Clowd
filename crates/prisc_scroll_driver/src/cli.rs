@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
+use prisc_rust_core::geometry::{parse_point, parse_rect, ScreenPoint, ScreenRect};
 
 #[derive(Debug, Parser)]
 #[command(version, about = "Prisc scrolling capture driver")]
@@ -32,7 +32,7 @@ pub struct CliArgs {
     /// above the primary puts the whole region at negative coordinates, and
     /// without it clap reads a separate-token value like `-1920,0,…` as an
     /// unknown flag and refuses the command line.
-    #[arg(long, value_name = "X,Y,W,H", value_parser = parse_region, allow_hyphen_values = true)]
+    #[arg(long, value_name = "X,Y,W,H", value_parser = parse_rect, allow_hyphen_values = true)]
     pub region: Option<ScreenRect>,
 
     /// Scroll point, `PX,PY` in the same space as `--region` (negative
@@ -66,71 +66,10 @@ pub struct CliArgs {
     pub no_rewind: bool,
 }
 
-/// `--region X,Y,W,H`. Zero-area regions are rejected here rather than
-/// deeper in the driver: a 0-wide capture fails with an OS error that says
-/// nothing about where the bad rect came from.
-fn parse_region(s: &str) -> Result<ScreenRect, String> {
-    let n = parse_i32_list::<4>(s)?;
-    if n[2] <= 0 || n[3] <= 0 {
-        return Err(format!("'{s}' has a non-positive width or height"));
-    }
-    Ok(ScreenRect::from_xy_size(n[0], n[1], n[2], n[3]))
-}
-
-/// `--point PX,PY`. Negative coordinates are legal and common — a monitor
-/// left of or above the primary one lives at negative virtual-desktop
-/// coordinates.
-fn parse_point(s: &str) -> Result<ScreenPoint, String> {
-    let n = parse_i32_list::<2>(s)?;
-    Ok(ScreenPoint::new(n[0], n[1]))
-}
-
-/// Exactly `N` comma-separated decimal integers, no more and no fewer.
-fn parse_i32_list<const N: usize>(s: &str) -> Result<[i32; N], String> {
-    let mut out = [0i32; N];
-    let mut parts = s.split(',');
-    for slot in out.iter_mut() {
-        let part = parts
-            .next()
-            .ok_or_else(|| format!("'{s}' needs {N} comma-separated integers"))?
-            .trim();
-        *slot = part
-            .parse()
-            .map_err(|_| format!("'{part}' is not an integer"))?;
-    }
-    if parts.next().is_some() {
-        return Err(format!("'{s}' needs exactly {N} comma-separated integers"));
-    }
-    Ok(out)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn region_parses_and_rejects_degenerate() {
-        assert_eq!(parse_region("10,20,300,400").unwrap(), ScreenRect::from_xy_size(10, 20, 300, 400));
-        // Secondary monitor left of the primary: negative origin, positive size.
-        assert_eq!(
-            parse_region("-1920,0,1920,1080").unwrap(),
-            ScreenRect::from_xy_size(-1920, 0, 1920, 1080)
-        );
-        assert_eq!(parse_region(" 1 , 2 , 3 , 4 ").unwrap(), ScreenRect::from_xy_size(1, 2, 3, 4));
-        assert!(parse_region("10,20,0,400").is_err());
-        assert!(parse_region("10,20,300,-1").is_err());
-        assert!(parse_region("10,20,300").is_err());
-        assert!(parse_region("10,20,300,400,500").is_err());
-        assert!(parse_region("10,20,300,x").is_err());
-    }
-
-    #[test]
-    fn point_parses_negative_coordinates() {
-        assert_eq!(parse_point("40,50").unwrap(), ScreenPoint::new(40, 50));
-        assert_eq!(parse_point("-40,-50").unwrap(), ScreenPoint::new(-40, -50));
-        assert!(parse_point("40").is_err());
-        assert!(parse_point("40,50,60").is_err());
-    }
+    use prisc_rust_core::geometry::RectExt;
 
     #[test]
     fn flags_parse() {

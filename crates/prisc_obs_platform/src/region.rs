@@ -3,14 +3,44 @@
 
 use std::fmt;
 
+use prisc_rust_core::geometry::{self, RectExt, ScreenRect};
+
 use crate::MonitorInfo;
 
+/// A capture region in the §1.1 capture space. The recorder stack's own
+/// shape (unsigned size) for what `prisc_rust_core::geometry::ScreenRect`
+/// spells as a euclid rect; it is what the status lines print, so it stays,
+/// and converts both ways.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
     pub x: i32,
     pub y: i32,
     pub w: u32,
     pub h: u32,
+}
+
+impl From<ScreenRect> for Rect {
+    /// A negative extent clamps to 0.
+    fn from(r: ScreenRect) -> Self {
+        Rect {
+            x: r.origin.x,
+            y: r.origin.y,
+            w: r.size.width.max(0) as u32,
+            h: r.size.height.max(0) as u32,
+        }
+    }
+}
+
+impl From<Rect> for ScreenRect {
+    /// A size past `i32::MAX` saturates.
+    fn from(r: Rect) -> Self {
+        ScreenRect::from_xy_size(
+            r.x,
+            r.y,
+            r.w.min(i32::MAX as u32) as i32,
+            r.h.min(i32::MAX as u32) as i32,
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -56,28 +86,16 @@ impl fmt::Display for RegionError {
 
 impl std::error::Error for RegionError {}
 
-/// Parses `"x,y,w,h"` (all four components used — x,y included).
+/// Parses `"x,y,w,h"` (all four components used — x,y included) with the
+/// parser every Prisc command line shares
+/// (`prisc_rust_core::geometry::parse_rect`), then holds the recorder's
+/// minimum of 2 px a side (the canvas floor).
 pub fn parse_region(s: &str) -> Result<Rect, RegionError> {
-    let parts: Vec<&str> = s.split(',').map(str::trim).collect();
-    if parts.len() != 4 {
-        return Err(RegionError::Parse("region must be X,Y,W,H".to_string()));
-    }
-    let x: i32 = parts[0]
-        .parse()
-        .map_err(|_| RegionError::Parse(format!("invalid X '{}'", parts[0])))?;
-    let y: i32 = parts[1]
-        .parse()
-        .map_err(|_| RegionError::Parse(format!("invalid Y '{}'", parts[1])))?;
-    let w: u32 = parts[2]
-        .parse()
-        .map_err(|_| RegionError::Parse(format!("invalid W '{}'", parts[2])))?;
-    let h: u32 = parts[3]
-        .parse()
-        .map_err(|_| RegionError::Parse(format!("invalid H '{}'", parts[3])))?;
-    if w < 2 || h < 2 {
+    let rect = geometry::parse_rect(s).map_err(RegionError::Parse)?;
+    if rect.size.width < 2 || rect.size.height < 2 {
         return Err(RegionError::Parse("W and H must be >= 2".to_string()));
     }
-    Ok(Rect { x, y, w, h })
+    Ok(rect.into())
 }
 
 /// Canvas = region × canvas scale (forced even, min 2); one item per monitor
@@ -245,6 +263,32 @@ mod tests {
         assert!(parse_region("0,0,1,600").is_err()); // W < 2
         assert!(parse_region("0,0,800,0").is_err()); // H < 2
         assert!(parse_region("0,0,-800,600").is_err()); // negative size
+    }
+
+    #[test]
+    fn rect_converts_to_and_from_screen_rect() {
+        let r = Rect {
+            x: -1920,
+            y: 200,
+            w: 640,
+            h: 480,
+        };
+        let screen = ScreenRect::from(r);
+        assert_eq!(
+            (screen.origin.x, screen.origin.y, screen.size.width, screen.size.height),
+            (-1920, 200, 640, 480)
+        );
+        assert_eq!(Rect::from(screen), r);
+        // Out-of-range sizes clamp rather than wrap.
+        let huge = Rect {
+            x: 0,
+            y: 0,
+            w: u32::MAX,
+            h: 1,
+        };
+        assert_eq!(ScreenRect::from(huge).size.width, i32::MAX);
+        let inverted = ScreenRect::from_xy_size(5, 5, -3, 4);
+        assert_eq!(Rect::from(inverted).w, 0);
     }
 
     #[test]
