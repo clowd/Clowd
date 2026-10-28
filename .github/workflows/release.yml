@@ -172,12 +172,16 @@ jobs:
             Write-Warning "publish/PriscShellExt.msix not found - skipping shell extension signing."
             exit 0
           }
-          # The Trusted Signing dlib only ships with vpk (its tool store's vendor/signing dir, whose
-          # layout is vpk's business), so search the store for it rather than assume a depth.
-          $tools = Split-Path (Get-Command vpk).Source
-          $dlib = Get-ChildItem (Join-Path $tools .store/vpk) -Recurse -File -Filter Azure.CodeSigning.Dlib.dll -ErrorAction SilentlyContinue |
-            Sort-Object FullName | Select-Object -Last 1
-          if (-not $dlib) { Write-Error "Azure.CodeSigning.Dlib.dll not found in vpk's tool store under $tools"; exit 1 }
+          # The Trusted Signing dlib only ships with vpk, in a signing dir somewhere under its tool
+          # store (.store/vpk/<version>/...), so search the store rather than assume a depth. Only
+          # a dir named signing counts, which skips any per-arch copies (signing/x86, ...), and the
+          # newest vpk version wins by [version], not by a lexical path sort.
+          $store = Join-Path (Split-Path (Get-Command vpk).Source) .store/vpk
+          $dlib = Get-ChildItem $store -Recurse -File -Filter Azure.CodeSigning.Dlib.dll -ErrorAction SilentlyContinue |
+            Where-Object { $_.Directory.Name -eq 'signing' } |
+            Sort-Object { $v = [regex]::Match($_.FullName, '[\\/]\.store[\\/]vpk[\\/]([^\\/]+)').Groups[1].Value; try { [version]$v } catch { [version]'0.0' } } |
+            Select-Object -Last 1
+          if (-not $dlib) { Write-Error "Azure.CodeSigning.Dlib.dll not found in a signing dir of vpk's tool store $store"; exit 1 }
           # signtool: the newest Windows SDK's x64 one (the dlib is x64), else the copy vpk vendors beside the dlib.
           $sdkBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
           $signtool = Get-ChildItem $sdkBin -Directory -ErrorAction SilentlyContinue |
