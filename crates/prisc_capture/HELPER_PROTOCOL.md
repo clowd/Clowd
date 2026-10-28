@@ -641,9 +641,13 @@ public static class HelperLocator
     public static string Find(string stem);         // executable; null when not found; EnsureExecutable applied
     public static string FindLibrary(string stem);  // native library (prisc_hotkeys)
     internal static string Find(string fileName, string envDirs, string baseDirectory); // testable
-    internal static Func<string, string> Override;  // test seam (DenoiseGeneratorTests); null in production
+    internal static Func<string, string> Override;  // test seam (Denoise/MatteGeneratorTests); null in production
 }
 ```
+
+`Override` is asked first, by stem. A non-null answer is final: the path when it exists,
+otherwise "not found" (a seam that throws counts as "not found" too). A null answer falls
+through to the normal probe, so a seam for one helper leaves the others resolvable.
 
 `PRISC_HELPERS_DIR` is a **path list** separated by `Path.PathSeparator` (`;` on Windows, `:`
 elsewhere), probed in order. That covers an out-of-tree Prisc.Ui `OutDir`, where the dev
@@ -659,7 +663,9 @@ Probe order for file name `f` = `Platform.ExeName(stem)` (or `LibName`), first e
    share_region and vid2gif in `recorder/`).
 3. Dev walk-up from `AppContext.BaseDirectory`: at each ancestor holding `Cargo.toml`, probe
    `target/debug/f` and `target/release/f` and take the newer by last-write time (debug wins a
-   tie; `CaptureBinaryLocator`'s rule). Stem `Prisc.VideoRender` instead probes
+   tie; `CaptureBinaryLocator`'s rule). `FindLibrary` also probes `target/{debug,release}/deps/f`,
+   newer wins: building a crate that depends on prisc_hotkeys compiles the library there without
+   copying it up, so `target/<profile>/f` alone can be a stale copy that fails the ABI check. Stem `Prisc.VideoRender` instead probes
    `ui/Prisc.VideoRender/bin/{Debug,Release}/net10.0/f` at each ancestor, newer wins. Keep
    walking past a `Cargo.toml` with nothing built.
 
@@ -683,7 +689,8 @@ public sealed class HelperClient<TEvent, TCommand> : IAsyncDisposable
     public int ProcessId { get; }
     public ChannelReader<TEvent> Events { get; }          // unbounded, single reader, in order, every event
     public Task<HelperOutcome<TEvent>> Completion { get; } // never faults
-    public string StderrTail { get; }                       // HelperLog snapshot
+    public HelperLog Log { get; }                           // stderr and non-protocol stdout
+    public string StderrTail { get; }                       // Log snapshot
 
     public bool Send(TCommand command);                     // false once stdin is closed
     public Task<TEvent> SendAndWaitAsync(TCommand command, Func<TEvent, bool> isReply, TimeSpan timeout);
@@ -714,6 +721,13 @@ public enum HelperFailure { None, StartFailed, HelloTimeout, ProtocolMismatch,
     FatalError, NoScreenPermission, CaptureFailed, InferenceUnavailable, Crashed, Timeout }
 
 public sealed class HelperCommandException : Exception { public IIpcError Error { get; } }
+
+// StartAsync's failure: spawn failed, no hello, wrong hello, or exit first; already killed
+public sealed class HelperStartException : Exception
+{
+    public HelperFailure Failure { get; }   // StartFailed, HelloTimeout, ProtocolMismatch, or the exit mapping
+    public int? ExitCode { get; }
+}
 ```
 
 Behaviour:
@@ -757,7 +771,7 @@ Behaviour:
 ### 7.3 Grace policy (one policy, per-catalog duration)
 
 `StopAsync`: send `{"type":"quit"}`, close stdin, wait `spec.QuitGrace` for exit, then
-`Kill(entireProcessTree: true)` and record that a kill was needed (Completion reports `Timeout`
+kill it (with its tree unless `KillEntireTree = false`, §7.4) and record that a kill was needed (Completion reports `Timeout`
 from then on, §7.2), wait 2 s more, then give up. Durations come from the catalog: recorder
 65 s (§4.1: stop signal plus mp4 flush), everything else 5 s. This replaces the 2/5/10/45 s
 constants in the runners. Helper-specific readiness timeouts (recorder `initialized` 30 s,
@@ -775,7 +789,7 @@ right after `Process.Start`.
   `ShellExecuteW` (`system/win_browser.rs`, OCR search) would be created inside the job when no
   browser is already running, and killed whenever Prisc.Ui exits, updates or crashes. Helper
   grandchildren (prisc_ai under prisc_capture) end through their own stdin lease when their
-  parent dies, and `Kill()` is a tree kill.
+  parent dies, and `Kill()` is a tree kill (except for prisc_capture, below).
 - **Except for prisc_capture.** The breakaway keeps the browser out of the job, but a tree kill
   walks parent PIDs, so it would still take the browser down. Both prisc_capture spawns (the
   standby supervisor and the one-shot) start with `KillEntireTree = false`, so `Kill()` and the
@@ -805,7 +819,7 @@ today's `ObsCapturer`, which treats any exit without `stopped_recording` as fata
 ```csharp
 public static class IpcChild
 {
-    public static IpcWriter<TEvent> Open<TEvent>(string helper, HelperSpec<TEvent, object> spec); // claims stdout, writes hello
+    public static IpcWriter<TEvent> Open<TEvent, TCommand>(string helper, HelperSpec<TEvent, TCommand> spec); // claims stdout, writes hello
     public static void ReadCommands<TCommand>(Func<string, TCommand> decode,
         Action<TCommand> onCommand, Action<string> onBadCommand); // background thread; quit/EOF -> OnQuit
     public static event Action OnQuit;                               // raised once
@@ -817,8 +831,11 @@ public static class IpcChild
 hardware encoders (NVENC, AMF, VideoToolbox through FFmpeg, Skia GPU) whose drivers can write
 to fd 1, the same class of problem as the prisc_ai CoreML incident:
 
-- Unix: `fcntl(1, F_DUPFD_CLOEXEC, 3)` into a private `SafeFileHandle` wrapped in a
-  `FileStream` for protocol lines, then `dup2(2, 1)` (libc via `DllImport`).
+- Unix: open `/dev/fd/1` with `File.OpenHandle` (a new descriptor onto the same pipe, and .NET
+  opens every file `O_CLOEXEC`) into a `FileStream` for protocol lines, then `dup2(2, 1)` (libc
+  via `DllImport`). This replaces `fcntl(1, F_DUPFD_CLOEXEC, 3)`: `fcntl` is variadic, which
+  arm64 macOS cannot P/Invoke correctly. Not `Console.OpenStandardOutput`, which swallows EPIPE,
+  so a dead parent would never surface as a failed write.
 - Windows: `DuplicateHandle` of `GetStdHandle(STD_OUTPUT_HANDLE)` with `bInheritHandle =
   FALSE` into the private stream, `SetStdHandle(STD_OUTPUT_HANDLE, stderr)`, and `_dup2(2, 1)`
   in `ucrtbase.dll`, with the shared-UCRT assumption of §3.2.
