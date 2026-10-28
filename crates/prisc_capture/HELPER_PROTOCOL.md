@@ -343,7 +343,7 @@ only for those and `configure`:
 |---|---|---|
 | `start` | | `started_recording` (first start, from `--pause`); `recording_resumed` (while paused, or re-emitted when already recording); while a first start is still pending, no separate reply: the pending `started_recording` answers it; `error{failed}` if libobs refuses to unpause |
 | `pause` | | `recording_paused` (also re-emitted when already paused); `error{rejected}` before the output started; `error{failed}` if libobs refuses to pause |
-| `mute_speaker` / `unmute_speaker` / `mute_mic` / `unmute_mic` | `index: u32` | **never acks**: fire with `Send` |
+| `mute_speaker` / `unmute_speaker` / `mute_mic` / `unmute_mic` | `index: u32` | **never acks and never errors** (an index with no source is logged to stderr): fire with `Send`, even while a `SendAndWaitAsync` is pending |
 | `configure` | `path: string` | exactly one `configure_applied` or `configure_error` |
 
 `quit`: stop the output, flush the file, emit `done`, exit.

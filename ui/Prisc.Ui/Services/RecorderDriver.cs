@@ -410,7 +410,7 @@ namespace Prisc.UI
                     break;
 
                 case RecorderEvent.Error { Fatal: false } error:
-                    // a refused command no one waited for (the never-acked mute commands)
+                    // a refusal no one waited for; the mute commands never produce one (§4.1)
                     Debug.WriteLine($"Recording process refused a command: {error.Code}: {error.Message}");
                     break;
             }
