@@ -30,6 +30,7 @@ use crate::commands::Command;
 use crate::encoder_config::{self, EncoderConfig, AUDIO_SAMPLE_RATE};
 use crate::frame_clock::{FrameClock, FrameClockCallback};
 use crate::input_capture::InputCapture;
+use crate::pause_gate::{PauseGate, PAUSE_RETRY_INTERVAL};
 use crate::platform::{self, DisplayCaptureMode};
 use crate::region::{self, Rect, RegionPlan};
 use crate::settings::Settings;
@@ -901,6 +902,7 @@ impl Recorder {
         let mut start_requested = false;
         let mut started = false;
         let mut paused = false;
+        let mut pause_gate = PauseGate::default();
         let mut clock: Option<Arc<RecordingClock>> = None;
         let status_stop = Arc::new(AtomicBool::new(false));
         let mut status_handle: Option<std::thread::JoinHandle<()>> = None;
@@ -942,7 +944,7 @@ impl Recorder {
                         // `started_recording` answers this one too.
                     } else if !paused {
                         status::out().emit(&wire::Event::RecordingResumed {});
-                    } else if self.output.pause(false) {
+                    } else if unpause_output(&self.output, &mut pause_gate) {
                         paused = false;
                         if let Some(ref c) = clock {
                             c.resume();
@@ -957,7 +959,7 @@ impl Recorder {
                         status::out().error(ErrorCode::Rejected, "the recording has not started yet", false);
                     } else if paused {
                         status::out().emit(&wire::Event::RecordingPaused {});
-                    } else if self.output.pause(true) {
+                    } else if pause_output(&self.output, &mut pause_gate) {
                         paused = true;
                         if let Some(ref c) = clock {
                             c.pause();
@@ -1052,6 +1054,11 @@ impl Recorder {
                         });
                         prisc_ipc::lifetime::exit(prisc_ipc::exit::OK);
                     }
+                    // obs_output_stop unpauses first: space it from the pause
+                    // like a resume (see pause_gate).
+                    std::thread::sleep(
+                        pause_gate.unpause_delay(prisc_obs::time::now_ns(), prisc_obs::time::frame_interval_ns()),
+                    );
                     self.output.stop();
                     let deadline = Instant::now() + STOP_DEADLINE;
                     loop {
@@ -1766,6 +1773,32 @@ fn wait_for_picker(
             }
         }
     }
+}
+
+/// Pause the output, retrying while libobs refuses because it has not yet
+/// consumed a recent unpause (see [`crate::pause_gate`]).
+fn pause_output(output: &ObsOutput, gate: &mut PauseGate) -> bool {
+    loop {
+        if output.pause(true) {
+            gate.paused(prisc_obs::time::now_ns());
+            return true;
+        }
+        if !gate.retry_refused_pause(prisc_obs::time::now_ns()) {
+            return false;
+        }
+        std::thread::sleep(PAUSE_RETRY_INTERVAL);
+    }
+}
+
+/// Unpause the output, first waiting out the minimum span after the pause so
+/// libobs's audio pause state clears (see [`crate::pause_gate`]).
+fn unpause_output(output: &ObsOutput, gate: &mut PauseGate) -> bool {
+    std::thread::sleep(gate.unpause_delay(prisc_obs::time::now_ns(), prisc_obs::time::frame_interval_ns()));
+    if !output.pause(false) {
+        return false;
+    }
+    gate.unpaused(prisc_obs::time::now_ns());
+    true
 }
 
 /// Answers a command that arrived while the recorder is stopping or flushing:

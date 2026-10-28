@@ -6,6 +6,7 @@ mod encoder_config;
 mod frame_clock;
 mod input_capture;
 mod input_hook;
+mod pause_gate;
 mod recorder;
 mod settings;
 mod status;

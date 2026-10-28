@@ -11,3 +11,10 @@ pub fn now_ns() -> u64 {
 pub fn video_frame_time_ns() -> u64 {
     unsafe { prisc_obs_sys::obs_get_video_frame_time() }
 }
+
+/// The duration of one video frame at the current output frame rate
+/// (`obs_get_frame_interval_ns`), the grid libobs aligns pause and unpause
+/// timestamps to.
+pub fn frame_interval_ns() -> u64 {
+    unsafe { prisc_obs_sys::obs_get_frame_interval_ns() }
+}

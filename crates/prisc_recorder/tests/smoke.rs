@@ -291,6 +291,55 @@ fn single_track_records_one_stream_per_media_type() {
     assert_eq!(count_tracks(&data), (1, 1));
 }
 
+/// Back-to-back `pause` / `start` (resume) toggles, with no gap and with a
+/// short one, must each get their reply and still let `quit` stop cleanly.
+/// An immediate resume used to wedge libobs's audio pause state, so the stop
+/// waited out its whole deadline and ended in done{failed} -99.
+#[test]
+#[ignore]
+fn rapid_pause_resume_still_stops_cleanly() {
+    let out_dir = std::env::temp_dir().join("prisc-recorder-smoke");
+    std::fs::create_dir_all(&out_dir).unwrap();
+    let out_mp4 = out_dir.join("smoke-rapid-pause.mp4");
+    let _ = std::fs::remove_file(&out_mp4);
+
+    let exe = env!("CARGO_BIN_EXE_prisc_recorder");
+    let mut child = Command::new(exe)
+        .args(["--region", "0,0,640,480"])
+        .args(["--fps", "30"])
+        .arg("--output")
+        .arg(&out_mp4)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn prisc_recorder");
+
+    let reader = ProtocolReader::new(&mut child);
+    let mut stdin = child.stdin.take().expect("stdin piped");
+    reader.wait_for("started_recording", Duration::from_secs(30));
+    std::thread::sleep(Duration::from_secs(1));
+
+    for gap_ms in [0, 0, 10, 0, 100] {
+        stdin.write_all(b"{\"type\":\"pause\"}\n").unwrap();
+        stdin.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(gap_ms));
+        stdin.write_all(b"{\"type\":\"start\"}\n").unwrap();
+        stdin.flush().unwrap();
+        reader.wait_for("recording_paused", Duration::from_secs(5));
+        reader.wait_for("recording_resumed", Duration::from_secs(5));
+    }
+    std::thread::sleep(Duration::from_secs(1));
+
+    stdin.write_all(b"{\"type\":\"quit\"}\n").unwrap();
+    stdin.flush().unwrap();
+    let stopped = reader.wait_for("done", Duration::from_secs(35));
+    assert_eq!(stopped["result"].as_str(), Some("stopped"), "{stopped}");
+    assert_eq!(stopped["code"].as_i64(), Some(0), "stop code: {stopped}");
+    assert_eq!(child.wait().expect("wait for exit").code(), Some(0));
+    validate_mp4(&std::fs::read(&out_mp4).expect("read mp4"));
+}
+
 /// Counts (video, audio) tracks: every `moov/trak/mdia/hdlr` whose handler
 /// type is `vide` / `soun`.
 fn count_tracks(data: &[u8]) -> (usize, usize) {
