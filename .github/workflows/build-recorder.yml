@@ -16,9 +16,8 @@ name: Build recorder
 # tools/staging/stage-recorder.sh, the same script build.sh runs.
 #
 # These and build-recorder-linux.yml are the only CI jobs that check out the
-# submodules. libobs is 20-40 min
-# cold, so the OBS build tree is cached per OS and arch (see
-# .github/actions/setup-obs-build).
+# submodules. libobs is 20-40 min cold, so the OBS build tree is cached per OS
+# and arch (see .github/actions/setup-obs-build).
 #
 # No step tags the tagless obs-studio checkout for OBS's `git describe --tags`
 # version discovery: the top-level configure gets -DOBS_VERSION_OVERRIDE, and
