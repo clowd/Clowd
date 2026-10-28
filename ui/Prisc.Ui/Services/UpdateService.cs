@@ -270,8 +270,8 @@ namespace Prisc.UI
                 if (info is { IsDowngrade: true }
                     && !String.Equals(info.TargetFullRelease?.PackageId, Manager.AppId, StringComparison.OrdinalIgnoreCase))
                 {
-                    Debug.WriteLine("UpdateService: ignoring a downgrade to " + info.TargetFullRelease?.PackageId
-                                    + " " + info.TargetFullRelease?.Version + " (a different package id)");
+                    AppLog.Info("UpdateService: ignoring a downgrade to " + info.TargetFullRelease?.PackageId
+                                + " " + info.TargetFullRelease?.Version + " (a different package id)");
                     info = null;
                 }
 
