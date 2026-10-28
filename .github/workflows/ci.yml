@@ -123,17 +123,22 @@ jobs:
       # are built and tested in build-recorder.yml (their clippy is not gated yet).
       # `cargo fmt --check` covers the whole workspace; the imported recorder crates opt out
       # of formatting through their own rustfmt.toml.
-      # One clippy/test call over several -p packages unifies dependency features across
-      # them, so a crate that only compiles because a sibling enables a feature on a shared
-      # dependency passes here. build-rust.yml builds them together the same way, so this
-      # gates what ships.
+      # One call per crate, never several -p together: that would unify dependency features
+      # across them, so a crate that only compiles because a sibling enables a feature would pass.
       - name: "Rust gate: format + lint + tests"
         run: |
           cargo fmt --check
-          cargo clippy -p prisc_rust_core -p prisc_hotkeys -p prisc_scroll_driver -p prisc_ai --all-targets -- -D warnings
+          cargo clippy -p prisc_rust_core --all-targets -- -D warnings
+          cargo test -p prisc_rust_core
+          cargo clippy -p prisc_hotkeys --all-targets -- -D warnings
+          cargo test -p prisc_hotkeys
           # prisc_capture has always been gated without --all-targets; widening that is a change of its own.
           cargo clippy -p prisc_capture -- -D warnings
-          cargo test -p prisc_rust_core -p prisc_hotkeys -p prisc_capture -p prisc_scroll_driver -p prisc_ai
+          cargo test -p prisc_capture
+          cargo clippy -p prisc_scroll_driver --all-targets -- -D warnings
+          cargo test -p prisc_scroll_driver
+          cargo clippy -p prisc_ai --all-targets -- -D warnings
+          cargo test -p prisc_ai
         shell: bash
 
       # prisc_hotkeys has no Linux backend yet, but Key/Gesture/the C ABI still build there, and
