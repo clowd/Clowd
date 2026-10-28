@@ -247,8 +247,7 @@ pub enum CursorImage {
 
 impl CursorImage {
     /// The overlay's form of a cursor bitmap read off Windows
-    /// (`desktop::read_cursor`). `None` for an empty bitmap and for the
-    /// `DrawIconEx` fallback, which the overlay does not composite.
+    /// (`desktop::read_cursor`). `None` for an empty bitmap.
     #[cfg_attr(not(windows), allow(dead_code))]
     fn from_icon(width: u32, height: u32, pixels: desktop::IconPixels) -> Option<Self> {
         if width == 0 || height == 0 {
@@ -300,9 +299,58 @@ impl CursorImage {
                 })
             }
             desktop::IconPixels::Rendered {
-                ..
-            } => None,
+                over_black,
+                over_white,
+            } => Self::from_renders(width, height, &over_black, &over_white),
         }
+    }
+
+    /// The `DrawIconEx` fallback's two renders, over black (`b`) and over
+    /// white (`w`). Over black is already the premultiplied color, and
+    /// `w - b` is how much background shows through, so an alpha cursor is
+    /// `AlphaBlended` with `alpha = 255 - (w - b)`. A channel darker over
+    /// white (beyond `DrawIconEx` rounding) means the cursor inverts the
+    /// screen, which alpha cannot say, so
+    /// such a cursor becomes `Masked`: `(screen AND and) XOR xor` reproduces
+    /// both renders exactly with `xor = b` and `and` set wherever they differ.
+    fn from_renders(width: u32, height: u32, b: &[u8], w: &[u8]) -> Option<Self> {
+        let len = (width as usize) * (height as usize) * 4;
+        if b.len() < len || w.len() < len {
+            return None;
+        }
+        let (b, w) = (&b[..len], &w[..len]);
+        let inverts = b
+            .iter()
+            .zip(w)
+            .any(|(&b, &w)| (w as i32) < b as i32 - 16);
+        if inverts {
+            let mut and_mask_bgra = vec![0u8; len];
+            let mut xor_color_bgra = b.to_vec();
+            for i in (0..len).step_by(4) {
+                if b[i..i + 3] != w[i..i + 3] {
+                    and_mask_bgra[i..i + 4].fill(0xFF);
+                }
+                xor_color_bgra[i + 3] = 0xFF;
+            }
+            return Some(CursorImage::Masked {
+                and_mask_bgra,
+                xor_color_bgra,
+                width,
+                height,
+            });
+        }
+        let mut bgra = b.to_vec();
+        for i in (0..len).step_by(4) {
+            let seen: u32 = (0..3)
+                .map(|c| w[i + c].saturating_sub(b[i + c]) as u32)
+                .sum();
+            bgra[i + 3] = 255 - (seen / 3) as u8;
+        }
+        Some(CursorImage::AlphaBlended {
+            bgra,
+            width,
+            height,
+        })
     }
 }
 
@@ -894,12 +942,57 @@ mod tests {
     }
 
     #[test]
-    fn the_rendered_fallback_and_empty_bitmaps_are_not_composited() {
+    fn an_alpha_cursor_is_recovered_from_its_two_renders() {
+        // Opaque red, half-transparent black, fully transparent.
+        let over_black = vec![0, 0, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let over_white = vec![0, 0, 200, 0, 128, 128, 128, 0, 255, 255, 255, 0];
+        let image = CursorImage::from_icon(
+            3,
+            1,
+            desktop::IconPixels::Rendered {
+                over_black,
+                over_white,
+            },
+        )
+        .unwrap();
+        assert_eq!(pixels(&image), (&[0, 0, 200, 255, 0, 0, 0, 127, 0, 0, 0, 0][..], None));
+    }
+
+    #[test]
+    fn an_inverting_cursor_is_recovered_from_its_two_renders_as_and_xor() {
+        // Opaque blue, transparent, screen invert.
+        let over_black = vec![200, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0];
+        let over_white = vec![200, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0];
+        let image = CursorImage::from_icon(
+            3,
+            1,
+            desktop::IconPixels::Rendered {
+                over_black: over_black.clone(),
+                over_white: over_white.clone(),
+            },
+        )
+        .unwrap();
+        let (and, xor) = pixels(&image);
+        let xor = xor.unwrap();
+        assert_eq!(and, &[0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255][..]);
+        assert_eq!(xor, &[200, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255][..]);
+        // The AND/XOR form reproduces both renders.
+        for (bg, render) in [(0u8, &over_black), (255u8, &over_white)] {
+            for i in (0..12).step_by(4) {
+                for c in 0..3 {
+                    assert_eq!((bg & and[i + c]) ^ xor[i + c], render[i + c]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn short_renders_and_empty_bitmaps_are_not_composited() {
         let rendered = desktop::IconPixels::Rendered {
             over_black: vec![0; 4],
             over_white: vec![0; 4],
         };
-        assert!(CursorImage::from_icon(1, 1, rendered).is_none());
+        assert!(CursorImage::from_icon(2, 1, rendered).is_none());
         assert!(CursorImage::from_icon(
             0,
             1,
