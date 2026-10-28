@@ -1,6 +1,6 @@
-//! Cooperative cancellation: the stdin watcher trips the token and the
-//! conversion loops check it between packets, so a cancel takes effect within
-//! one packet's worth of work.
+//! Cooperative cancellation: the quit path (`quit`, stdin EOF, a signal, a
+//! dead stdout) trips the token and the conversion loops check it between
+//! packets, so a cancel takes effect within one packet's worth of work.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

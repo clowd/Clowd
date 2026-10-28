@@ -10,8 +10,8 @@ prisc_vid2gif input.mkv --max-width 480 --fps 12 # aspect-preserving clamps; nev
 
 - `--quality` sets frame rate and dithering: `best` (20 fps, sierra2_4a), `good` (15 fps, bayer), `fair` (10 fps, coarse bayer). `--fps` overrides the preset.
 - `--max-width` / `--max-height` cap the output size like prisc_recorder's recording clamps: aspect preserved, the more restrictive wins, never upscales.
-- Stdout is a line protocol for a parent process: `progress <0-100>` lines (monotonic), then `done <path> <bytes>`, or `error <message>` with exit code 1.
-- Writing `quit\n` to stdin cancels the conversion: the in-flight ffmpeg is killed, temp files and any partial output are removed, and prisc_vid2gif prints `cancelled` and exits 0.
+- It speaks the `job` catalog of Prisc's helper protocol, specified in [`crates/prisc_capture/HELPER_PROTOCOL.md`](../prisc_capture/HELPER_PROTOCOL.md) (§4.3): JSON lines on stdout, `hello`, monotonic `progress` lines, then `done` with the output's `path` and `bytes`, or a fatal `error` (exit 1; exit 2 for arguments that parsed but cannot be used).
+- `{"type":"quit"}` on stdin, closing stdin, or a signal cancels the conversion: the in-flight pass stops within one packet, any partial output is removed, and prisc_vid2gif emits `done` with `result` `cancelled` and exits 0. Run by hand, keep stdin open (a terminal does).
 
 The conversion is two in-process passes (fps/scale + `palettegen`, then `paletteuse` into the GIF encoder) with the palette kept in memory — no temp files. Progress derives from input frame timestamps, so it streams smoothly through both passes.
 

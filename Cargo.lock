@@ -3721,6 +3721,9 @@ dependencies = [
  "clap",
  "prisc_build_support",
  "prisc_ffmpeg_sys",
+ "prisc_ipc",
+ "prisc_rust_core",
+ "serde_json",
 ]
 
 [[package]]
