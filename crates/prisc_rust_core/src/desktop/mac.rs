@@ -237,6 +237,14 @@ pub struct DisplayMode {
     pub refresh_hz: f64,
 }
 
+impl DisplayMode {
+    /// Backing-store pixels per point (2.0 on a Retina panel), or `None`
+    /// when the mode reports an empty size.
+    pub fn backing_scale(&self) -> Option<f64> {
+        (self.pixel_width > 0 && self.width > 0).then(|| self.pixel_width as f64 / self.width as f64)
+    }
+}
+
 impl Display {
     /// The display's pixel size: the mode's backing store, or
     /// `CGDisplayPixelsWide`/`High` (which report points on Retina panels)
@@ -248,12 +256,17 @@ impl Display {
         }
     }
 
-    /// The display UUID string libobs's screen capture source takes, or
-    /// `None` when CoreGraphics will not produce one.
+    /// The display UUID string libobs's screen capture source takes. `None`
+    /// when CoreGraphics has no UUID for the display; empty when it has one
+    /// but cannot format it.
     pub fn uuid(&self) -> Option<String> {
         // Create rule: CFRetained releases the UUID and its string on drop.
         let uuid = unsafe { CGDisplayCreateUUIDFromDisplayID(self.id) }.map(|p| unsafe { CFRetained::from_raw(p) })?;
-        CFUUID::new_string(None, Some(&uuid)).map(|s| s.to_string())
+        Some(
+            CFUUID::new_string(None, Some(&uuid))
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
+        )
     }
 }
 
@@ -264,23 +277,25 @@ extern "C-unwind" {
     fn CGDisplayCreateUUIDFromDisplayID(display: u32) -> Option<NonNull<CFUUID>>;
 }
 
-/// Every active display, in `CGGetActiveDisplayList` order. Empty when the
-/// list cannot be read.
-pub fn active_displays() -> Vec<Display> {
+/// Every active display, in `CGGetActiveDisplayList` order.
+pub fn active_displays() -> Result<Vec<Display>, CGError> {
     let mut count: u32 = 0;
     // SAFETY: a null list with a zero capacity only asks for the count.
-    if unsafe { CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) } != CGError::Success {
-        return Vec::new();
+    let err = unsafe { CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) };
+    if err != CGError::Success {
+        return Err(err);
     }
     let mut ids = vec![0 as CGDirectDisplayID; count as usize];
     // SAFETY: `ids` holds `count` entries.
-    if unsafe { CGGetActiveDisplayList(count, ids.as_mut_ptr(), &mut count) } != CGError::Success {
-        return Vec::new();
+    let err = unsafe { CGGetActiveDisplayList(count, ids.as_mut_ptr(), &mut count) };
+    if err != CGError::Success {
+        return Err(err);
     }
     ids.truncate(count as usize);
 
     let main = CGMainDisplayID();
-    ids.into_iter()
+    Ok(ids
+        .into_iter()
         .map(|id| Display {
             id,
             bounds: CGDisplayBounds(id),
@@ -293,7 +308,7 @@ pub fn active_displays() -> Vec<Display> {
             }),
             is_main: id == main,
         })
-        .collect()
+        .collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +370,20 @@ mod tests {
         }
         assert!(NORMAL_WINDOW_LAYERS.contains(&0));
         assert!(!NORMAL_WINDOW_LAYERS.contains(&3));
+    }
+
+    #[test]
+    fn backing_scale_is_pixels_per_point() {
+        let mode = |pixel_width, width| DisplayMode {
+            pixel_width,
+            pixel_height: 0,
+            width,
+            refresh_hz: 0.0,
+        };
+        assert_eq!(mode(3456, 1728).backing_scale(), Some(2.0));
+        assert_eq!(mode(1920, 1920).backing_scale(), Some(1.0));
+        assert_eq!(mode(0, 1920).backing_scale(), None);
+        assert_eq!(mode(1920, 0).backing_scale(), None);
     }
 
     #[test]

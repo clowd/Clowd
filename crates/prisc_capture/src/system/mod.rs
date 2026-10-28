@@ -16,9 +16,6 @@ mod win_cursor;
 mod win_foreground;
 
 #[cfg(windows)]
-mod win_monitor;
-
-#[cfg(windows)]
 mod win_mouse;
 
 #[cfg(windows)]
@@ -48,6 +45,8 @@ mod mac_mouse;
 #[cfg(target_os = "macos")]
 mod mac_walker;
 
+#[cfg(windows)]
+use prisc_rust_core::desktop;
 #[cfg(target_os = "macos")]
 use prisc_rust_core::geometry::{LogicalPoint, LogicalSize};
 use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
@@ -374,23 +373,46 @@ impl SystemInterop {
     }
 
     pub fn all_monitors() -> Vec<MonitorInfo> {
-        let dxgi_map = win_monitor::build_dxgi_adapter_map();
+        const LOW_VRAM_BYTES: u64 = 1024 * 1024 * 1024;
+        // GDI device name (`\\.\DISPLAY1`) -> the DXGI adapter driving it,
+        // which is what the render workers pick their GPU by.
+        let adapters: std::collections::HashMap<String, desktop::AdapterInfo> = desktop::dxgi_outputs()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|o| {
+                let a = o.adapter?;
+                info!(
+                    "DXGI output {:?} → adapter vendor=0x{:04X} device=0x{:04X} dedicated_vram={}MB",
+                    o.device_name,
+                    a.vendor_id,
+                    a.device_id,
+                    a.dedicated_video_memory / (1024 * 1024)
+                );
+                Some((o.device_name, a))
+            })
+            .collect();
 
-        win_monitor::all()
+        desktop::monitors()
             .expect("Unable to enumerate monitors")
             .into_iter()
-            .map(|m| {
-                const LOW_VRAM_BYTES: u64 = 1024 * 1024 * 1024;
-                let entry = dxgi_map.get(&m.name).copied();
-                MonitorInfo {
-                    bounds: m.bounds(),
-                    scale_factor: m.scale_factor,
+            .filter_map(|m| {
+                // Bounds and refresh rate come from the display mode, the DPI
+                // scale from GetDpiForMonitor; a monitor missing either is
+                // skipped.
+                let (Some(mode), Some(dpi)) = (m.display_mode(), m.dpi()) else {
+                    error!("monitor {:?} ({:?}) could not be described", m.device_name, m.handle);
+                    return None;
+                };
+                let adapter = adapters.get(&m.device_name);
+                Some(MonitorInfo {
+                    bounds: ScreenRect::from_xy_size(mode.origin.x, mode.origin.y, mode.width as i32, mode.height as i32),
+                    scale_factor: dpi as f32 / 96.0,
                     is_primary: m.is_primary,
-                    refresh_hz: m.frequency,
-                    name: m.name,
-                    adapter_id: entry.map(|(v, d, _)| (v, d)),
-                    low_vram_adapter: entry.is_some_and(|(_, _, vram)| vram < LOW_VRAM_BYTES),
-                }
+                    refresh_hz: mode.refresh_hz,
+                    name: m.device_name,
+                    adapter_id: adapter.map(|a| (a.vendor_id, a.device_id)),
+                    low_vram_adapter: adapter.is_some_and(|a| a.dedicated_video_memory < LOW_VRAM_BYTES),
+                })
             })
             .collect()
     }

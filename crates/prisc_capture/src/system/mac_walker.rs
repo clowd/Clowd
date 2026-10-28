@@ -317,7 +317,7 @@ fn find_monitor_for_cg_point(x: f64, y: f64, monitors: &[MonitorInfo]) -> Option
 /// Find the scale factor of the display whose logical bounds contain the
 /// given CG point.
 fn display_scale_at_logical_point(x: f64, y: f64) -> f32 {
-    for d in desktop::active_displays() {
+    for d in desktop::active_displays().unwrap_or_default() {
         let b = d.bounds;
         if x >= b.origin.x && x < b.origin.x + b.size.width && y >= b.origin.y && y < b.origin.y + b.size.height {
             // The mode's pixel width is the true physical pixel count;

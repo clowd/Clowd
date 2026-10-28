@@ -8,26 +8,18 @@ use std::sync::OnceLock;
 
 use prisc_obs::data::ObsData;
 use prisc_rust_core::desktop;
-use windows::core::{BOOL, PCWSTR};
+use prisc_rust_core::geometry::ScreenPoint;
 use windows::Wdk::System::SystemServices::RtlGetVersion;
-use windows::Win32::Foundation::{LPARAM, POINT, RECT, TRUE};
-use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
-use windows::Win32::Graphics::Gdi::{
-    EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, DISPLAY_DEVICEW,
-    HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
-};
 use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows::Win32::System::Threading::ExitProcess;
 use windows::Win32::UI::HiDpi::{
-    GetDpiForMonitor, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
-    MDT_DEFAULT,
+    SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorInfo, GetCursorPos, LoadCursorW, CURSORINFO, CURSOR_SHOWING,
-    EDD_GET_DEVICE_INTERFACE_NAME, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS, IDC_HAND, IDC_HELP,
-    IDC_IBEAM, IDC_NO, IDC_PERSON, IDC_PIN, IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE,
-    IDC_SIZEWE, IDC_UPARROW, IDC_WAIT, MONITORINFOF_PRIMARY,
+    GetCursorInfo, LoadCursorW, CURSORINFO, CURSOR_SHOWING, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS,
+    IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_PERSON, IDC_PIN, IDC_SIZEALL, IDC_SIZENESW,
+    IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_UPARROW, IDC_WAIT,
 };
 
 use super::cursor_sprite::SpriteEvent;
@@ -65,82 +57,29 @@ pub fn init_process() {
 }
 
 pub fn enumerate_monitors() -> Vec<MonitorInfo> {
-    unsafe extern "system" fn enum_proc(
-        hmonitor: HMONITOR,
-        _hdc: HDC,
-        _rect: *mut RECT,
-        lparam: LPARAM,
-    ) -> BOOL {
-        let list = &mut *(lparam.0 as *mut Vec<HMONITOR>);
-        list.push(hmonitor);
-        TRUE
-    }
-
-    let mut handles: Vec<HMONITOR> = Vec::new();
-    // Return BOOL is #[must_use] in the windows crate; a failed enumeration
-    // simply yields an empty list, as before.
-    let _ = unsafe {
-        EnumDisplayMonitors(
-            None,
-            None,
-            Some(enum_proc),
-            LPARAM(&mut handles as *mut Vec<HMONITOR> as isize),
-        )
-    };
-
-    let mut monitors = Vec::new();
-    for hmonitor in handles {
-        let mut info: MONITORINFOEXW = unsafe { mem::zeroed() };
-        info.monitorInfo.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
-        let ok = unsafe {
-            GetMonitorInfoW(
-                hmonitor,
-                &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
-            )
-        };
-        if !ok.as_bool() {
-            continue;
-        }
-
-        let device_name = wide_to_string(&info.szDevice);
-        let rc = info.monitorInfo.rcMonitor;
-
-        // Resolve the stable device interface path; mirrors win-capture, which
-        // matches DeviceID first and falls back to szDevice.
-        let mut dd: DISPLAY_DEVICEW = unsafe { mem::zeroed() };
-        dd.cb = mem::size_of::<DISPLAY_DEVICEW>() as u32;
-        let dd_ok = unsafe {
-            EnumDisplayDevicesW(
-                PCWSTR(info.szDevice.as_ptr()),
-                0,
-                &mut dd,
-                EDD_GET_DEVICE_INTERFACE_NAME,
-            )
-        };
-
-        let (id, alt_id) = if dd_ok.as_bool() {
-            let device_id = wide_to_string(&dd.DeviceID);
-            if device_id.is_empty() {
-                (device_name.clone(), None)
-            } else {
-                (device_id, Some(device_name.clone()))
+    // A failed enumeration simply yields an empty list.
+    desktop::monitors()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| {
+            // The stable device interface path wins; this mirrors win-capture,
+            // which matches DeviceID first and falls back to szDevice.
+            let (id, alt_id) = match m.device_interface_path() {
+                Some(path) => (path, Some(m.device_name)),
+                None => (m.device_name, None),
+            };
+            MonitorInfo {
+                id,
+                alt_id,
+                x: m.bounds.origin.x,
+                y: m.bounds.origin.y,
+                width: m.bounds.size.width.max(0) as u32,
+                height: m.bounds.size.height.max(0) as u32,
+                scale: 1.0,
+                is_primary: m.is_primary,
             }
-        } else {
-            (device_name.clone(), None)
-        };
-
-        monitors.push(MonitorInfo {
-            id,
-            alt_id,
-            x: rc.left,
-            y: rc.top,
-            width: (rc.right - rc.left).max(0) as u32,
-            height: (rc.bottom - rc.top).max(0) as u32,
-            scale: 1.0,
-            is_primary: info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
-        });
-    }
-    monitors
+        })
+        .collect()
 }
 
 pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
@@ -152,23 +91,10 @@ pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
 /// Distinct from `MonitorInfo::scale` (capture px per coordinate unit, always
 /// 1.0 on Windows).
 pub fn monitor_display_scale(m: &MonitorInfo) -> f64 {
-    let center = POINT {
-        x: m.x + (m.width as i32 / 2),
-        y: m.y + (m.height as i32 / 2),
-    };
-    let hmon = unsafe { MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST) };
-    if hmon.is_invalid() {
-        return 1.0;
-    }
-    let mut dpi_x: u32 = 96;
-    let mut dpi_y: u32 = 96;
-    // The windows crate folds the raw HRESULT into a Result (failed HRESULT ->
-    // Err), so is_err() is the old `hr < 0` check.
-    let hr = unsafe { GetDpiForMonitor(hmon, MDT_DEFAULT, &mut dpi_x, &mut dpi_y) };
-    if hr.is_err() || dpi_x == 0 {
-        return 1.0;
-    }
-    dpi_x as f64 / 96.0
+    desktop::dpi_scale_at(ScreenPoint::new(
+        m.x + (m.width as i32 / 2),
+        m.y + (m.height as i32 / 2),
+    ))
 }
 
 /// The graphics-adapter index that drives the display the region mostly sits
@@ -197,50 +123,18 @@ pub fn region_adapter_index(
     monitors: &[MonitorInfo],
 ) -> Option<u32> {
     let ranked = region::monitors_by_coverage(region, plan, monitors);
-    let adapters = adapter_outputs()?;
+    let outputs = desktop::dxgi_outputs()?;
     for index in ranked {
         // GDI device name (`\.\DISPLAY1`) is the join key: it is both
         // MonitorInfo::alt_id and DXGI_OUTPUT_DESC::DeviceName.
         let Some(name) = monitors.get(index).and_then(|m| m.alt_id.as_deref()) else {
             continue;
         };
-        if let Some((adapter, _)) = adapters.iter().find(|(_, output)| output == name) {
-            return Some(*adapter);
+        if let Some(output) = outputs.iter().find(|o| o.device_name == name) {
+            return Some(output.adapter_index);
         }
     }
     None
-}
-
-/// Every (adapter index, GDI device name) pair DXGI reports, in enumeration
-/// order. `None` only when the factory itself cannot be created.
-fn adapter_outputs() -> Option<Vec<(u32, String)>> {
-    let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.ok()?;
-    let mut pairs = Vec::new();
-    for adapter_index in 0.. {
-        // EnumAdapters1 ends with DXGI_ERROR_NOT_FOUND; any other error is
-        // treated the same way (stop, keep what we have).
-        let Ok(adapter) = (unsafe { factory.EnumAdapters1(adapter_index) }) else {
-            break;
-        };
-        for output_index in 0.. {
-            let Ok(output) = (unsafe { adapter.EnumOutputs(output_index) }) else {
-                break;
-            };
-            let Ok(desc) = (unsafe { output.GetDesc() }) else {
-                continue;
-            };
-            let len = desc
-                .DeviceName
-                .iter()
-                .position(|&c| c == 0)
-                .unwrap_or(desc.DeviceName.len());
-            pairs.push((
-                adapter_index,
-                String::from_utf16_lossy(&desc.DeviceName[..len]),
-            ));
-        }
-    }
-    Some(pairs)
 }
 
 /// The first component of the Windows 11 build range. Windows 11 kept
@@ -362,11 +256,6 @@ pub fn exit_process(code: i32) -> ! {
     unsafe { ExitProcess(code as u32) }
 }
 
-fn wide_to_string(buf: &[u16]) -> String {
-    let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    String::from_utf16_lossy(&buf[..len])
-}
-
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "wasapi_input_capture";
 /// Webcam capture source (`--webcam` / `--list-cameras`): DirectShow.
 pub const WEBCAM_SOURCE_ID: &str = "dshow_input";
@@ -380,35 +269,24 @@ pub const WEBCAM_DEVICE_KEY: &str = "video_device_id";
 /// click is caught as long as the button is still held on some tick — the same
 /// sampling the C++ original does.
 pub fn get_mouse_info() -> MouseInfo {
-    let mut p = POINT { x: 0, y: 0 };
-    if unsafe { GetCursorPos(&mut p) }.is_err() {
+    let Some(p) = desktop::cursor_position() else {
         return MouseInfo {
             x: 0.0,
             y: 0.0,
             pressed: false,
             scale: 1.0,
         };
-    }
+    };
 
     let down = |vk: i32| unsafe { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 };
     let pressed = down(VK_LBUTTON.0 as i32) || down(VK_RBUTTON.0 as i32);
-
-    // Per-monitor DPI: 96 = 100% scaling, so dpi/96 is the zoom factor.
-    let mut dpi_x: u32 = 96;
-    let mut dpi_y: u32 = 96;
-    let hmon = unsafe { MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST) };
-    if !hmon.is_invalid() {
-        let ok = unsafe { GetDpiForMonitor(hmon, MDT_DEFAULT, &mut dpi_x, &mut dpi_y) };
-        if ok.is_err() || dpi_x == 0 {
-            dpi_x = 96;
-        }
-    }
 
     MouseInfo {
         x: p.x as f64,
         y: p.y as f64,
         pressed,
-        scale: dpi_x as f64 / 96.0,
+        // Per-monitor DPI: 96 = 100% scaling, so dpi/96 is the zoom factor.
+        scale: desktop::dpi_scale_at(p),
     }
 }
 
