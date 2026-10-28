@@ -845,10 +845,13 @@ namespace Prisc.VideoSDK.Tests
             string dll = FindRenderDll();
             Assert.SkipWhen(dll == null, "Prisc.VideoRender.dll not found: build the exe project.");
 
-            string input = WriteFixtureMp4(64, 64, 30, seconds: 2, sampleRate: 48000);
+            // long enough that the quit always lands mid-render: a release build renders a couple of
+            // seconds of 64x64 faster than a loaded test host turns hello around into the quit, and
+            // a render that finishes first rightly ends with done{ok}
+            string input = WriteFixtureMp4(64, 64, 30, seconds: 60, sampleRate: 48000);
             string output = TempPath(".mp4");
             string argsPath = TempPath(".json");
-            File.WriteAllText(argsPath, ArgsJson(input, output, segments: "[{\"start_ms\":0,\"end_ms\":2000}]", crf: "30"));
+            File.WriteAllText(argsPath, ArgsJson(input, output, segments: "[{\"start_ms\":0,\"end_ms\":60000}]", crf: "30"));
 
             var client = await HelperClient<JobEvent, JobCommand>.StartAsync(HelperSpecs.Job, "dotnet",
                 new[] { "exec", dll, argsPath },
