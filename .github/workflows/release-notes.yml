@@ -85,10 +85,15 @@ jobs:
           fi
           echo "EXCLUDE=$EXCLUDE" >> "$GITHUB_ENV"
 
-          # The release that ships the rename to Prisc gets a section announcing it. Found by
-          # subject for the same reason as above; empty unless the rename is inside the range.
-          RENAME=$(git rev-list -1 --no-merges \
-            --grep='^Rename Clowd to Prisc in code and build the recorder in-repo$' "$TO" "^$FROM")
+          # The release that ships the rename to Prisc gets a section announcing it: the commit
+          # "Rename Clowd to Prisc in code and build the recorder in-repo", pinned by sha so a later
+          # commit reusing that subject cannot take its place. Empty unless it is inside the range.
+          RENAME_COMMIT=e851d1f2987d91101e92ef8b5a318390074e0eb7
+          RENAME=""
+          if git merge-base --is-ancestor "$RENAME_COMMIT" "$TO" 2>/dev/null \
+            && ! git merge-base --is-ancestor "$RENAME_COMMIT" "$FROM" 2>/dev/null; then
+            RENAME=$RENAME_COMMIT
+          fi
           echo "RENAME_SHA=$RENAME" >> "$GITHUB_ENV"
 
           # EXCLUDE stays unquoted so that an empty value adds no argument

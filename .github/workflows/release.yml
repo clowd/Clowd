@@ -172,10 +172,24 @@ jobs:
             Write-Warning "publish/PriscShellExt.msix not found - skipping shell extension signing."
             exit 0
           }
+          # The Trusted Signing dlib only ships with vpk (its tool store's vendor/signing dir, whose
+          # layout is vpk's business), so search the store for it rather than assume a depth.
           $tools = Split-Path (Get-Command vpk).Source
-          $signing = (Resolve-Path "$tools/.store/vpk/*/vpk/*/vendor/signing" | Select-Object -Last 1).Path
-          & (Join-Path $signing signtool.exe) sign /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 `
-            /dlib (Join-Path $signing Azure.CodeSigning.Dlib.dll) /dmdf .github/azure-trusted-sign.json `
+          $dlib = Get-ChildItem (Join-Path $tools .store/vpk) -Recurse -File -Filter Azure.CodeSigning.Dlib.dll -ErrorAction SilentlyContinue |
+            Sort-Object FullName | Select-Object -Last 1
+          if (-not $dlib) { Write-Error "Azure.CodeSigning.Dlib.dll not found in vpk's tool store under $tools"; exit 1 }
+          # signtool: the newest Windows SDK's x64 one (the dlib is x64), else the copy vpk vendors beside the dlib.
+          $sdkBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+          $signtool = Get-ChildItem $sdkBin -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+(\.\d+){3}$' -and (Test-Path (Join-Path $_.FullName x64/signtool.exe)) } |
+            Sort-Object { [version]$_.Name } | Select-Object -Last 1 |
+            ForEach-Object { Join-Path $_.FullName x64/signtool.exe }
+          if (-not $signtool) { $signtool = Join-Path $dlib.DirectoryName signtool.exe }
+          if (-not (Test-Path $signtool)) { Write-Error "signtool.exe not found in the Windows SDK or beside $($dlib.FullName)"; exit 1 }
+          Write-Host "signtool: $signtool"
+          Write-Host "dlib: $($dlib.FullName)"
+          & $signtool sign /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 `
+            /dlib $dlib.FullName /dmdf .github/azure-trusted-sign.json `
             publish/PriscShellExt.msix
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
