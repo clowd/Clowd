@@ -213,11 +213,17 @@ pub(crate) fn atomic_copy(src: &Path, dst: &Path, finish: impl FnOnce(&Path) -> 
         dst.file_name().unwrap().to_string_lossy(),
         std::process::id()
     ));
-    let ok = fs::copy(src, &tmp).is_ok() && finish(&tmp) && fs::rename(&tmp, dst).is_ok();
-    if !ok {
+    // The io::Error matters most on Windows, where a running recorder holding
+    // the destination DLL shows up as a sharing violation.
+    let result = match fs::copy(src, &tmp) {
+        Err(e) => Err(e.to_string()),
+        Ok(_) if !finish(&tmp) => Err("post-copy step failed".to_string()),
+        Ok(_) => fs::rename(&tmp, dst).map_err(|e| e.to_string()),
+    };
+    if let Err(e) = result {
         let _ = fs::remove_file(&tmp);
         println!(
-            "cargo:warning=failed to stage {} -> {}",
+            "cargo:warning=failed to stage {} -> {}: {e}",
             src.display(),
             dst.display()
         );
