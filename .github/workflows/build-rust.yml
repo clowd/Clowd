@@ -36,6 +36,10 @@ jobs:
           # What each leg builds and ships (prisc_ai only where ONNX Runtime
           # exists, the shell extension only on Windows) comes from
           # tools/staging/shipped.sh, the list build.sh uses too.
+          # The app jobs (here, build-ui.yml, ci.yml's tests and release.yml)
+          # stay on macos-15, where they were pinned on purpose. Only the
+          # recorder runs on macos-26, because OBS 32.2.2 needs Xcode 26.5
+          # (build-recorder.yml). Moving the app jobs over is untested.
           - rid: win-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc

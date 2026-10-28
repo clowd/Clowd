@@ -103,6 +103,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macos-15, not the recorder's macos-26: see build-rust.yml.
           - rid: win-x64
             os: windows-latest
           - rid: win-arm64

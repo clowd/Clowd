@@ -154,10 +154,10 @@ jobs:
   macos:
     name: recorder (${{ matrix.rid }})
     if: inputs.platforms == 'desktop'
-    # macos-26, not the macos-15 the app jobs use: OBS 32.2.2's CMake requires
-    # the macOS 26.5 SDK (Xcode 26.5+). Pinned rather than macos-latest so the
-    # image only changes on purpose. Both the arm64 (native) and x64 (cross)
-    # slices run on this arm64 runner.
+    # macos-26, not the macos-15 the app jobs use (see build-rust.yml): OBS
+    # 32.2.2's CMake requires the macOS 26.5 SDK (Xcode 26.5+). Pinned rather
+    # than macos-latest so the image only changes on purpose. Both the arm64
+    # (native) and x64 (cross) slices run on this arm64 runner.
     runs-on: macos-26
     timeout-minutes: 120
     strategy:
