@@ -1024,17 +1024,26 @@ runner tests). Moved, not deleted: `HelperProcess.cs`, `HelperProcessLog.cs` →
 
 ### 8.3 Open items
 
-Integration smoke tests not yet run (they need the screen-recording permission or a person at
-the running app):
+Integration smoke tests run on macOS with the Screen Recording permission granted:
+`RecorderDriver` saw `initialized`, then configure, start, pause, resume and mute, and stopped
+cleanly with an mp4 on disk; `ShareRegionDriver` had its prompt accepted (clicked through System
+Events) and `WaitForDecisionAsync` returned `Started`.
 
+Not yet seen (they need a person at the running app, or a harness that pumps the Avalonia
+dispatcher):
+
+- The recorder's `status` and `levels` events reaching their UI-thread handlers.
+- share_region's obscure and move acks and its `done` reaching `ShareRegionDriver`'s UI-thread
+  handlers.
+- A real scrolling capture that returns a session. Only `hello` and `quit` have been driven
+  through `ScrollDriver`.
 - One-shot capture ended with Escape through `ScreenCaptureService`, with standby turned off in
   settings. Through the C# client it has only been launched and quit; Escape has been seen only
   on a raw `prisc_capture` run.
-- A share session in the running app with obscure and move toggled: `ShareRegionDriver` has not
-  yet seen share_region's acks or its `done`.
-- A real scrolling capture that returns a session. Only `hello` and `quit` have been driven
-  through `ScrollDriver`.
-- A recording that produces frames: `started_recording`, `status`, `levels` and `done{stopped}`.
+
+Known recorder bug, outside this change: a `pause` followed at once by `resume` makes the next
+`quit` hang until `STOP_DEADLINE`, ending in `done{failed}` with code -99 and a truncated file.
+It reproduces at dd5f024fd, before this change, so it is not a regression of the protocol work.
 
 Not yet run on Windows: the `ci.yml` Rust gate on `windows-latest`, which runs
 `guard::tests::private_stdout_is_not_inherited_and_fd1_goes_to_stderr` and so checks the
