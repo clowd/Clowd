@@ -458,6 +458,71 @@ namespace Prisc.Shared.Tests
         }
 
         // ------------------------------------------------------------------------------------
+        // macOS bundle rename and update cache
+        // ------------------------------------------------------------------------------------
+
+        [Fact]
+        public void BundleRename_TargetsTheSiblingPriscApp_ForAnUpgradedBundle()
+        {
+            var applications = Path.Combine(_root, "Applications");
+            var bundle = Path.Combine(applications, "Clowd.app");
+            Touch(Path.Combine(bundle, "Contents", "MacOS", "Prisc.Ui"));
+
+            Assert.Equal(Path.Combine(applications, "Prisc.app"), LegacyClowd.GetMacBundleRenameTarget(bundle, "Prisc.app"));
+            Assert.Equal(Path.Combine(applications, "Prisc.app"), LegacyClowd.GetMacBundleRenameTarget(bundle + Path.DirectorySeparatorChar, "Prisc.app"));
+        }
+
+        [Fact]
+        public void BundleRename_IsNull_WhenPriscAppExists_OrTheBundleHasAnotherName()
+        {
+            var applications = Path.Combine(_root, "Applications");
+            var bundle = Path.Combine(applications, "Clowd.app");
+            Touch(Path.Combine(bundle, "Contents", "MacOS", "Prisc.Ui"));
+            Touch(Path.Combine(applications, "Prisc.app", "Contents", "MacOS", "Prisc.Ui"));
+
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget(bundle, "Prisc.app"));
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget(Path.Combine(applications, "Prisc.app"), "Prisc.app"));
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget(Path.Combine(applications, "My Clowd.app"), "Prisc.app"));
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget(null, "Prisc.app"));
+            Assert.Null(LegacyClowd.GetMacBundleRenameTarget("Clowd.app", "Prisc.app"));
+        }
+
+        private string VelopackCache => Path.Combine(_root, "Caches", "velopack");
+        private string LegacyPackages => Path.Combine(VelopackCache, "Clowd", "packages");
+        private string NewPackages => Path.Combine(VelopackCache, "Prisc", "packages");
+
+        [Fact]
+        public void UpdatePackages_AreMovedToTheNewCache_AndTheLegacyCacheDeleted()
+        {
+            WriteFile(Path.Combine(LegacyPackages, "Prisc-5.0.0-osx-arm64-full.nupkg"), "full");
+            WriteFile(Path.Combine(LegacyPackages, "Clowd-4.10.9-osx-arm64-full.nupkg"), "old");
+            WriteFile(Path.Combine(LegacyPackages, ".betaId"), "id");
+            Directory.CreateDirectory(Path.Combine(LegacyPackages, "VelopackTemp"));
+
+            LegacyClowd.MigrateMacUpdatePackages(LegacyPackages, NewPackages, "Prisc");
+
+            Assert.Equal("full", File.ReadAllText(Path.Combine(NewPackages, "Prisc-5.0.0-osx-arm64-full.nupkg")));
+            Assert.False(File.Exists(Path.Combine(NewPackages, "Clowd-4.10.9-osx-arm64-full.nupkg")));
+            Assert.False(Directory.Exists(Path.Combine(VelopackCache, "Clowd")));
+
+            // idempotent once the legacy cache is gone
+            LegacyClowd.MigrateMacUpdatePackages(LegacyPackages, NewPackages, "Prisc");
+            Assert.True(File.Exists(Path.Combine(NewPackages, "Prisc-5.0.0-osx-arm64-full.nupkg")));
+        }
+
+        [Fact]
+        public void UpdatePackages_KeepAPackageTheNewCacheAlreadyHas()
+        {
+            WriteFile(Path.Combine(LegacyPackages, "Prisc-5.0.0-osx-arm64-full.nupkg"), "stranded");
+            WriteFile(Path.Combine(NewPackages, "Prisc-5.0.0-osx-arm64-full.nupkg"), "current");
+
+            LegacyClowd.MigrateMacUpdatePackages(LegacyPackages, NewPackages, "Prisc");
+
+            Assert.Equal("current", File.ReadAllText(Path.Combine(NewPackages, "Prisc-5.0.0-osx-arm64-full.nupkg")));
+            Assert.False(Directory.Exists(Path.Combine(VelopackCache, "Clowd")));
+        }
+
+        // ------------------------------------------------------------------------------------
         // Data folder (sessions)
         // ------------------------------------------------------------------------------------
 

@@ -201,6 +201,13 @@ namespace Prisc.UI
             /// state, so a false here is the "already answered" case.</summary>
             public static bool RequestProcessTrust()
             {
+                // AX looks the option up by value (CFEqual) and dereferences what it finds without a
+                // null check: a dictionary it cannot find the key in crashes the process (SIGSEGV in
+                // CFGetTypeID) the moment the app is not yet trusted, so never hand it one.
+                if (kCFBooleanTrue == IntPtr.Zero || kCFTypeDictionaryKeyCallBacks == IntPtr.Zero
+                    || kCFTypeDictionaryValueCallBacks == IntPtr.Zero)
+                    return false;
+
                 IntPtr key = IntPtr.Zero, options = IntPtr.Zero;
                 try
                 {
@@ -208,8 +215,10 @@ namespace Prisc.UI
                     if (key == IntPtr.Zero)
                         return false;
 
+                    // the CFType callbacks, not NULL ones: NULL callbacks compare keys by pointer, so
+                    // AX's own kAXTrustedCheckOptionPrompt never matches this freshly created string.
                     options = CFDictionaryCreate(IntPtr.Zero, new[] { key }, new[] { kCFBooleanTrue }, 1,
-                                                 IntPtr.Zero, IntPtr.Zero);
+                                                 kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks);
                     if (options == IntPtr.Zero)
                         return false;
 
@@ -263,20 +272,24 @@ namespace Prisc.UI
             [DllImport(CoreFoundation)]
             private static extern void CFRelease(IntPtr cf);
 
-            // kCFBooleanTrue is exported data, not a function, so it has to be resolved by hand.
-            private static readonly IntPtr kCFBooleanTrue = ResolveCFBooleanTrue();
+            // exported data, not functions, so they have to be resolved by hand: kCFBooleanTrue is a
+            // CFBooleanRef variable (read its value), the callbacks are structs CFDictionaryCreate
+            // takes by address.
+            private static readonly IntPtr kCFBooleanTrue = ResolveCoreFoundationData("kCFBooleanTrue", dereference: true);
+            private static readonly IntPtr kCFTypeDictionaryKeyCallBacks = ResolveCoreFoundationData("kCFTypeDictionaryKeyCallBacks", dereference: false);
+            private static readonly IntPtr kCFTypeDictionaryValueCallBacks = ResolveCoreFoundationData("kCFTypeDictionaryValueCallBacks", dereference: false);
 
-            private static IntPtr ResolveCFBooleanTrue()
+            private static IntPtr ResolveCoreFoundationData(string name, bool dereference)
             {
                 try
                 {
-                    var handle = NativeLibrary.Load(CoreFoundation);
-                    return Marshal.ReadIntPtr(NativeLibrary.GetExport(handle, "kCFBooleanTrue"));
+                    var address = NativeLibrary.GetExport(NativeLibrary.Load(CoreFoundation), name);
+                    return dereference ? Marshal.ReadIntPtr(address) : address;
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine("[MacPermissions] could not resolve kCFBooleanTrue: " + ex);
-                    SentryConfig.CaptureHandled(ex, "macperm.cfbool");
+                    Debug.WriteLine("[MacPermissions] could not resolve " + name + ": " + ex);
+                    SentryConfig.CaptureHandled(ex, "macperm.cfdata");
                     return IntPtr.Zero;
                 }
             }

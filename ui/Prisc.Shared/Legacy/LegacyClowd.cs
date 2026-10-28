@@ -742,6 +742,100 @@ public static class LegacyClowd
     }
 
     // ------------------------------------------------------------------------------------------
+    // macOS bundle and update cache
+    // ------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Where an upgraded macOS bundle should move: Velopack updates a bundle in place, so an
+    /// install upgraded across the rename still lives at <c>Clowd.app</c>, which Finder, Spotlight
+    /// and Launchpad keep showing as "Clowd". Returns the sibling <paramref name="newBundleName"/>
+    /// when <paramref name="ownBundle"/> is named <see cref="MacBundleName"/> and nothing exists at
+    /// the sibling path yet; null otherwise (including a null or relative bundle). Never throws.
+    /// </summary>
+    public static string? GetMacBundleRenameTarget(string? ownBundle, string newBundleName)
+    {
+        try
+        {
+            if (String.IsNullOrEmpty(ownBundle) || !Path.IsPathRooted(ownBundle))
+                return null;
+
+            var bundle = NormalizePath(ownBundle);
+            if (!String.Equals(Path.GetFileName(bundle), MacBundleName, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var parent = Path.GetDirectoryName(bundle);
+            if (String.IsNullOrEmpty(parent))
+                return null;
+
+            var target = Path.Combine(parent, newBundleName);
+            return Directory.Exists(target) || File.Exists(target) ? null : target;
+        }
+        catch (Exception ex)
+        {
+            Log("could not work out the bundle rename: " + ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Carries Velopack's macOS update cache across the package id change. The cache lives in
+    /// <c>~/Library/Caches/velopack/&lt;packId&gt;/packages</c>, so the update to the first renamed
+    /// release downloads its full package into the old app's folder, where nothing looks for it:
+    /// the next update finds no base and downloads the full package again instead of a delta, and
+    /// the stranded copy lingers. Moves every <c>&lt;newPackageId&gt;-*-full.nupkg</c> from
+    /// <paramref name="legacyPackagesDir"/> into <paramref name="newPackagesDir"/> (skipping one
+    /// already there) and then deletes the legacy app's cache folder (the parent of
+    /// <paramref name="legacyPackagesDir"/>, which only ever held Velopack's own files) unless a
+    /// package could not be moved. Callers skip this while a separate legacy install exists, whose
+    /// cache it is. Idempotent; never throws.
+    /// </summary>
+    public static void MigrateMacUpdatePackages(string legacyPackagesDir, string newPackagesDir, string newPackageId)
+    {
+        try
+        {
+            if (String.IsNullOrEmpty(legacyPackagesDir) || String.IsNullOrEmpty(newPackagesDir) || String.IsNullOrEmpty(newPackageId))
+                return;
+
+            if (PathsEqual(legacyPackagesDir, newPackagesDir) || !Directory.Exists(legacyPackagesDir))
+                return;
+
+            var allMoved = true;
+            foreach (var source in Directory.GetFiles(legacyPackagesDir, newPackageId + "-*-full.nupkg"))
+            {
+                var target = Path.Combine(newPackagesDir, Path.GetFileName(source));
+                if (File.Exists(target))
+                    continue;
+
+                try
+                {
+                    Directory.CreateDirectory(newPackagesDir);
+                    File.Move(source, target);
+                    Log("moved " + source + " to " + target);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    allMoved = false;
+                    Log("could not move " + source + " (retried next start): " + ex.Message);
+                }
+            }
+
+            if (!allMoved)
+                return;
+
+            var legacyAppCache = Path.GetDirectoryName(NormalizePath(legacyPackagesDir));
+            if (!String.IsNullOrEmpty(legacyAppCache) && Directory.Exists(legacyAppCache))
+            {
+                Directory.Delete(legacyAppCache, true);
+                Log("deleted " + legacyAppCache);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log("could not migrate the update cache: " + ex.Message);
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------------------------------
 

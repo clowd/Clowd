@@ -115,6 +115,11 @@ namespace Prisc
 
             velopack.Run();
 
+            // a macOS install upgraded across the rename still lives at Clowd.app; the first start
+            // moves it to Prisc.app and comes back from there with the same arguments.
+            if (LegacyClowdShellCleanup.TryRelaunchFromRenamedBundle(args))
+                return;
+
             // Records whether this process was accidentally started with the shell extension's
             // package identity (priscapp/Prisc#83) — the one launch-origin difference that is
             // invisible from the outside once the app is running.

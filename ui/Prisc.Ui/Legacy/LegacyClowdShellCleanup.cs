@@ -218,8 +218,9 @@ public static class LegacyClowdShellCleanup
         }
     }
 
-    /// <summary>macOS: deletes the legacy LaunchAgent plist, if present. Call it before
-    /// <see cref="AutoStartManager.Sync"/>. A no-op on other platforms.</summary>
+    /// <summary>macOS: deletes the legacy LaunchAgent plist, if present, and moves the update
+    /// cache out of the legacy app's Velopack folder (<see cref="LegacyClowd.MigrateMacUpdatePackages"/>).
+    /// Call it before <see cref="AutoStartManager.Sync"/>. A no-op on other platforms.</summary>
     public static void RunMacCleanup()
     {
         if (!OperatingSystem.IsMacOS())
@@ -229,24 +230,139 @@ public static class LegacyClowdShellCleanup
         {
             var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Library", "LaunchAgents", LegacyLaunchAgentLabel + ".plist");
+            var packagesDir = GetLegacyMacPackagesDir();
 
-            if (!File.Exists(path))
+            if (!File.Exists(path) && packagesDir == null)
                 return;
 
-            // the plist of a still-installed, not-upgraded copy of the old app is its autostart
+            // the plist and update cache of a still-installed, not-upgraded copy of the old app are
+            // still that app's
             if (HasSeparateLegacyInstall())
             {
-                Log("a separate legacy install is present; its LaunchAgent is left alone");
+                Log("a separate legacy install is present; its LaunchAgent and update cache are left alone");
                 return;
             }
 
-            File.Delete(path);
-            Log("deleted " + path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+                Log("deleted " + path);
+            }
+
+            if (packagesDir != null)
+                LegacyClowd.MigrateMacUpdatePackages(packagesDir, VelopackLocator.Current.PackagesDir, Constants.PriscAppName);
         }
         catch (Exception ex)
         {
-            Log("LaunchAgent cleanup failed: " + ex);
+            Log("macOS cleanup failed: " + ex);
         }
+    }
+
+    /// <summary>The legacy app's Velopack packages folder beside ours
+    /// (<c>~/Library/Caches/velopack/Clowd/packages</c>) when it exists and this is an installed
+    /// build; null otherwise.</summary>
+    private static string GetLegacyMacPackagesDir()
+    {
+        if (OwnInstallRoot == null)
+            return null;
+
+        // <cache>/velopack/<packId>/packages: only rebase a folder of that shape onto the old id
+        var packages = VelopackLocator.Current.PackagesDir;
+        var appCache = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(packages ?? ""));
+        var velopackCache = Path.GetDirectoryName(appCache ?? "");
+        if (String.IsNullOrEmpty(velopackCache) || !String.Equals(Path.GetFileName(appCache), Constants.PriscAppName, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var legacy = Path.Combine(velopackCache, LegacyClowd.FolderName, Path.GetFileName(packages.TrimEnd('/')));
+        return Directory.Exists(legacy) ? legacy : null;
+    }
+
+    /// <summary>
+    /// macOS: moves an install upgraded across the rename from <c>Clowd.app</c> to a sibling
+    /// <c>Prisc.app</c> (see <see cref="LegacyClowd.GetMacBundleRenameTarget"/>). A running app
+    /// cannot move its own bundle, as later loads resolve against the old path, so this hands off
+    /// to a <c>/bin/sh</c> that waits for this process to exit, renames the bundle and relaunches it
+    /// with the same arguments (the old path if the rename failed). Returns true when that handoff
+    /// is under way and the caller must exit at once, before taking the single-instance mutex.
+    ///
+    /// Attempted once per install (a marker in <see cref="PathConstants.AppDataRoot"/>), so a
+    /// rename macOS refuses costs one extra relaunch rather than one on every start; and only while
+    /// nothing else runs out of the bundle (a second launch next to a running Prisc, the standby
+    /// capturer), since every such process would lose its own files. Never throws.
+    /// </summary>
+    public static bool TryRelaunchFromRenamedBundle(string[] args)
+    {
+        if (!OperatingSystem.IsMacOS())
+            return false;
+
+        try
+        {
+            var bundle = OwnInstallRoot;
+            var target = LegacyClowd.GetMacBundleRenameTarget(bundle, Constants.PriscAppName + ".app");
+            if (target == null)
+                return false;
+
+            var marker = Path.Combine(PathConstants.AppDataRoot, BundleRenameMarkerFileName);
+            if (File.Exists(marker))
+                return false;
+
+            if (IsAnyPriscProcessRunning())
+            {
+                Log("another Prisc process runs out of " + bundle + "; the bundle rename waits for a later start");
+                return false;
+            }
+
+            Directory.CreateDirectory(PathConstants.AppDataRoot);
+            File.WriteAllText(marker, "");
+
+            // $1 pid, $2 bundle, $3 target, the rest are the app's own arguments
+            const string script =
+                "pid=$1; old=$2; new=$3; shift 3; " +
+                "while kill -0 \"$pid\" 2>/dev/null; do sleep 0.1; done; " +
+                "app=$old; if [ ! -e \"$new\" ] && /bin/mv \"$old\" \"$new\"; then app=$new; fi; " +
+                "exec /usr/bin/open -n \"$app\" --args \"$@\"";
+
+            var psi = new ProcessStartInfo("/bin/sh") { UseShellExecute = false };
+            foreach (var a in new[] { "-c", script, "sh", Environment.ProcessId.ToString(), bundle, target })
+                psi.ArgumentList.Add(a);
+            foreach (var a in args ?? Array.Empty<string>())
+                psi.ArgumentList.Add(a);
+
+            using var _ = Process.Start(psi);
+            Log("relaunching from " + target);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log("bundle rename failed: " + ex);
+            return false;
+        }
+    }
+
+    private const string BundleRenameMarkerFileName = ".legacy-bundle-rename-attempted";
+
+    /// <summary>The executables Prisc runs out of its bundle, other than this process.</summary>
+    private static bool IsAnyPriscProcessRunning()
+    {
+        string[] names = { "Prisc.Ui", "Prisc.VideoRender", "prisc_capture", "prisc_scroll_driver", "prisc_ai", "prisc_recorder", "prisc_share_region", "prisc_vid2gif" };
+        var self = Environment.ProcessId;
+
+        foreach (var name in names)
+        {
+            var processes = Process.GetProcessesByName(name);
+            try
+            {
+                if (processes.Any(p => p.Id != self))
+                    return true;
+            }
+            finally
+            {
+                foreach (var p in processes)
+                    p.Dispose();
+            }
+        }
+
+        return false;
     }
 
     private static void Log(string message) => Debug.WriteLine("LegacyClowdShellCleanup: " + message);
