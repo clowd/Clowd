@@ -4,12 +4,12 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Prisc.Config;
+using Prisc.Ipc;
 using Prisc.PlatformUtil;
 using Prisc.UI.Helpers;
 
@@ -40,12 +40,6 @@ namespace Prisc.UI
         /// here, and the standby capturer's overlay tracked by its supervisor.</summary>
         public static bool IsCaptureActive =>
             Volatile.Read(ref _captureActive) != 0 || CaptureStandbySupervisor.IsOverlayOpen;
-
-        /// <summary>The capturer's exit code for "macOS has not granted Screen Recording" — see
-        /// <c>NO_SCREEN_PERMISSION</c> in crates/prisc_rust_core/src/exit.rs. Reported instead of
-        /// crashing, so a revoked permission gets the permission dialog rather than a stack trace.
-        /// </summary>
-        internal const int ExitCodeNoScreenPermission = 3;
 
         public async void Open(CaptureMode mode, RegionIntent intent = RegionIntent.Capture)
         {
@@ -102,45 +96,43 @@ namespace Prisc.UI
                 var sessionDir = SessionManager.Current.GetNextSessionDirectory();
                 Directory.CreateDirectory(sessionDir);
 
-                var psi = new ProcessStartInfo(binary)
+                // All three streams go through the client: hello and done on stdout, the log on
+                // stderr, and the stdin lease, so a dead Prisc.Ui ends the overlay instead of
+                // orphaning it. The overlay needs keyboard focus immediately (Esc / shortcuts), so it
+                // gets our foreground rights; best-effort, it only works while we hold them (hotkey
+                // or tray interaction).
+                HelperOutcome<Prisc.Ipc.CaptureEvent> outcome;
+                try
                 {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    // capture the capturer's log output (simplelog writes its log and any
-                    // Rust panic to stderr) so a crash can be reported to the user. Rust
-                    // writes UTF-8; without pinning, .NET decodes with the OEM codepage.
-                    RedirectStandardError = true,
-                    StandardErrorEncoding = Encoding.UTF8,
-                    WorkingDirectory = Path.GetDirectoryName(binary),
-                };
-                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current, mode, intent,
-                                                          SettingsRoot.Current.General.LastSavePath))
-                    psi.ArgumentList.Add(arg);
+                    var client = await HelperClient<Prisc.Ipc.CaptureEvent, CaptureCommand>.StartAsync(HelperSpecs.Capture, binary,
+                        CaptureArguments.Build(sessionDir, SettingsRoot.Current, mode, intent, SettingsRoot.Current.General.LastSavePath),
+                        new HelperStartOptions { GrantForeground = true });
+                    await using (client)
+                    {
+                        // one-shot reports its session through the directory (action.txt,
+                        // session.json), so the events only matter for the terminal
+                        await foreach (var _ in client.Events.ReadAllAsync())
+                        {
+                        }
 
-                using var process = Process.Start(psi);
-                if (process == null)
-                    throw new InvalidOperationException("Failed to start capture process: " + binary);
-
-                // Hand our foreground rights to the capturer: a freshly spawned process is
-                // denied SetForegroundWindow by the foreground lock, and the overlay needs
-                // keyboard focus immediately (Esc / shortcuts). Best-effort — it only works
-                // when we hold foreground permission ourselves (hotkey / tray interaction).
-                if (OperatingSystem.IsWindows())
-                    AllowSetForegroundWindow(process.Id);
-
-                // drain stderr concurrently so a full pipe buffer can never block the
-                // process from exiting (classic redirect deadlock).
-                var stderrTask = process.StandardError.ReadToEndAsync();
-                await process.WaitForExitAsync();
-                var stderr = await stderrTask;
-
-                // Every normal outcome (edit / upload / color / video / cancel) exits 0.
-                // A non-zero exit means the capturer crashed or aborted — e.g. a GPU shader
-                // that failed to load — so surface it instead of silently treating the empty
-                // session directory as a user cancellation (which produced no error at all).
-                if (process.ExitCode != 0)
+                        outcome = await client.Completion;
+                    }
+                }
+                catch (HelperStartException ex)
                 {
-                    Debug.WriteLine($"Capture process exited with code {process.ExitCode}:\n{stderr}");
+                    // exited before hello: the same mapping as a run that ended without a terminal
+                    outcome = new HelperOutcome<Prisc.Ipc.CaptureEvent>(null, ex.ExitCode,
+                        ex.Failure is HelperFailure.NoScreenPermission or HelperFailure.CaptureFailed ? ex.Failure : HelperFailure.Crashed,
+                        ex.Data[SentryConfig.ProcessLogKey] as string ?? ex.Message);
+                }
+
+                // Every normal outcome (edit / upload / color / video / cancel) ends with done.
+                // Anything else means the capturer crashed or aborted (a GPU shader that failed to
+                // load, say), so surface it instead of silently treating the empty session
+                // directory as a user cancellation.
+                if (outcome.Failure != HelperFailure.None)
+                {
+                    Debug.WriteLine($"Capture process failed: {outcome.Describe()}\n{outcome.StderrTail}");
 
                     // the capturer mirrors its log into the session dir (stdout is lost when
                     // launched from an .app bundle); grab it before the dir is deleted.
@@ -148,31 +140,35 @@ namespace Prisc.UI
                     CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
 
                     // permission revoked between our preflight and the capturer's own check, or the
-                    // capturer's TCC verdict differs from ours — either way it is not a crash.
-                    if (process.ExitCode == ExitCodeNoScreenPermission)
+                    // capturer's TCC verdict differs from ours: either way it is not a crash.
+                    if (outcome.Failure == HelperFailure.NoScreenPermission
+                        || outcome.Error?.Code == IpcErrorCodes.Permission
+                        || outcome.ExitCode == HelperExit.NoScreenPermission)
                     {
                         await PromptForScreenRecordingPermissionAsync();
                         return;
                     }
 
                     // The capturer reports its own panics, but it cannot report the ways it dies
-                    // without running Rust code — a native fault in a GPU driver, an abort out of
-                    // an FFI frame, or a kill. Its exit code and log are all that survives
-                    // those, so report from this side. Keep the message free of the exit code so
-                    // Sentry groups every capturer death into one issue; the specifics ride along
-                    // in Data.
+                    // without running Rust code: a native fault in a GPU driver, an abort out of
+                    // an FFI frame, or a kill. Its exit and log are all that survives those, so
+                    // report from this side. Keep the message free of the exit code so Sentry
+                    // groups every capturer death into one issue; the specifics ride along in Data.
                     var crash = new InvalidOperationException("Capture process exited unexpectedly");
-                    crash.Data["exit_code"] = process.ExitCode;
+                    crash.Data["exit_code"] = outcome.ExitCode;
+                    crash.Data["failure"] = outcome.Failure.ToString();
+                    crash.Data["error_code"] = outcome.Error?.Code;
                     // Both logs in full, as the process-log.txt attachment. A death of that kind
                     // writes nothing to stderr, and the session log is the only place the adapter
-                    // it selected is named — truncating either to fit inline in Data is what
-                    // leaves these reports unactionable.
-                    SentryConfig.AttachProcessLog(crash, ("stderr", stderr), ("capture.log", captureLog));
+                    // it selected is named; truncating either to fit inline in Data is what leaves
+                    // these reports unactionable.
+                    SentryConfig.AttachProcessLog(crash, ("error", outcome.Error?.Message),
+                        ("stderr", outcome.StderrTail), ("capture.log", captureLog));
                     SentryConfig.CaptureHandled(crash, "capture.process-crash");
 
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The screen capture tool exited unexpectedly (code {process.ExitCode})." +
-                        $"\n\n{SummarizeDiagnostics(stderr, captureLog)}",
+                        $"The screen capture tool exited unexpectedly ({outcome.Describe()})." +
+                        $"\n\n{SummarizeDiagnostics(outcome.Error?.Message ?? outcome.StderrTail, captureLog)}",
                         "Screen capture failed");
                     return;
                 }
@@ -254,7 +250,7 @@ namespace Prisc.UI
         }
 
         /// <summary>Completes a session announced by the standby capturer's
-        /// PRISC_CAPTURE_FINISHED line. Runs on the UI thread via the supervisor.</summary>
+        /// <c>capture_finished</c>. Runs on the UI thread via the supervisor.</summary>
         internal static async Task ProcessStandbySessionAsync(string sessionDir)
         {
             try
@@ -320,10 +316,6 @@ namespace Prisc.UI
                 return null;
             }
         }
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
-        private static extern bool AllowSetForegroundWindow(int dwProcessId);
 
         /// <summary>Picks what to put in front of the user: the capturer's stderr when it managed to
         /// say something, and otherwise the log file it left behind. A process that dies without

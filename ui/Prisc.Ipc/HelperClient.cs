@@ -321,12 +321,14 @@ namespace Prisc.Ipc
             return new HelperOutcome<TEvent>(Volatile.Read(ref _terminal), null, HelperFailure.Timeout, StderrTail);
         }
 
-        /// <summary>Kills the process tree now, with no quit. The outcome is whatever the exit maps to.</summary>
+        /// <summary>Kills the process tree now, with no quit. The outcome is whatever the exit maps to.
+        /// Safe from any thread, including while a <see cref="Send"/> is blocked on a full pipe: the
+        /// kill comes first, and is what unblocks that write.</summary>
         public void Kill()
         {
             _killRequested = true;
-            CloseStdin();
             _child.Kill();
+            CloseStdin();
         }
 
         /// <summary><see cref="StopAsync"/>, then joins the pumps (bounded) and releases the process.</summary>
