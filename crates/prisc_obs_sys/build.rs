@@ -11,9 +11,7 @@ fn main() {
     // Fail with the fix, not with a CMake error, when the submodule is missing:
     // an editor checking the whole workspace gets here on a checkout that only
     // ever built the app crates.
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    prisc_build_support::require_obs_submodule(&repo_root.join("crates").join("obs-studio"), "prisc_obs_sys");
+    prisc_build_support::require_obs_submodule(&prisc_build_support::obs_src(), "prisc_obs_sys");
 
     match target_os.as_str() {
         "macos" => build_macos(),
@@ -76,8 +74,7 @@ fn mac_osx_arch() -> &'static str {
 fn build_macos() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let obs_src = repo_root.join("crates").join("obs-studio");
+    let obs_src = prisc_build_support::obs_src();
     let obs_build = out_dir.join("obs-build");
 
     println!("cargo:rerun-if-changed=wrapper.h");
@@ -359,31 +356,26 @@ fn mac_emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
     // rpaths so this crate's own test harness can launch. `cargo:rustc-link-arg`
     // is package-scoped: it applies to prisc_obs_sys's tests/benches but does NOT
     // propagate to dependents, so every executable-producing consumer repeats
-    // these in its own build script (prisc_recorder, prisc_obs_platform, prisc_obs,
-    // prisc_share_region). Even an empty harness dies in dyld without them:
+    // them through prisc_build_support::link_obs_rpaths. Even an empty harness dies in dyld without them:
     // libobs's install name and its FFmpeg/x264 references are all @rpath.
     println!(
         "cargo:rustc-link-arg=-Wl,-rpath,{}",
         framework_search.display()
     );
-    if let Some(deps_lib) = mac_find_obs_deps_lib(obs_src) {
+    let deps_lib = find_obs_deps_subdir(obs_src, "lib");
+    if let Some(deps_lib) = &deps_lib {
         println!("cargo:rustc-link-arg=-Wl,-rpath,{}", deps_lib.display());
     }
 
-    // Export paths so downstream crates can locate frameworks and plugins at runtime
+    // Export paths so downstream crates can locate frameworks and plugins at
+    // runtime (prisc_build_support::link_obs_rpaths reads them), and the
+    // prebuilt FFmpeg dylibs, so they need not probe `.deps` themselves.
     println!("cargo:framework_search={}", framework_search.display());
     println!("cargo:obs_build_dir={}", obs_build.display());
     println!("cargo:obs_build_config={config}");
-}
-
-/// The prebuilt obs-deps `lib` dir (FFmpeg et al.) — same probe as the
-/// downstream build scripts, but rooted at the obs-studio checkout we already
-/// hold rather than walking up from OUT_DIR.
-fn mac_find_obs_deps_lib(obs_src: &Path) -> Option<PathBuf> {
-    prisc_build_support::obs_deps_bundles(obs_src)
-        .into_iter()
-        .map(|dir| dir.join("lib"))
-        .find(|lib| lib.exists())
+    if let Some(deps_lib) = &deps_lib {
+        println!("cargo:deps_lib={}", deps_lib.display());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -392,8 +384,7 @@ fn mac_find_obs_deps_lib(obs_src: &Path) -> Option<PathBuf> {
 
 fn build_windows() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let obs_src = repo_root.join("crates").join("obs-studio");
+    let obs_src = prisc_build_support::obs_src();
     let build_dir = win_build_dir();
     let config = "RelWithDebInfo";
 
@@ -705,35 +696,10 @@ fn find_obs_deps_bin(obs_src: &Path) -> Option<PathBuf> {
     find_obs_deps_subdir(obs_src, "bin")
 }
 
-/// Locates `<obs-deps bundle>/<sub>` for the TARGET architecture.
-///
-/// `.deps` holds several bundles: a Windows build also downloads the x86 one
-/// (and an ARM64 build the x64 one) for the child CMake configures OBS spawns
-/// for its helpers. Directory order is arbitrary, so matching the first
-/// `obs-deps-*` would ship x64 runtime DLLs in an ARM64 bundle, or generate
-/// bindings against the wrong headers.
+/// Locates `<obs-deps bundle>/<sub>` for the TARGET architecture (see
+/// prisc_build_support::target_obs_deps_bundle for why the arch matters).
 fn find_obs_deps_subdir(obs_src: &Path, sub: &str) -> Option<PathBuf> {
-    prisc_build_support::obs_deps_bundles(obs_src)
-        .into_iter()
-        .find(|dir| {
-            let name = dir.file_name().unwrap_or_default().to_string_lossy();
-            is_target_arch_bundle(&name) && dir.join(sub).exists()
-        })
-        .map(|dir| dir.join(sub))
-}
-
-/// True for a bundle name built for the target arch. macOS ships one
-/// `-universal` bundle covering both slices; Windows names them `-x64` /
-/// `-arm64` / `-x86`.
-fn is_target_arch_bundle(name: &str) -> bool {
-    if name.contains("universal") {
-        return true;
-    }
-    match target_arch().as_str() {
-        "x86_64" => name.ends_with("-x64"),
-        "aarch64" => name.ends_with("-arm64"),
-        _ => false,
-    }
+    prisc_build_support::target_obs_deps_bundle(obs_src, &[sub]).map(|dir| dir.join(sub))
 }
 
 // ---------------------------------------------------------------------------
@@ -862,8 +828,7 @@ fn build_linux() {
 
     let arch_suffix = linux_arch_suffix();
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
-    let obs_src = repo_root.join("crates").join("obs-studio");
+    let obs_src = prisc_build_support::obs_src();
     let deps_dir = obs_src.join(".deps");
     let build_dir = workspace_obs_build_dir(arch_suffix);
     let config = "RelWithDebInfo";

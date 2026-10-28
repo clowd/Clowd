@@ -2,6 +2,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use prisc_build_support::copy_if_newer;
+
 fn main() {
     // Branch on the target OS at runtime of the build script (not #[cfg]).
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
@@ -32,15 +34,9 @@ fn build_macos() {
     let config = env::var("DEP_OBS_OBS_BUILD_CONFIG").expect("DEP_OBS_OBS_BUILD_CONFIG not set");
     let framework_path =
         env::var("DEP_OBS_FRAMEWORK_SEARCH").expect("DEP_OBS_FRAMEWORK_SEARCH not set");
-    let out_dir = env::var("OUT_DIR").unwrap();
-
+    let deps_lib = env::var_os("DEP_OBS_DEPS_LIB").map(PathBuf::from);
     let obs_build = PathBuf::from(&build_dir);
-    let repo_root = Path::new(&out_dir)
-        .ancestors()
-        .find(|p| p.join("crates").join("obs-studio").exists())
-        .expect("Could not find repo root")
-        .to_path_buf();
-    let deps_lib = find_obs_deps_lib(&repo_root);
+    let profile_dir = prisc_build_support::cargo_profile_dir();
 
     // Bake the plugin path into the binary so no env var is needed at runtime
     println!(
@@ -48,60 +44,37 @@ fn build_macos() {
         obs_build.display()
     );
 
-    // Set rpaths for libobs.framework, libobs-metal.dylib, and FFmpeg dylibs
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{framework_path}");
-    println!(
-        "cargo:rustc-link-arg=-Wl,-rpath,{}/libobs-metal/{config}",
-        obs_build.display()
-    );
-    println!(
-        "cargo:rustc-link-arg=-Wl,-rpath,{}/libobs-opengl/{config}",
-        obs_build.display()
-    );
-    if let Some(ref lib) = deps_lib {
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib.display());
-    }
+    // rpaths for libobs.framework, libobs-metal.dylib, and FFmpeg dylibs
+    prisc_build_support::link_obs_rpaths();
 
     // Copy and patch obs-ffmpeg-mux helper binary
-    let target_dir = Path::new(&out_dir)
-        .ancestors()
-        .find(|p| p.ends_with("debug") || p.ends_with("release"))
-        .map(|p| p.to_path_buf());
+    let mux_src = obs_build
+        .join("plugins/obs-ffmpeg/ffmpeg-mux")
+        .join(&config)
+        .join("obs-ffmpeg-mux");
+    let mux_dst = profile_dir.join("obs-ffmpeg-mux");
 
-    if let Some(target) = target_dir {
-        let mux_src = obs_build
-            .join("plugins/obs-ffmpeg/ffmpeg-mux")
-            .join(&config)
-            .join("obs-ffmpeg-mux");
-        let mux_dst = target.join("obs-ffmpeg-mux");
+    if mux_src.exists() {
+        let _ = std::fs::copy(&mux_src, &mux_dst);
+        let mux_path = mux_dst.to_str().unwrap();
 
-        if mux_src.exists() {
-            let _ = std::fs::copy(&mux_src, &mux_dst);
-            let mux_path = mux_dst.to_str().unwrap();
-
+        run(
+            "install_name_tool",
+            &["-add_rpath", &framework_path, mux_path],
+        );
+        if let Some(ref lib) = deps_lib {
             run(
                 "install_name_tool",
-                &["-add_rpath", &framework_path, mux_path],
+                &["-add_rpath", lib.to_str().unwrap(), mux_path],
             );
-            if let Some(ref lib) = deps_lib {
-                run(
-                    "install_name_tool",
-                    &["-add_rpath", lib.to_str().unwrap(), mux_path],
-                );
-            }
-            run("codesign", &["--force", "--sign", "-", mux_path]);
         }
+        run("codesign", &["--force", "--sign", "-", mux_path]);
     }
 
     // Stage the prebuilt dependency dylibs (FFmpeg, x264, rist/srt, mbedtls,
     // ...) beside the binaries, the way build_windows() stages the DLLs.
-    // OUT_DIR = target[/<triple>]/{debug,release}/build/prisc_recorder-<hash>/out
     if let Some(ref deps) = deps_lib {
-        let profile_dir = Path::new(&out_dir)
-            .ancestors()
-            .nth(3)
-            .expect("could not resolve the cargo profile dir from OUT_DIR");
-        stage_macos_dylibs(deps, profile_dir);
+        stage_macos_dylibs(deps, &profile_dir);
     }
 }
 
@@ -264,26 +237,12 @@ fn run_checked(cmd: &str, args: &[&str], benign: &[&str]) -> bool {
     }
 }
 
-fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    prisc_build_support::obs_deps_bundles(&repo_root.join("crates").join("obs-studio"))
-        .into_iter()
-        .map(|dir| dir.join("lib"))
-        .find(|lib| lib.exists())
-}
-
 // ---------------------------------------------------------------------------
 // Windows (assemble a self-contained runtime next to prisc_recorder.exe)
 // ---------------------------------------------------------------------------
 
 fn build_windows() {
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // OUT_DIR = target/{debug,release}/build/prisc_recorder-<hash>/out
-    // ancestors: [0]=out [1]=prisc_recorder-<hash> [2]=build [3]={debug,release}
-    let profile_dir = out_dir
-        .ancestors()
-        .nth(3)
-        .expect("could not resolve the cargo profile dir from OUT_DIR")
-        .to_path_buf();
+    let profile_dir = prisc_build_support::cargo_profile_dir();
 
     let obs_build =
         PathBuf::from(env::var("DEP_OBS_OBS_BUILD_DIR").expect("DEP_OBS_OBS_BUILD_DIR not set"));
@@ -343,36 +302,6 @@ fn build_windows() {
             println!(
                 "cargo:warning=prisc_recorder: deps DLL not found: {}",
                 src.display()
-            );
-        }
-    }
-}
-
-/// Copy `src` to `dst` only when it is newer or a different size (the runtime
-/// tree is ~150 MB — incremental builds must stay cheap).
-fn copy_if_newer(src: &Path, dst: &Path) {
-    let should_copy = match (fs::metadata(src), fs::metadata(dst)) {
-        (Ok(s), Ok(d)) => {
-            let size_changed = s.len() != d.len();
-            let newer = match (s.modified(), d.modified()) {
-                (Ok(sm), Ok(dm)) => sm > dm,
-                _ => true,
-            };
-            size_changed || newer
-        }
-        (Ok(_), Err(_)) => true, // dst missing
-        _ => false,              // src missing — nothing to do
-    };
-
-    if should_copy {
-        if let Some(parent) = dst.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        if let Err(e) = fs::copy(src, dst) {
-            println!(
-                "cargo:warning=prisc_recorder: failed to copy {} -> {}: {e}",
-                src.display(),
-                dst.display()
             );
         }
     }
@@ -465,13 +394,7 @@ fn copy_dir_all(src_dir: &Path, dst_dir: &Path) {
 fn build_linux() {
     use prisc_build_support::linux::{self, FfmpegBundle};
 
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // OUT_DIR = target/{debug,release}/build/prisc_recorder-<hash>/out
-    let profile_dir = out_dir
-        .ancestors()
-        .nth(3)
-        .expect("could not resolve the cargo profile dir from OUT_DIR")
-        .to_path_buf();
+    let profile_dir = prisc_build_support::cargo_profile_dir();
 
     let obs_build =
         PathBuf::from(env::var("DEP_OBS_OBS_BUILD_DIR").expect("DEP_OBS_OBS_BUILD_DIR not set"));
@@ -497,8 +420,7 @@ fn build_linux() {
     // release staging rewrites the RUNPATH to plain $ORIGIN). cargo passes
     // link args without a shell, so `$ORIGIN` reaches the linker verbatim.
     println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", bundle.lib().display());
+    prisc_build_support::link_obs_rpaths();
 
     linux::require_tool("patchelf");
 

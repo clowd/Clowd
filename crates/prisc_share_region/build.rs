@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 // `build_windows`). macOS: rpaths so the produced binary (and the unit-test harness — the
 // geometry tests link libobs via prisc_obs_sys, whose references are all @rpath) can
 // launch. cargo does not propagate `cargo:rustc-link-arg` between packages, so
-// each executable-producing crate repeats these; see prisc_recorder's build.rs
-// for the canonical set.
+// each executable-producing crate repeats these through
+// prisc_build_support::link_obs_rpaths.
 //
 // Deliberately NOT repeated here: the obs-ffmpeg-mux patch and the dep-dylib
 // staging (prisc_recorder's build script owns those, and this binary neither
@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os == "macos" {
-        build_macos();
+        prisc_build_support::link_obs_rpaths();
     }
     if target_os == "windows" {
         build_windows();
@@ -104,37 +104,4 @@ fn find_rc_exe() -> Option<PathBuf> {
     }
     found.sort();
     found.pop()
-}
-
-fn build_macos() {
-    let build_dir = env::var("DEP_OBS_OBS_BUILD_DIR").expect("DEP_OBS_OBS_BUILD_DIR not set");
-    let config = env::var("DEP_OBS_OBS_BUILD_CONFIG").expect("DEP_OBS_OBS_BUILD_CONFIG not set");
-    let framework_path =
-        env::var("DEP_OBS_FRAMEWORK_SEARCH").expect("DEP_OBS_FRAMEWORK_SEARCH not set");
-
-    // libobs.framework itself, then the graphics module libobs dlopens by bare
-    // name at obs_reset_video time (GRAPHICS_MODULE = "libobs-metal.dylib"),
-    // then the prebuilt FFmpeg/x264 dylibs everything above references.
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{framework_path}");
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{build_dir}/libobs-metal/{config}");
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{build_dir}/libobs-opengl/{config}");
-
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let repo_root = Path::new(&out_dir)
-        .ancestors()
-        .find(|p| p.join("crates").join("obs-studio").exists())
-        .expect("Could not find repo root")
-        .to_path_buf();
-    if let Some(deps_lib) = find_obs_deps_lib(&repo_root) {
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", deps_lib.display());
-    }
-}
-
-/// The prebuilt obs-deps `lib` dir (FFmpeg et al.) — same probe as
-/// prisc_recorder's build script.
-fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {
-    prisc_build_support::obs_deps_bundles(&repo_root.join("crates").join("obs-studio"))
-        .into_iter()
-        .map(|dir| dir.join("lib"))
-        .find(|lib| lib.exists())
 }
