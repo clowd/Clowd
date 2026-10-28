@@ -359,8 +359,11 @@ impl SystemInterop {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
-                prisc_rust_core::telemetry::flush();
-                std::process::exit(EXIT_CAPTURE_FAILED);
+                crate::protocol::fail_exit(
+                    prisc_ipc::catalog::ErrorCode::Failed,
+                    format_args!("unable to capture the desktop: {err:#}"),
+                    EXIT_CAPTURE_FAILED,
+                );
             }
         };
         CapturedDesktop {
@@ -480,8 +483,11 @@ impl SystemInterop {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
-                prisc_rust_core::telemetry::flush();
-                std::process::exit(EXIT_CAPTURE_FAILED);
+                crate::protocol::fail_exit(
+                    prisc_ipc::catalog::ErrorCode::Failed,
+                    format_args!("unable to capture the desktop: {err:#}"),
+                    EXIT_CAPTURE_FAILED,
+                );
             }
         };
         let vd = virtual_desktop_bounds(&monitors);

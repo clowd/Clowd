@@ -100,8 +100,8 @@ impl WindowEntry {
 /// there is nothing to retry and no prompt worth showing from a background
 /// helper: the honest move is to say which permission is missing and stop.
 /// Screen Recording takes a Prisc restart; an Accessibility grant reads true
-/// live, so the next run picks it up. The message travels to the user as the `fatal_error`
-/// event's text, so it is written for them and not for a log.
+/// live, so the next run picks it up. The message travels to the user as the fatal `error`
+/// event's message, so it is written for them and not for a log.
 pub fn preflight() -> anyhow::Result<()> {
     if !ScreenCaptureAccess.preflight() {
         bail!(

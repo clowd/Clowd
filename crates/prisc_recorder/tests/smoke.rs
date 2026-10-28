@@ -110,6 +110,8 @@ fn record_three_seconds_and_validate_mp4() {
     let reader = ProtocolReader::new(&mut child);
     let mut stdin = child.stdin.take().expect("stdin piped");
 
+    let hello = reader.wait_for("hello", Duration::from_secs(5));
+    assert_eq!(hello["catalog"].as_str(), Some("recorder"), "{hello}");
     reader.wait_for("initialized", Duration::from_secs(30));
 
     // Levels must flow during the pre-start WAIT phase (100 ms cadence).
@@ -131,7 +133,7 @@ fn record_three_seconds_and_validate_mp4() {
         }
     }
 
-    stdin.write_all(b"start\n").unwrap();
+    stdin.write_all(b"{\"type\":\"start\"}\n").unwrap();
     stdin.flush().unwrap();
     reader.wait_for("started_recording", Duration::from_secs(10));
 
@@ -147,14 +149,15 @@ fn record_three_seconds_and_validate_mp4() {
             s["fps"].is_f64() || s["fps"].is_u64(),
             "fps must be numeric: {s}"
         );
-        assert!(s["timeMs"].is_u64(), "timeMs must be u64: {s}");
-        assert!(s.get("dropped").is_some() && s.get("droppedPerc").is_some());
+        assert!(s["time_ms"].is_u64(), "time_ms must be u64: {s}");
+        assert!(s.get("dropped").is_some() && s.get("dropped_perc").is_some());
     }
 
-    stdin.write_all(b"quit\n").unwrap();
+    stdin.write_all(b"{\"type\":\"quit\"}\n").unwrap();
     stdin.flush().unwrap();
 
-    let stopped = reader.wait_for("stopped_recording", Duration::from_secs(35));
+    let stopped = reader.wait_for("done", Duration::from_secs(35));
+    assert_eq!(stopped["result"].as_str(), Some("stopped"), "{stopped}");
     assert_eq!(stopped["code"].as_i64(), Some(0), "stop code: {stopped}");
     assert_eq!(stopped["message"].as_str(), Some("Successfully stopped"));
 
@@ -197,7 +200,7 @@ fn multi_track_records_four_separate_streams() {
     let mut stdin = child.stdin.take().expect("stdin piped");
 
     reader.wait_for("initialized", Duration::from_secs(30));
-    stdin.write_all(b"start\n").unwrap();
+    stdin.write_all(b"{\"type\":\"start\"}\n").unwrap();
     stdin.flush().unwrap();
 
     // The tracks payload must describe every stream before a byte is written.
@@ -213,9 +216,10 @@ fn multi_track_records_four_separate_streams() {
     let statuses = reader.collect_for("status", Duration::from_millis(3500));
     assert!(statuses.len() >= 2, "got {} status lines", statuses.len());
 
-    stdin.write_all(b"quit\n").unwrap();
+    stdin.write_all(b"{\"type\":\"quit\"}\n").unwrap();
     stdin.flush().unwrap();
-    let stopped = reader.wait_for("stopped_recording", Duration::from_secs(35));
+    let stopped = reader.wait_for("done", Duration::from_secs(35));
+    assert_eq!(stopped["result"].as_str(), Some("stopped"), "{stopped}");
     assert_eq!(stopped["code"].as_i64(), Some(0), "stop code: {stopped}");
     assert_eq!(child.wait().expect("wait for exit").code(), Some(0));
 
@@ -275,9 +279,10 @@ fn single_track_records_one_stream_per_media_type() {
     let statuses = reader.collect_for("status", Duration::from_millis(3500));
     assert!(statuses.len() >= 2, "got {} status lines", statuses.len());
 
-    stdin.write_all(b"quit\n").unwrap();
+    stdin.write_all(b"{\"type\":\"quit\"}\n").unwrap();
     stdin.flush().unwrap();
-    let stopped = reader.wait_for("stopped_recording", Duration::from_secs(35));
+    let stopped = reader.wait_for("done", Duration::from_secs(35));
+    assert_eq!(stopped["result"].as_str(), Some("stopped"), "{stopped}");
     assert_eq!(stopped["code"].as_i64(), Some(0), "stop code: {stopped}");
     assert_eq!(child.wait().expect("wait for exit").code(), Some(0));
 

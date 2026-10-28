@@ -174,12 +174,15 @@ impl<E: catalog::Event> Channel<E> {
     /// Serialize, then one write_all(json + "\n") + flush under the lock. Never panics.
     /// Returns false once the pipe is gone. The first EPIPE/broken-pipe error marks the
     /// channel closed (later emits are no-ops) and, **after the lock is released**, fires
-    /// lifetime::trigger(StdoutClosed).
+    /// lifetime::trigger(StdoutClosed). The first terminal event or fatal `error` written
+    /// finishes the channel: later emits from any thread are dropped (return false), so the
+    /// terminal line is always the last line even while other threads wind down.
     pub fn emit(&self, event: &E) -> bool;
     /// Emits `error`. `message` is passed through single_line. If `fatal`, then calls
     /// lifetime::exit(2) for ErrorCode::Usage and lifetime::exit(exit::FAILED) otherwise.
     pub fn error(&self, code: catalog::ErrorCode, message: impl Display, fatal: bool);
     pub fn is_closed(&self) -> bool;
+    pub fn is_finished(&self) -> bool;
 }
 
 /// The guard alone: duplicate the real stdout into a private, non-inheritable handle and
@@ -209,8 +212,12 @@ pub mod lifetime {
     /// Fire the quit path. First call runs on_quit and arms the timer; later calls no-op.
     pub fn trigger(reason: QuitReason);
     /// Overrides the final exit primitive (recorder/share_region: platform::exit_process,
-    /// which skips libobs's broken static destructors). Default std::process::exit.
+    /// which skips libobs's broken static destructors; prisc_ai: exit_now). Default
+    /// std::process::exit.
     pub fn set_exit_fn(f: fn(i32) -> !);
+    /// A raw exit (_exit / TerminateProcess): no atexit handlers, static destructors or DLL
+    /// teardown.
+    pub fn exit_now(code: i32) -> !;
     /// Registers a hook that `exit` runs before the exit fn. Helpers register
     /// prisc_rust_core::telemetry::shutdown here (§3.4).
     pub fn on_exit(f: fn(i32));
@@ -262,9 +269,22 @@ Windows caveats, stated so nobody relies on more than this:
 - `_dup2(2, 1)` closes the OS handle UCRT fd 1 owned. A native library with its own CRT (static
   CRT, or a mingw-built FFmpeg on `msvcrt.dll`) keeps the old handle value in its own fd table
   and would write to a closed or reused handle. The guard therefore **assumes every native
-  library shares the dynamic UCRT**. Verify that for the shipped libobs and FFmpeg DLLs (check
-  their imports for `api-ms-win-crt-*` / `ucrtbase.dll` and no `msvcrt.dll`) as part of the
-  recorder port, and record the result here.
+  library shares the dynamic UCRT**.
+
+  Checked on the `recorder-win-x64` artifact of CI run 40698648187 (master, 2026-10-28) by
+  reading each PE's import table. Every libobs, plugin and FFmpeg module imports the CRT only
+  through `api-ms-win-crt-*` (plus `VCRUNTIME140`/`MSVCP140`), and none imports `msvcrt.dll`:
+  `obs.dll`, `libobs-d3d11.dll`, `libobs-winrt.dll`, `w32-pthreads.dll`, every DLL in
+  `obs-plugins/64bit/`, `obs-ffmpeg-mux.exe`, `avcodec-62`, `avdevice-62`, `avfilter-11`,
+  `avformat-62`, `avutil-60`, `swresample-6`, `swscale-9`, `libcurl`, `librist`, `srt`, `zlib`.
+  Two exceptions, neither a problem:
+  - `libx264-164.dll` has a static CRT. It is loaded only with the `obs-x264` plugin, after the
+    guard ran, so its CRT takes the already redirected `STD_OUTPUT_HANDLE` as its fd 1; and
+    `obs-x264` routes x264's logging through its own callback anyway.
+  - The win-capture helpers (`get-graphics-offsets*`, `inject-helper*`, `graphics-hook*`) have
+    a static CRT, but run as child processes or inside other processes, never in ours.
+  The Rust binaries themselves are `+crt-static`; Rust's std writes through `GetStdHandle`,
+  which `SetStdHandle` already covers. Re-check when the obs-deps or FFmpeg bundle changes.
 - Load-time-imported DLLs run their initialisers before `main`, so "before any native library"
   means before any native library is **initialised by us or called**, not before it is mapped.
   A DLL that prints from `DllMain` is not covered (none of ours is known to).
@@ -473,7 +493,10 @@ Payload protocols unchanged (OCR header + BGRA through `--out`; matte/denoise fr
 stdout). It adopts: `claim_stdout()` (replacing `claim_payload_stdout`, matte/denoise only, as
 today), `lifetime::install` for signals and the hard-exit timer (stdin EOF is end-of-input
 here, not quit, so `read_commands` is not used; a dead parent shows up as EPIPE on its payload
-writes), `exit::*` constants, stderr logging. No `hello`: stdout is payload. prisc_capture
+writes), `exit::*` constants, stderr logging. Its exit fn is `lifetime::exit_now`, and its `on_quit`
+exits with `FAILED` on the spot: nothing in it can stop cleanly mid-job, and the raw exit keeps
+ONNX Runtime's static destructors from running under a thread still inferring. No `hello`:
+stdout is payload. prisc_capture
 spawns it via `locate::sibling("prisc_ai")`.
 
 ## 5. Exit codes (`prisc_ipc::exit`)

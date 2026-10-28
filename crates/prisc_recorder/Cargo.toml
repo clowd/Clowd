@@ -5,6 +5,10 @@ edition = "2021"
 license = "GPL-2.0-or-later"
 
 [dependencies]
+# The helper protocol (crates/prisc_capture/HELPER_PROTOCOL.md): stdio channel, commands, lifetime.
+prisc_ipc = { workspace = true }
+# Sentry: panics and release-health sessions, one project with the rest of Prisc.
+prisc_rust_core = { workspace = true }
 prisc_obs = { workspace = true }
 prisc_obs_sys = { workspace = true }
 prisc_obs_platform = { workspace = true }
@@ -18,12 +22,6 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 libc = { workspace = true }
 png = { workspace = true }
-
-[target.'cfg(unix)'.dependencies]
-# POSIX signal handling only; on Windows a native SetConsoleCtrlHandler is
-# registered instead (ctrlc's HandlerRoutine returns immediately, which forfeits
-# the CTRL_CLOSE grace period — see recorder.rs).
-ctrlc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 # The imported recorder workspace's unified `windows` feature list, copied whole into each
@@ -59,8 +57,6 @@ windows = { workspace = true, features = [
     # manifest-shimmed version instead, so ntdll's is the only usable one.
     "Wdk_System_SystemServices",
     "Win32_System_SystemInformation",
-    # SetConsoleCtrlHandler (recorder.rs CTRL_CLOSE grace handling).
-    "Win32_System_Console",
     # CoInitializeEx / CoCreateInstance + IMMDeviceEnumerator/IAudioEndpointVolume:
     # --speaker-volume-compensation endpoint-volume query (replaces the
     # hand-rolled COM vtables that windows-sys required).

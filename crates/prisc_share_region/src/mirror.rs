@@ -15,6 +15,8 @@
 use std::ffi::{c_void, CString};
 use std::fmt::Display;
 
+use prisc_ipc::catalog::ErrorCode;
+
 use prisc_obs::audio::AudioInfo;
 use prisc_obs::context::ObsContext;
 use prisc_obs::display::ObsDisplay;
@@ -64,20 +66,24 @@ fn normalize_region(region: Rect) -> Rect {
     }
 }
 
-/// Runtime/obs failures exit 1. Never unwind: partial OBS state is never torn
-/// down (same invariant as prisc_recorder — libobs shutdown is a known crash
-/// source; see crates/prisc_obs/src/context.rs), so every failure path must leave
-/// through `exit_process`.
+/// Setup failures: fatal `error{code:"init_failed"}`, exit 1. Never unwind:
+/// partial OBS state is never torn down (same invariant as prisc_recorder,
+/// libobs shutdown is a known crash source; see crates/prisc_obs/src/context.rs),
+/// so every failure path must leave through `prisc_ipc::lifetime::exit`.
 fn fail(msg: impl Display) -> ! {
-    eprintln!("Fatal: {msg}");
-    prisc_obs_platform::exit_process(1)
+    crate::status::out().fatal(ErrorCode::InitFailed, msg)
 }
 
-/// Argument-shaped failures exit 2 (matching prisc_recorder's `fail_args`), so
-/// callers can distinguish their own bad input from an obs breakage.
+/// A libobs failure while already mirroring: fatal `error{code:"failed"}`, exit 1.
+fn fail_running(msg: impl Display) -> ! {
+    crate::status::out().fatal(ErrorCode::Failed, msg)
+}
+
+/// Argument-shaped failures: fatal `error{code:"usage"}`, exit 2 (matching
+/// prisc_recorder), so callers can distinguish their own bad input from an obs
+/// breakage.
 fn fail_args(msg: impl Display) -> ! {
-    eprintln!("Fatal: {msg}");
-    prisc_obs_platform::exit_process(2)
+    crate::status::out().fatal(ErrorCode::Usage, msg)
 }
 
 pub struct Mirror {
@@ -255,7 +261,7 @@ impl Mirror {
     pub fn attach_display(&mut self, window: *mut c_void) {
         // Safety: the UI layer hands us the mirror window's HWND / contentView
         // NSView*, which lives until the process exits (the mirror window is
-        // never destroyed; closing it exits via events.quit → exit_process).
+        // never destroyed; closing it exits via events.quit → lifetime::exit).
         let display = match unsafe { ObsDisplay::new(window, self.canvas.0, self.canvas.1) } {
             Ok(d) => d,
             Err(e) => fail(format_args!("Failed to create the OBS display: {e}")),
@@ -288,8 +294,8 @@ impl Mirror {
     /// not the requested one.
     ///
     /// `Err` means the request was refused and NOTHING changed: the previous
-    /// region is still being mirrored. The reason is worded for
-    /// `status::emit_command_error`, because a refusal has to be visible as a
+    /// region is still being mirrored. The reason is worded for the
+    /// `error{code:"failed"}` reply, because a refusal has to be visible as a
     /// refusal — echoing the unchanged region back as `region_changed` would be
     /// indistinguishable on the wire from a successful move to that rect, and
     /// Prisc (which resizes its border to whatever `region_changed` reports)
@@ -315,7 +321,7 @@ impl Mirror {
                 self.context
                     .reset_video(&video_info(plan.canvas, self.fps, self.adapter))
             {
-                fail(format_args!("Failed to reset OBS video: {e}"));
+                fail_running(format_args!("Failed to reset OBS video: {e}"));
             }
             if let Some(ref display) = self.display {
                 display.resize(plan.canvas.0, plan.canvas.1);

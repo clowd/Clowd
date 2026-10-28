@@ -1,26 +1,19 @@
 //! The driver loop and its conversation with the shell.
 //!
-//! One NDJSON object per line, the shape described in CAPTURE_PROTOCOL.md
-//! §2.2, under the rule: **stdout carries only protocol lines**. Every log record goes to stderr and the session's
-//! `scroll.log`, so the shell can treat any `{…}` line as an event.
+//! The conversation is the `scroll` catalog of Prisc's helper protocol
+//! (crates/prisc_capture/HELPER_PROTOCOL.md §4.4): `ready`, then `status` at
+//! each phase change of every step, then one terminal `done`. **stdout carries
+//! only protocol lines**: every log record goes to stderr and the session's
+//! `scroll.log`.
 //!
-//! ```jsonc
-//! {"type":"ready"}                                                   // about to scroll
-//! {"type":"status","frames":12,"height_px":4180,"state":"scrolling"}
-//! {"type":"done","result":"complete","frames":31,"height_px":9800}
-//! {"type":"fatal_error","message":"…"}
-//! ```
+//! Back the other way: `stop` (finish now, keep what we have) and `quit`
+//! (abandon the run, write nothing; also stdin EOF and signals). Both are
+//! polled at the top of each step rather than interrupting one, so a stop
+//! that lands mid-settle takes effect a fraction of a second later.
 //!
-//! Back the other way: `{"type":"stop"}` (finish now, keep what we have)
-//! and `{"type":"cancel"}` (abort, write nothing). Both are polled at the
-//! top of each step rather than interrupting one, so a stop that lands
-//! mid-settle takes effect a fraction of a second later.
-//!
-//! The process exits 0 for every outcome the shell can act on, `done`
-//! included — a `done` with `result` other than `failed` means
-//! `session.json` is on disk. Only an unrecoverable setup failure produces
-//! `fatal_error`, and it still exits 0: the shell reads the event, not the
-//! code.
+//! Every outcome ends in `done`, cancel included, and exits 0; `session.json`
+//! is on disk for every `result` but `cancelled`. A failure is a fatal
+//! `error` and exit 1 (exit 2 for unusable arguments).
 //!
 //! Two things end a run early, and both keep the partial capture: the user
 //! pressing Esc (level-sampled every 50ms throughout the waits and latched,
@@ -38,13 +31,15 @@
 //! capture carries on where it left off. Paused time is excluded from the
 //! wall-clock cap, so an interruption cannot silently truncate a run.
 
-use std::io::{BufRead, Write};
+use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
+use prisc_ipc::catalog::scroll::{self, Event, ScrollResult, ScrollState};
+use prisc_ipc::catalog::ErrorCode;
+use prisc_ipc::{Channel, Inbound};
 
 use crate::cli::CliArgs;
 use crate::frame::{self, Frame};
@@ -196,103 +191,36 @@ const ZERO_STREAK_END: u32 = 2;
 /// run.
 const ZERO_STREAK_FALLBACK: u32 = 3;
 
-// ── Wire protocol ──────────────────────────────────────────────────────
+// ── Protocol ───────────────────────────────────────────────────────────
 
-/// Driver → shell events.
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum DriveEvent {
-    /// The target is resolved and focused; scrolling is about to start.
-    Ready,
-    /// Progress. Emitted at each phase change of every step, so the shell's
-    /// HUD can show both a frame count and what the driver is waiting on.
-    ///
-    /// `resume_in_s` rides along only on the `resuming` state — the whole
-    /// seconds left before a paused run takes the cursor back. Omitted
-    /// everywhere else so every other status line keeps the exact shape it
-    /// has always had.
-    Status {
-        frames: u32,
-        height_px: u32,
-        state: DriveState,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        resume_in_s: Option<u64>,
-    },
-    /// The run ended. Unless `result` is `failed`, `session.json` is
-    /// already on disk.
-    Done { result: DriveResult, frames: u32, height_px: u32 },
-    /// Setup or output failed; there is no session. The shell shows a
-    /// dialog and deletes the directory.
-    FatalError { message: String },
+static OUT: OnceLock<Channel<Event>> = OnceLock::new();
+
+/// The process's protocol channel, set once by [`run`].
+fn out() -> &'static Channel<Event> {
+    OUT.get()
+        .expect("drive::run sets the channel first")
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum DriveState {
-    /// Winding the document back to the top before frame 0. Emitted only
-    /// when the rewind is enabled, and always before any other state — the
-    /// HUD needs it or the pause reads as a hang.
-    Rewinding,
-    /// The user has the mouse; nothing is being scrolled or captured until
-    /// they put it down. Emitted the moment the cursor leaves the scroll
-    /// point, so the HUD's readout matches the fact that the frame count has
-    /// stopped advancing — and again if a countdown gets interrupted.
-    Paused,
-    /// The cursor has gone still and the run is about to take it back.
-    /// Carries `resume_in_s`, and is re-emitted on each whole second so the
-    /// HUD can count down; movement drops straight back to [`Paused`].
-    Resuming,
-    Scrolling,
-    Settling,
-    Stitching,
+/// A failed run, with the protocol error code it is reported under.
+struct Failure {
+    code: ErrorCode,
+    error: anyhow::Error,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum DriveResult {
-    /// Reached the bottom of the document.
-    Complete,
-    /// Esc, a `stop` command, the target window going away, or a pause the
-    /// user never came back from. Partial capture kept.
-    Stopped,
-    /// Hit one of the hard caps. Partial capture kept.
-    MaxReached,
-    /// The target never scrolled — nothing we could inject moved it. A
-    /// single-frame session is still written.
-    NoMovement,
-    /// No session was produced. Part of the contract because the shell has
-    /// to handle it; the driver currently reports every failure it can
-    /// recognize as `fatal_error` instead, since those all happen before
-    /// there is anything worth keeping.
-    #[allow(dead_code)]
-    Failed,
-}
-
-/// Shell → driver commands.
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum DriveCommand {
-    /// Finish now and keep what has been captured.
-    Stop,
-    /// Abandon the run; write nothing.
-    Cancel,
-}
-
-/// Serialize one event as an NDJSON line on stdout and flush it. The std
-/// stdout handle's mutex keeps concurrent writes line-atomic, and a
-/// serializer failure is swallowed rather than allowed to half-write a line
-/// into the stream.
-fn emit(event: &DriveEvent) {
-    let line = match serde_json::to_string(event) {
-        Ok(l) => l,
-        Err(e) => {
-            error!("failed to serialize drive event: {e}");
-            return;
+impl From<anyhow::Error> for Failure {
+    fn from(error: anyhow::Error) -> Self {
+        Self {
+            code: ErrorCode::Failed,
+            error,
         }
-    };
-    let mut out = std::io::stdout().lock();
-    if let Err(e) = writeln!(out, "{line}").and_then(|()| out.flush()) {
-        warn!("failed to emit drive event: {e}");
+    }
+}
+
+/// Tags an error with the code it is reported under.
+fn coded(code: ErrorCode) -> impl FnOnce(anyhow::Error) -> Failure {
+    move |error| Failure {
+        code,
+        error,
     }
 }
 
@@ -350,35 +278,83 @@ fn clamp_into(point: ScreenPoint, rect: ScreenRect) -> ScreenPoint {
     )
 }
 
-/// The driver's entry point, called from `main::run`. Always returns `Ok`
-/// for outcomes the shell can act on — failures are reported as
-/// `fatal_error` on the protocol channel, which is the only place the
-/// shell is listening.
-pub fn run(args: CliArgs) -> anyhow::Result<()> {
-    let result = DriveArgs::from_cli(&args).and_then(drive);
-    if let Err(e) = result {
-        error!("scroll driver failed: {e:#}");
-        emit(&DriveEvent::FatalError {
-            message: format!("{e:#}"),
-        });
+/// The driver's entry point, called from `main`. Never returns: every outcome
+/// ends in `done` and exit 0, every failure in a fatal `error` and exit 1 (2
+/// for unusable arguments). `channel` already carried `hello`.
+pub fn run(args: CliArgs, channel: Channel<Event>) -> ! {
+    if OUT.set(channel).is_err() {
+        panic!("drive::run called twice");
     }
-    Ok(())
+
+    // Requests from the shell. `stop` arrives as a command; `quit`, stdin
+    // EOF, signals and a dead stdout all arrive as the quit path, which here
+    // means cancel: abandon the run and write nothing.
+    let signals = Arc::new(Signals::default());
+    let quit = Arc::clone(&signals);
+    prisc_ipc::lifetime::install(
+        move |reason| {
+            info!("cancel requested ({reason:?})");
+            quit.cancel.store(true, Ordering::Release);
+        },
+        scroll::QUIT_GRACE + prisc_ipc::SELF_EXIT_MARGIN,
+    );
+    let commands = Arc::clone(&signals);
+    prisc_ipc::read_commands::<scroll::Command>(move |inbound| {
+        match inbound {
+            Inbound::Command(scroll::Command::Stop {}) => {
+                info!("stop requested");
+                commands.stop.store(true, Ordering::Release);
+            }
+            // Garbage on the command channel must not take out a capture
+            // that is going fine. There are no acks to stay in order with, so
+            // it is answered from here.
+            Inbound::Malformed {
+                reason,
+            } => out().error(ErrorCode::BadCommand, reason, false),
+        }
+        ControlFlow::Continue(())
+    });
+
+    let result = DriveArgs::from_cli(&args)
+        .map_err(coded(ErrorCode::Usage))
+        .and_then(|cfg| drive(cfg, &signals));
+    match result {
+        Ok((result, frames, height_px)) => {
+            out().emit(&Event::Done {
+                result,
+                frames,
+                height_px,
+            });
+            prisc_ipc::lifetime::exit(prisc_ipc::exit::OK)
+        }
+        Err(Failure {
+            code,
+            error,
+        }) => {
+            error!("scroll driver failed: {error:#}");
+            prisc_rust_core::telemetry::capture_error(&error);
+            out().fatal(code, format!("{error:#}"))
+        }
+    }
 }
 
-fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
+/// How the run ended: the `done` fields.
+type Outcome = (ScrollResult, u32, u32);
+
+fn drive(cfg: DriveArgs, signals: &Signals) -> Result<Outcome, Failure> {
     // Refuse before the border window and the HUD are on screen for a run
     // that cannot work — on macOS a missing permission means every wheel
     // event we post is discarded in silence.
-    input::preflight()?;
+    input::preflight().map_err(coded(ErrorCode::Permission))?;
 
-    let target = input::resolve_target(cfg.hwnd, cfg.point).ok_or_else(|| anyhow!("no window at scroll point {:?}", cfg.point))?;
+    let target = input::resolve_target(cfg.hwnd, cfg.point).ok_or_else(|| Failure {
+        code: ErrorCode::InitFailed,
+        error: anyhow!("no window at scroll point {:?}", cfg.point),
+    })?;
     // Sampled once: a window that moves or resizes mid-run has invalidated
     // the fixed rect we are photographing, and everything after that point
     // would stitch garbage.
     let target_rect = input::window_rect(target);
-
-    let signals = Arc::new(Signals::default());
-    spawn_stdin_reader(Arc::clone(&signals));
 
     // Esc is level-sampled, and a tap only lasts ~100ms, so every wait in
     // this function polls the key into this latch; `stop_requested`
@@ -389,13 +365,13 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
 
     let run = Run {
         cfg: &cfg,
-        signals: &signals,
+        signals,
         esc_latch: &esc_latch,
         target,
         target_rect,
     };
 
-    emit(&DriveEvent::Ready);
+    out().emit(&Event::Ready {});
 
     // Before anything is photographed: the target has to actually be the
     // window at the scroll point. The wheel is routed by cursor position and
@@ -404,11 +380,11 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     // plausible-looking picture of entirely the wrong window. Refusing is the
     // only honest outcome.
     if !input::raise_over_point(target, cfg.point) {
-        bail!(
+        return Err(Failure::from(anyhow!(
             "the window you selected could not be brought in front of the scroll point (window {} is over it). \
              Move whatever is covering it, or pick a scroll point on a visible part of the window.",
             input::describe_window_at(cfg.point)
-        );
+        )));
     }
     input::park_cursor(cfg.point);
     wait_latching_escape(START_DELAY, &esc_latch);
@@ -419,7 +395,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
             // back; there is nothing captured to keep.
             Rewind::Canceled => {
                 info!("canceled during rewind; writing nothing");
-                return Ok(());
+                return Ok((ScrollResult::Cancelled, 0, 0));
             }
             Rewind::Finished(why) => info!("rewind finished: {why}"),
         }
@@ -453,17 +429,17 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     let outcome = loop {
         if signals.canceled() {
             info!("canceled after {} frames; writing nothing", stitcher.frames());
-            return Ok(());
+            return Ok((ScrollResult::Cancelled, stitcher.frames(), stitcher.height()));
         }
         if let Some(reason) = stop_requested(&run) {
             info!("stopping: {reason}");
-            break DriveResult::Stopped;
+            break ScrollResult::Stopped;
         }
         // The user has the mouse: hold everything until they put it down,
         // then park it back on the scroll point and carry on. Deliberately
         // ahead of the wheel injection — a scroll sent while they are
         // pointing at something else lands in whatever they are pointing at.
-        match pause_while_drifting(&run, stitcher.frames(), stitcher.height(), DriveState::Scrolling) {
+        match pause_while_drifting(&run, stitcher.frames(), stitcher.height(), ScrollState::Scrolling) {
             Paused::Ready {
                 waited,
             } => {
@@ -477,16 +453,16 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
             }
             Paused::Canceled => {
                 info!("canceled while paused; writing nothing");
-                return Ok(());
+                return Ok((ScrollResult::Cancelled, stitcher.frames(), stitcher.height()));
             }
             Paused::Stopped(reason) => {
                 info!("stopping: {reason}");
-                break DriveResult::Stopped;
+                break ScrollResult::Stopped;
             }
         }
         if let Some(cap) = cap_reached(&stitcher, started, paused_for) {
             info!("stopping: {cap}");
-            break DriveResult::MaxReached;
+            break ScrollResult::MaxReached;
         }
 
         let wheeled = !skip_wheel;
@@ -497,17 +473,17 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
             // reference the stitcher is still registering against.
             skip_wheel = false;
         } else {
-            status(&stitcher, DriveState::Scrolling);
+            status(&stitcher, ScrollState::Scrolling);
             if use_message_wheel {
                 if !input::wheel_message(target, cfg.point, ticks) {
-                    break DriveResult::NoMovement;
+                    break ScrollResult::NoMovement;
                 }
             } else {
                 input::wheel_burst(cfg.point, ticks, input::WheelDir::Down);
             }
         }
 
-        status(&stitcher, DriveState::Settling);
+        status(&stitcher, ScrollState::Settling);
         let frame = match settle(cfg.region, &esc_latch) {
             Ok(f) => f,
             Err(e) => {
@@ -517,7 +493,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
                     "capture failed after {} frames, keeping the partial capture: {e:#}",
                     stitcher.frames()
                 );
-                break DriveResult::Stopped;
+                break ScrollResult::Stopped;
             }
         };
 
@@ -535,7 +511,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
             continue;
         }
 
-        status(&stitcher, DriveState::Stitching);
+        status(&stitcher, ScrollState::Stitching);
         let dy = match stitcher.append(frame) {
             AppendResult::Appended {
                 dy,
@@ -550,14 +526,14 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
                 holds += 1;
                 if holds >= 2 {
                     warn!("two consecutive unregisterable frames; keeping the partial capture");
-                    break DriveResult::Stopped;
+                    break ScrollResult::Stopped;
                 }
                 skip_wheel = true;
                 continue;
             }
             AppendResult::Failed => {
                 warn!("stitcher gave up; keeping the partial capture");
-                break DriveResult::Stopped;
+                break ScrollResult::Stopped;
             }
         };
 
@@ -595,7 +571,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
             // We have moved before, so an unchanging picture means the
             // document ended.
             if zero_streak >= ZERO_STREAK_END {
-                break DriveResult::Complete;
+                break ScrollResult::Complete;
             }
             continue;
         }
@@ -606,7 +582,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
         // a surface that ignores synthetic wheel entirely.
         if zero_streak >= ZERO_STREAK_FALLBACK {
             if use_message_wheel {
-                break DriveResult::NoMovement;
+                break ScrollResult::NoMovement;
             }
             info!("no movement after {zero_streak} wheel bursts; posting the wheel to the target instead");
             use_message_wheel = true;
@@ -618,7 +594,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     // shell tells the user why they got a single screenshot instead of a
     // long one, and the session is still written.
     let outcome = if stitcher.frames() == 1 && total_dy == 0 {
-        DriveResult::NoMovement
+        ScrollResult::NoMovement
     } else {
         outcome
     };
@@ -627,23 +603,18 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     // point of cancel is that no session appears.
     if signals.canceled() {
         info!("canceled during the final step; writing nothing");
-        return Ok(());
+        return Ok((ScrollResult::Cancelled, stitcher.frames(), stitcher.height()));
     }
 
     let (frames, height_px) = (stitcher.frames(), stitcher.height());
     let composite = stitcher.finish();
     let quality = composite.quality;
-    let path = output::write_session(&cfg.session_dir, composite)?;
+    let path = output::write_session(&cfg.session_dir, composite).map_err(coded(ErrorCode::IoFailed))?;
     info!("scroll session written to {path:?} ({frames} frames, {height_px}px, {outcome:?}, quality {quality:?})");
-    emit(&DriveEvent::Done {
-        result: outcome,
-        frames,
-        height_px,
-    });
-    Ok(())
+    Ok((outcome, frames, height_px))
 }
 
-/// How the rewind ended. Only a `cancel` aborts the run — every other
+/// How the rewind ended. Only a `quit` aborts the run; every other
 /// ending, including hitting a cap, just means "start capturing here".
 enum Rewind {
     Finished(String),
@@ -670,7 +641,7 @@ enum Rewind {
 /// Esc and a `stop` end the rewind and begin the capture from here — the
 /// same "end this phase, keep going with what you have" they mean during
 /// the capture, where what you have is the current scroll position. Only
-/// `cancel` abandons the run.
+/// `quit` abandons the run.
 fn rewind_to_top(run: &Run) -> anyhow::Result<Rewind> {
     // Pushed forward by however long each pause lasted, so `REWIND_MAX_ELAPSED`
     // measures time spent winding rather than time spent waiting for the user.
@@ -690,7 +661,7 @@ fn rewind_to_top(run: &Run) -> anyhow::Result<Rewind> {
         if let Some(reason) = stop_requested(run) {
             return Ok(Rewind::Finished(format!("{reason}; capturing from here")));
         }
-        match pause_while_drifting(run, 0, 0, DriveState::Rewinding) {
+        match pause_while_drifting(run, 0, 0, ScrollState::Rewinding) {
             Paused::Ready {
                 waited,
             } => started += waited,
@@ -698,10 +669,10 @@ fn rewind_to_top(run: &Run) -> anyhow::Result<Rewind> {
             Paused::Stopped(reason) => return Ok(Rewind::Finished(format!("{reason}; capturing from here"))),
         }
 
-        emit(&DriveEvent::Status {
+        out().emit(&Event::Status {
             frames: 0,
             height_px: 0,
-            state: DriveState::Rewinding,
+            state: ScrollState::Rewinding,
             resume_in_s: None,
         });
 
@@ -731,8 +702,8 @@ fn rewind_to_top(run: &Run) -> anyhow::Result<Rewind> {
     )))
 }
 
-fn status(stitcher: &Stitcher, state: DriveState) {
-    emit(&DriveEvent::Status {
+fn status(stitcher: &Stitcher, state: ScrollState) {
+    out().emit(&Event::Status {
         frames: stitcher.frames(),
         height_px: stitcher.height(),
         state,
@@ -798,14 +769,14 @@ enum Paused {
 /// So: past [`CURSOR_DRIFT_PX`] this waits. Every poll that finds the
 /// cursor somewhere new restarts the clock, so a user who keeps moving
 /// stays paused; [`RESUME_STILL_FOR`] of stillness parks the cursor back on
-/// the scroll point and hands the run back. `stop`, `cancel`, Esc and the
+/// the scroll point and hands the run back. `stop`, `quit`, Esc and the
 /// target window going away are all still honored while paused — a paused
 /// run is not an unresponsive one.
 ///
 /// `resume_state` is what the run goes back to doing: the rewind and the
 /// capture loop pause identically but resume into different phases, and a
 /// HUD left saying the wrong one is worse than one left saying "paused".
-fn pause_while_drifting(run: &Run, frames: u32, height_px: u32, resume_state: DriveState) -> Paused {
+fn pause_while_drifting(run: &Run, frames: u32, height_px: u32, resume_state: ScrollState) -> Paused {
     if input::cursor_drift(run.cfg.point) <= CURSOR_DRIFT_PX {
         return Paused::Ready {
             waited: Duration::ZERO,
@@ -815,13 +786,13 @@ fn pause_while_drifting(run: &Run, frames: u32, height_px: u32, resume_state: Dr
     let began = Instant::now();
     info!("the cursor left the scroll point; pausing");
     let paused = |resume_in_s: Option<u64>| {
-        emit(&DriveEvent::Status {
+        out().emit(&Event::Status {
             frames,
             height_px,
             state: if resume_in_s.is_some() {
-                DriveState::Resuming
+                ScrollState::Resuming
             } else {
-                DriveState::Paused
+                ScrollState::Paused
             },
             resume_in_s,
         })
@@ -889,7 +860,7 @@ fn pause_while_drifting(run: &Run, frames: u32, height_px: u32, resume_state: Dr
         input::park_cursor(run.cfg.point);
         let waited = began.elapsed();
         info!("the cursor has been still for {RESUME_STILL_FOR:?}; re-parked and resuming after {waited:?}");
-        emit(&DriveEvent::Status {
+        out().emit(&Event::Status {
             frames,
             height_px,
             state: resume_state,
@@ -1050,11 +1021,12 @@ fn adapt_ticks(ticks: u32, dy: u32, viewport_px: u32) -> u32 {
     }
 }
 
-// ── stdin ──────────────────────────────────────────────────────────────
+// ── Requests ───────────────────────────────────────────────────────────
 
-/// Requests from the shell, set by the reader thread and polled by the
-/// loop. Flags rather than a channel: the loop only ever asks "should I
-/// still be running", and it asks between steps, never inside one.
+/// Requests from the shell, set by the stdin reader (`stop`) and the quit
+/// path (cancel), and polled by the loop. Flags rather than a channel: the
+/// loop only ever asks "should I still be running", and it asks between
+/// steps, never inside one.
 #[derive(Default)]
 struct Signals {
     stop: AtomicBool,
@@ -1067,136 +1039,11 @@ impl Signals {
     }
 }
 
-fn spawn_stdin_reader(signals: Arc<Signals>) {
-    std::thread::Builder::new()
-        .name("scroll-stdin".into())
-        .spawn(move || {
-            for line in std::io::stdin().lock().lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
-                        warn!("stdin: broken pipe, treating as parent death");
-                        break;
-                    }
-                    Err(e) => {
-                        // Anything else — most plausibly an unredirected
-                        // stdin with no console behind it — means we have no
-                        // command channel, not that the parent is gone.
-                        // Abandoning the capture over it would be worse than
-                        // running without stop/cancel.
-                        warn!("stdin: unusable ({e}); running without a command channel");
-                        return;
-                    }
-                };
-                // Strip a UTF-8 BOM as well: .NET's default UTF8Encoding
-                // prefixes one to its first line.
-                let trimmed = line.trim().trim_start_matches('\u{feff}');
-                if trimmed.is_empty() {
-                    continue;
-                }
-                match serde_json::from_str::<DriveCommand>(trimmed) {
-                    Ok(DriveCommand::Stop) => {
-                        info!("stop requested");
-                        signals.stop.store(true, Ordering::Release);
-                    }
-                    Ok(DriveCommand::Cancel) => {
-                        info!("cancel requested");
-                        signals.cancel.store(true, Ordering::Release);
-                    }
-                    // Garbage on the command channel must not take out a
-                    // capture that is going fine.
-                    Err(e) => warn!("stdin: ignoring unparseable command ({e}): {trimmed}"),
-                }
-            }
-            // The shell holds our stdin pipe open for its whole life, so EOF
-            // means it is gone — and a session directory nobody is watching
-            // is worse than none at all.
-            info!("stdin closed; treating as cancel");
-            signals.cancel.store(true, Ordering::Release);
-        })
-        .expect("spawn scroll stdin reader thread");
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use clap::Parser;
     use prisc_rust_core::geometry::RectExt;
-
-    #[test]
-    fn events_match_the_wire_contract() {
-        assert_eq!(serde_json::to_string(&DriveEvent::Ready).unwrap(), r#"{"type":"ready"}"#);
-        assert_eq!(
-            serde_json::to_string(&DriveEvent::Status {
-                frames: 12,
-                height_px: 4180,
-                state: DriveState::Scrolling,
-                resume_in_s: None,
-            })
-            .unwrap(),
-            r#"{"type":"status","frames":12,"height_px":4180,"state":"scrolling"}"#
-        );
-        // The countdown field appears only where it means something, so
-        // every other status line keeps the shape shells already parse.
-        assert_eq!(
-            serde_json::to_string(&DriveEvent::Status {
-                frames: 12,
-                height_px: 4180,
-                state: DriveState::Resuming,
-                resume_in_s: Some(2),
-            })
-            .unwrap(),
-            r#"{"type":"status","frames":12,"height_px":4180,"state":"resuming","resume_in_s":2}"#
-        );
-        assert_eq!(
-            serde_json::to_string(&DriveEvent::Done {
-                result: DriveResult::Complete,
-                frames: 31,
-                height_px: 9800,
-            })
-            .unwrap(),
-            r#"{"type":"done","result":"complete","frames":31,"height_px":9800}"#
-        );
-        assert_eq!(
-            serde_json::to_string(&DriveEvent::FatalError {
-                message: "boom".into(),
-            })
-            .unwrap(),
-            r#"{"type":"fatal_error","message":"boom"}"#
-        );
-    }
-
-    #[test]
-    fn every_state_and_result_is_snake_case() {
-        let states = [
-            (DriveState::Rewinding, "rewinding"),
-            (DriveState::Paused, "paused"),
-            (DriveState::Resuming, "resuming"),
-            (DriveState::Scrolling, "scrolling"),
-            (DriveState::Settling, "settling"),
-            (DriveState::Stitching, "stitching"),
-        ];
-        for (state, expected) in states {
-            assert_eq!(serde_json::to_string(&state).unwrap(), format!("\"{expected}\""));
-        }
-        let results = [
-            (DriveResult::Complete, "complete"),
-            (DriveResult::Stopped, "stopped"),
-            (DriveResult::MaxReached, "max_reached"),
-            (DriveResult::NoMovement, "no_movement"),
-            (DriveResult::Failed, "failed"),
-        ];
-        for (result, expected) in results {
-            assert_eq!(serde_json::to_string(&result).unwrap(), format!("\"{expected}\""));
-        }
-    }
-
-    #[test]
-    fn commands_parse() {
-        assert!(matches!(serde_json::from_str(r#"{"type":"stop"}"#), Ok(DriveCommand::Stop)));
-        assert!(matches!(serde_json::from_str(r#"{"type":"cancel"}"#), Ok(DriveCommand::Cancel)));
-        assert!(serde_json::from_str::<DriveCommand>(r#"{"type":"shutdown"}"#).is_err());
-    }
 
     #[test]
     fn drive_args_require_the_scroll_trio() {

@@ -141,16 +141,6 @@ pub fn mode() -> Mode {
     }
 }
 
-/// The wire name of a mode, as it appears in the `obscure` status line.
-pub fn name(mode: Mode) -> &'static str {
-    match mode {
-        Mode::None => "none",
-        Mode::Blur(_) => "blur",
-        Mode::Pixelate(_) => "pixelate",
-        Mode::Hide => "hide",
-    }
-}
-
 /// The strength of a mode, as it appears in the `obscure` status line. Modes
 /// that have no strength report 0 rather than omitting the field, so Prisc can
 /// deserialise every ack into the same shape.
@@ -327,15 +317,15 @@ pub unsafe extern "C" fn draw(_param: *mut c_void, cx: u32, cy: u32) {
         // being told yes. So the retraction goes on the wire as well.
         //
         // This is the one place a protocol line is written from the graphics
-        // thread, and it is legal because `emit_obscure` only takes the stdout
-        // lock and writes — it touches no OBS state and cannot block on
+        // thread, and it is legal because the channel only takes its own lock
+        // and writes: it touches no OBS state and cannot block on
         // anything this thread holds. It runs at most once per obscure command,
         // not per frame: `set_mode(None)` sends every subsequent frame down the
         // fast path at the top of this function, and the next command is what
         // brings it back here.
         _ => {
             set_mode(Mode::None);
-            crate::status::emit_obscure(Mode::None);
+            crate::status::out().emit(&crate::status::obscure_event(Mode::None));
             unsafe { prisc_obs_sys::obs_render_main_texture() };
             return;
         }
@@ -755,7 +745,6 @@ mod tests {
     fn mode_round_trips_through_atomics() {
         set_mode(Mode::Blur(40));
         assert_eq!(mode(), Mode::Blur(40));
-        assert_eq!(name(mode()), "blur");
         assert_eq!(strength(mode()), 40);
 
         set_mode(Mode::Pixelate(9999));
@@ -770,7 +759,6 @@ mod tests {
 
         set_mode(Mode::None);
         assert_eq!(mode(), Mode::None);
-        assert_eq!(name(mode()), "none");
     }
 
     /// The icon keeps its aspect ratio (one icon unit is the same number of

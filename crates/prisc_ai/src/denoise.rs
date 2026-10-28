@@ -1,8 +1,8 @@
 //! Speech denoising via DPDFNet2 (48 kHz high-resolution variant).
 //!
 //! The protocol is a sample pump: f32le interleaved N-channel PCM at 48 kHz
-//! arrives on stdin until EOF and leaves on the `payload` writer — this
-//! process's real stdout, claimed by `main::claim_payload_stdout` — in the
+//! arrives on stdin until EOF and leaves on the `payload` writer (this
+//! process's real stdout, claimed by `prisc_ipc::claim_stdout`) in the
 //! same layout with the same total sample count. Each channel runs through its own
 //! independent model state — DPDFNet is single-channel, and tying a stereo
 //! pair through one state would smear the channels together.
@@ -399,7 +399,7 @@ fn initial_state(session: &Session) -> anyhow::Result<Vec<f32>> {
 
 /// The `denoise` subcommand: pump stdin PCM through the model until EOF,
 /// writing the enhanced samples to `payload` (this process's real stdout,
-/// claimed by `main::claim_payload_stdout`).
+/// claimed by `prisc_ipc::claim_stdout`).
 pub fn run(channels: usize, mut payload: impl Write) -> anyhow::Result<()> {
     ensure!(channels >= 1, "--channels must be at least 1");
     let mut model = DpdfModel::new(channels)?;

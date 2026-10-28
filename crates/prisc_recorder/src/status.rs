@@ -1,78 +1,49 @@
-//! stdout JSON protocol (§1.3) and the 1 Hz status thread with its
-//! paused-adjusted recording clock.
+//! The stdout protocol channel (crates/prisc_capture/HELPER_PROTOCOL.md §4.1)
+//! and the 1 Hz status thread with its paused-adjusted recording clock.
 
 use std::collections::VecDeque;
-use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use prisc_ipc::catalog::recorder::Event;
+use prisc_ipc::Channel;
 
 use crate::commands::Command;
 use crate::platform;
 
-/// Writes one JSON line to stdout (protocol channel; stderr carries all
-/// free-form output).
-pub fn emit_json(value: serde_json::Value) {
-    let stdout = std::io::stdout();
-    let mut lock = stdout.lock();
-    let _ = writeln!(lock, "{value}");
-    let _ = lock.flush();
+static OUT: OnceLock<Channel<Event>> = OnceLock::new();
+
+/// Makes `out` the channel every emitter in the process writes to. Called
+/// once, first thing in `main`.
+pub fn init(out: Channel<Event>) {
+    if OUT.set(out).is_err() {
+        panic!("status::init called twice");
+    }
 }
 
-pub fn emit_simple(msg_type: &str) {
-    emit_json(serde_json::json!({ "type": msg_type }));
-}
-
-/// `tracks` is the optional per-track stream map (same shape as in
-/// `started_recording`); omitted entirely when None so consumers that key on
-/// field presence keep their previous value. `input_capture` and
-/// `window_capture` are the JSONL sidecar paths when those flags are active —
-/// also key-omitted when absent.
-pub fn emit_stopped_recording(
-    code: i64,
-    error: Option<String>,
-    tracks: Option<serde_json::Value>,
-    input_capture: Option<&std::path::Path>,
-    window_capture: Option<&std::path::Path>,
-) {
-    let mut msg = serde_json::json!({
-        "type": "stopped_recording",
-        "code": code,
-        "message": stop_code_message(code),
-        "error": error,
-    });
-    if let Some(tracks) = tracks {
-        msg["tracks"] = tracks;
-    }
-    if let Some(path) = input_capture {
-        msg["input_capture"] = serde_json::json!(path.to_string_lossy());
-    }
-    if let Some(path) = window_capture {
-        msg["window_capture"] = serde_json::json!(path.to_string_lossy());
-    }
-    emit_json(msg);
+/// The process's protocol channel (stdout). Every line goes through it; all
+/// free-form output goes to stderr.
+pub fn out() -> &'static Channel<Event> {
+    OUT.get().expect("status::init runs first thing in main")
 }
 
 /// Ack for a successful `configure`. `ignored_keys` is always present (empty
 /// when everything applied): the settings-file field names of post-start
 /// non-live keys whose requested value differed, in schema order.
-pub fn emit_configure_applied(ignored_keys: &[&str]) {
-    emit_json(serde_json::json!({
-        "type": "configure_applied",
-        "ignored_keys": ignored_keys,
-    }));
+pub fn configure_applied(ignored_keys: &[&str]) {
+    out().emit(&Event::ConfigureApplied {
+        ignored_keys: ignored_keys.iter().map(|k| k.to_string()).collect(),
+    });
 }
 
-/// Ack for a failed `configure`. `fatal: true` means the pipeline may match
-/// neither the old nor the new config and the parent should respawn.
-pub fn emit_configure_error(message: &str, fatal: bool) {
-    emit_json(serde_json::json!({
-        "type": "configure_error",
-        "message": message,
-        "fatal": fatal,
-    }));
+/// Ack for a failed `configure`. `restart_required` means the pipeline may
+/// match neither the old nor the new config and the parent should respawn.
+pub fn configure_error(message: &str, restart_required: bool) {
+    out().emit(&Event::ConfigureError {
+        message: message.to_string(),
+        restart_required,
+    });
 }
 
 /// Fixed message per OBS stop code (C++ parity table).
@@ -91,20 +62,8 @@ pub fn stop_code_message(code: i64) -> String {
     }
 }
 
-#[derive(Serialize)]
-struct StatusMessage {
-    #[serde(rename = "type")]
-    msg_type: &'static str,
-    #[serde(rename = "timeMs")]
-    time_ms: u64,
-    fps: f64,
-    dropped: i64,
-    #[serde(rename = "droppedPerc")]
-    dropped_perc: f64,
-}
-
 /// Wall clock since `started_recording` minus accumulated paused time. Both
-/// `timeMs` and `fps` are computed against this same clock so fps does not dip
+/// `time_ms` and `fps` are computed against this same clock so fps does not dip
 /// permanently after a pause.
 pub struct RecordingClock {
     inner: Mutex<ClockInner>,
@@ -219,7 +178,8 @@ impl FpsWindow {
 ///
 /// Reads the raw output pointer directly (frame counters are thread-safe);
 /// this is sound because the process always terminates via
-/// `platform::exit_process` while the output is still alive.
+/// `prisc_ipc::lifetime::exit` (which ends in `platform::exit_process`) while
+/// the output is still alive.
 ///
 /// `video_tracks` is the number of video encoders attached to the output
 /// (1, or 2 with a webcam): `obs_output_get_total_frames` /
@@ -262,23 +222,19 @@ pub fn start_status_thread(
                 0.0
             };
 
-            let status = StatusMessage {
-                msg_type: "status",
+            out().emit(&Event::Status {
                 time_ms,
                 fps,
                 dropped,
                 dropped_perc,
-            };
-            if let Ok(json) = serde_json::to_value(&status) {
-                emit_json(json);
-            }
+            });
         }
     })
 }
 
-/// Peak dBFS floor for the `levels` protocol line. JSON has no -inf/NaN (serde
-/// serializes non-finite floats as null), so every non-finite value — silence
-/// (-inf), plus NaN/+inf from corrupt device samples — clamps here.
+/// Peak dBFS floor for the `levels` protocol line. JSON has no -inf/NaN, so
+/// every non-finite value (silence is -inf; corrupt device samples can be NaN
+/// or +inf) clamps here rather than reaching the channel's finite-float guard.
 const LEVELS_FLOOR_DB: f64 = -100.0;
 
 fn clamp_dbfs(peak: f32) -> f64 {
@@ -333,7 +289,7 @@ pub fn start_levels_thread(
                 break;
             }
             // Lock only for the atomic reads; emitting (which takes the
-            // stdout lock) happens after release.
+            // channel's lock) happens after release.
             let (speaker, mic, devices, compensate) = {
                 let peaks = peaks.lock().unwrap();
                 if peaks.speaker.is_empty() && peaks.mic.is_empty() {
@@ -366,11 +322,7 @@ pub fn start_levels_thread(
                 }
             }
 
-            emit_json(serde_json::json!({
-                "type": "levels",
-                "speaker": speaker,
-                "mic": mic,
-            }));
+            out().emit(&Event::Levels { speaker, mic });
         }
     })
 }
@@ -528,8 +480,5 @@ mod tests {
         assert_eq!(clamp_dbfs(-100.0), -100.0);
         assert!((clamp_dbfs(-18.5) - -18.5f32 as f64).abs() < 1e-6);
         assert_eq!(clamp_dbfs(0.0), 0.0);
-        // Clamped values always serialize as JSON numbers, never null.
-        let v = serde_json::json!(clamp_dbfs(f32::NEG_INFINITY));
-        assert!(v.is_f64(), "expected number, got {v}");
     }
 }

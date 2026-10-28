@@ -3511,9 +3511,9 @@ dependencies = [
  "anyhow",
  "clap",
  "image",
- "libc",
  "log",
  "ort",
+ "prisc_ipc",
  "prisc_rust_core",
  "realfft",
  "serde_json",
@@ -3554,6 +3554,7 @@ dependencies = [
  "objc2-metal 0.3.2",
  "objc2-quartz-core 0.3.2",
  "prisc_hotkeys",
+ "prisc_ipc",
  "prisc_rust_core",
  "rfd",
  "sentry",
@@ -3593,8 +3594,11 @@ dependencies = [
 name = "prisc_ipc"
 version = "1.0.0"
 dependencies = [
+ "ctrlc",
+ "libc",
  "serde",
  "serde_json",
+ "windows",
 ]
 
 [[package]]
@@ -3633,7 +3637,6 @@ dependencies = [
  "anyhow",
  "base64 0.23.1",
  "clap",
- "ctrlc",
  "libc",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
@@ -3643,9 +3646,11 @@ dependencies = [
  "png 0.18.1",
  "prisc_build_support",
  "prisc_hotkeys",
+ "prisc_ipc",
  "prisc_obs",
  "prisc_obs_platform",
  "prisc_obs_sys",
+ "prisc_rust_core",
  "serde",
  "serde_json",
  "windows",
@@ -3659,6 +3664,7 @@ dependencies = [
  "euclid",
  "image",
  "log",
+ "prisc_ipc",
  "sentry",
  "serde",
  "serde_json",
@@ -3674,8 +3680,8 @@ dependencies = [
  "core-graphics 0.25.0",
  "log",
  "objc2-app-kit 0.3.2",
+ "prisc_ipc",
  "prisc_rust_core",
- "serde",
  "serde_json",
  "simplelog",
  "windows",
@@ -3686,15 +3692,16 @@ name = "prisc_share_region"
 version = "0.1.0"
 dependencies = [
  "clap",
- "ctrlc",
  "libc",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "prisc_build_support",
+ "prisc_ipc",
  "prisc_obs",
  "prisc_obs_platform",
  "prisc_obs_sys",
+ "prisc_rust_core",
  "serde_json",
  "windows",
 ]
@@ -3715,6 +3722,9 @@ dependencies = [
  "clap",
  "prisc_build_support",
  "prisc_ffmpeg_sys",
+ "prisc_ipc",
+ "prisc_rust_core",
+ "serde_json",
 ]
 
 [[package]]

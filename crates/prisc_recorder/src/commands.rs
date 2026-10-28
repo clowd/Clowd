@@ -1,8 +1,15 @@
-/// Commands consumed by the recorder's run loop. Most originate from stdin
-/// (§1.2); `OutputStarted` / `OutputStopped` / `OutputDeactivated` are
-/// injected by the OBS output's start/stop/deactivate signal handlers,
-/// `SetSpeakerVolume` by the levels thread — none of those are ever parsed
-/// from stdin.
+//! The run loop's command queue. The stdin commands arrive as `recorder::Command`
+//! (crates/prisc_capture/HELPER_PROTOCOL.md §4.1) and are mapped onto [`Command`] by
+//! [`from_wire`]; everything else in the queue is injected from inside the process.
+
+use prisc_ipc::catalog::recorder;
+use prisc_ipc::Inbound;
+
+/// Commands consumed by the recorder's run loop. Most originate from stdin;
+/// `Quit` is posted by the quit path (`quit`, stdin EOF, a signal or a dead
+/// stdout), `OutputStarted` / `OutputStopped` / `OutputDeactivated` by the
+/// OBS output's start/stop/deactivate signal handlers, and `SetSpeakerVolume`
+/// by the levels thread.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Start,
@@ -12,16 +19,17 @@ pub enum Command {
     UnmuteSpeaker(usize),
     MuteMic(usize),
     UnmuteMic(usize),
-    /// `configure <path>`: re-read the settings JSON at the given path and
-    /// apply the diff. The path is the trimmed remainder of the line and may
-    /// contain spaces; no quoting or escaping.
+    /// Re-read the settings JSON at the given path and apply the diff.
     Configure(String),
-    /// OBS "start" signal fired — recording is actually rolling.
+    /// A stdin line that was not a command, answered with `bad_command` in
+    /// its place in the queue so it cannot overtake an earlier command's ack.
+    Malformed(String),
+    /// OBS "start" signal fired: recording is actually rolling.
     OutputStarted,
     /// OBS "stop" signal fired with the given stop code (spontaneous or in
     /// response to our own `obs_output_stop`).
     OutputStopped(i64),
-    /// OBS "deactivate" signal fired — the output has fully torn down its
+    /// OBS "deactivate" signal fired: the output has fully torn down its
     /// data capture. For mp4_output this is the earliest point at which the
     /// file is guaranteed flushed and closed: the "stop" signal fires *before*
     /// the buffered file serializer drains (see `Recorder::wait_for_flush`).
@@ -32,30 +40,20 @@ pub enum Command {
     SetSpeakerVolume(usize, f32),
 }
 
-/// Whitespace-split, first token dispatched case-insensitively. Unknown lines
-/// return `None` (the caller logs and ignores them).
-pub fn parse_command(line: &str) -> Option<Command> {
-    let line = line.trim();
-    let mut parts = line.split_whitespace();
-    let head = parts.next()?.to_ascii_lowercase();
-    if head == "configure" {
-        // The argument is the rest of the line, not one token: paths may
-        // contain spaces. ASCII lowercasing preserves byte length, so
-        // `head.len()` is where the first token ends.
-        let path = line[head.len()..].trim();
-        return (!path.is_empty()).then(|| Command::Configure(path.to_string()));
-    }
-    let arg = parts.next();
-    let index = || arg?.parse::<usize>().ok();
-    match head.as_str() {
-        "start" => Some(Command::Start),
-        "pause" => Some(Command::Pause),
-        "quit" | "q" => Some(Command::Quit),
-        "mute-speaker" => index().map(Command::MuteSpeaker),
-        "unmute-speaker" => index().map(Command::UnmuteSpeaker),
-        "mute-mic" => index().map(Command::MuteMic),
-        "unmute-mic" => index().map(Command::UnmuteMic),
-        _ => None,
+/// One stdin line, as the run loop sees it.
+pub fn from_wire(inbound: Inbound<recorder::Command>) -> Command {
+    let index = |i: u32| i as usize;
+    match inbound {
+        Inbound::Command(command) => match command {
+            recorder::Command::Start {} => Command::Start,
+            recorder::Command::Pause {} => Command::Pause,
+            recorder::Command::MuteSpeaker { index: i } => Command::MuteSpeaker(index(i)),
+            recorder::Command::UnmuteSpeaker { index: i } => Command::UnmuteSpeaker(index(i)),
+            recorder::Command::MuteMic { index: i } => Command::MuteMic(index(i)),
+            recorder::Command::UnmuteMic { index: i } => Command::UnmuteMic(index(i)),
+            recorder::Command::Configure { path } => Command::Configure(path),
+        },
+        Inbound::Malformed { reason } => Command::Malformed(reason),
     }
 }
 
@@ -63,48 +61,33 @@ pub fn parse_command(line: &str) -> Option<Command> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn parses_basic_commands() {
-        assert_eq!(parse_command("start"), Some(Command::Start));
-        assert_eq!(parse_command("  pause  "), Some(Command::Pause));
-        assert_eq!(parse_command("quit"), Some(Command::Quit));
-        assert_eq!(parse_command("q"), Some(Command::Quit));
-        assert_eq!(parse_command("QUIT"), Some(Command::Quit)); // case-insensitive
-        assert_eq!(
-            parse_command("mute-speaker 1"),
-            Some(Command::MuteSpeaker(1))
-        );
-        assert_eq!(parse_command("unmute-mic 0"), Some(Command::UnmuteMic(0)));
+    fn parse(line: &str) -> Command {
+        from_wire(Inbound::Command(serde_json::from_str(line).unwrap()))
     }
 
     #[test]
-    fn rejects_unknown_and_malformed() {
-        assert_eq!(parse_command(""), None);
-        assert_eq!(parse_command("bogus"), None);
-        assert_eq!(parse_command("mute-speaker"), None);
-        assert_eq!(parse_command("mute-speaker abc"), None);
+    fn maps_every_wire_command() {
+        assert_eq!(parse(r#"{"type":"start"}"#), Command::Start);
+        assert_eq!(parse(r#"{"type":"pause"}"#), Command::Pause);
+        assert_eq!(parse(r#"{"type":"mute_speaker","index":1}"#), Command::MuteSpeaker(1));
+        assert_eq!(parse(r#"{"type":"unmute_speaker","index":0}"#), Command::UnmuteSpeaker(0));
+        assert_eq!(parse(r#"{"type":"mute_mic","index":2}"#), Command::MuteMic(2));
+        assert_eq!(parse(r#"{"type":"unmute_mic","index":0}"#), Command::UnmuteMic(0));
     }
 
     #[test]
-    fn parses_configure_with_the_rest_of_the_line_as_path() {
+    fn configure_paths_keep_spaces_and_quotes() {
         assert_eq!(
-            parse_command("configure /tmp/obs-settings.json"),
-            Some(Command::Configure("/tmp/obs-settings.json".to_string()))
+            parse(r#"{"type":"configure","path":"C:\\Users\\Jane Doe\\\"s\".json"}"#),
+            Command::Configure("C:\\Users\\Jane Doe\\\"s\".json".to_string())
         );
-        // Spaces inside the path are preserved; surrounding whitespace is not.
+    }
+
+    #[test]
+    fn malformed_lines_become_bad_commands() {
         assert_eq!(
-            parse_command("  CONFIGURE  C:\\Users\\Jane Doe\\obs-settings.json  "),
-            Some(Command::Configure(
-                "C:\\Users\\Jane Doe\\obs-settings.json".to_string()
-            ))
+            from_wire(Inbound::Malformed { reason: "unknown command 'mvoe'".into() }),
+            Command::Malformed("unknown command 'mvoe'".into())
         );
-        // No quote stripping: quotes are part of the path.
-        assert_eq!(
-            parse_command("configure \"/tmp/a.json\""),
-            Some(Command::Configure("\"/tmp/a.json\"".to_string()))
-        );
-        // Bare `configure` is malformed.
-        assert_eq!(parse_command("configure"), None);
-        assert_eq!(parse_command("configure   "), None);
     }
 }

@@ -26,10 +26,9 @@
 //! not imposed: truncating mid-recording would desync the editor's model more
 //! badly than a large file does.
 //!
-//! Lifetime: exit paths skip Drop (`platform::exit_process`), so the recorder
-//! calls [`WindowCapture::close`] explicitly before *every*
-//! `emit_stopped_recording`, exactly as it does for the input-capture
-//! sidecar.
+//! Lifetime: exit paths skip Drop (they end in `platform::exit_process`), so
+//! the recorder calls [`WindowCapture::close`] explicitly before *every* final
+//! `done`, exactly as it does for the input-capture sidecar.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::c_void;
@@ -715,7 +714,7 @@ impl WindowCapture {
     }
 
     /// Disarms the pipeline and makes the file durable. MUST run before every
-    /// `emit_stopped_recording` — exit paths skip Drop, and a truncated tail
+    /// final `done`: exit paths skip Drop, and a truncated tail
     /// silently desyncs the editor's window overlays.
     ///
     /// Deregistration quiesces a tick that already passed the arm gate. The
