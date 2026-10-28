@@ -72,11 +72,7 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
 
     let mut bgra = vec![0u8; vd_w * vd_h * 4];
 
-    let display_ids: Vec<u32> = desktop::active_displays()
-        .map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?
-        .into_iter()
-        .map(|d| d.id)
-        .collect();
+    let display_ids = desktop::active_display_ids().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
 
     // Zip monitors with display_ids; truncate to the shorter list in
     // case a display connected/disconnected between enumeration and capture.

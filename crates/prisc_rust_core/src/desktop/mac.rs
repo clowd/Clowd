@@ -277,8 +277,10 @@ extern "C-unwind" {
     fn CGDisplayCreateUUIDFromDisplayID(display: u32) -> Option<NonNull<CFUUID>>;
 }
 
-/// Every active display, in `CGGetActiveDisplayList` order.
-pub fn active_displays() -> Result<Vec<Display>, CGError> {
+/// Every active display id, in `CGGetActiveDisplayList` order. The cheap half
+/// of [`active_displays`], for callers on a latency-critical path that need
+/// neither bounds nor mode.
+pub fn active_display_ids() -> Result<Vec<CGDirectDisplayID>, CGError> {
     let mut count: u32 = 0;
     // SAFETY: a null list with a zero capacity only asks for the count.
     let err = unsafe { CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) };
@@ -292,9 +294,13 @@ pub fn active_displays() -> Result<Vec<Display>, CGError> {
         return Err(err);
     }
     ids.truncate(count as usize);
+    Ok(ids)
+}
 
+/// Every active display, in `CGGetActiveDisplayList` order.
+pub fn active_displays() -> Result<Vec<Display>, CGError> {
     let main = CGMainDisplayID();
-    Ok(ids
+    Ok(active_display_ids()?
         .into_iter()
         .map(|id| Display {
             id,
