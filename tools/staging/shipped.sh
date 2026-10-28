@@ -77,7 +77,9 @@ recorder_packages() {
 }
 
 # The recorder's executables, which ship in recorder/ beside Prisc.Ui with the
-# libobs runtime the stage scripts add around them. One per line.
+# libobs runtime the stage scripts add around them. One per line. obs-ffmpeg-mux
+# is required, not best effort: the default ffmpeg_muxer output cannot record
+# without it, so a build that lacks it fails at staging rather than shipping.
 recorder_binaries() {
   local exe
   exe=$(rid_exe "$1")
