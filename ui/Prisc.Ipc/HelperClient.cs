@@ -93,6 +93,10 @@ namespace Prisc.Ipc
         /// gives up on it. Settable for tests only.</summary>
         internal TimeSpan KillWait { get; init; } = TimeSpan.FromSeconds(2);
 
+        /// <summary>The longest stdout line read (§2.1); longer ones are logged and skipped. Settable
+        /// for tests only.</summary>
+        internal int MaxStdoutLineBytes { get; init; } = BoundedLineReader.MaxLineBytes;
+
         /// <summary>The wait between <c>quit</c> and kill: the catalog's, unless a test shortens it.</summary>
         internal TimeSpan QuitGrace { get; init; }
 
@@ -401,9 +405,15 @@ namespace Prisc.Ipc
         {
             try
             {
-                string line;
-                while ((line = await _child.Stdout.ReadLineAsync().ConfigureAwait(false)) != null)
-                    HandleLine(line);
+                // bounded (§2.1): a runaway line with no newline must not be buffered whole
+                var reader = new BoundedLineReader(_child.Stdout, MaxStdoutLineBytes);
+                while (await reader.ReadLineAsync().ConfigureAwait(false) is { } next)
+                {
+                    if (next.Oversize)
+                        Log.Append("[stdout] oversize line skipped");
+                    else
+                        HandleLine(next.Line);
+                }
             }
             catch (Exception ex)
             {

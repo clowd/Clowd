@@ -287,6 +287,41 @@ namespace Prisc.Ipc.Tests
             Assert.Single(await DrainAsync(client));
         }
 
+        [Fact]
+        public async Task An_oversize_stdout_line_is_logged_and_skipped()
+        {
+            var child = new FakeChild();
+            child.WriteStdout(Hello(HelperSpecs.Recorder));
+            var client = new HelperClient<RecorderEvent, RecorderCommand>(HelperSpecs.Recorder, child.ToHelperChild(), null)
+            {
+                PumpDrainTimeout = Short,
+                KillWait = Short,
+                QuitGrace = Short,
+                MaxStdoutLineBytes = 1024,
+            };
+            await HelperClient<RecorderEvent, RecorderCommand>.StartAsync(client, "prisc_recorder", default).WaitAsync(Generous);
+
+            child.WriteStdout(new string('x', 20_000));
+            child.WriteStdout("""{"type":"done","result":"stopped","code":0,"message":"ok"}""");
+            child.Exit(0);
+
+            var outcome = await client.Completion.WaitAsync(Generous);
+            Assert.Contains("[stdout] oversize line skipped", outcome.StderrTail);
+            Assert.DoesNotContain("xxxx", outcome.StderrTail);
+            Assert.IsType<RecorderEvent.Done>(Assert.Single(await DrainAsync(client)));
+            Assert.Equal(HelperFailure.None, outcome.Failure);
+        }
+
+        [Fact]
+        public async Task The_line_reader_strips_carriage_returns_and_keeps_an_unterminated_last_line()
+        {
+            var reader = new BoundedLineReader(new StringReader("one\r\n\ntwo"));
+            Assert.Equal(("one", false), await reader.ReadLineAsync());
+            Assert.Equal(("", false), await reader.ReadLineAsync());
+            Assert.Equal(("two", false), await reader.ReadLineAsync());
+            Assert.Null(await reader.ReadLineAsync());
+        }
+
         /// <summary>A child process made of channels: lines written to its stdout and stderr, commands
         /// read from its stdin, an exit the test decides, and a kill it observes.</summary>
         private sealed class FakeChild
@@ -391,6 +426,25 @@ namespace Prisc.Ipc.Tests
                     {
                         return null;
                     }
+                }
+
+                // the stdout pump reads characters, not lines: hand out each line with its newline
+                private string _pending = "";
+
+                public override async ValueTask<int> ReadAsync(Memory<char> buffer, CancellationToken cancellationToken = default)
+                {
+                    if (_pending.Length == 0)
+                    {
+                        var line = await ReadLineAsync(cancellationToken);
+                        if (line == null)
+                            return 0;
+                        _pending = line + "\n";
+                    }
+
+                    var count = Math.Min(buffer.Length, _pending.Length);
+                    _pending.AsSpan(0, count).CopyTo(buffer.Span);
+                    _pending = _pending.Substring(count);
+                    return count;
                 }
             }
         }
