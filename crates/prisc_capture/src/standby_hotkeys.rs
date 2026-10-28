@@ -119,7 +119,7 @@ fn recovery(err: &Error) -> Recovery {
     }
 }
 
-/// The machine-readable twin of an error's text in PRISC_SETTINGS_STATUS:
+/// The machine-readable twin of an error's text in `settings_status`:
 /// the shell keys behaviour (the Accessibility prompt) off this, never off
 /// the display text. Exhaustive on purpose, so a new variant picks a code.
 fn error_code(err: &Error) -> &'static str {
@@ -184,7 +184,7 @@ pub enum Poll {
     Unchanged,
     /// The hook came up, went down, failed differently, or died and was
     /// restarted at once: the gestures' new statuses, for an unsolicited
-    /// PRISC_SETTINGS_STATUS.
+    /// `settings_status`.
     Statuses(serde_json::Map<String, serde_json::Value>),
     /// The hook died where that is fatal (`Recovery::Exit`).
     Fatal(String),
@@ -301,7 +301,7 @@ impl<H: Hook> StandbyHotkeys<H> {
     }
 
     /// Replaces the whole gesture set from a CLI snapshot and returns the
-    /// per-gesture statuses for PRISC_SETTINGS_STATUS. Hook-based hotkeys
+    /// per-gesture statuses for `settings_status`. Hook-based hotkeys
     /// cannot conflict with other applications, so a gesture is active exactly
     /// when it parses, is usable on this OS, is not a duplicate, and the hook
     /// accepted it. A hook that is down is tried again first if

@@ -67,6 +67,9 @@ pub struct App {
     /// to `main` after the loop exits, preserving the non-zero exit code
     /// (and the sentry capture) the old blocking-wait `?` produced.
     fatal: Option<anyhow::Error>,
+    /// How the cycle ended, once `finish_cycle` ran: the one-shot run's `done`
+    /// says `cancelled` or `finished` from it.
+    finished: Option<CycleAction>,
 }
 
 /// All state for the single capture this process serves. Built in
@@ -753,6 +756,7 @@ impl App {
             worker_failed,
             cycle: Some(cycle),
             fatal: None,
+            finished: None,
         }
     }
 
@@ -763,6 +767,13 @@ impl App {
             Some(e) => Err(e),
             None => Ok(()),
         }
+    }
+
+    /// How the cycle ended. A loop that exited without finishing a cycle
+    /// counts as canceled: nothing was handed to the shell.
+    pub fn finished(&self) -> CycleAction {
+        self.finished
+            .unwrap_or(CycleAction::Canceled)
     }
 
     /// Window creation for monitor `i` failed, so its worker will never
@@ -779,6 +790,7 @@ impl App {
     /// `main` then drops `App` itself and returns to minimal standby.
     fn finish_cycle(&mut self, event_loop: &ActiveEventLoop, action: CycleAction) {
         log::info!("capture cycle finished: {:?}", action);
+        self.finished.get_or_insert(action);
         // Every exit path that has a live cycle comes through here, so this is
         // also the last hide before the process itself goes away. Hence the
         // foreground handback rather than a bare hide, even though the action

@@ -165,16 +165,6 @@ pub fn shutdown_hook(code: i32) {
     shutdown(code, std::time::Duration::from_secs(2));
 }
 
-/// Flushes queued events. Call before `process::exit`, which skips the init
-/// guard's drop and would otherwise lose anything reported on that path.
-pub fn flush() {
-    if reporting_compiled_in() {
-        if let Some(client) = sentry::Hub::current().client() {
-            client.flush(Some(std::time::Duration::from_secs(2)));
-        }
-    }
-}
-
 /// Reports a fatal error that is on its way out of `main`. An `Err` return is not
 /// a panic, so the panic hook never sees it; without this the process would exit
 /// non-zero with nothing but a line on stderr.

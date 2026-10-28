@@ -1,62 +1,35 @@
-//! Cross-platform standby control plane. Newline-delimited JSON on stdin carries
-//! complete CLI snapshots and explicit capture requests; EOF means the shell died.
-//! The screenshot hotkeys themselves are owned here too — see standby_hotkeys.rs
-//! for why they must live in this process and use a low-level hook.
+//! Cross-platform standby control plane: the `capture` catalog of Prisc's helper
+//! protocol (crates/prisc_capture/HELPER_PROTOCOL.md §4.5). JSON lines on stdin carry
+//! complete CLI snapshots and explicit capture requests; the quit path (`quit`, EOF,
+//! a signal, a dead stdout) means the shell is done with us. The screenshot hotkeys
+//! themselves are owned here too: see standby_hotkeys.rs for why they must live in
+//! this process and use a low-level hook.
 
-use std::io::{BufRead, Write};
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Instant, SystemTime};
 
 use clap::Parser;
-use serde::Deserialize;
+use prisc_ipc::catalog::capture::{self, CaptureResult, Event};
+use prisc_ipc::catalog::ErrorCode;
+use prisc_ipc::Inbound;
 use winit::application::ApplicationHandler;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, ControlFlow as LoopFlow, EventLoop, EventLoopProxy};
 use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
 
+use crate::protocol::out;
 use crate::settings::{CaptureMode, CliArgs};
 use crate::standby_hotkeys::{Poll, StandbyHotkeys};
 
-/// Writes one protocol line to stdout. Never panics: when the shell has died the
-/// pipe is closed and `println!` would abort the process from inside a protocol
-/// print — parent-EOF handling is the one place that decides how we exit.
-pub fn emit_line(line: std::fmt::Arguments<'_>) {
-    let mut out = std::io::stdout().lock();
-    let _ = out.write_fmt(line);
-    let _ = out.write_all(b"\n");
-    let _ = out.flush();
-}
-
-macro_rules! emit {
-    ($($arg:tt)*) => { crate::standby::emit_line(format_args!($($arg)*)) };
-}
-pub(crate) use emit;
-
-/// PRISC_IPC_ERROR is a line protocol like everything else, but its payload is
-/// arbitrary error text (clap help output spans many lines) — collapse it so a
-/// diagnostic can never masquerade as, or interrupt, another protocol line.
-fn emit_ipc_error(message: &str) {
-    let flat = message
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    emit!("PRISC_IPC_ERROR {flat}");
-}
-
-/// `Pause` stops the hotkeys while the shell records a gesture. It is applied
-/// on the reader thread, so it takes effect even mid-capture, and is never
-/// forwarded.
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum Message {
-    Settings { args: Vec<String> },
-    Capture { mode: String },
-    Pause { paused: bool },
-}
-
+/// What the event loop is handed from stdin. `pause` never gets here: it stops
+/// the hotkeys while the shell records a gesture, so it is applied on the
+/// reader thread and takes effect even mid-capture.
 enum Input {
-    Message(Message),
+    Settings(Vec<String>),
+    Capture(CaptureMode),
+    /// A malformed line, answered with `bad_command` in arrival order.
     Invalid(String),
 }
 
@@ -83,48 +56,66 @@ impl Standby {
             }
         }
 
-        let (input_tx, input_rx) = mpsc::channel();
-        let parent_gone_reader = Arc::clone(&parent_gone);
-        let capture_active_reader = Arc::clone(&capture_active);
-        let pause = hotkeys.pause_handle();
-        std::thread::Builder::new()
-            .name("standby-ipc".into())
-            .spawn(move || {
-                for line in std::io::stdin().lock().lines() {
-                    match line {
-                        Ok(line) if !line.trim().is_empty() => {
-                            let input = match serde_json::from_str(&line) {
-                                Ok(Message::Pause {
-                                    paused,
-                                }) => {
-                                    pause.set_paused(paused);
-                                    continue;
-                                }
-                                Ok(message) => Input::Message(message),
-                                Err(err) => Input::Invalid(err.to_string()),
-                            };
-                            if input_tx.send(input).is_err() {
-                                return;
-                            }
-                            let _ = proxy.send_event(());
-                        }
-                        Ok(_) => {}
-                        Err(err) => {
-                            let _ = input_tx.send(Input::Invalid(err.to_string()));
-                            break;
-                        }
+        // The quit path. Between captures it wakes the loop, which returns
+        // from `wait` and ends with `done{stopped}`. Mid-capture the overlay
+        // owns the main thread and `wait` is not listening, so the process
+        // ends from here: the overlay closes without writing the session.
+        // SeqCst pairs with wait()'s store(capture_active)-then-load(parent_gone):
+        // the total order guarantees at least one side sees the other, so a
+        // quit racing a hotkey either exits here or is caught by wait()'s
+        // re-check, never a fully orphaned capture.
+        let parent_gone_quit = Arc::clone(&parent_gone);
+        let capture_active_quit = Arc::clone(&capture_active);
+        let proxy_quit = proxy.clone();
+        prisc_ipc::lifetime::install(
+            move |reason| {
+                parent_gone_quit.store(true, Ordering::SeqCst);
+                let _ = proxy_quit.send_event(());
+                if capture_active_quit.load(Ordering::SeqCst) {
+                    let spawned = std::thread::Builder::new()
+                        .name("standby-quit".into())
+                        .spawn(move || {
+                            log::info!("quit ({reason:?}) during a capture; closing the overlay");
+                            crate::finish(CaptureResult::Stopped, None)
+                        });
+                    if spawned.is_err() {
+                        prisc_ipc::lifetime::exit(prisc_ipc::exit::OK);
                     }
                 }
-                // SeqCst pairs with wait()'s store(capture_active)-then-load(parent_gone):
-                // the total order guarantees at least one side sees the other, so an EOF
-                // racing a hotkey either exits here or is caught by wait()'s re-check —
-                // never a fully orphaned capture with this kill switch already gone.
-                parent_gone_reader.store(true, Ordering::SeqCst);
-                let _ = proxy.send_event(());
-                if capture_active_reader.load(Ordering::SeqCst) {
-                    std::process::exit(0);
+            },
+            capture::QUIT_GRACE + prisc_ipc::SELF_EXIT_MARGIN,
+        );
+
+        let (input_tx, input_rx) = mpsc::channel();
+        let pause = hotkeys.pause_handle();
+        prisc_ipc::read_commands::<capture::Command>(move |inbound| {
+            let input = match inbound {
+                Inbound::Command(capture::Command::Pause {
+                    paused,
+                }) => {
+                    pause.set_paused(paused);
+                    return ControlFlow::Continue(());
                 }
-            })?;
+                Inbound::Command(capture::Command::Settings {
+                    args,
+                }) => Input::Settings(args),
+                Inbound::Command(capture::Command::Capture {
+                    mode,
+                }) => Input::Capture(match mode {
+                    capture::CaptureMode::Region => CaptureMode::Region,
+                    capture::CaptureMode::Screen => CaptureMode::Screen,
+                    capture::CaptureMode::Window => CaptureMode::Window,
+                }),
+                Inbound::Malformed {
+                    reason,
+                } => Input::Invalid(reason),
+            };
+            if input_tx.send(input).is_err() {
+                return ControlFlow::Break(());
+            }
+            let _ = proxy.send_event(());
+            ControlFlow::Continue(())
+        });
         Ok(Self {
             input_rx,
             parent_gone,
@@ -134,20 +125,27 @@ impl Standby {
         })
     }
 
-    /// Returns false when the shell closed stdin before a capture was requested.
+    /// Returns false when the quit path fired before a capture was requested.
     pub fn wait(&mut self, args: &mut CliArgs, event_loop: &mut EventLoop<()>) -> anyhow::Result<bool> {
         loop {
             self.capture_active
                 .store(false, Ordering::SeqCst);
 
             // The hotkeys stay hooked while the overlay is active, and everything
-            // queued in the channels meanwhile is stale and dropped: a raced capture
-            // request was superseded by the overlay the user just saw, and the shell
-            // re-sends its complete settings snapshot after every READY.
+            // queued in the channels meanwhile is stale: a raced capture request
+            // was superseded by the overlay the user just saw, and the shell
+            // re-sends its complete settings snapshot after every `ready`. Capture
+            // requests and malformed lines are still answered, in arrival order.
             self.hotkeys.drain();
-            while self.input_rx.try_recv().is_ok() {}
+            while let Ok(input) = self.input_rx.try_recv() {
+                match input {
+                    Input::Capture(_) => out().error(ErrorCode::Rejected, "a capture was already open", false),
+                    Input::Invalid(reason) => out().error(ErrorCode::BadCommand, reason, false),
+                    Input::Settings(_) => {}
+                }
+            }
 
-            emit!("PRISC_STANDBY_READY");
+            out().emit(&Event::Ready {});
             let mut app = StandbyApp {
                 args,
                 hotkeys: &mut self.hotkeys,
@@ -183,7 +181,9 @@ impl Standby {
                 Ok(session) => {
                     args.session_dir = Some(session.clone());
                     args.capture_mode = selected;
-                    emit!("PRISC_SESSION {}", session.display());
+                    out().emit(&Event::Session {
+                        dir: session.to_string_lossy().into_owned(),
+                    });
                     return Ok(true);
                 }
                 Err(err) => {
@@ -191,7 +191,7 @@ impl Standby {
                     // exit that burns one of the shell's crash-fallback strikes. Report
                     // and go back to waiting; the shell clears its overlay gate on this.
                     log::error!("failed to create session dir in {}: {err}", root.display());
-                    emit_ipc_error(&format!("failed to create session dir: {err}"));
+                    out().error(ErrorCode::IoFailed, format!("failed to create session dir: {err}"), false);
                 }
             }
         }
@@ -225,7 +225,7 @@ impl StandbyApp<'_> {
         // A rejected snapshot changes nothing: the previous hotkeys stay hooked,
         // so replay their last reported state (exact, error text included)
         // rather than pretending they broke.
-        emit_ipc_error(&format!("rejected settings snapshot: {rejection}"));
+        out().error(ErrorCode::Rejected, format!("rejected settings snapshot: {rejection}"), false);
         if !self.last_statuses.is_empty() {
             report_settings_status(self.last_statuses.clone());
         }
@@ -272,32 +272,12 @@ impl StandbyApp<'_> {
         }
         while let Ok(input) = self.input_rx.try_recv() {
             match input {
-                Input::Message(Message::Settings {
-                    args,
-                }) => self.apply_settings(args),
-                Input::Message(Message::Capture {
-                    mode,
-                }) => {
-                    self.selected = match mode.as_str() {
-                        "region" => Some(CaptureMode::Region),
-                        "window" => Some(CaptureMode::Window),
-                        "screen" | "monitor" => Some(CaptureMode::Screen),
-                        _ => {
-                            emit_ipc_error(&format!("unknown capture mode '{mode}'"));
-                            None
-                        }
-                    };
-                    if self.selected.is_some() {
-                        return true;
-                    }
+                Input::Settings(args) => self.apply_settings(args),
+                Input::Capture(mode) => {
+                    self.selected = Some(mode);
+                    return true;
                 }
-                // Applied on the reader thread; never forwarded here.
-                Input::Message(Message::Pause {
-                    ..
-                }) => {}
-                Input::Invalid(err) => {
-                    emit_ipc_error(&err);
-                }
+                Input::Invalid(reason) => out().error(ErrorCode::BadCommand, reason, false),
             }
         }
         if let Some(mode) = self.hotkeys.try_recv() {
@@ -313,17 +293,17 @@ impl StandbyApp<'_> {
 /// `about_to_wait` with nothing else queued would block INFINITE. `Poll`
 /// makes that wait return at once (the capture cycle sets its own flow).
 /// Otherwise blocked indefinitely unless a hook that is down is due a retry.
-fn control_flow(exit: bool, next_retry: Option<Instant>) -> ControlFlow {
+fn control_flow(exit: bool, next_retry: Option<Instant>) -> LoopFlow {
     match next_retry {
-        _ if exit => ControlFlow::Poll,
-        Some(at) => ControlFlow::WaitUntil(at),
-        None => ControlFlow::Wait,
+        _ if exit => LoopFlow::Poll,
+        Some(at) => LoopFlow::WaitUntil(at),
+        None => LoopFlow::Wait,
     }
 }
 
 impl ApplicationHandler for StandbyApp<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        event_loop.set_control_flow(ControlFlow::Wait);
+        event_loop.set_control_flow(LoopFlow::Wait);
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
@@ -337,8 +317,18 @@ impl ApplicationHandler for StandbyApp<'_> {
     fn window_event(&mut self, _event_loop: &ActiveEventLoop, _window_id: winit::window::WindowId, _event: winit::event::WindowEvent) {}
 }
 
+/// `settings_status`. The statuses come from standby_hotkeys as JSON objects in
+/// exactly the record's shape (`{gesture, active, error, error_code}` per
+/// gesture, under `main`, `window` and `monitor`).
 fn report_settings_status(hotkeys: serde_json::Map<String, serde_json::Value>) {
-    emit!("PRISC_SETTINGS_STATUS {}", serde_json::json!({ "hotkeys": hotkeys }));
+    match serde_json::from_value::<capture::Hotkeys>(serde_json::Value::Object(hotkeys)) {
+        Ok(hotkeys) => {
+            out().emit(&Event::SettingsStatus {
+                hotkeys,
+            });
+        }
+        Err(err) => log::error!("hotkey statuses do not match the protocol's shape: {err}"),
+    }
 }
 
 fn create_session_dir(root: &Path) -> anyhow::Result<PathBuf> {
@@ -361,9 +351,9 @@ mod tests {
     #[test]
     fn an_exit_never_waits() {
         let at = Instant::now() + std::time::Duration::from_secs(2);
-        assert_eq!(control_flow(true, None), ControlFlow::Poll);
-        assert_eq!(control_flow(true, Some(at)), ControlFlow::Poll);
-        assert_eq!(control_flow(false, Some(at)), ControlFlow::WaitUntil(at));
-        assert_eq!(control_flow(false, None), ControlFlow::Wait);
+        assert_eq!(control_flow(true, None), LoopFlow::Poll);
+        assert_eq!(control_flow(true, Some(at)), LoopFlow::Poll);
+        assert_eq!(control_flow(false, Some(at)), LoopFlow::WaitUntil(at));
+        assert_eq!(control_flow(false, None), LoopFlow::Wait);
     }
 }
