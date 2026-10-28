@@ -6,6 +6,4 @@ namespace Prisc.Util;
 [JsonSerializable(typeof(SendArgsRequestModel))]
 [JsonSerializable(typeof(Prisc.UI.Pages.CreditsData))]
 [JsonSerializable(typeof(Prisc.UI.RecorderSettingsJson))]
-[JsonSerializable(typeof(Prisc.UI.ScrollDriverEvent))]
-[JsonSerializable(typeof(Prisc.UI.ScrollDriverCommand))]
 internal partial class PriscUiJsonContext : JsonSerializerContext { }
