@@ -7,7 +7,7 @@
 //! alpha. The C# side encodes the alpha stream into a luma-only H.264
 //! sidecar it composites from later. Frames go to the `payload` writer rather
 //! than to `stdout`, which by then points at stderr — see
-//! `main::claim_payload_stdout` for whose stray printing made that necessary.
+//! `prisc_ipc::claim_stdout` for whose stray printing made that necessary.
 //!
 //! RVM is recurrent: four state tensors (`r1i..r4i`) carry temporal context
 //! between frames, seeded as `[1,1,1,1]` zeros (validated bit-exact against
@@ -117,7 +117,7 @@ impl RvmSession {
 
 /// The `matte` subcommand: pump stdin frames through the model until EOF,
 /// answering each on `payload` (this process's real stdout, claimed by
-/// `main::claim_payload_stdout`).
+/// `prisc_ipc::claim_stdout`).
 pub fn run(width: u32, height: u32, format: MatteFormat, mut payload: impl Write) -> anyhow::Result<()> {
     ensure!(width > 0 && height > 0, "--width and --height must be positive");
     let mut rvm = RvmSession::new()?;
