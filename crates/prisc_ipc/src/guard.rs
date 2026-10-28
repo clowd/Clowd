@@ -56,16 +56,30 @@ fn duplicate_stdout() -> io::Result<File> {
     ))
 }
 
-/// `SetStdHandle` moves what `GetStdHandle` returns (Rust's own `println!`, and anything else
-/// that asks the OS), then the shared UCRT's `_dup2(2, 1)` moves the C runtime's fd 1, which
-/// native `printf` writes to. The second step assumes every native library shares the dynamic
+/// The original pipe handle came in through STARTUPINFO and is inheritable, so first its
+/// inherit flag is cleared: the UCRT `_dup2` below is the only thing that closes it, and that
+/// step is skipped in a static-CRT process that never loads `ucrtbase.dll`. Left inheritable,
+/// it would reach every grandchild spawned with handle inheritance (std's `Command` among them).
+///
+/// Then `SetStdHandle` moves what `GetStdHandle` returns (Rust's own `println!`, and anything
+/// else that asks the OS), and the shared UCRT's `_dup2(2, 1)` moves the C runtime's fd 1, which
+/// native `printf` writes to. The last step assumes every native library shares the dynamic
 /// UCRT (`ucrtbase.dll`); a library with its own CRT keeps the old handle value in its own fd
 /// table (§3.2).
 #[cfg(windows)]
 fn redirect_stdout_to_stderr() {
     use windows::core::{s, w};
+    use windows::Win32::Foundation::{SetHandleInformation, HANDLE_FLAGS, HANDLE_FLAG_INHERIT};
     use windows::Win32::System::Console::{GetStdHandle, SetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
     use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+
+    // SAFETY: a flag change on this process's own standard output handle, which
+    // duplicate_stdout has just proved valid.
+    let uninherited =
+        unsafe { GetStdHandle(STD_OUTPUT_HANDLE).and_then(|stdout| SetHandleInformation(stdout, HANDLE_FLAG_INHERIT.0, HANDLE_FLAGS(0))) };
+    if let Err(e) = uninherited {
+        eprintln!("prisc_ipc: could not make the original stdout handle non-inheritable ({e})");
+    }
 
     // SAFETY: handle-table edits on this process's own standard handles.
     let redirected = unsafe { GetStdHandle(STD_ERROR_HANDLE).and_then(|stderr| SetStdHandle(STD_OUTPUT_HANDLE, stderr)) };
