@@ -51,7 +51,7 @@ namespace Prisc.UI.Preview
                 // The same resolver every other caller in the app passes (VideoRenderManager,
                 // VideoCapturePage, VideoEditorWindow), so the preview engine cannot end up loading
                 // a different FFmpeg than the one the editor and the renderer use.
-                var ok = FFmpegLoader.TryInitialize(ObsBinaryLocator.ResolveFFmpegDirectory);
+                var ok = FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder);
                 if (!ok)
                 {
                     // Said once per process, because that is how often it is worth saying: the

@@ -6,8 +6,7 @@ namespace Prisc.UI
     /// <summary>
     /// The pure geometry of a share-region resize drag, in CAPTURE space (physical px in
     /// virtual-desktop coordinates on Windows, CG points on macOS; x/y may be negative).
-    /// <para>No Avalonia, no Window, no Dispatcher — for the same reason
-    /// <see cref="ShareRegionProtocol"/> has none: this is where a resize can silently produce a
+    /// <para>No Avalonia, no Window, no Dispatcher: this is where a resize can silently produce a
     /// rectangle nobody notices is wrong, so it must be testable without a screen. Public rather
     /// than internal-plus-InternalsVisibleTo, per the repo's standing preference.</para>
     /// </summary>

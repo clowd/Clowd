@@ -57,7 +57,7 @@ namespace Prisc.UI
             if (OperatingSystem.IsLinux())
                 return "Global hotkeys are not supported on Linux yet.";
 
-            var path = HotkeysLibraryLocator.Resolve();
+            var path = Prisc.Ipc.HelperLocator.FindLibrary("prisc_hotkeys");
             if (path == null)
                 return "the prisc_hotkeys library was not found";
 

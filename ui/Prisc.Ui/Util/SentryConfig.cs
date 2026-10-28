@@ -45,7 +45,7 @@ namespace Prisc
         /// log reaches Sentry no matter how many layers up the exception is finally reported —
         /// "exited unexpectedly" / "timed out" events are undiagnosable without it (CLOWD-Z,
         /// CLOWD-C).</summary>
-        public const string ProcessLogKey = "prisc.process-log";
+        public const string ProcessLogKey = Prisc.Ipc.HelperLog.ExceptionDataKey;
 
         /// <summary>Sets a tag on every event this process reports from now on. No-op in debug
         /// builds and when telemetry is opted out, like <see cref="Init"/>.</summary>

@@ -107,10 +107,10 @@ namespace Prisc.UI.VideoEditor
 
         // the render currently reflected on btnRender's progress ring. Session mode tracks the
         // edited entry's ActiveRender (the manager owns the run — the window may close during
-        // it); dev mode runs a VidRenderRunner of its own.
+        // it); dev mode runs a JobRunner of its own.
         private SessionInfo _renderSession;
         private VideoRender _trackedRender;
-        private VidRenderRunner _devRunner;
+        private JobRunner _devRunner;
         private bool _devRenderRunning;
 
         // the Render flyout's rows in display order — the list the arrow keys walk. Built once in
@@ -445,7 +445,7 @@ namespace Prisc.UI.VideoEditor
                 return;
             }
 
-            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 // no in-app playback available — hand the file to the OS player so the user still
                 // sees their recording, and say why the editor did not open. A project has no file
@@ -489,7 +489,7 @@ namespace Prisc.UI.VideoEditor
         /// </summary>
         public static void ShowBlankProject()
         {
-            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
                     UnavailableMessage(playerFallback: false), "Can't open the video editor");
@@ -566,8 +566,6 @@ namespace Prisc.UI.VideoEditor
             return Enumerable.Empty<VideoEditorWindow>();
         }
 
-        private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
-
         // ====================================================================
         // Session + playback
         // ====================================================================
@@ -602,7 +600,7 @@ namespace Prisc.UI.VideoEditor
 
         private async Task StartPlaybackAsync()
         {
-            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 ShowStatus("Video playback unavailable: " + FFmpegLoader.FailureReason);
                 return;
@@ -2566,23 +2564,23 @@ namespace Prisc.UI.VideoEditor
                     request.HardwareEncoder ? Prisc.VideoSDK.Media.VideoEncoder.Auto : Prisc.VideoSDK.Media.VideoEncoder.Software,
                     Math.Max(0, request.MaxHeight));
 
-                _devRunner = new VidRenderRunner();
+                _devRunner = JobRunner.ForVideoRender(argsPath);
                 _devRunner.ProgressChanged += (_, percent) => btnRender.Progress = percent;
                 _devRenderRunning = true;
                 btnRender.ShowProgress = true;
                 ToolTip.SetTip(btnRender, CancelRenderTooltip);
 
-                var result = await _devRunner.RunAsync(argsPath);
+                var result = await _devRunner.RunAsync();
                 Console.WriteLine($"[video-edit] render result: {result.Outcome} {result.OutputPath} {result.Bytes}");
 
                 switch (result.Outcome)
                 {
-                    case VidRenderOutcome.Success:
+                    case JobOutcome.Success:
                         // the same after-render actions (and the same toast) a real render runs
                         await RenderAfterActions.RunAsync(this, result.OutputPath ?? outputPath,
                             request.CopyToClipboard, request.ShowInFolder);
                         break;
-                    case VidRenderOutcome.Canceled:
+                    case JobOutcome.Canceled:
                         break;
                     default:
                         await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error,

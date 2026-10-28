@@ -84,12 +84,11 @@ PRISC_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml
 
 echo "==> Copying capture binaries into publish output"
 cp "$ROOT/target/release/prisc_capture$EXE" "$OUT/"
-# Beside the overlay, which is where CaptureBinaryLocator.ResolveScrollDriver
-# looks for it.
+# Beside the overlay and Prisc.Ui, where HelperLocator looks for it.
 if [ "$RID" != "linux-x64" ]; then
     cp "$ROOT/target/release/prisc_scroll_driver$EXE" "$OUT/"
 fi
-# The global hotkey library, beside Prisc.Ui where HotkeysLibraryLocator looks for it.
+# The global hotkey library, beside Prisc.Ui where HelperLocator looks for it.
 # Linux has no hotkey backend yet and Prisc.Ui never loads the library there, so
 # nothing ships for it.
 case "$RID" in
@@ -97,7 +96,7 @@ case "$RID" in
     osx-*) cp "$ROOT/target/release/libprisc_hotkeys.dylib" "$OUT/" ;;
 esac
 if [ "$RID" != "osx-x64" ]; then
-    # The AI inference binary, beside Prisc.Ui where AiLoader looks for it
+    # The AI inference binary, beside Prisc.Ui where HelperLocator looks for it
     # and beside the overlay, which spawns it for OCR. ONNX Runtime is
     # statically linked by the ort crate;
     # on Windows the hardware execution providers still need dylibs beside the

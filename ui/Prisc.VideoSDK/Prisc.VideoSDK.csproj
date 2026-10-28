@@ -50,5 +50,7 @@
   <ItemGroup>
     <!-- the arrow and curve maths the image editor draws with, so shapes match it exactly -->
     <ProjectReference Include="..\Prisc.Geometry\Prisc.Geometry.csproj" />
+    <!-- HelperLocator: where prisc_ai and the recorder's FFmpeg live -->
+    <ProjectReference Include="..\Prisc.Ipc\Prisc.Ipc.csproj" />
   </ItemGroup>
 </Project>

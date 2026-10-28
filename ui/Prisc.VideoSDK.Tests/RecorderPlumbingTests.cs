@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Text.Json;
 using Prisc.Config;
+using Prisc.Ipc;
 using Prisc.PlatformUtil;
 using Prisc.UI;
 using Prisc.UI.VideoEditor;
@@ -39,8 +40,8 @@ namespace Prisc.VideoSDK.Tests
                 WebcamDeviceId = webcam ? "cam-1" : "",
             };
 
-        private static string[] Build(SettingsRecording settings, bool windowCapture = false)
-            => ObsArguments.Build(new ScreenRect(10, 20, 640, 480), TestPath.Native(@"C:\out\video.mp4"), TestPath.Native(@"C:\out\obs.json"), settings, windowCapture)
+        private static string[] Build(SettingsRecording settings)
+            => RecorderArguments.Build(new ScreenRect(10, 20, 640, 480), TestPath.Native(@"C:\out\video.mp4"), TestPath.Native(@"C:\out\obs.json"), settings)
                            .ToArray();
 
         [Fact]
@@ -63,7 +64,7 @@ namespace Prisc.VideoSDK.Tests
         public void The_output_extension_reaches_the_recorder_verbatim()
         {
             var mkv = TestPath.Native(@"C:\out\video.mkv");
-            var args = ObsArguments.Build(new ScreenRect(0, 0, 8, 8), mkv, TestPath.Native(@"C:\out\obs.json"), Settings(composition: false)).ToArray();
+            var args = RecorderArguments.Build(new ScreenRect(0, 0, 8, 8), mkv, TestPath.Native(@"C:\out\obs.json"), Settings(composition: false)).ToArray();
 
             Assert.Equal("--output", args[2]);
             Assert.Equal(mkv, args[3]);
@@ -106,13 +107,13 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public void A_webcam_needs_composition_a_camera_and_the_tick()
         {
-            Assert.True(ObsArguments.UsesWebcam(Settings(webcam: true)));
-            Assert.False(ObsArguments.UsesWebcam(Settings(composition: false, webcam: true)));
-            Assert.False(ObsArguments.UsesWebcam(Settings(webcam: false)));
+            Assert.True(RecorderArguments.UsesWebcam(Settings(webcam: true)));
+            Assert.False(RecorderArguments.UsesWebcam(Settings(composition: false, webcam: true)));
+            Assert.False(RecorderArguments.UsesWebcam(Settings(webcam: false)));
 
             var ticked = Settings(webcam: true);
             ticked.WebcamDeviceId = "";
-            Assert.False(ObsArguments.UsesWebcam(ticked));
+            Assert.False(RecorderArguments.UsesWebcam(ticked));
         }
 
         /// <summary>The capture API is a spawn-time argument, always emitted so the recorder's own
@@ -136,8 +137,8 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public void Null_settings_never_ask_for_multi_track()
         {
-            Assert.False(ObsArguments.UsesMultiTrack(null));
-            Assert.False(ObsArguments.UsesWebcam(null));
+            Assert.False(RecorderArguments.UsesMultiTrack(null));
+            Assert.False(RecorderArguments.UsesWebcam(null));
         }
 
         /// <summary>Input capture rides with multi-track: every composed recording gets the jsonl
@@ -155,39 +156,26 @@ namespace Prisc.VideoSDK.Tests
             Assert.DoesNotContain("--input-capture", Build(Settings(composition: false)));
         }
 
-        /// <summary>Window capture rides with multi-track the same way, but only when the caller has
-        /// established that the recorder understands the flag — hence the explicit opt-in rather
-        /// than the switch deciding on its own. The jsonl lands in the session directory beside the
-        /// other sidecar.</summary>
+        /// <summary>Window capture rides with multi-track the same way: the shipped recorder always
+        /// understands the flag, and the jsonl lands in the session directory beside the other
+        /// sidecar.</summary>
         [Fact]
-        public void Multi_track_recordings_also_capture_windows_when_the_recorder_can()
+        public void Multi_track_recordings_always_capture_windows()
         {
-            var args = Build(Settings(), windowCapture: true);
+            var args = Build(Settings());
             var i = Array.IndexOf(args, "--window-capture");
 
             Assert.True(i >= 0);
             Assert.Equal(TestPath.Native(@"C:\out\window-capture.jsonl"), args[i + 1]);
-        }
-
-        /// <summary>The opt-in defaults to off. An older recorder rejects an unknown argument with a
-        /// usage error before it writes a line of protocol, so a flag passed on faith would cost
-        /// the whole recording, not just the sidecar — the input-capture flag it has always
-        /// understood must keep arriving without it.</summary>
-        [Fact]
-        public void A_recorder_without_window_capture_is_never_given_the_flag()
-        {
-            var args = Build(Settings());
-
             Assert.Contains("--input-capture", args);
-            Assert.DoesNotContain("--window-capture", args);
         }
 
-        /// <summary>A single-track recording has no editor to read either sidecar, so even a
-        /// recorder that could write the window jsonl is not asked for it.</summary>
+        /// <summary>A single-track recording has no editor to read either sidecar, so neither is
+        /// asked for.</summary>
         [Fact]
         public void Single_track_recordings_ask_for_neither_sidecar()
         {
-            var args = Build(Settings(composition: false), windowCapture: true);
+            var args = Build(Settings(composition: false));
 
             Assert.DoesNotContain("--input-capture", args);
             Assert.DoesNotContain("--window-capture", args);
@@ -198,7 +186,7 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public void The_two_sidecars_are_different_files()
         {
-            var args = Build(Settings(), windowCapture: true);
+            var args = Build(Settings());
             var input = args[Array.IndexOf(args, "--input-capture") + 1];
             var window = args[Array.IndexOf(args, "--window-capture") + 1];
 
@@ -213,7 +201,7 @@ namespace Prisc.VideoSDK.Tests
                 "prisc-obs-settings-" + Guid.NewGuid().ToString("N") + ".json");
             try
             {
-                ObsArguments.WriteSettingsFile(path, settings);
+                RecorderArguments.WriteSettingsFile(path, settings);
                 return JsonDocument.Parse(System.IO.File.ReadAllText(path));
             }
             finally
@@ -283,11 +271,10 @@ namespace Prisc.VideoSDK.Tests
 
         // ------------------------------------------------------------------ tracks report
 
-        private static ObsTracks Parse(string json, ObsTracks previous = null)
-        {
-            using var doc = JsonDocument.Parse(json);
-            return ObsCapturer.ParseTracks(doc.RootElement, previous);
-        }
+        /// <summary>The report after one wire line, decoded with the generated codec exactly as the
+        /// driver receives it.</summary>
+        private static RecorderReport Parse(string json, RecorderReport previous = null)
+            => RecorderReport.Merge(previous, RecorderCodec.DecodeEvent(json));
 
         [Fact]
         public void A_multi_track_report_is_read_as_its_video_and_audio_tracks()
@@ -298,139 +285,81 @@ namespace Prisc.VideoSDK.Tests
                   "webcam":{"index":1,"width":1280,"height":720},
                   "audio":[{"index":0,"kind":"speaker","device":"default","name":"Speaker 1"},
                            {"index":1,"kind":"microphone","device":"mic-id","name":"Microphone 1"}]}}
-                """);
+                """).Tracks;
 
-            Assert.Equal(new ObsTrackInfo(0, 1920, 1080), tracks.Screen);
-            Assert.Equal(new ObsTrackInfo(1, 1280, 720), tracks.Webcam);
-            Assert.Equal(new[] { new ObsAudioTrackInfo(0, "speaker"), new ObsAudioTrackInfo(1, "microphone") },
-                tracks.Audio);
+            Assert.Equal(new RecorderVideoTrack(0, 1920, 1080), tracks.Screen);
+            Assert.Equal(new RecorderVideoTrack(1, 1280, 720), tracks.Webcam);
+            Assert.Equal(new[] { (0u, RecorderAudioKind.Speaker), (1u, RecorderAudioKind.Microphone) },
+                tracks.Audio.Select(a => (a.Index, a.Kind)));
         }
 
         [Fact]
         public void A_single_track_report_is_read_as_one_mixed_track()
         {
             var tracks = Parse("""
-                {"tracks":{"screen":{"index":0,"width":800,"height":600},
-                           "audio":[{"index":0,"kind":"mixed","device":null,"name":"Audio"}]}}
-                """);
+                {"type":"started_recording","tracks":{"screen":{"index":0,"width":800,"height":600},
+                           "audio":[{"index":0,"kind":"mixed","name":"Audio"}]}}
+                """).Tracks;
 
             Assert.Null(tracks.Webcam);
-            Assert.Equal(new ObsAudioTrackInfo(0, "mixed"), Assert.Single(tracks.Audio));
+            Assert.Equal(RecorderAudioKind.Mixed, Assert.Single(tracks.Audio).Kind);
         }
 
-        /// <summary>The <c>audio</c> array is optional — a recorder that predates it still reports
-        /// its video tracks, and the editor still gets its rows from the file.</summary>
+        /// <summary>An empty <c>audio</c> array (or a missing one) reads as no audio tracks; the
+        /// editor still gets its rows from the file.</summary>
         [Fact]
-        public void A_report_without_an_audio_array_reads_as_no_audio_tracks()
+        public void A_report_without_audio_reads_as_no_audio_tracks()
         {
-            var tracks = Parse("""{"tracks":{"screen":{"index":0,"width":800,"height":600}}}""");
+            var tracks = Parse("""{"type":"started_recording","tracks":{"screen":{"index":0,"width":800,"height":600},"audio":[]}}""").Tracks;
 
             Assert.NotNull(tracks.Screen);
             Assert.Empty(tracks.Audio);
-
-            // …as does one whose audio field is not an array at all
-            Assert.Empty(Parse("""{"tracks":{"screen":{"index":0},"audio":{"index":0}}}""").Audio);
-            Assert.Empty(Parse("""{"tracks":{"screen":{"index":0},"audio":null}}""").Audio);
+            Assert.Empty(Parse("""{"type":"started_recording","tracks":{"screen":{"index":0,"width":8,"height":8}}}""").Tracks.Audio);
         }
 
+        /// <summary>An input-capture recording's report echoes the jsonl path back (a top-level field
+        /// beside <c>tracks</c>), and a window-capture one does the same beside it.</summary>
         [Fact]
-        public void Malformed_audio_entries_are_dropped_rather_than_thrown_on()
+        public void A_report_carries_the_sidecar_paths()
         {
-            var tracks = Parse("""
-                {"tracks":{"screen":{"index":0,"width":800,"height":600},
-                           "audio":[7, "microphone", null, [],
-                                    {"kind":"microphone"},
-                                    {"index":"1","kind":"speaker"},
-                                    {"index":-1,"kind":"speaker"},
-                                    {"index":1},
-                                    {"index":2,"kind":42},
-                                    {"index":3,"kind":"microphone"}]}}
-                """);
-
-            // only the entries that name a stream survive; a missing/invalid kind is simply unnamed.
-            Assert.Equal(new[] { new ObsAudioTrackInfo(1, null), new ObsAudioTrackInfo(2, null),
-                                 new ObsAudioTrackInfo(3, "microphone") },
-                tracks.Audio);
-        }
-
-        /// <summary>An input-capture recording's report echoes the jsonl path back (a top-level
-        /// field beside <c>tracks</c>) — the mp4 carries no cursor track anymore, the sprites live
-        /// in the jsonl itself.</summary>
-        [Fact]
-        public void An_input_capture_report_carries_the_jsonl_path()
-        {
-            var tracks = Parse("""
-                {"type":"started_recording","input_capture":"C:\\s\\input-capture.jsonl","tracks":{
-                  "screen":{"index":0,"width":1920,"height":1080},
-                  "webcam":{"index":1,"width":1280,"height":720}}}
-                """);
-
-            Assert.Equal(@"C:\s\input-capture.jsonl", tracks.InputCapturePath);
-        }
-
-        /// <summary>The field is optional and forward-tolerant: a recorder that predates it (or a
-        /// malformed value) reads as "no jsonl", never as a failure — and a stale report still
-        /// naming the retired <c>cursor</c> box track is read straight past.</summary>
-        [Fact]
-        public void A_report_without_input_capture_reads_as_none()
-        {
-            var tracks = Parse("""{"tracks":{"screen":{"index":0,"width":800,"height":600}}}""");
-            Assert.Null(tracks.InputCapturePath);
-
-            Assert.Null(Parse("""{"input_capture":42,"tracks":{"screen":{"index":0}}}""").InputCapturePath);
-            Assert.Null(Parse("""{"input_capture":"","tracks":{"screen":{"index":0}}}""").InputCapturePath);
-
-            var stale = Parse("""
-                {"tracks":{"screen":{"index":0,"width":800,"height":600},
-                           "cursor":{"index":2,"width":512,"height":512}}}
-                """);
-            Assert.Equal(new ObsTrackInfo(0, 800, 600), stale.Screen);
-            Assert.Null(stale.Webcam);
-        }
-
-        /// <summary>A window-capture recording echoes its jsonl path the same way, beside the
-        /// input-capture one — the two describe the same take and are read into one record.</summary>
-        [Fact]
-        public void A_window_capture_report_carries_the_jsonl_path()
-        {
-            var tracks = Parse("""
+            var report = Parse("""
                 {"type":"started_recording","input_capture":"C:\\s\\input-capture.jsonl","window_capture":"C:\\s\\window-capture.jsonl","tracks":{
                   "screen":{"index":0,"width":1920,"height":1080},
-                  "webcam":{"index":1,"width":1280,"height":720}}}
+                  "webcam":{"index":1,"width":1280,"height":720},"audio":[]}}
                 """);
 
-            Assert.Equal(@"C:\s\input-capture.jsonl", tracks.InputCapturePath);
-            Assert.Equal(@"C:\s\window-capture.jsonl", tracks.WindowCapturePath);
+            Assert.Equal(@"C:\s\input-capture.jsonl", report.InputCapturePath);
+            Assert.Equal(@"C:\s\window-capture.jsonl", report.WindowCapturePath);
         }
 
-        /// <summary>Optional and forward-tolerant like <c>input_capture</c>: a recorder that was not
-        /// asked for one (or predates the flag) omits the key, and a malformed value reads as "no
-        /// sidecar" — while the input-capture path beside it is still read.</summary>
+        /// <summary>A recorder that was not asked for a sidecar omits the key, and an empty value
+        /// reads as "no sidecar" too.</summary>
         [Fact]
-        public void A_report_without_window_capture_reads_as_none()
+        public void A_report_without_a_sidecar_reads_as_none()
         {
-            var tracks = Parse("""{"input_capture":"C:\\s\\input-capture.jsonl","tracks":{"screen":{"index":0,"width":800,"height":600}}}""");
-            Assert.Null(tracks.WindowCapturePath);
-            Assert.Equal(@"C:\s\input-capture.jsonl", tracks.InputCapturePath);
+            var report = Parse("""{"type":"started_recording","input_capture":"C:\\s\\input-capture.jsonl","tracks":{"screen":{"index":0,"width":800,"height":600},"audio":[]}}""");
+            Assert.Null(report.WindowCapturePath);
+            Assert.Equal(@"C:\s\input-capture.jsonl", report.InputCapturePath);
 
-            Assert.Null(Parse("""{"window_capture":42,"tracks":{"screen":{"index":0}}}""").WindowCapturePath);
-            Assert.Null(Parse("""{"window_capture":"","tracks":{"screen":{"index":0}}}""").WindowCapturePath);
+            Assert.Null(Parse("""{"type":"started_recording","input_capture":"","tracks":{"screen":{"index":0,"width":8,"height":8},"audio":[]}}""").InputCapturePath);
         }
 
-        /// <summary>stopped_recording is the second report; a message carrying none must not clear
-        /// what started_recording said.</summary>
+        /// <summary><c>done</c> is the second report; one carrying no tracks must not clear what
+        /// started_recording said.</summary>
         [Fact]
         public void A_message_with_no_usable_tracks_keeps_the_previous_report()
         {
             var previous = Parse("""
-                {"tracks":{"screen":{"index":0,"width":800,"height":600},
-                           "audio":[{"index":0,"kind":"microphone"}]}}
+                {"type":"started_recording","tracks":{"screen":{"index":0,"width":800,"height":600},
+                           "audio":[{"index":0,"kind":"microphone","name":"Mic"}]}}
                 """);
 
-            Assert.Same(previous, Parse("""{"type":"stopped_recording","code":0}""", previous));
-            Assert.Same(previous, Parse("""{"tracks":null}""", previous));
-            Assert.Same(previous, Parse("""{"tracks":{}}""", previous)); // no screen track: unusable
-            Assert.Null(Parse("""{"type":"stopped_recording"}""", null));
+            Assert.Same(previous, Parse("""{"type":"done","result":"stopped","code":0,"message":"ok"}""", previous));
+            Assert.Same(previous, Parse("""{"type":"status","time_ms":1,"fps":30.0,"dropped":0,"dropped_perc":0.0}""", previous));
+            Assert.Null(Parse("""{"type":"done","result":"cancelled","code":0,"message":"ok"}""", null));
+
+            var final = Parse("""{"type":"done","result":"stopped","code":0,"message":"ok","tracks":{"screen":{"index":0,"width":640,"height":480},"audio":[]}}""", previous);
+            Assert.Equal(640u, final.Tracks.Screen.Width);
         }
 
         // ------------------------------------------------------------------ labels
@@ -477,13 +406,13 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public void A_recorder_report_names_the_rows_of_a_fresh_edit()
         {
-            var reported = Parse("""
-                {"tracks":{"screen":{"index":0,"width":1920,"height":1080},
+            var report = Parse("""
+                {"type":"started_recording","tracks":{"screen":{"index":0,"width":1920,"height":1080},
                            "audio":[{"index":0,"kind":"speaker","name":"Speaker 1"},
                                     {"index":1,"kind":"microphone","name":"Microphone 1"}]}}
-                """).Audio;
+                """);
 
-            var session = reported.Select(a => new SessionAudioTrack { Index = a.Index, Kind = a.Kind }).ToArray();
+            var session = report.ToSessionAudioTracks();
 
             Assert.Equal(new[] { "System Audio", "Microphone" }, AudioTrackLabels.From(session));
         }

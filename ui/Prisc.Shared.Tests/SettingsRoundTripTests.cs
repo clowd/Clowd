@@ -504,8 +504,8 @@ namespace Prisc.Shared.Tests
             // a settings file written before the shared-region section existed has no ShareRegion
             // object at all. The binder must leave both compiled-in defaults alone rather
             // than writing a zeroed value over them. The strength is the load-bearing half: 0 is a
-            // legal int, and ShareRegionProtocol.BuildObscureCommand clamps strength to 1..100, so a
-            // remembered 0 goes out as "obscure blur 1" — an invisible blur the user believes is on.
+            // legal int, and ShareRegionDriver.BuildObscureCommand clamps strength to 1..100, so a
+            // remembered 0 goes out as a strength-1 blur: an invisible blur the user believes is on.
             // (Blur is also member 0, so its assertion cannot tell a real default from a zeroed one;
             // it is here to pin the documented default, and the strength catches the zeroing.)
             Directory.CreateDirectory(Path.GetDirectoryName(_path));

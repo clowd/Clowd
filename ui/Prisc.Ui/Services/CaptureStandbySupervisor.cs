@@ -3,18 +3,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using Prisc.Config;
+using Prisc.Ipc;
 using Prisc.Util;
+using IpcCaptureMode = Prisc.Ipc.CaptureMode;
 
 namespace Prisc.UI
 {
     /// <summary>
-    /// Runs the capturer in its lightweight hotkey-waiting standby mode (CAPTURE_PROTOCOL.md).
+    /// Runs the capturer in its lightweight hotkey-waiting standby mode over the <c>capture</c>
+    /// catalog (HELPER_PROTOCOL.md §4.5).
     /// Exists only while warm capture is in effect: created and disposed by
     /// <c>App.ConfigureCaptureHotkeys</c>, which owns the choice between this and the classic
     /// in-process hotkeys + one-shot path. When standby cannot work — missing permission or binary,
@@ -24,13 +26,7 @@ namespace Prisc.UI
     /// </summary>
     internal sealed class CaptureStandbySupervisor : IDisposable
     {
-        private const int MaxPipeChars = 256 * 1024;
         private const int MaxConsecutiveFailures = 3;
-        private const string ReadyLine = "PRISC_STANDBY_READY";
-        private const string SessionPrefix = "PRISC_SESSION ";
-        private const string CaptureFinishedPrefix = "PRISC_CAPTURE_FINISHED ";
-        private const string SettingsStatusPrefix = "PRISC_SETTINGS_STATUS ";
-        private const string IpcErrorPrefix = "PRISC_IPC_ERROR ";
 
         /// <summary>The status <c>error_code</c> of a gesture the capturer cannot hook because
         /// macOS has not granted Accessibility. The capturer never prompts; the shell does.</summary>
@@ -52,7 +48,7 @@ namespace Prisc.UI
 
         // whether the standby capturer's hook should be paused: true while the shell records a
         // gesture (HotkeyManager.IsRecording), so the combination being recorded is not caught
-        // there as well. Re-sent after every READY, since a restarted capturer starts unpaused.
+        // there as well. Re-sent after every `ready`, since a restarted capturer starts unpaused.
         private static volatile bool s_hotkeysPaused;
 
         /// <summary>True while the standby capturer's overlay is on screen (or an accepted
@@ -64,7 +60,7 @@ namespace Prisc.UI
         private readonly CancellationTokenSource _stop = new();
         private readonly object _stdinGate = new();
         private Action _onFallback;
-        private Process _process;
+        private HelperClient<CaptureEvent, CaptureCommand> _client;
         private string _lastSettings;
         private int _ready;
         private int _overlayOpen;
@@ -89,10 +85,10 @@ namespace Prisc.UI
 
         /// <summary>
         /// Routes a shell-initiated capture (tray, menu) to the waiting standby process.
-        /// True: handled — either sent, or dropped because an overlay is already up (matching
+        /// True: handled, either sent or dropped because an overlay is already up (matching
         /// how the capturer treats its own hotkeys). False: standby cannot take it right now
-        /// (no supervisor, faulted, or between capture and READY) — the caller must run the
-        /// classic one-shot capture instead. Nothing is ever queued: a request that cannot be
+        /// (no supervisor, faulted, or between a capture and the next <c>ready</c>), so the
+        /// caller must run the classic one-shot capture instead. Nothing is ever queued: a request that cannot be
         /// satisfied promptly is either dropped as a duplicate or taken over by the fallback.
         /// </summary>
         public static bool TryCapture(CaptureMode mode)
@@ -103,11 +99,12 @@ namespace Prisc.UI
 
         private bool TrySendCapture(CaptureMode mode)
         {
-            // serialized before the CAS so no failure can strand _overlayOpen at 1
-            var payload = JsonSerializer.Serialize(new
+            // built before the CAS so no failure can strand _overlayOpen at 1
+            var command = new CaptureCommand.Capture(mode switch
             {
-                type = "capture",
-                mode = mode.ToString().ToLowerInvariant(),
+                CaptureMode.Screen => IpcCaptureMode.Screen,
+                CaptureMode.Window => IpcCaptureMode.Window,
+                _ => IpcCaptureMode.Region,
             });
             if (Interlocked.CompareExchange(ref _overlayOpen, 1, 0) != 0)
                 return true;
@@ -117,7 +114,7 @@ namespace Prisc.UI
             Volatile.Write(ref _overlayOpenedAtTicks, DateTime.UtcNow.Ticks);
             lock (_stdinGate)
             {
-                if (SendLocked(payload, grantForeground: true))
+                if (SendLocked(command, grantForeground: true))
                     return true;
             }
             Volatile.Write(ref _overlayOpen, 0);
@@ -138,7 +135,7 @@ namespace Prisc.UI
             {
                 try { SentryConfig.CaptureHandled(ex, "capture.standby-supervisor-crash"); }
                 catch { }
-                try { if (Volatile.Read(ref _process) is { HasExited: false } orphan) orphan.Kill(); }
+                try { Volatile.Read(ref _client)?.Kill(); }
                 catch { }
                 Fallback("supervisor crashed: " + ex.Message);
             }
@@ -150,9 +147,7 @@ namespace Prisc.UI
             while (!_stop.IsCancellationRequested)
             {
                 string sessionDir = null;
-                var stdout = new StringBuilder();
-                var stderr = new StringBuilder();
-                Process process = null;
+                HelperClient<CaptureEvent, CaptureCommand> client = null;
                 using var processExited = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
                 try
                 {
@@ -165,7 +160,7 @@ namespace Prisc.UI
                         return;
                     }
 
-                    var binary = CaptureBinaryLocator.Resolve();
+                    var binary = HelperLocator.Find("prisc_capture");
                     if (binary == null)
                     {
                         // one-shot shows its "binary missing" dialog on the next attempt
@@ -173,123 +168,110 @@ namespace Prisc.UI
                         return;
                     }
 
-                    var psi = new ProcessStartInfo(binary)
-                    {
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        // Keeping this pipe open is the child's parent-lifetime lease. If Prisc.UI
-                        // terminates for any reason, EOF tells the standby event loop to exit.
-                        RedirectStandardInput = true,
-                        // The protocol round-trips filesystem paths through these pipes; .NET
-                        // otherwise defaults them to the OEM codepage, which corrupts any
-                        // non-ASCII profile path and silently loses the capture. BOM-less on
-                        // stdin: a StreamWriter preamble would corrupt the first JSON line.
-                        StandardOutputEncoding = Encoding.UTF8,
-                        StandardErrorEncoding = Encoding.UTF8,
-                        StandardInputEncoding = new UTF8Encoding(false),
-                        WorkingDirectory = Path.GetDirectoryName(binary),
-                    };
-                    foreach (var arg in CaptureArguments.BuildStandby(PathConstants.SessionData, SettingsRoot.Current,
-                                 SettingsRoot.Current.General.LastSavePath))
-                        psi.ArgumentList.Add(arg);
-
-                    process = Process.Start(psi)
-                        ?? throw new InvalidOperationException("Failed to start standby capturer");
+                    // The open stdin is the child's parent-lifetime lease: if Prisc.Ui terminates
+                    // for any reason, EOF tells the standby event loop to exit.
+                    // Not a tree kill: on Windows the browser an OCR search opens is this process's
+                    // child when no browser was already running, and quitting Prisc, turning warm
+                    // capture off or the hang watchdog must not close the user's browser (§7.4).
+                    client = await HelperClient<CaptureEvent, CaptureCommand>.StartAsync(HelperSpecs.Capture, binary,
+                        CaptureArguments.BuildStandby(PathConstants.SessionData, SettingsRoot.Current,
+                            SettingsRoot.Current.General.LastSavePath),
+                        new HelperStartOptions { KillEntireTree = false });
                     var startedUtc = DateTime.UtcNow;
                     lock (_stdinGate)
-                        _process = process;
-                    // Dekker pair with Dispose (Cancel then Kill-via-_process): a Dispose
-                    // that ran before the publish above saw null and killed nothing, so
-                    // re-check here — otherwise this child leaks alive, holding the native
-                    // hotkey registrations, with the runner parked in ReadLineAsync forever.
+                        _client = client;
+                    // Dekker pair with Dispose (Cancel then Kill-via-_client): a Dispose that ran
+                    // before the publish above saw null and killed nothing, so re-check here;
+                    // otherwise this child leaks alive, holding the native hotkey registrations.
                     if (_stop.IsCancellationRequested)
                     {
-                        try { process.Kill(); }
-                        catch { }
+                        client.Kill();
                         return;
                     }
 
-                    var stderrTask = DrainAsync(process.StandardError, stderr);
-                    _ = WatchOverlayHangAsync(process, processExited.Token);
-                    while (await process.StandardOutput.ReadLineAsync() is { } line)
+                    _ = WatchOverlayHangAsync(client, processExited.Token);
+                    await foreach (var ev in client.Events.ReadAllAsync())
                     {
-                        Append(stdout, line);
-                        Debug.WriteLine("[CaptureStandby] " + line);
-                        if (line == ReadyLine)
+                        switch (ev)
                         {
-                            // READY means no overlay is in progress, and stdout is ordered —
-                            // this self-heals any stuck-open gate at the next cycle. Cleared
-                            // before _ready so a racing tray click can't slip a duplicate in.
-                            Interlocked.Exchange(ref _overlayOpen, 0);
-                            Volatile.Write(ref _ready, 1);
-                            // off the reader thread: writing stdin from the stdout loop is the
-                            // classic bidirectional-pipe deadlock shape
-                            _ = Task.Run(() =>
-                            {
-                                SendSettings(force: true);
-                                SendPause();
-                            });
-                        }
-                        else if (line.StartsWith(SessionPrefix, StringComparison.Ordinal))
-                        {
-                            sessionDir = line.Substring(SessionPrefix.Length);
-                            // overlay flag before clearing _ready: a TryCapture landing
-                            // between the two must read as "duplicate, drop" rather than
-                            // "not ready" and fall through to a one-shot spawn on top of
-                            // the overlay that is opening right now
-                            Volatile.Write(ref _overlayOpenedAtTicks, DateTime.UtcNow.Ticks);
-                            Interlocked.Exchange(ref _overlayOpen, 1);
-                            Volatile.Write(ref _ready, 0);
-                            IdleMonitor.NotifyCaptureActivity();
-                        }
-                        else if (line.StartsWith(CaptureFinishedPrefix, StringComparison.Ordinal))
-                        {
-                            var finished = line.Substring(CaptureFinishedPrefix.Length);
-                            sessionDir = null;
-                            failures = 0;
-                            Interlocked.Exchange(ref _overlayOpen, 0);
-                            IdleMonitor.NotifyCaptureActivity();
-                            Dispatcher.UIThread.Post(async () => await ScreenCapturePage.ProcessStandbySessionAsync(finished));
-                        }
-                        else if (line.StartsWith(SettingsStatusPrefix, StringComparison.Ordinal))
-                            ApplyHotkeyStatus(line.Substring(SettingsStatusPrefix.Length));
-                        else if (line.StartsWith(IpcErrorPrefix, StringComparison.Ordinal))
-                        {
-                            // A NACK (bad message, unknown mode, session-dir create failure):
-                            // whatever we optimistically marked open is not coming, and a
-                            // stuck-at-1 gate would swallow every later tray capture. Scoped
-                            // to no-session so a NACK can never open the gate mid-overlay.
-                            if (sessionDir == null)
+                            case CaptureEvent.Ready:
+                                // ready means no overlay is in progress, and events are ordered:
+                                // this self-heals any stuck-open gate at the next cycle. Cleared
+                                // before _ready so a racing tray click can't slip a duplicate in.
                                 Interlocked.Exchange(ref _overlayOpen, 0);
+                                Volatile.Write(ref _ready, 1);
+                                // off the reader: a write that blocks on a full stdin pipe must
+                                // never stall the loop that drains the child's stdout
+                                _ = Task.Run(() =>
+                                {
+                                    SendSettings(force: true);
+                                    SendPause();
+                                });
+                                break;
+
+                            case CaptureEvent.Session session:
+                                sessionDir = session.Dir;
+                                // overlay flag before clearing _ready: a TryCapture landing
+                                // between the two must read as "duplicate, drop" rather than
+                                // "not ready" and fall through to a one-shot spawn on top of
+                                // the overlay that is opening right now
+                                Volatile.Write(ref _overlayOpenedAtTicks, DateTime.UtcNow.Ticks);
+                                Interlocked.Exchange(ref _overlayOpen, 1);
+                                Volatile.Write(ref _ready, 0);
+                                IdleMonitor.NotifyCaptureActivity();
+                                break;
+
+                            case CaptureEvent.CaptureFinished finished:
+                                sessionDir = null;
+                                failures = 0;
+                                Interlocked.Exchange(ref _overlayOpen, 0);
+                                IdleMonitor.NotifyCaptureActivity();
+                                var dir = finished.Dir;
+                                Dispatcher.UIThread.Post(async () => await ScreenCapturePage.ProcessStandbySessionAsync(dir));
+                                break;
+
+                            case CaptureEvent.SettingsStatus status:
+                                ApplyHotkeyStatus(status.Hotkeys);
+                                break;
+
+                            case CaptureEvent.Error { Fatal: false } error:
+                                // A refusal (a capture while one is open, a rejected snapshot, a
+                                // session-dir create failure): whatever we optimistically marked
+                                // open is not coming, and a stuck-at-1 gate would swallow every
+                                // later tray capture. Scoped to no-session so a refusal can never
+                                // open the gate mid-overlay.
+                                Debug.WriteLine($"Standby capturer refused a request: {error.Code}: {error.Message}");
+                                if (sessionDir == null)
+                                    Interlocked.Exchange(ref _overlayOpen, 0);
+                                break;
                         }
                     }
-                    await process.WaitForExitAsync(_stop.Token);
-                    await stderrTask;
+
+                    var outcome = await client.Completion;
                     if (_stop.IsCancellationRequested)
                         return;
 
-                    // The standby process never exits on its own while the shell lives — any
-                    // exit here is a failure of some kind. Uptime does not forgive a
-                    // watchdog kill: a capturer that hangs on every capture always runs
-                    // "stably" past the threshold first, and forgiving it would trade
-                    // permanent 30-minute hangs against ever reaching the fallback.
+                    // A permission that went away, or a hook that could not come up at all, is
+                    // not a crash and will not get better by restarting: one-shot mode owns that
+                    // conversation from here.
+                    if (outcome.Failure == HelperFailure.NoScreenPermission
+                        || outcome.Error?.Code is IpcErrorCodes.Permission or IpcErrorCodes.InitFailed)
+                    {
+                        Fallback("standby capturer cannot run: " + outcome.Describe());
+                        return;
+                    }
+
+                    // The standby process never exits on its own while the shell lives, so any
+                    // exit here is a failure of some kind. Uptime does not forgive a watchdog
+                    // kill: a capturer that hangs on every capture always runs "stably" past the
+                    // threshold first, and forgiving it would trade permanent 30-minute hangs
+                    // against ever reaching the fallback.
                     if (Interlocked.Exchange(ref _watchdogKilled, 0) == 0 && DateTime.UtcNow - startedUtc > StableUptime)
                         failures = 0;
                     failures++;
-                    var captureLog = TryReadCaptureLog(sessionDir);
 
-                    if (process.ExitCode == ScreenCapturePage.ExitCodeNoScreenPermission)
-                    {
-                        // Not a crash: TCC revoked the permission under us. One-shot mode
-                        // re-runs the permission conversation on the next capture attempt.
-                        Fallback("screen recording permission revoked");
-                        return;
-                    }
-
-                    Debug.WriteLine($"Standby capturer exited with code {process.ExitCode}");
-                    ReportCrash(process.ExitCode, failures, stdout.ToString(), stderr.ToString(), captureLog);
+                    Debug.WriteLine($"Standby capturer ended: {outcome.Describe()}");
+                    ReportCrash(outcome, failures, TryReadCaptureLog(sessionDir));
                 }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested)
                 {
@@ -300,7 +282,6 @@ namespace Prisc.UI
                     failures++;
                     Debug.WriteLine("Standby capturer failed: " + ex);
                     ex.Data["consecutive_failures"] = failures;
-                    SentryConfig.AttachProcessLog(ex, ("stdout", stdout.ToString()), ("stderr", stderr.ToString()));
                     SentryConfig.CaptureHandled(ex, "capture.standby-supervisor");
                 }
                 finally
@@ -309,9 +290,10 @@ namespace Prisc.UI
                     Volatile.Write(ref _ready, 0);
                     Interlocked.Exchange(ref _overlayOpen, 0);
                     lock (_stdinGate)
-                        _process = null;
-                    process?.Dispose();
-                    // any session not announced as FINISHED is a partial the shell owns
+                        _client = null;
+                    if (client != null)
+                        await client.DisposeAsync();
+                    // any session not announced as finished is a partial the shell owns
                     // deleting, on every exit path (crash, cancellation, escape)
                     if (sessionDir != null)
                         CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
@@ -339,7 +321,7 @@ namespace Prisc.UI
         /// wedged child swallows every tray click and blocks updates until app restart.
         /// Two consecutive expired samples are required so the instant between winning the
         /// overlay CAS and stamping its timestamp can never kill a healthy process.</summary>
-        private async Task WatchOverlayHangAsync(Process process, CancellationToken token)
+        private async Task WatchOverlayHangAsync(HelperClient<CaptureEvent, CaptureCommand> client, CancellationToken token)
         {
             try
             {
@@ -358,7 +340,7 @@ namespace Prisc.UI
                     Debug.WriteLine("Standby capturer overlay unresponsive; killing process");
                     // kill first: a hang must be broken even where telemetry itself throws
                     Interlocked.Exchange(ref _watchdogKilled, 1);
-                    try { process.Kill(); }
+                    try { client.Kill(); }
                     catch { }
                     try
                     {
@@ -392,59 +374,31 @@ namespace Prisc.UI
             }
         }
 
-        private static void Append(StringBuilder buffer, string line)
-        {
-            buffer.AppendLine(line);
-            if (buffer.Length > MaxPipeChars)
-                buffer.Remove(0, buffer.Length - MaxPipeChars);
-        }
-
-        private static async Task DrainAsync(StreamReader reader, StringBuilder buffer)
-        {
-            while (await reader.ReadLineAsync() is { } line)
-                Append(buffer, line);
-        }
-
-        /// <summary>A parsed PRISC_SETTINGS_STATUS: each capture action's gesture statuses, and
+        /// <summary>A capturer <c>settings_status</c>: each capture action's gesture statuses, and
         /// whether any of them is down for want of Accessibility.</summary>
         internal readonly record struct StandbyHotkeyStatus(
             (HotkeyId Id, ExternalGestureStatus[] Gestures)[] Actions, bool NeedsAccessibility);
 
         /// <summary>
-        /// Parses a PRISC_SETTINGS_STATUS payload: <c>"hotkeys"</c> maps each action to an array
-        /// with one <c>{"gesture","active","error","error_code"}</c> per <c>--hk-*</c> occurrence
-        /// it received, in order, the gesture echoed exactly as sent. <c>error_code</c> is optional,
-        /// so a capturer that predates it still parses. Throws on a malformed line.
+        /// Reads a <c>settings_status</c>: each action has one status per <c>--hk-*</c> occurrence it
+        /// received, in order, the gesture echoed exactly as sent. The shell acts on
+        /// <c>error_code</c>, never on the display text, which prisc_hotkeys is free to reword.
         /// </summary>
-        internal static StandbyHotkeyStatus ParseHotkeyStatus(string json)
+        internal static StandbyHotkeyStatus ReadHotkeyStatus(CaptureHotkeys hotkeys)
         {
-            using var document = JsonDocument.Parse(json);
-            var hotkeys = document.RootElement.GetProperty("hotkeys");
             var actions = new[]
             {
-                Read("main", HotkeyId.CaptureRegion),
-                Read("window", HotkeyId.CaptureActive),
-                Read("monitor", HotkeyId.CaptureFullscreen),
+                Read(hotkeys?.Main, HotkeyId.CaptureRegion),
+                Read(hotkeys?.Window, HotkeyId.CaptureActive),
+                Read(hotkeys?.Monitor, HotkeyId.CaptureFullscreen),
             };
             return new StandbyHotkeyStatus(actions,
                 actions.Any(a => a.Gestures.Any(g => g.ErrorCode == PermissionErrorCode)));
 
-            (HotkeyId Id, ExternalGestureStatus[] Gestures) Read(string name, HotkeyId id)
-            {
-                var gestures = new List<ExternalGestureStatus>();
-                foreach (var status in hotkeys.GetProperty(name).EnumerateArray())
-                {
-                    var errorElement = status.GetProperty("error");
-                    gestures.Add(new ExternalGestureStatus(
-                        status.GetProperty("gesture").GetString(),
-                        status.GetProperty("active").GetBoolean(),
-                        errorElement.ValueKind == JsonValueKind.String ? errorElement.GetString() : "",
-                        status.TryGetProperty("error_code", out var code) && code.ValueKind == JsonValueKind.String
-                            ? code.GetString()
-                            : null));
-                }
-                return (id, gestures.ToArray());
-            }
+            static (HotkeyId Id, ExternalGestureStatus[] Gestures) Read(IReadOnlyList<CaptureHotkeyStatus> statuses, HotkeyId id) =>
+                (id, (statuses ?? Array.Empty<CaptureHotkeyStatus>())
+                    .Select(status => new ExternalGestureStatus(status.Gesture, status.Active, status.Error ?? "", status.ErrorCode))
+                    .ToArray());
         }
 
         /// <summary>Asks for Accessibility when the capturer reports a gesture down for want of it —
@@ -461,17 +415,17 @@ namespace Prisc.UI
         }
 
         /// <summary>
-        /// Applies a PRISC_SETTINGS_STATUS line (see <see cref="ParseHotkeyStatus"/>), which may
-        /// also arrive unasked when the capturer's hook comes up or goes down. The manager matches
+        /// Applies a <c>settings_status</c> (see <see cref="ReadHotkeyStatus"/>), which may also
+        /// arrive unasked when the capturer's hook comes up or goes down. The manager matches
         /// statuses back to its own gestures by the echoed string, so a report for a snapshot that
         /// has since been superseded simply finds nothing to update for the gestures it did not
         /// know about.
         /// </summary>
-        private void ApplyHotkeyStatus(string json)
+        private void ApplyHotkeyStatus(CaptureHotkeys hotkeys)
         {
             try
             {
-                var status = ParseHotkeyStatus(json);
+                var status = ReadHotkeyStatus(hotkeys);
                 Dispatcher.UIThread.Post(() =>
                 {
                     // a status drained from a dead process's pipe after fallback (or from a
@@ -491,12 +445,12 @@ namespace Prisc.UI
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("Failed to parse standby hotkey status: " + ex);
+                Debug.WriteLine("Failed to apply standby hotkey status: " + ex);
             }
         }
 
         /// <summary>Pauses or resumes the standby capturer's hotkeys (best-effort: a capturer that
-        /// is busy or restarting gets the current value with its next READY). Any thread.</summary>
+        /// is busy or restarting gets the current value with its next <c>ready</c>). Any thread.</summary>
         public static void SetHotkeysPaused(bool paused)
         {
             s_hotkeysPaused = paused;
@@ -508,7 +462,7 @@ namespace Prisc.UI
             try
             {
                 lock (_stdinGate)
-                    SendLocked(JsonSerializer.Serialize(new { type = "pause", paused = s_hotkeysPaused }));
+                    SendLocked(new CaptureCommand.Pause(s_hotkeysPaused));
             }
             catch (Exception ex)
             {
@@ -520,8 +474,8 @@ namespace Prisc.UI
         {
             try
             {
-                // built INSIDE the gate so lock order equals snapshot order: a forced READY
-                // send racing a PropertyChanged send must not put older settings on the
+                // built INSIDE the gate so lock order equals snapshot order: the forced send
+                // after a `ready` racing a PropertyChanged send must not put older settings on the
                 // wire last (the pipe write already sits under this lock anyway)
                 lock (_stdinGate)
                 {
@@ -531,14 +485,9 @@ namespace Prisc.UI
                     if (!force && fingerprint == _lastSettings)
                         return;
                     _lastSettings = fingerprint;
-                    var payload = JsonSerializer.Serialize(new
-                    {
-                        type = "settings",
-                        args,
-                    });
                     // A send that misses (capture in progress, process restarting) needs no
-                    // queue: every READY is answered with a forced full snapshot.
-                    SendLocked(payload);
+                    // queue: every ready is answered with a forced full snapshot.
+                    SendLocked(new CaptureCommand.Settings(args));
                 }
             }
             catch (Exception ex)
@@ -547,21 +496,22 @@ namespace Prisc.UI
             }
         }
 
-        private bool SendLocked(string payload, bool grantForeground = false)
+        private bool SendLocked(CaptureCommand command, bool grantForeground = false)
         {
             try
             {
-                if (Volatile.Read(ref _ready) == 0 || _process is not { HasExited: false } process)
+                if (Volatile.Read(ref _ready) == 0 || _client is not { } client)
                     return false;
                 // The overlay needs keyboard focus immediately (Esc / shortcuts), and a
                 // process poked from the background is denied SetForegroundWindow by the
                 // foreground lock. Best-effort, exactly like the one-shot spawn: it works
                 // because the user just clicked our tray/menu, so we hold the rights.
-                if (grantForeground && OperatingSystem.IsWindows())
-                    AllowSetForegroundWindow(process.Id);
-                process.StandardInput.WriteLine(payload);
-                process.StandardInput.Flush();
-                return true;
+                if (grantForeground)
+                    HelperProcess.GrantForeground(client.ProcessId);
+                if (client.Send(command))
+                    return true;
+                Volatile.Write(ref _ready, 0);
+                return false;
             }
             catch (Exception ex)
             {
@@ -583,14 +533,17 @@ namespace Prisc.UI
             catch { return null; }
         }
 
-        private static void ReportCrash(int exitCode, int failures, string stdout, string stderr, string captureLog)
+        private static void ReportCrash(HelperOutcome<CaptureEvent> outcome, int failures, string captureLog)
         {
             var crash = new InvalidOperationException(failures >= MaxConsecutiveFailures
                 ? "Standby capturer disabled after consecutive crashes"
                 : "Standby capturer exited unexpectedly");
-            crash.Data["exit_code"] = exitCode;
+            crash.Data["exit_code"] = outcome.ExitCode;
+            crash.Data["failure"] = outcome.Failure.ToString();
+            crash.Data["error_code"] = outcome.Error?.Code;
             crash.Data["consecutive_failures"] = failures;
-            SentryConfig.AttachProcessLog(crash, ("stdout", stdout), ("stderr", stderr), ("capture.log", captureLog));
+            SentryConfig.AttachProcessLog(crash, ("error", outcome.Error?.Message), ("stderr", outcome.StderrTail),
+                ("capture.log", captureLog));
             SentryConfig.CaptureHandled(crash, failures >= MaxConsecutiveFailures
                 ? "capture.standby-consecutive-crashes"
                 : "capture.standby-process-crash");
@@ -608,21 +561,13 @@ namespace Prisc.UI
             _onFallback = null;
             _stop.Cancel();
             // Kill WITHOUT _stdinGate: a writer stuck in SendLocked on a full pipe would
-            // hold the lock, and this Kill is the only thing that can unstick it — taking
+            // hold the lock, and this kill is the only thing that can unstick it; taking
             // the lock here would deadlock the UI thread. The runner observes the
             // kill/cancel and winds itself down (waiting for it here would stall the UI
-            // thread during shutdown or a warm-setting toggle); the Process object itself
-            // is disposed by the runner's finally.
-            try
-            {
-                if (Volatile.Read(ref _process) is { HasExited: false } process)
-                    process.Kill();
-            }
+            // thread during shutdown or a warm-setting toggle) and disposes the client in its
+            // finally.
+            try { Volatile.Read(ref _client)?.Kill(); }
             catch { }
         }
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
-        private static extern bool AllowSetForegroundWindow(int dwProcessId);
     }
 }

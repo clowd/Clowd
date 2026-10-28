@@ -16,7 +16,7 @@ namespace Prisc.UI
     /// recorder's JSON schema — every one is written on every save (a missing field means the
     /// recorder's default, never "keep current").
     /// </summary>
-    internal sealed class ObsSettingsJson
+    internal sealed class RecorderSettingsJson
     {
         [JsonPropertyName("fps")]
         public int Fps { get; set; }
@@ -72,7 +72,7 @@ namespace Prisc.UI
     /// always passed: the pipeline is built up-front and recording only starts on the stdin
     /// <c>start</c> command. Factored out of the page so it is testable without a process.
     /// </summary>
-    public static class ObsArguments
+    public static class RecorderArguments
     {
         /// <summary>Name of the settings file inside the session directory.</summary>
         public const string SettingsFileName = "obs-settings.json";
@@ -105,10 +105,9 @@ namespace Prisc.UI
         private const string InputCaptureArg = "--input-capture";
 
         /// <summary>Recorder flag naming the JSONL file it should write live window geometry into.
-        /// prisc_recorder 0.9.0 and later only, and unlike the flag above it is gated on a capability
-        /// probe rather than passed on faith: clap rejects an unknown argument with a usage error
-        /// and exit 2 during parsing, before one line of protocol is written, so guessing wrong
-        /// costs the entire recording rather than the sidecar. See <see cref="ObsCapabilities"/>.</summary>
+        /// Every shipped recorder accepts it (the helpers ship in lockstep with the app, and the
+        /// <c>hello</c> catalog check refuses a stale one), so it is passed whenever the recording
+        /// is multi-track.</summary>
         private const string WindowCaptureArg = "--window-capture";
 
         /// <summary>Recorder flag choosing the OS API that backs display capture. Windows only —
@@ -128,7 +127,7 @@ namespace Prisc.UI
         /// <see cref="VideoContainer"/> and VideoCapturePage's WantedContainer.
         /// </summary>
         public static IReadOnlyList<string> Build(ScreenRect region, string outputPath, string settingsPath,
-            SettingsRecording settings, bool windowCapture = false)
+            SettingsRecording settings)
         {
             var args = new List<string>
             {
@@ -160,13 +159,9 @@ namespace Prisc.UI
 
                 // window capture rides with input capture for the same reason (only the editor
                 // reads it) and shares its timebase, so the editor can line the two up with no
-                // cross-referencing. Gated separately because it is younger than the recorders in
-                // the field.
-                if (windowCapture)
-                {
-                    args.Add(WindowCaptureArg);
-                    args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputPath)));
-                }
+                // cross-referencing.
+                args.Add(WindowCaptureArg);
+                args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputPath)));
             }
 
             return args;
@@ -234,7 +229,7 @@ namespace Prisc.UI
             // the flattened file is all the user ever gets, so the settings apply directly.
             var inputCapture = UsesMultiTrack(settings);
 
-            var model = new ObsSettingsJson
+            var model = new RecorderSettingsJson
             {
                 Fps = settings.Fps,
                 // Studio records at a fixed CRF; Instant at the user's preset (the VideoQuality
@@ -262,7 +257,7 @@ namespace Prisc.UI
                 WebcamDevice = UsesWebcam(settings) ? settings.WebcamDeviceId : "",
             };
 
-            File.WriteAllText(path, JsonSerializer.Serialize(model, PriscUiJsonContext.Default.ObsSettingsJson));
+            File.WriteAllText(path, JsonSerializer.Serialize(model, PriscUiJsonContext.Default.RecorderSettingsJson));
         }
 
         private static string[] DeviceList(string deviceId)

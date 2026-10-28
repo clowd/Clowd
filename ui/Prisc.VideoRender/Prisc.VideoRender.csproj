@@ -12,6 +12,8 @@
     <NoWarn>$(NoWarn);CA2007</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <!-- IpcChild: the child side of the job protocol -->
+    <ProjectReference Include="..\Prisc.Ipc\Prisc.Ipc.csproj" />
     <ProjectReference Include="..\Prisc.VideoSDK\Prisc.VideoSDK.csproj" />
   </ItemGroup>
 </Project>

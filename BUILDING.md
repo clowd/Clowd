@@ -7,8 +7,8 @@
 - For video recording, the video editor, `Prisc.VideoRender` and the FFmpeg-gated tests: the native
   toolchain in [Recording stack (libobs)](#recording-stack-libobs) below (`cargo rec` stages FFmpeg
   8.1 beside `prisc_recorder`). Without it, set `PRISC_FFMPEG_PATH` to a directory holding the FFmpeg
-  8.1 shared libraries, or `PRISC_RECORDER_PATH` to the `prisc_recorder` of an unpacked CI
-  `recorder-<rid>` artifact; see [The video editor's FFmpeg](#the-video-editors-ffmpeg).
+  8.1 shared libraries, or `PRISC_HELPERS_DIR` to the directory an unpacked CI `recorder-<rid>`
+  artifact sits in; see [The video editor's FFmpeg](#the-video-editors-ffmpeg).
 
 ## Build
 
@@ -44,25 +44,49 @@ no build-script output (the libobs bindings) for the recorder crates. When worki
 both options (or add `"rust-analyzer.cargo.targetDir": true`, which gives the editor its own
 target dir so it never blocks your own builds).
 
+### Finding the helpers
+
+Prisc.Ui spawns its helpers (`prisc_capture`, `prisc_scroll_driver`, `prisc_recorder`,
+`prisc_share_region`, `prisc_vid2gif`, `prisc_ai`, `Prisc.VideoRender`) and loads the
+`prisc_hotkeys` library through one lookup, `HelperLocator` (`ui/Prisc.Ipc`), with one override.
+For each file, the first hit wins:
+
+1. each directory of `PRISC_HELPERS_DIR`, then its `recorder/` subdirectory. It is a path list,
+   separated like `PATH` (`;` on Windows, `:` elsewhere),
+2. the app directory, then its `recorder/` subdirectory (the release layout),
+3. walking up to the workspace `Cargo.toml`, the newer of `target/debug` and `target/release` (the
+   dev layout); `Prisc.VideoRender` is looked for in `ui/Prisc.VideoRender/bin/{Debug,Release}/net10.0`.
+
+A Prisc.Ui built inside the checkout needs no variable. One built to an out-of-tree `OutDir` finds no
+`Cargo.toml` on the way up and no single directory that holds both the Rust helpers and
+`Prisc.VideoRender`, so set the list to both:
+
+```sh
+PRISC_HELPERS_DIR="<repo>/target/debug:<repo>/ui/Prisc.VideoRender/bin/Debug/net10.0"
+```
+
+(`;` instead of `:` on Windows.) The only other variable is `PRISC_FFMPEG_PATH`, which names the
+FFmpeg library directory rather than a helper (below). The stdio contract every helper speaks is
+`crates/prisc_capture/HELPER_PROTOCOL.md`.
+
 ### The video editor's FFmpeg
 
 The editor, the playback engine and `Prisc.VideoRender` all load FFmpeg 8.1 natively (avcodec 62 /
-avformat 62 / avutil 60 / swscale 9 / swresample 6) and refuse to start without it —
+avformat 62 / avutil 60 / swscale 9 / swresample 6) and refuse to start without it:
 `FFmpegLoader.TryInitialize` asserts those majors. A release build takes them from the bundled
-recorder payload; `ObsBinaryLocator.ResolveFFmpegDirectory` is the one resolver every caller goes
-through, probing in order:
+recorder payload; `FFmpegLoader.FindBesideRecorder` is the one resolver every caller goes through,
+probing in order:
 
-1. `PRISC_FFMPEG_PATH`, if set — always wins,
+1. `PRISC_FFMPEG_PATH`, if set: always wins,
 2. the recorder binary's own directory (the Windows layout, and every dev layout),
 3. its `Frameworks/` subdirectory (the macOS bundle layout).
 
-The recorder binary itself (`prisc_recorder`) is found via `PRISC_RECORDER_PATH`, a `recorder/`
-directory beside the app (the release layout), or, walking up to the workspace `Cargo.toml`,
-`target/{debug,release}` of this repository (the dev layout). Building the recorder with `cargo rec`
-(or `cargo recr` for release) is therefore all a dev checkout needs on either platform: its build
-scripts stage the FFmpeg libraries into the profile dir beside the binary, so the dev FFmpeg
-directory is `target/<profile>`. Failing that, point `PRISC_RECORDER_PATH` at the recorder binary
-of an unpacked CI `recorder-<rid>` artifact.
+The recorder binary itself (`prisc_recorder`) is found like every other helper (see
+[Finding the helpers](#finding-the-helpers)). Building the recorder with `cargo rec` (or `cargo recr`
+for release) is therefore all a dev checkout needs on either platform: its build scripts stage the
+FFmpeg libraries into the profile dir beside the binary, so the dev FFmpeg directory is
+`target/<profile>`. Failing that, point `PRISC_HELPERS_DIR` at the directory an unpacked CI
+`recorder-<rid>` artifact sits in (the one holding `recorder/`).
 
 Roughly a hundred tests — every encode, render, composition-player, filmstrip, waveform and AI
 sidecar test — skip rather than fail when FFmpeg is missing, so check for `Skipped: 0` before
@@ -91,13 +115,10 @@ go through one keyboard hook in the `prisc_hotkeys` crate (`WH_KEYBOARD_LL` on W
 capturer links it statically. Prisc.Ui P/Invokes it as a native library, `prisc_hotkeys.dll` /
 `libprisc_hotkeys.dylib`, which release packages ship beside the Prisc.Ui executable.
 `cargo build -p prisc_capture` builds the library as a dependency, so the build block above needs no
-extra step. `HotkeysLibraryLocator` finds the library by probing, in order:
-
-1. `PRISC_HOTKEYS_PATH`, if set,
-2. the app directory (the release layout),
-3. walking up to the workspace `Cargo.toml`, the newest of `target/{debug,release}/` and
-   `target/{debug,release}/deps/`. Building a dependent crate leaves the library in `deps/` without
-   copying it up a level, so both places are checked.
+extra step. `HelperLocator.FindLibrary` finds it like any helper (see
+[Finding the helpers](#finding-the-helpers)), with one addition to the dev walk-up: it takes the
+newest of `target/{debug,release}/` and `target/{debug,release}/deps/`. Building a dependent crate
+leaves the library in `deps/` without copying it up a level, so both places are checked.
 
 While Prisc.Ui runs, it holds the library open, so relinking it fails (LNK1104 on Windows). Close
 Prisc.Ui and the standby `prisc_capture` process, build, then relaunch.

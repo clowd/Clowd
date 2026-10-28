@@ -8,8 +8,8 @@ namespace Prisc.Config
     /// How the shared region is obscured when the HIDE tile is on. Mirrors the three non-none modes
     /// prisc_share_region's <c>obscure</c> command accepts; <c>none</c> is deliberately absent —
     /// that state is the toolbar tile being off, not a configuration. Mapped to
-    /// <c>Prisc.UI.ShareObscureMode</c> inside Prisc.Ui: the protocol enum lives in the Prisc.Ui
-    /// assembly and the project reference is one-way, so this cannot reuse it.
+    /// <c>Prisc.Ipc.ShareRegionObscureMode</c> inside Prisc.Ui: the protocol enum is generated into
+    /// Prisc.Ipc, which this project does not reference, so this cannot reuse it.
     /// Declaration order is dropdown order, so the default goes first.
     /// </summary>
     public enum ShareRegionObscureStyle

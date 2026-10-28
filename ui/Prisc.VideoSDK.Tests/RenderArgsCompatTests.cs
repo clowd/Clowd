@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Prisc.Ipc;
 using Prisc.VideoSDK.Editing;
 using Prisc.VideoSDK.Media;
 using Prisc.VideoSDK.Model;
@@ -683,7 +684,13 @@ namespace Prisc.VideoSDK.Tests
             return null;
         }
 
-        private sealed record ToolRun(int ExitCode, IReadOnlyList<string> Stdout, string Stderr);
+        /// <summary>One run of the tool: its exit code, the <c>hello</c> it opened with, every protocol
+        /// event after it (decoded with the generated job codec, so a line it cannot read fails the
+        /// test), and its stderr.</summary>
+        private sealed record ToolRun(int ExitCode, IpcHello Hello, IReadOnlyList<JobEvent> Events, string Stderr)
+        {
+            public JobEvent Terminal => Events.Count == 0 ? null : Events[^1];
+        }
 
         private static ToolRun RunTool(string argsPath, string ffmpegDirectory)
         {
@@ -715,7 +722,17 @@ namespace Prisc.VideoSDK.Tests
             string stderr = stderrReader.GetAwaiter().GetResult();
 
             var lines = stdout.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            return new ToolRun(process.ExitCode, lines, stderr);
+            Assert.NotEmpty(lines);
+
+            // stdout is protocol and nothing else: hello first, then events the codec knows
+            var hello = IpcCodec.DecodeHello(lines[0]);
+            Assert.NotNull(hello);
+            Assert.Equal(HelperSpecs.Job.Catalog, hello.Catalog);
+            Assert.Equal(HelperSpecs.Job.CatalogHash, hello.CatalogHash);
+            Assert.Equal("Prisc.VideoRender", hello.Helper);
+            var events = lines.Skip(1).Select(line => JobCodec.DecodeEvent(line)
+                ?? throw new Xunit.Sdk.XunitException("not a job event: " + line)).ToList();
+            return new ToolRun(process.ExitCode, hello, events, stderr);
         }
 
         /// <summary>A 2s 64x64 30fps mp4 with audio, encoded through Mp4Writer.</summary>
@@ -790,22 +807,20 @@ namespace Prisc.VideoSDK.Tests
             var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(0, run.ExitCode);
-            Assert.NotEmpty(run.Stdout);
+            Assert.NotEmpty(run.Events);
 
-            // every line before the terminal one is a progress line: monotonic, 0..100.
-            var progress = run.Stdout.Take(run.Stdout.Count - 1).ToList();
-            Assert.All(progress, line => Assert.StartsWith("progress ", line, StringComparison.Ordinal));
-            var values = progress.Select(l => Int32.Parse(l.AsSpan("progress ".Length), CultureInfo.InvariantCulture)).ToList();
+            // every event before the terminal one is a progress event: monotonic, 0..100.
+            var progress = run.Events.Take(run.Events.Count - 1).ToList();
+            var values = progress.Select(e => (int)Assert.IsType<JobEvent.Progress>(e).Percent).ToList();
             Assert.Equal(0, values.First());
             Assert.Equal(100, values.Last());
             for (int i = 1; i < values.Count; i++)
                 Assert.True(values[i] > values[i - 1], $"progress went {values[i - 1]} -> {values[i]}");
 
-            string terminal = run.Stdout[^1];
-            Assert.StartsWith("done ", terminal, StringComparison.Ordinal);
-            int lastSpace = terminal.LastIndexOf(' ');
-            Assert.Equal(output, terminal.Substring("done ".Length, lastSpace - "done ".Length));
-            long bytes = Int64.Parse(terminal.AsSpan(lastSpace + 1), CultureInfo.InvariantCulture);
+            var done = Assert.IsType<JobEvent.Done>(run.Terminal);
+            Assert.Equal(JobResult.Ok, done.Result);
+            Assert.Equal(output, done.Path);
+            long bytes = (long)done.Bytes.GetValueOrDefault();
             Assert.True(bytes > 0);
 
             Assert.True(File.Exists(output));
@@ -818,6 +833,39 @@ namespace Prisc.VideoSDK.Tests
             Assert.Equal(64, video.Height);
             // 30 frames at 30fps: one second, within a frame of tolerance.
             Assert.InRange(probe.DurationTicks, Second - Second / Fps, Second + Second / Fps);
+        }
+
+        /// <summary>The cancel path end to end, through the same client the app uses: <c>quit</c> right
+        /// after <c>hello</c> ends the run with <c>done{cancelled}</c>, exit 0, and no output file.
+        /// (The old text protocol spelled it two ways, so a GIF cancel was never recognised.)</summary>
+        [Fact]
+        public async System.Threading.Tasks.Task Quit_cancels_the_render_with_a_cancelled_done()
+        {
+            Assert.SkipUnless(FFmpegAvailable, TestFFmpeg.SkipReason);
+            string dll = FindRenderDll();
+            Assert.SkipWhen(dll == null, "Prisc.VideoRender.dll not found: build the exe project.");
+
+            string input = WriteFixtureMp4(64, 64, 30, seconds: 2, sampleRate: 48000);
+            string output = TempPath(".mp4");
+            string argsPath = TempPath(".json");
+            File.WriteAllText(argsPath, ArgsJson(input, output, segments: "[{\"start_ms\":0,\"end_ms\":2000}]", crf: "30"));
+
+            var client = await HelperClient<JobEvent, JobCommand>.StartAsync(HelperSpecs.Job, "dotnet",
+                new[] { "exec", dll, argsPath },
+                new HelperStartOptions
+                {
+                    WorkingDirectory = Path.GetDirectoryName(dll),
+                    Environment = new Dictionary<string, string> { [FFmpegLoader.EnvVarName] = FFmpegLoader.LibrariesDirectory },
+                });
+            await using (client)
+            {
+                var outcome = await client.StopAsync();
+
+                Assert.Equal(HelperFailure.None, outcome.Failure);
+                Assert.Equal(JobResult.Cancelled, Assert.IsType<JobEvent.Done>(outcome.Terminal).Result);
+                Assert.Equal(HelperExit.Ok, outcome.ExitCode);
+                Assert.False(File.Exists(output));
+            }
         }
 
         [Fact]
@@ -833,10 +881,11 @@ namespace Prisc.VideoSDK.Tests
             var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(1, run.ExitCode);
-            string line = Assert.Single(run.Stdout);
-            Assert.StartsWith("error ", line, StringComparison.Ordinal);
-            Assert.Contains("input path is empty", line, StringComparison.Ordinal);
-            Assert.DoesNotContain('\n', line);
+            var error = Assert.IsType<JobEvent.Error>(Assert.Single(run.Events));
+            Assert.True(error.Fatal);
+            Assert.Equal(IpcErrorCodes.Failed, error.Code);
+            Assert.Contains("input path is empty", error.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain('\n', error.Message);
         }
 
         /// <summary>The editor's own path: a v2 job file written by <see cref="ProjectFileWriter"/>
@@ -869,9 +918,9 @@ namespace Prisc.VideoSDK.Tests
             var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(0, run.ExitCode);
-            string terminal = run.Stdout[^1];
-            Assert.StartsWith("done ", terminal, StringComparison.Ordinal);
-            Assert.Contains(output, terminal, StringComparison.Ordinal);
+            var done = Assert.IsType<JobEvent.Done>(run.Terminal);
+            Assert.Equal(JobResult.Ok, done.Result);
+            Assert.Equal(output, done.Path);
             Assert.True(File.Exists(output));
 
             var rendered = MediaProbe.ProbeDetailed(output);
@@ -900,10 +949,9 @@ namespace Prisc.VideoSDK.Tests
             var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(1, run.ExitCode);
-            string line = Assert.Single(run.Stdout);
-            Assert.StartsWith("error ", line, StringComparison.Ordinal);
-            Assert.Contains("unknown encoder \"x264\"", line, StringComparison.Ordinal);
-            Assert.Contains(VideoEncoderNames.All, line, StringComparison.Ordinal);
+            var error = Assert.IsType<JobEvent.Error>(Assert.Single(run.Events));
+            Assert.Contains("unknown encoder \"x264\"", error.Message, StringComparison.Ordinal);
+            Assert.Contains(VideoEncoderNames.All, error.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -931,7 +979,7 @@ namespace Prisc.VideoSDK.Tests
             var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(0, run.ExitCode);
-            Assert.StartsWith("done ", run.Stdout[^1], StringComparison.Ordinal);
+            Assert.Equal(JobResult.Ok, Assert.IsType<JobEvent.Done>(run.Terminal).Result);
             // the diagnostics name the encoder that ran: x264, as asked
             Assert.Contains("Mp4Writer: video encoder libx264 (x264 crf=30 preset=fast", run.Stderr, StringComparison.Ordinal);
             Assert.Contains("requested software", run.Stderr, StringComparison.Ordinal);
@@ -966,7 +1014,7 @@ namespace Prisc.VideoSDK.Tests
             var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(0, run.ExitCode);
-            Assert.StartsWith("done ", run.Stdout[^1], StringComparison.Ordinal);
+            Assert.Equal(JobResult.Ok, Assert.IsType<JobEvent.Done>(run.Terminal).Result);
             var rendered = Assert.Single(MediaProbe.ProbeDetailed(output).VideoStreams);
             Assert.Equal(32, rendered.Height);
             Assert.Equal(32, rendered.Width);
@@ -995,9 +1043,8 @@ namespace Prisc.VideoSDK.Tests
             var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(1, run.ExitCode);
-            string line = Assert.Single(run.Stdout);
-            Assert.StartsWith("error ", line, StringComparison.Ordinal);
-            Assert.Contains(expected, line, StringComparison.Ordinal);
+            var error = Assert.IsType<JobEvent.Error>(Assert.Single(run.Events));
+            Assert.Contains(expected, error.Message, StringComparison.Ordinal);
         }
 
         /// <summary>A v1 args file predates the cap and never gets one, whatever the file says.</summary>
@@ -1014,9 +1061,11 @@ namespace Prisc.VideoSDK.Tests
         {
             var run = RunTool(null, null);
 
-            Assert.Equal(1, run.ExitCode);
-            string line = Assert.Single(run.Stdout);
-            Assert.StartsWith("error usage: Prisc.VideoRender", line, StringComparison.Ordinal);
+            Assert.Equal(HelperExit.Usage, run.ExitCode);
+            var error = Assert.IsType<JobEvent.Error>(Assert.Single(run.Events));
+            Assert.True(error.Fatal);
+            Assert.Equal(IpcErrorCodes.Usage, error.Code);
+            Assert.StartsWith("usage: Prisc.VideoRender", error.Message, StringComparison.Ordinal);
         }
     }
 }

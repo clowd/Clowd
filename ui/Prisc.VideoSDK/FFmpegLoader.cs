@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Prisc.Ipc;
 using FFmpeg.AutoGen.Abstractions;
 using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
 
@@ -8,9 +9,8 @@ namespace Prisc.VideoSDK
     /// <summary>
     /// One-time process-wide initialization of the dynamically-loaded FFmpeg bindings.
     /// Resolution order for the native DLL directory: the <c>PRISC_FFMPEG_PATH</c> environment
-    /// variable, then the caller-supplied resolver (the app passes the directory of the
-    /// prisc_recorder binary — the FFmpeg DLLs ship alongside it). Prisc.VideoSDK deliberately has no
-    /// reference to Prisc.Ui, so the fallback is a delegate rather than ObsBinaryLocator itself.
+    /// variable, then the caller-supplied resolver (normally <see cref="FindBesideRecorder"/>: the
+    /// FFmpeg libraries ship with prisc_recorder).
     /// </summary>
     public static class FFmpegLoader
     {
@@ -124,6 +124,51 @@ namespace Prisc.VideoSDK
                     return false;
                 }
             }
+        }
+
+        /// <summary>
+        /// The directory holding the FFmpeg native libraries that ship with prisc_recorder, or null
+        /// when the recorder cannot be found; the usual fallback resolver for
+        /// <see cref="TryInitialize"/>. FFmpeg is not a helper, so it has no lookup of its own: the
+        /// libraries sit beside the recorder on Windows and in a <c>Frameworks/</c> subdirectory next
+        /// to it in a macOS bundle.
+        /// <para>
+        /// Each candidate is confirmed to hold an avcodec of the major the bindings were generated
+        /// against before it is returned: a directory that merely exists has repeatedly been what
+        /// turned a missing dependency into an unrelated failure much further along. When neither
+        /// holds one, the recorder's directory is still the best guess, and the loader's own error
+        /// names it.
+        /// </para>
+        /// </summary>
+        public static string FindBesideRecorder()
+        {
+            var recorder = HelperLocator.Find("prisc_recorder");
+            if (String.IsNullOrEmpty(recorder))
+                return null;
+
+            var dir = Path.GetDirectoryName(Path.GetFullPath(recorder));
+            if (HasFFmpeg(dir))
+                return dir;
+
+            var frameworks = Path.Combine(dir ?? "", "Frameworks");
+            return HasFFmpeg(frameworks) ? frameworks : dir;
+        }
+
+        /// <summary>True when <paramref name="directory"/> holds an avcodec of the major the bindings
+        /// were generated against. The name is built from the binding constant, so bumping
+        /// FFmpeg.AutoGen cannot leave a stale literal behind, and the unversioned dev symlink is not
+        /// accepted: it says nothing about the major.</summary>
+        private static bool HasFFmpeg(string directory)
+        {
+            if (String.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+                return false;
+
+            int major = ffmpeg.LIBAVCODEC_VERSION_MAJOR;
+            string name = OperatingSystem.IsWindows() ? $"avcodec-{major}.dll"
+                : OperatingSystem.IsMacOS() ? $"libavcodec.{major}.dylib"
+                : $"libavcodec.so.{major}";
+
+            return File.Exists(Path.Combine(directory, name));
         }
 
         /// <summary>Throws when the bindings are not initialized; call before any FFmpeg use.</summary>

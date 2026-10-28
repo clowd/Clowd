@@ -1,11 +1,10 @@
 using System;
-using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using Prisc.Ipc;
 using Prisc.VideoSDK;
-using Prisc.VideoSDK.Ai;
 using Prisc.VideoSDK.Editing;
 using Prisc.VideoSDK.Media;
 using Prisc.VideoSDK.Model;
@@ -14,53 +13,56 @@ using Prisc.VideoSDK.Render;
 namespace Prisc.VideoRender
 {
     /// <summary>
-    /// Renders an edited recording to an mp4, replacing the external Rust <c>vid-render</c> tool
-    /// with the in-repo <see cref="RenderJob"/>. Deliberately thin: locate the FFmpeg natives, turn
-    /// the args file into a <see cref="Project"/>, run the render, speak the protocol.
+    /// Renders an edited recording to an mp4 with the in-repo <see cref="RenderJob"/>. Deliberately
+    /// thin: locate the FFmpeg natives, turn the args file into a <see cref="Project"/>, run the
+    /// render, speak the protocol.
     ///
-    /// <para>Usage: <c>Prisc.VideoRender &lt;path-to-args.json&gt; [output.mp4]</c> — the args file
-    /// is the whole job description, exactly as vid-render took it (the caller,
-    /// <c>VidRenderRunner</c>, passes nothing else). Two file shapes are accepted:</para>
+    /// <para>Usage: <c>Prisc.VideoRender &lt;path-to-args.json&gt; [output.mp4]</c>. The args file is
+    /// the whole job description (the caller, <c>JobRunner.ForVideoRender</c>, passes nothing else).
+    /// Two file shapes are accepted:</para>
     /// <list type="bullet">
-    /// <item><c>"version": 1</c> — the legacy render-args file (keep segments, webcam rect + mask
+    /// <item><c>"version": 1</c>: the legacy render-args file (keep segments, webcam rect + mask
     /// PNG, crf), mapped onto the v2 model by <see cref="RenderArgsCompat"/>.</item>
-    /// <item><c>"version": 2</c> — a <see cref="Project"/> straight from the editor. The output
+    /// <item><c>"version": 2</c>: a <see cref="Project"/> straight from the editor. The output
     /// path is not part of the project model, so it comes from a sibling <c>"output"</c> property
     /// in the same file (and optional <c>"crf"</c>, <c>"encoder"</c> and <c>"maxHeight"</c>
-    /// siblings — the encoder one of <c>auto|software|nvenc|amf|videotoolbox</c>, <c>auto</c> when
+    /// siblings: the encoder one of <c>auto|software|nvenc|amf|videotoolbox</c>, <c>auto</c> when
     /// absent; <c>maxHeight</c> a non-negative whole number of pixels capping the encoded height,
     /// no cap when absent or 0), or from the optional second argument, which wins when both are
     /// present.</item>
     /// </list>
     ///
-    /// <para>Stdout protocol, byte-compatible with vid-render (and prisc_vid2gif before it), one message
-    /// per line and <b>nothing else on stdout ever</b>:</para>
-    /// <code>
-    /// progress &lt;0-100&gt;       monotonically increasing integer percent
-    /// done &lt;path&gt; &lt;bytes&gt;    render finished successfully (exit code 0)
-    /// error &lt;message&gt;        render failed, single line (exit code 1)
-    /// canceled              stdin cancellation honored (exit code 0)
-    /// </code>
-    ///
-    /// <para>Stdin: a <c>quit</c> line cancels — the render stops within one frame, the partial
-    /// output is removed and the terminal message is <c>canceled</c>. Errors also remove the
-    /// partial output. Diagnostics (backend selection, mask notes) go to stderr, which is outside
-    /// the protocol.</para>
+    /// <para>The stdio protocol is the <c>job</c> catalog (crates/prisc_capture/HELPER_PROTOCOL.md
+    /// §4.3), shared with prisc_vid2gif: <c>hello</c>, then <c>progress</c> (monotonic,
+    /// deduplicated), then exactly one of <c>done{ok, path, bytes}</c> (exit 0),
+    /// <c>done{cancelled}</c> (exit 0) or a fatal <c>error</c> (exit 1, or 2 for a bad command line).
+    /// <c>quit</c> or stdin EOF cancels: the render stops within one frame and the partial output is
+    /// removed, as it is on an error. stdout carries protocol lines and nothing else (the
+    /// <see cref="IpcChild"/> guard); diagnostics go to stderr.</para>
     /// </summary>
     internal static class Program
     {
-        private const int ExitSuccess = 0;
-        private const int ExitError = 1;
+        /// <summary>Beyond the catalog's quit grace: the parent kills us first if it is alive, so this
+        /// only ends an orphan.</summary>
+        private static readonly TimeSpan SelfExitMargin = TimeSpan.FromSeconds(5);
 
         private static int Main(string[] argv)
         {
-            // the protocol is line-oriented ASCII; make sure nothing buffers past a terminal line.
-            var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
-            Console.SetOut(stdout);
+            // first, before FFmpeg, Skia or a GPU driver can print to fd 1
+            var events = IpcChild.Open("Prisc.VideoRender", HelperSpecs.Job);
 
             using var cancel = new CancellationTokenSource();
-            StartStdinWatcher(cancel);
-            var emitter = new ProgressEmitter();
+            IpcChild.OnQuit += () =>
+            {
+                try { cancel.Cancel(); }
+                catch (ObjectDisposedException) { }
+            };
+            IpcChild.ArmHardExit(HelperSpecs.Job.QuitGrace + SelfExitMargin);
+            // the job catalog has no commands besides quit
+            IpcChild.ReadCommands(JobCodec.DecodeCommand, _ => { },
+                reason => events.Emit(new JobEvent.Error(IpcErrorCodes.BadCommand, reason, false)));
+
+            var emitter = new ProgressEmitter(events);
 
             // remembered as soon as the args parse, so the error path can remove a partial output
             // that RenderJob did not get to clean up itself.
@@ -70,9 +72,8 @@ namespace Prisc.VideoRender
             {
                 var argsPath = ParseCommandLine(argv, out var outputOverride);
 
-                if (!FFmpegLoader.TryInitialize(FindFFmpegDirectory))
-                    throw new InvalidOperationException(FFmpegLoader.FailureReason);
-                AiLoader.Configure(FindAiBinary);
+                if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
+                    throw new JobFailure(IpcErrorCodes.InitFailed, FFmpegLoader.FailureReason);
 
                 var job = LoadJob(argsPath, outputOverride);
                 output = job.OutputPath;
@@ -91,7 +92,7 @@ namespace Prisc.VideoRender
                         // one. v2 projects render on the CFR grid with full sample durations.
                         FrameTimestampsTicks = job.FrameTimestampsTicks,
                         LegacyContainerTiming = job.LegacyContainerTiming,
-                        // PRISC_RENDER_BACKEND=cpu forces the raster path — used by the GPU/CPU
+                        // PRISC_RENDER_BACKEND=cpu forces the raster path, used by the GPU/CPU
                         // equivalence checks; the surface factory falls back to CPU on its own
                         // when no usable GPU context exists, so this is a test/diagnostic knob,
                         // not something the app needs to set.
@@ -100,13 +101,13 @@ namespace Prisc.VideoRender
                             StringComparison.OrdinalIgnoreCase),
                         // PRISC_RENDER_ZEROCOPY=0 forces the readback path for NVENC/AMF renders
                         // (the zero-copy Direct3D 11 hand-off falls back to it on its own when
-                        // anything is missing) — the A/B knob for benchmarking the two, in the
+                        // anything is missing): the A/B knob for benchmarking the two, in the
                         // same spirit as PRISC_RENDER_BACKEND.
                         ZeroCopyEncode = !String.Equals(
                             Environment.GetEnvironmentVariable("PRISC_RENDER_ZEROCOPY"), "0",
                             StringComparison.Ordinal),
                         // the job file sits beside the project's videoedit.json, which is where
-                        // the AI sidecars live (AiSidecars) — matte/denoise consumption and any
+                        // the AI sidecars live (AiSidecars): matte/denoise consumption and any
                         // pre-render generation both key off this directory.
                         SidecarCacheDir = Path.GetDirectoryName(Path.GetFullPath(argsPath)),
                         DiagnosticLog = message => Console.Error.WriteLine("Prisc.VideoRender: " + message),
@@ -117,28 +118,40 @@ namespace Prisc.VideoRender
                 if (result.Outcome == RenderOutcome.Canceled)
                 {
                     // RenderJob already deleted the partial file.
-                    Console.WriteLine("canceled");
-                    return ExitSuccess;
+                    events.Emit(new JobEvent.Done(JobResult.Cancelled, null, null));
+                    return HelperExit.Ok;
                 }
 
                 emitter.Emit(100);
-                Console.WriteLine(FormattableString.Invariant(
-                    $"done {result.OutputPath} {result.OutputBytes}"));
-                return ExitSuccess;
+                events.Emit(new JobEvent.Done(JobResult.Ok, result.OutputPath, (ulong)Math.Max(0, result.OutputBytes)));
+                return HelperExit.Ok;
             }
             catch (OperationCanceledException) when (cancel.IsCancellationRequested)
             {
                 TryDelete(output);
-                Console.WriteLine("canceled");
-                return ExitSuccess;
+                events.Emit(new JobEvent.Done(JobResult.Cancelled, null, null));
+                return HelperExit.Ok;
             }
             catch (Exception ex)
             {
                 TryDelete(output);
-                Console.WriteLine("error " + SingleLine(Describe(ex)));
+                var code = (ex as JobFailure)?.Code ?? IpcErrorCodes.Failed;
+                events.Emit(new JobEvent.Error(code, SingleLine(Describe(ex)), true));
                 Console.Error.WriteLine(ex.ToString());
-                return ExitError;
+                return code == IpcErrorCodes.Usage ? HelperExit.Usage : HelperExit.Failed;
             }
+        }
+
+        /// <summary>A failure with a specific protocol error code (the rest are <c>failed</c>).</summary>
+        private sealed class JobFailure : Exception
+        {
+            public JobFailure(string code, string message)
+                : base(message)
+            {
+                Code = code;
+            }
+
+            public string Code { get; }
         }
 
         // ------------------------------------------------------------------------ job loading
@@ -149,7 +162,7 @@ namespace Prisc.VideoRender
         {
             outputOverride = null;
             if (argv == null || argv.Length == 0 || argv.Length > 2)
-                throw new InvalidOperationException("usage: Prisc.VideoRender <path-to-args.json> [output.mp4]");
+                throw new JobFailure(IpcErrorCodes.Usage, "usage: Prisc.VideoRender <path-to-args.json> [output.mp4]");
 
             if (argv.Length == 2)
                 outputOverride = argv[1];
@@ -299,122 +312,17 @@ namespace Prisc.VideoRender
             };
         }
 
-        // ------------------------------------------------------------------------ FFmpeg natives
-
-        /// <summary>
-        /// Where the FFmpeg natives live when <c>PRISC_FFMPEG_PATH</c> is unset. Release layout
-        /// first: the DLLs ship beside this binary (the runner starts us in our own directory for
-        /// exactly that reason, and vid-render loaded them the same way). Then the dev layout: the
-        /// Prisc repository's cargo target directory (built by <c>cargo rec</c>), mirroring
-        /// <c>ObsBinaryLocator</c> and the test suite's resolver.
-        /// </summary>
-        private static string FindFFmpegDirectory()
-        {
-            var baseDirectory = AppContext.BaseDirectory;
-            if (HasFFmpeg(baseDirectory))
-                return baseDirectory;
-
-            // Release layout: this exe publishes beside Prisc.Ui, and the FFmpeg DLLs ship in
-            // the recorder/ subdirectory (ci.yml). The runner also passes PRISC_FFMPEG_PATH
-            // explicitly; this probe keeps a manually-invoked exe working in that layout too.
-            var obsSubdir = Path.Combine(baseDirectory, "recorder");
-            if (HasFFmpeg(obsSubdir))
-                return obsSubdir;
-
-            // …and in a macOS bundle they are one level further in, under Frameworks/.
-            var obsFrameworks = Path.Combine(obsSubdir, "Frameworks");
-            if (HasFFmpeg(obsFrameworks))
-                return obsFrameworks;
-
-            var directory = new DirectoryInfo(baseDirectory);
-            while (directory != null)
-            {
-                if (File.Exists(Path.Combine(directory.FullName, "Cargo.toml")))
-                {
-                    foreach (var configuration in new[] { "release", "debug" })
-                    {
-                        var candidate = Path.Combine(directory.FullName, "target", configuration);
-                        if (HasFFmpeg(candidate))
-                            return candidate;
-                    }
-                }
-
-                directory = directory.Parent;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Where the <c>prisc_ai</c> inference binary ships when <c>PRISC_AI_PATH</c>
-        /// is unset (the loader consults the env var itself): beside this exe, the release
-        /// layout. The probe lives here rather than in the SDK because the SDK cannot know the
-        /// app's layout — the same seam as <see cref="FindFFmpegDirectory"/>.
-        /// </summary>
-        private static string FindAiBinary()
-        {
-            string name = OperatingSystem.IsWindows() ? "prisc_ai.exe" : "prisc_ai";
-            var candidate = Path.Combine(AppContext.BaseDirectory, name);
-            return File.Exists(candidate) ? candidate : null;
-        }
-
-        private static bool HasFFmpeg(string directory)
-        {
-            if (String.IsNullOrEmpty(directory))
-                return false;
-
-            // Named for the major the bindings were generated against, and built from the binding
-            // constant so a FFmpeg.AutoGen bump cannot leave a stale literal here. The unversioned
-            // libavcodec.dylib is deliberately not accepted: it is a dev symlink that says nothing
-            // about the major, and it is not the name the loader goes on to open.
-            int major = FFmpeg.AutoGen.Abstractions.ffmpeg.LIBAVCODEC_VERSION_MAJOR;
-            string probe = OperatingSystem.IsWindows() ? $"avcodec-{major}.dll"
-                : OperatingSystem.IsMacOS() ? $"libavcodec.{major}.dylib"
-                : $"libavcodec.so.{major}";
-
-            return File.Exists(Path.Combine(directory, probe));
-        }
-
         // ---------------------------------------------------------------------------- protocol
 
-        /// <summary>Watches stdin for a <c>quit</c> line and trips the token. The thread blocks in
-        /// read for the process lifetime; it is a background thread, so it dies with the process.</summary>
-        private static void StartStdinWatcher(CancellationTokenSource cancel)
-        {
-            var thread = new Thread(() =>
-            {
-                try
-                {
-                    string line;
-                    while ((line = Console.In.ReadLine()) != null)
-                    {
-                        if (String.Equals(line.Trim(), "quit", StringComparison.OrdinalIgnoreCase))
-                        {
-                            cancel.Cancel();
-                            return;
-                        }
-                    }
-                }
-                catch
-                {
-                    // stdin closed or already disposed — nothing left to cancel from.
-                }
-            })
-            {
-                IsBackground = true,
-                Name = "stdin-watcher",
-            };
-
-            thread.Start();
-        }
-
-        /// <summary>Prints <c>progress &lt;n&gt;</c>: deduplicated, monotonic, clamped to 100 —
-        /// the same rule vid-render's Emitter applied, because the consumers parse them
-        /// identically.</summary>
+        /// <summary>Emits <c>progress</c>: deduplicated, monotonic, clamped to 100, because the
+        /// consumers treat the stream as a monotonic percentage.</summary>
         private sealed class ProgressEmitter
         {
+            private readonly IpcWriter<JobEvent> _events;
             private readonly object _sync = new object();
             private int _last = -1;
+
+            public ProgressEmitter(IpcWriter<JobEvent> events) => _events = events;
 
             public void Emit(double percent)
             {
@@ -427,7 +335,7 @@ namespace Prisc.VideoRender
                     _last = value;
                 }
 
-                Console.WriteLine("progress " + value.ToString(CultureInfo.InvariantCulture));
+                _events.Emit(new JobEvent.Progress((uint)value));
             }
         }
 

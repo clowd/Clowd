@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Prisc.VideoSDK.Ai;
 using Prisc.VideoSDK.Editing;
 using Prisc.VideoSDK.Model;
+using Prisc.Ipc;
 
 namespace Prisc.UI.Services
 {
@@ -223,7 +224,7 @@ namespace Prisc.UI.Services
                     changed = true;
                 }
 
-                var available = _cacheDir != null && AiLoader.TryGetPath() != null;
+                var available = _cacheDir != null && HelperLocator.Find("prisc_ai") != null;
                 foreach (var key in required)
                 {
                     var source = project.Sources?.FirstOrDefault(s => s.Id == key.SourceId);
