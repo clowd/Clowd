@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Prisc.Config;
 using Prisc.PlatformUtil;
+using Prisc.Ipc;
 
 namespace Prisc.UI
 {
@@ -87,7 +88,7 @@ namespace Prisc.UI
             OperatingSystem.IsWindows() ? "prisc_share_region.exe" : "prisc_share_region";
 
         private readonly ShareRegionProtocol _protocol = new();
-        private readonly HelperProcessLog _log = new(MaxLogLines, MaxLogChars);
+        private readonly HelperLog _log = new(MaxLogLines, MaxLogChars);
 
         private readonly TaskCompletionSource<bool> _initTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<ShareHandshake> _decisionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -384,7 +385,7 @@ namespace Prisc.UI
         }
 
         /// <summary>The most recent helper output (stderr plus any non-protocol stdout), for an
-        /// error report. Bounded; see <see cref="HelperProcessLog"/>.</summary>
+        /// error report. Bounded; see <see cref="HelperLog"/>.</summary>
         public string GetLog() => _log.GetLog();
 
         /// <summary>

@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The helper protocol's C# side (crates/prisc_capture/HELPER_PROTOCOL.md §7): the message
-       types and codecs generated from crates/prisc_ipc into Generated/HelperMessages.g.cs. No
-       package references, so Prisc.Ui, Prisc.VideoSDK and Prisc.VideoRender can all use it. -->
+       types and codecs generated from crates/prisc_ipc into Generated/HelperMessages.g.cs, and the
+       locator, client and child plumbing around them. No package references, so Prisc.Ui,
+       Prisc.VideoSDK and Prisc.VideoRender can all use it. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -10,5 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Prisc.Ipc.Tests" />
+    <!-- for HelperLocator.Override, the seam DenoiseGeneratorTests and MatteGeneratorTests use -->
+    <InternalsVisibleTo Include="Prisc.VideoSDK.Tests" />
   </ItemGroup>
 </Project>

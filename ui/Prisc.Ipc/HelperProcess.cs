@@ -2,45 +2,66 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Prisc.UI
+namespace Prisc.Ipc
 {
+    /// <summary>How a helper is spawned (HELPER_PROTOCOL.md §7.2). The defaults suit every line-protocol
+    /// helper; each runner overrides only what its helper needs.</summary>
+    public sealed record HelperStartOptions
+    {
+        /// <summary>Assign the child to the process-wide kill-on-close job (§7.4), so it dies with
+        /// Prisc.Ui on Windows. The recorder opts out: its parent-death path is stdin EOF, which
+        /// stops and flushes the recording instead of truncating it.</summary>
+        public bool KillWithParent { get; init; } = true;
+
+        /// <summary>Hand the child our foreground rights (<c>AllowSetForegroundWindow</c>), for
+        /// helpers that put a window of their own on screen.</summary>
+        public bool GrantForeground { get; init; }
+
+        /// <summary>Extra environment variables for the child, on top of our own.</summary>
+        public IReadOnlyDictionary<string, string> Environment { get; init; }
+
+        /// <summary>Defaults to the executable's own directory, where its native libraries live.</summary>
+        public string WorkingDirectory { get; init; }
+
+        /// <summary>How long the child gets to say <c>hello</c>. A freshly updated helper can sit in
+        /// Windows Defender's block-at-first-sight check and must load its load-time-linked DLLs
+        /// before <c>main</c> runs, so this matches the old readiness timeouts.</summary>
+        public TimeSpan HelloTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>Lines of stderr (and non-protocol stdout) kept in the <see cref="HelperLog"/>.</summary>
+        public int StderrLines { get; init; } = 1000;
+
+        /// <summary>A second cap on the same buffer, in characters.</summary>
+        public int StderrChars { get; init; } = 256 * 1024;
+    }
+
     /// <summary>
-    /// The semantics-free plumbing every helper-binary driver in this app repeats: build the
-    /// <see cref="ProcessStartInfo"/>, spawn, join the stdio pumps at the end, and hand the child
-    /// the right to take the foreground. prisc_recorder, prisc_vid2gif, prisc_scroll_driver, prisc_ai and
-    /// prisc_share_region all spawn a redirected console child in exactly the same way, and the
-    /// differences between their copies of that code have historically been bugs rather than
-    /// intent (a missing <c>AutoFlush</c>, a missing UTF-8 encoding, a missing working directory).
-    /// <para>
-    /// NOTHING HERE MAY INTERPRET A PROTOCOL LINE. In particular, <see cref="ObsCapturer"/>'s rule
-    /// that "an exit without a terminal message is fatal" is a rule of the *prisc_recorder* protocol
-    /// (DESIGN §1.4), not a rule of child processes in general, and it must never migrate into this
-    /// file: prisc_share_region deliberately exits 0 with no terminal message once a share ends, so
-    /// a driver that inherited that rule from shared code would report every normal share session
-    /// as a crash. Each driver keeps its own protocol; this class only keeps the pipes.
-    /// </para>
+    /// The semantics-free plumbing every helper spawn repeats: build the
+    /// <see cref="ProcessStartInfo"/>, spawn, put the child in the kill-on-close job, hand it the
+    /// foreground, and join the stdio pumps at the end. Nothing here interprets a protocol line;
+    /// that is <see cref="HelperClient{TEvent, TCommand}"/>'s job (and, for the binary payload of
+    /// prisc_ai, <c>AiClient</c>'s).
     /// </summary>
     public static class HelperProcess
     {
         /// <summary>
-        /// Spawns <paramref name="exePath"/> with all three stdio streams redirected, ready for a
-        /// line-oriented protocol.
+        /// Spawns <paramref name="exePath"/> with all three stdio streams redirected.
         /// <para>
         /// Every option here is load-bearing. <c>UseShellExecute=false</c> is what makes redirection
         /// possible at all; <c>CreateNoWindow=true</c> keeps a console-subsystem debug build from
         /// flashing a console over the user's screen. The working directory is the binary's own
         /// folder because these helpers load native libraries (libobs, FFmpeg, ONNX Runtime) that
         /// ship beside them. All three streams are redirected even when a driver never intends to
-        /// read stderr or write stdin: an *unredirected* stdout inherits the parent's, which for a
-        /// GUI-subsystem Prisc.Ui is nothing at all, and every JSON line the helper writes would be
-        /// silently discarded — and a redirected-but-undrained stream eventually blocks the child on
-        /// a full pipe, which is why callers must pump both output streams for the child's lifetime.
+        /// write stdin: the open stdin pipe is the child's parent-lifetime lease (EOF means the
+        /// parent is gone), and an unredirected stdout inherits the parent's, which for a
+        /// GUI-subsystem Prisc.Ui is nothing at all.
         /// </para>
         /// <para>
-        /// The two encoding-and-flush details are the ones hand-rolled copies keep missing. .NET's
+        /// The two encoding-and-flush details are the ones hand-rolled copies kept missing. .NET's
         /// stdin writer does not auto-flush, so without <c>AutoFlush</c> a <c>quit</c> sits in the
         /// writer's buffer forever and the graceful shutdown silently becomes a kill. And the
         /// default console encoding is the OS ANSI code page, so a path or window title outside it
@@ -49,12 +70,15 @@ namespace Prisc.UI
         /// helper's first command line.
         /// </para>
         /// </summary>
-        /// <param name="workingDirectory">Overrides the default (the executable's own directory).</param>
+        /// <param name="log">Where a failed job assignment is noted; may be null.</param>
         /// <exception cref="InvalidOperationException">The process could not be started.</exception>
-        public static Process Start(string exePath, IReadOnlyList<string> args, string workingDirectory = null)
+        public static Process Start(string exePath, IReadOnlyList<string> args, HelperStartOptions options = null,
+            HelperLog log = null)
         {
             if (String.IsNullOrEmpty(exePath))
                 throw new ArgumentException("A helper process needs an executable path.", nameof(exePath));
+
+            options ??= new HelperStartOptions();
 
             // no BOM: the helper reads its stdin as lines of text, and a BOM is not whitespace.
             var utf8 = new UTF8Encoding(false);
@@ -63,9 +87,9 @@ namespace Prisc.UI
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                WorkingDirectory = String.IsNullOrEmpty(workingDirectory)
+                WorkingDirectory = String.IsNullOrEmpty(options.WorkingDirectory)
                     ? Path.GetDirectoryName(Path.GetFullPath(exePath))
-                    : workingDirectory,
+                    : options.WorkingDirectory,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -82,12 +106,24 @@ namespace Prisc.UI
                     psi.ArgumentList.Add(arg);
             }
 
+            if (options.Environment != null)
+            {
+                foreach (var (key, value) in options.Environment)
+                    psi.Environment[key] = value;
+            }
+
             Debug.WriteLine("Starting helper process: " + exePath + " "
                             + String.Join(" ", args ?? (IReadOnlyList<string>)Array.Empty<string>()));
 
             var proc = Process.Start(psi);
             if (proc == null)
                 throw new InvalidOperationException("Failed to start helper process: " + exePath);
+
+            if (options.KillWithParent)
+                JobObject.TryAssign(proc, log);
+
+            if (options.GrantForeground)
+                GrantForeground(proc);
 
             proc.StandardInput.AutoFlush = true;
             return proc;
@@ -108,7 +144,7 @@ namespace Prisc.UI
 
             try
             {
-                await Task.WhenAll(Array.FindAll(pumps, p => p != null)).WaitAsync(timeout);
+                await Task.WhenAll(Array.FindAll(pumps, p => p != null)).WaitAsync(timeout).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -119,34 +155,50 @@ namespace Prisc.UI
         /// <summary>
         /// Grants <paramref name="proc"/> the right to call <c>SetForegroundWindow</c>, for helpers
         /// that put a window of their own on screen (prisc_share_region's "share this window"
-        /// prompt, prisc_scroll_driver's target activation).
+        /// prompt, prisc_scroll_driver's target activation, the capture overlay).
         /// <para>
         /// Windows refuses a freshly spawned process the foreground by default; this hands it our
-        /// own foreground rights. Strictly best-effort: it only works while *we* still hold those
+        /// own foreground rights. Strictly best-effort: it only works while we still hold those
         /// rights (so the caller should spawn while Prisc.Ui is the foreground app), it is a no-op
-        /// on every other platform, and every helper carries on without it — its window simply
+        /// on every other platform, and every helper carries on without it: its window simply
         /// blinks in the taskbar instead of coming to the front.
         /// </para>
         /// </summary>
         public static void GrantForeground(Process proc)
         {
-            if (proc == null || !OperatingSystem.IsWindows())
+            if (proc == null)
                 return;
 
             try
             {
-                AllowSetForegroundWindow(proc.Id);
+                GrantForeground(proc.Id);
             }
             catch (Exception ex)
             {
-                // the process may already have exited (Process.Id throws once it is reaped), or
-                // user32 may be unavailable in an exotic session; neither is worth reporting.
+                // the process may already have exited (Process.Id throws once it is reaped).
                 Debug.WriteLine("AllowSetForegroundWindow failed: " + ex.Message);
             }
         }
 
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
+        /// <inheritdoc cref="GrantForeground(Process)"/>
+        public static void GrantForeground(int processId)
+        {
+            if (!OperatingSystem.IsWindows())
+                return;
+
+            try
+            {
+                AllowSetForegroundWindow(processId);
+            }
+            catch (Exception ex)
+            {
+                // user32 may be unavailable in an exotic session; not worth reporting.
+                Debug.WriteLine("AllowSetForegroundWindow failed: " + ex.Message);
+            }
+        }
+
+        [DllImport("user32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         private static extern bool AllowSetForegroundWindow(int dwProcessId);
     }
 }

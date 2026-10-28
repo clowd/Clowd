@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using Prisc.Ipc;
 
 namespace Prisc.UI
 {
@@ -111,7 +112,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         // libobs is chatty on stderr for the life of the process; an hours-long recording
         // must not accumulate unboundedly (§4.2). The caps stay the recorder's own numbers even
         // though the buffer itself is now shared code — the other drivers keep theirs.
-        private readonly HelperProcessLog _log = new(maxLines: 1000, maxChars: 256 * 1024);
+        private readonly HelperLog _log = new(maxLines: 1000, maxChars: 256 * 1024);
 
         private Process _proc;
         private Task _stdoutPump;
