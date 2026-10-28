@@ -48,7 +48,7 @@ namespace Prisc.UI
 
         // whether the standby capturer's hook should be paused: true while the shell records a
         // gesture (HotkeyManager.IsRecording), so the combination being recorded is not caught
-        // there as well. Re-sent after every READY, since a restarted capturer starts unpaused.
+        // there as well. Re-sent after every `ready`, since a restarted capturer starts unpaused.
         private static volatile bool s_hotkeysPaused;
 
         /// <summary>True while the standby capturer's overlay is on screen (or an accepted
@@ -85,10 +85,10 @@ namespace Prisc.UI
 
         /// <summary>
         /// Routes a shell-initiated capture (tray, menu) to the waiting standby process.
-        /// True: handled — either sent, or dropped because an overlay is already up (matching
+        /// True: handled, either sent or dropped because an overlay is already up (matching
         /// how the capturer treats its own hotkeys). False: standby cannot take it right now
-        /// (no supervisor, faulted, or between capture and READY) — the caller must run the
-        /// classic one-shot capture instead. Nothing is ever queued: a request that cannot be
+        /// (no supervisor, faulted, or between a capture and the next <c>ready</c>), so the
+        /// caller must run the classic one-shot capture instead. Nothing is ever queued: a request that cannot be
         /// satisfied promptly is either dropped as a duplicate or taken over by the fallback.
         /// </summary>
         public static bool TryCapture(CaptureMode mode)
@@ -450,7 +450,7 @@ namespace Prisc.UI
         }
 
         /// <summary>Pauses or resumes the standby capturer's hotkeys (best-effort: a capturer that
-        /// is busy or restarting gets the current value with its next READY). Any thread.</summary>
+        /// is busy or restarting gets the current value with its next <c>ready</c>). Any thread.</summary>
         public static void SetHotkeysPaused(bool paused)
         {
             s_hotkeysPaused = paused;
@@ -474,8 +474,8 @@ namespace Prisc.UI
         {
             try
             {
-                // built INSIDE the gate so lock order equals snapshot order: a forced READY
-                // send racing a PropertyChanged send must not put older settings on the
+                // built INSIDE the gate so lock order equals snapshot order: the forced send
+                // after a `ready` racing a PropertyChanged send must not put older settings on the
                 // wire last (the pipe write already sits under this lock anyway)
                 lock (_stdinGate)
                 {
