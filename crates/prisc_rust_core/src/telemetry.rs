@@ -91,6 +91,17 @@ const PANIC_TARGET: &str = "prisc_panic";
 /// and it reports through its spawner instead (`crates/prisc_capture/src/ocr/client.rs`,
 /// `AiClient.cs`).
 pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
+    start(app, true)
+}
+
+/// [`init`] for a helper spawned per job (`prisc_vid2gif`, one process per export): the same
+/// client with release-health sessions off, so it reports panics without skewing the session
+/// counts towards the number of exports.
+pub fn init_job(app: &'static str) -> Option<sentry::ClientInitGuard> {
+    start(app, false)
+}
+
+fn start(app: &'static str, sessions: bool) -> Option<sentry::ClientInitGuard> {
     if !reporting_compiled_in() {
         return None;
     }
@@ -106,7 +117,7 @@ pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
             release: Some(release()),
             environment: Some(Cow::Borrowed("production")),
             attach_stacktrace: true,
-            auto_session_tracking: true,
+            auto_session_tracking: sessions,
             session_mode: sentry::SessionMode::Application,
             // no window titles, file paths, or captured pixels
             send_default_pii: false,
@@ -126,6 +137,32 @@ pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
     });
 
     Some(guard)
+}
+
+/// Ends the release-health session (`exited` for exit code 0, `abnormal` otherwise) and flushes
+/// queued events, waiting at most `timeout`. For processes that leave through an exit call rather
+/// than by returning from `main`: the init guard is never dropped there, so without this the
+/// session never ends and anything queued is lost. A no-op when no client was initialised.
+pub fn shutdown(code: i32, timeout: std::time::Duration) {
+    if !reporting_compiled_in() {
+        return;
+    }
+    let hub = sentry::Hub::main();
+    let Some(client) = hub.client() else {
+        return;
+    };
+    let status = if code == 0 {
+        sentry::protocol::SessionStatus::Exited
+    } else {
+        sentry::protocol::SessionStatus::Abnormal
+    };
+    hub.end_session_with_status(status);
+    client.flush(Some(timeout));
+}
+
+/// [`shutdown`] with a 2 s bound, shaped for `prisc_ipc::lifetime::on_exit`.
+pub fn shutdown_hook(code: i32) {
+    shutdown(code, std::time::Duration::from_secs(2));
 }
 
 /// Flushes queued events. Call before `process::exit`, which skips the init

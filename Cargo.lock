@@ -3662,6 +3662,7 @@ dependencies = [
  "euclid",
  "image",
  "log",
+ "prisc_ipc",
  "sentry",
  "serde",
  "serde_json",
