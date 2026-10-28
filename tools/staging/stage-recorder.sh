@@ -151,9 +151,10 @@ stage_macos() {
   # 6. Verify relocation: relative rpaths only, no build-tree leakage.
   echo "=== prisc_recorder LC_RPATH ==="
   otool -l "$dist/prisc_recorder" | grep -A2 'cmd LC_RPATH' | awk '$1=="path"{print "  rpath:",$2}'
-  if otool -l "$dist/prisc_recorder" | grep -Eq "/Users/|obs-build|/\.deps/"; then
+  # tail skips otool's header line, which echoes the (absolute) path of the binary itself.
+  if otool -l "$dist/prisc_recorder" | tail -n +2 | grep -Eq "/Users/|obs-build|/\.deps/"; then
     echo "::error::prisc_recorder still references an absolute build-tree path"
-    otool -l "$dist/prisc_recorder" | grep -E "/Users/|obs-build|/\.deps/" || true
+    otool -l "$dist/prisc_recorder" | tail -n +2 | grep -E "/Users/|obs-build|/\.deps/" || true
     exit 1
   fi
   codesign -v "$dist/prisc_recorder" || { echo "::error::prisc_recorder signature invalid"; exit 1; }

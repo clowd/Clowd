@@ -53,7 +53,7 @@ pub fn split_mono_planes(data: &[u8], h: u32, stride: usize) -> Option<(&[u8], &
 /// alpha cursor (whose AND mask is vestigial) from a legacy masked one whose
 /// 32bpp plane leaves the alpha channel at zero everywhere.
 pub fn has_alpha(bgra: &[u8]) -> bool {
-    bgra.chunks_exact(4).any(|p| p[3] != 0)
+    bgra.as_chunks::<4>().0.iter().any(|p| p[3] != 0)
 }
 
 #[cfg(test)]
