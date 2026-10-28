@@ -12,10 +12,10 @@ name: CI
 # build no longer waits behind the recorder's.
 #
 # Job graph:
-#   version                                    -> artifact `version` (release.yml reads it)
+#   version                                    -> artifact `version` (release.yml reads it), output `version`
 #   recorder        build-recorder.yml         -> recorder-<rid>, Windows + macOS
 #   recorder-linux  build-recorder.yml         check only, nothing consumes it
-#   rust            build-rust.yml             -> rust-<rid>
+#   rust            build-rust.yml             -> rust-<rid>, needs version (stamps it)
 #   ui              build-ui.yml               -> ui-<rid>
 #   test                                       Rust gate + Shared/Drawing dotnet tests (no needs)
 #   test-video      needs recorder             runs even if it fails; the FFmpeg tests then skip
@@ -33,9 +33,14 @@ concurrency:
 
 jobs:
   # release.yml downloads this from a completed run and trusts it as that run's version.
+  # The one place CI computes the version: build-rust.yml takes it as an input rather than
+  # installing .NET and nbgv to compute it again (the .NET builds stamp it through nbgv's
+  # MSBuild integration, from the same version.json and history).
   version:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      version: ${{ steps.nbgv.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -43,11 +48,13 @@ jobs:
           fetch-depth: 0
 
       - name: Compute nbgv version
+        id: nbgv
         run: |
           dotnet tool update -g nbgv
           # Capture first, write after: nbgv reads a repo-root version.txt as a legacy version file and crashes on the empty one tee would leave.
           VERSION="$(nbgv get-version -v SimpleVersion)"
           echo "$VERSION" | tee version.txt
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Upload version artifact
         uses: actions/upload-artifact@v7
@@ -72,7 +79,10 @@ jobs:
       platforms: linux
 
   rust:
+    needs: version
     uses: ./.github/workflows/build-rust.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
     secrets:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
@@ -260,6 +270,17 @@ jobs:
           unzip -q "artifacts/ui-${{ matrix.rid }}.zip" -d publish
           unzip -qo "artifacts/rust-${{ matrix.rid }}.zip" -d publish
           unzip -q "artifacts/recorder-${{ matrix.rid }}.zip" -d publish/recorder
+
+      # Checked against tools/staging/shipped.sh, the list the three builds staged from, so a
+      # binary that fell out of one of them fails here rather than in a release.
+      - name: Checkout (staging scripts)
+        uses: actions/checkout@v7
+        with:
+          path: src
+          sparse-checkout: tools/staging
+
+      - name: Verify package contents
+        run: src/tools/staging/verify-package.sh "${{ matrix.rid }}" publish
 
       # upload-artifact does not preserve unix file modes, but a zip does. The checks make sure
       # the hop through this Linux runner kept the apphost's execute bit and the recorder's

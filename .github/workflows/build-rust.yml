@@ -13,6 +13,11 @@ name: Build rust
 # modes, and the macOS executables need theirs.
 on:
   workflow_call:
+    inputs:
+      version:
+        description: The nbgv version ci.yml's version job computed, stamped into the Sentry release name (crates/prisc_rust_core/src/telemetry.rs) and the MSIX manifest.
+        type: string
+        required: true
     secrets:
       SENTRY_AUTH_TOKEN:
         required: false
@@ -28,43 +33,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ai: whether the prisc_ai inference binary builds for this
-          # target. false only on osx-x64: upstream ONNX Runtime dropped
-          # macOS x86_64, so ort has no binaries for it — the app grays the
-          # AI effects out there and the overlay reports OCR as unavailable.
+          # What each leg builds and ships (prisc_ai only where ONNX Runtime
+          # exists, the shell extension only on Windows) comes from
+          # tools/staging/shipped.sh, the list build.sh uses too.
           - rid: win-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            ai: true
-            exe: .exe
             msix-arch: x64
           - rid: win-arm64
             os: windows-latest
             target: aarch64-pc-windows-msvc
-            ai: true
-            exe: .exe
             msix-arch: arm64
           - rid: osx-x64
             os: macos-15
             target: x86_64-apple-darwin
-            ai: false
-            exe: ""
           - rid: osx-arm64
             os: macos-15
             target: aarch64-apple-darwin
-            ai: true
-            exe: ""
     runs-on: ${{ matrix.os }}
     # Lifted to the job so the Sentry step can test the token in an `if:`, where secrets are unavailable but env is; no SENTRY_ORG because an org token carries the slug itself.
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      # The Rust build has no nbgv hook, so the version ci.yml computed once is stamped into the
+      # Sentry release name (crates/prisc_rust_core/src/telemetry.rs) and the MSIX manifest.
+      PRISC_VERSION: ${{ inputs.version }}
+      OUT: target/${{ matrix.target }}/release
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          # nbgv needs full history to compute the version height.
-          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -77,132 +74,34 @@ jobs:
         with:
           key: ${{ matrix.rid }}-${{ hashFiles('Cargo.toml', '.cargo/config.toml') }}
 
-      # Only for nbgv, which stamps the version into the capture binary and the MSIX manifest.
-      - name: Install .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-
-      # The Rust build has no nbgv hook, so stamp the same version into its Sentry release name (crates/prisc_rust_core/src/telemetry.rs).
-      - name: Resolve version for capture binary
-        shell: bash
-        run: |
-          dotnet tool update -g nbgv
-          echo "PRISC_VERSION=$(nbgv get-version -v SimpleVersion)" >> "$GITHUB_ENV"
-
       # One invocation rather than one per crate, so codegen and the LTO links overlap instead of leaving the runner idle.
       # Explicit packages: the workspace also holds the recorder crates, which build-recorder.yml builds.
+      # The ort crate's build downloads pyke's prebuilt ONNX Runtime for the target and links prisc_ai statically.
       - name: Build rust binaries
         shell: bash
         run: |
-          PKGS="-p prisc_capture -p prisc_scroll_driver -p prisc_hotkeys"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            PKGS="$PKGS -p prisc_shell_ext"
-          fi
-          # The ort crate's build downloads pyke's prebuilt ONNX Runtime for the target and links it statically (see the matrix `ai` flag).
-          if [ "${{ matrix.ai }}" = "true" ]; then
-            PKGS="$PKGS -p prisc_ai"
-          fi
-          cargo build --release --target ${{ matrix.target }} $PKGS
+          # shellcheck disable=SC2046 # word-split `-p <crate>` pairs
+          cargo build --release --target ${{ matrix.target }} $(tools/staging/stage-app.sh packages ${{ matrix.rid }})
 
       # Without these an LTO'd release build reports mangled frames with no file or line; skipped rather than failed when the token is absent (forks).
       # The recorder has no Sentry integration, so it uploads no debug files.
-      - name: Upload capture debug files to Sentry
+      - name: Upload debug files to Sentry
         if: env.SENTRY_AUTH_TOKEN != ''
         shell: bash
         run: |
           npm install -g @sentry/cli
-          OUT="target/${{ matrix.target }}/release"
-          # Name the artifacts rather than the directory, which would recurse into deps/ and upload every dependency's intermediates.
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            DIF="$OUT/prisc_capture.pdb"
-            SCROLL_DIF="$OUT/prisc_scroll_driver.pdb"
-            AI_DIF="$OUT/prisc_ai.pdb"
-          else
-            DIF="$OUT/prisc_capture.dSYM"
-            SCROLL_DIF="$OUT/prisc_scroll_driver.dSYM"
-            AI_DIF="$OUT/prisc_ai.dSYM"
-          fi
-          # The executable goes up alongside the debug file for its symbol table.
-          sentry-cli debug-files upload "$DIF" "$OUT/prisc_capture${{ matrix.exe }}"
-          sentry-cli debug-files upload "$SCROLL_DIF" "$OUT/prisc_scroll_driver${{ matrix.exe }}"
-          # absent on the one leg that does not build the AI inference binary
-          if [ "${{ matrix.ai }}" = "true" ]; then
-            sentry-cli debug-files upload "$AI_DIF" "$OUT/prisc_ai${{ matrix.exe }}"
-          fi
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            sentry-cli debug-files upload "$OUT/prisc_shell_ext.pdb" "$OUT/prisc_shell_ext.dll"
-            sentry-cli debug-files upload "$OUT/prisc_hotkeys.pdb" "$OUT/prisc_hotkeys.dll"
-          else
-            sentry-cli debug-files upload "$OUT/libprisc_hotkeys.dylib.dSYM" "$OUT/libprisc_hotkeys.dylib"
-          fi
-
-      # stage/ unpacks into the package directory beside Prisc.Ui. The driver (and prisc_ai,
-      # below) sit beside the overlay, which resolves them as siblings of its own executable.
-      - name: Stage capture binary
-        run: |
-          mkdir -p stage
-          cp "target/${{ matrix.target }}/release/prisc_capture${{ matrix.exe }}" stage/
-        shell: bash
-
-      - name: Stage scrolling capture driver
-        run: cp "target/${{ matrix.target }}/release/prisc_scroll_driver${{ matrix.exe }}" stage/
-        shell: bash
-
-      # The global hotkey library Prisc.Ui P/Invokes, beside it where HotkeysLibraryLocator looks.
-      # release.yml signs it with the rest: vpk's Trusted Signing pass covers every dll in the pack
-      # dir, and the macOS app signing and notarization cover every Mach-O in the bundle.
-      - name: Stage hotkeys library
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then cp "target/${{ matrix.target }}/release/prisc_hotkeys.dll" stage/
-          else cp "target/${{ matrix.target }}/release/libprisc_hotkeys.dylib" stage/; fi
-        shell: bash
-
-      # Beside Prisc.Ui (where AiLoader looks for it) and beside the overlay (which spawns it for OCR).
-      - name: Stage AI inference binary
-        if: matrix.ai
-        run: cp "target/${{ matrix.target }}/release/prisc_ai${{ matrix.exe }}" stage/
-        shell: bash
-
-      # prisc_ai is GPL-3.0 (it embeds the RobustVideoMatting weights);
-      # GPL sections 4/6 require the license text and source offer to travel
-      # with every distributed copy.
-      - name: Stage AI inference license
-        if: matrix.ai
-        run: |
-          cp crates/prisc_ai/LICENSE stage/prisc_ai.LICENSE.txt
-          cp crates/prisc_ai/NOTICE.txt stage/prisc_ai.NOTICE.txt
-        shell: bash
-
-      # The runtime itself is statically linked, but the DirectML EP needs
-      # its helper dylib beside the exe (both Windows arches). The macOS
-      # CoreML EP is fully static — nothing to ship.
-      - name: Stage execution-provider dylibs (Windows)
-        if: matrix.ai && runner.os == 'Windows'
-        run: cp "target/${{ matrix.target }}/release/DirectML.dll" stage/
-        shell: bash
-
-      # prisc_ai is the app's one /MD binary (its build.rs swaps
-      # it off `+crt-static` to match pyke's ONNX Runtime libs), so it
-      # imports msvcp140/vcruntime140 at runtime. Those are not OS
-      # components; ship them app-local from the runner's own VS redist,
-      # matching the package's architecture. Every other binary beside
-      # Prisc.Ui stays crt-static and needs none of this (the recorder/
-      # folder carries its own copies for libobs).
-      - name: Stage VC++ CRT (Windows)
-        if: matrix.ai && runner.os == 'Windows'
-        run: |
-          CRT_DIR=$(find "/c/Program Files/Microsoft Visual Studio" -type d \
-            -path "*/VC/Redist/MSVC/*/${{ matrix.msix-arch }}/Microsoft.VC*.CRT" 2>/dev/null | sort | tail -1)
-          if [ -z "$CRT_DIR" ]; then echo "VC redist dir not found" >&2; exit 1; fi
-          for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do
-            if [ -f "$CRT_DIR/$f" ]; then cp "$CRT_DIR/$f" stage/; fi
+          tools/staging/stage-app.sh debug-files ${{ matrix.rid }} "$OUT" | while IFS=$'\t' read -r dif bin; do
+            sentry-cli debug-files upload "$dif" "$bin"
           done
-          # the two every-arch dlls must have made it; fail loudly here rather
-          # than with a cryptic loader error on user machines
-          test -f stage/msvcp140.dll
-          test -f stage/vcruntime140.dll
+
+      # stage/ unpacks into the package directory beside Prisc.Ui: the overlay, the scrolling
+      # capture driver, the global hotkey library and prisc_ai with its license, DirectML.dll and
+      # (Windows) the VC++ runtime it alone imports. release.yml signs them with the rest: vpk's
+      # Trusted Signing pass covers every dll in the pack dir, and the macOS app signing and
+      # notarization cover every Mach-O in the bundle.
+      - name: Stage rust binaries
         shell: bash
+        run: tools/staging/stage-app.sh stage ${{ matrix.rid }} "$OUT" stage
 
       # The version in the filename means a changed extension arrives under a fresh name that a lock on the old copy cannot block.
       - name: Stage shell extension (Windows)
@@ -210,7 +109,7 @@ jobs:
         run: |
           EXT_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "prisc_shell_ext") | .version')
           echo "PRISC_EXT_VERSION=$EXT_VERSION" >> "$GITHUB_ENV"
-          cp "target/${{ matrix.target }}/release/prisc_shell_ext.dll" "stage/PriscShellExt_${EXT_VERSION}.dll"
+          cp "$OUT/prisc_shell_ext.dll" "stage/PriscShellExt_${EXT_VERSION}.dll"
         shell: bash
 
       # Sparse package: the msix holds only the manifest + logos and /nv skips the payload validation that would reject its references to the external dll.
