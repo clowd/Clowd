@@ -365,7 +365,7 @@ It is a **separate binary**, not a mode of the capturer. Nothing it does needs
 a window, an event loop, a GPU or the screen-recording permission dance, and
 bringing any of that up would put pixels on screen in front of the content it
 is about to photograph. It ships beside `prisc_capture`, which is where
-`CaptureBinaryLocator.ResolveScrollDriver` looks for it.
+`HelperLocator` looks for it.
 
 **Windows and macOS.** The loop, the caps, the stitcher, this protocol and the
 session output are one implementation; the OS half — injecting a wheel,

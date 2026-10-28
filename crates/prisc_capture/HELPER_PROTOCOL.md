@@ -5,10 +5,8 @@ process Prisc ships. It replaces the four stdout dialects in use today (recorder
 JSONL, vid2gif/VideoRender text, standby `PRISC_*` lines) and the three stdin dialects (recorder
 text, share text, scroll/standby NDJSON).
 
-Status: **spec, not implemented.** Until the migration in §8 lands, the per-helper docs
-(`CAPTURE_PROTOCOL.md` §1.2/§2.2/§2.3, `crates/prisc_recorder/README.md`, the header of
-`crates/prisc_share_region/src/main.rs` and `crates/prisc_vid2gif/src/main.rs`) describe what
-ships. `CAPTURE_PROTOCOL.md` stays authoritative for everything that is not stdio: CLI flags,
+Status: **implemented.** Every helper and its C# client speak this protocol.
+`CAPTURE_PROTOCOL.md` stays authoritative for everything that is not stdio: CLI flags,
 the session-directory files, `session.json`, the OCR request header.
 
 Scope:
