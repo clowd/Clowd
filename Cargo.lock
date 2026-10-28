@@ -3651,9 +3651,12 @@ dependencies = [
  "euclid",
  "image",
  "log",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
  "sentry",
  "serde",
  "serde_json",
+ "windows",
 ]
 
 [[package]]
