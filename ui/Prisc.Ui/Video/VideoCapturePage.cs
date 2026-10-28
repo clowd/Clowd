@@ -1046,7 +1046,7 @@ namespace Prisc.UI
         /// <summary>
         /// The webcam track this recording ended up with, or null if it has none. Normally read
         /// straight from the recorder's own <c>tracks</c> report (started_recording, refreshed on
-        /// stopped_recording); a recorder too old to send one falls back to probing the finished
+        /// done); a recorder too old to send one falls back to probing the finished
         /// file, which is the only way an existing recording can be classified at all. The probe is
         /// deliberately best-effort: a missing FFmpeg only costs the auto-open, never the session.
         /// </summary>

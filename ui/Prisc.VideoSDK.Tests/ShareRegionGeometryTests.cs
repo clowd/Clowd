@@ -347,7 +347,7 @@ namespace Prisc.VideoSDK.Tests
         /// cases: over every handle and a spread of deltas that cross, overshoot and collapse the
         /// rectangle, the result is ALWAYS a region the helper would accept. Anything that escapes
         /// this — a negative extent, an odd side, a side under the floor — is a rectangle that
-        /// reaches <c>move</c> and comes back as a <c>command_error</c>, which the UI can only
+        /// reaches <c>move</c> and comes back as a non-fatal <c>error</c>, which the UI can only
         /// report as a failed resize.</summary>
         [Fact]
         public void A_crossing_drag_never_produces_a_negative_extent()

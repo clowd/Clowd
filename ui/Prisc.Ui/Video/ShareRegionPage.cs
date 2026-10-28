@@ -115,7 +115,7 @@ namespace Prisc.UI
             Active,
 
             /// <summary>Exactly one <c>move</c> has been written and we are waiting for
-            /// <c>region_changed</c>, a <c>command_error</c>, or the 2000 ms backstop.</summary>
+            /// <c>region_changed</c>, a non-fatal <c>error</c>, or the 2000 ms backstop.</summary>
             Exiting,
         }
 
@@ -174,10 +174,10 @@ namespace Prisc.UI
 
         // Exactly one move may be in flight (the acks carry no request id, so a second could not be
         // matched to its own request). This is the guard, and every path out of the wait — the ack,
-        // a command_error, the backstop timer and teardown — clears it.
+        // a refusal error, the backstop timer and teardown — clears it.
         private bool _movePending;
 
-        // 2000 ms backstop on the move, because a refusal arrives as a command_error that carries
+        // 2000 ms backstop on the move, because a refusal arrives as an error that carries
         // no correlation id and can be missed or mis-attributed, and there is no other terminal
         // signal for a move that will never be applied.
         private DispatcherTimer _moveTimeout;
@@ -375,7 +375,7 @@ namespace Prisc.UI
         /// </summary>
         private void CreateResizeTimers()
         {
-            // The move backstop. A refused move answers command_error and emits no region_changed
+            // The move backstop. A refused move answers with an error and emits no region_changed
             // at all, and that error carries no correlation id, so this is the only guarantee that
             // the mode ends: without it a refusal that was missed leaves both tiles locked for the
             // rest of the session and the obscure this page owes the user never restored, so the
@@ -467,7 +467,7 @@ namespace Prisc.UI
         /// <para>Silent unless the region is actually hidden: pushing a mode change down the pipe
         /// while nothing is obscured would obscure a region the user has not asked to hide. Silent
         /// while resize mode runs, for the same reason <see cref="OnHideToggled"/> is, and because
-        /// the move abort path in <see cref="OnCommandError"/> consumes any <c>command_error</c> it
+        /// the move abort path in <see cref="OnCommandError"/> consumes any non-fatal <c>error</c> it
         /// sees while a move is pending — which is only sound while the move is the sole command
         /// this page has in flight.</para>
         /// </summary>
@@ -1073,12 +1073,12 @@ namespace Prisc.UI
             if (_closing || !_movePending)
                 return;
 
-            // A refused move emits ONLY command_error and never region_changed, and it is reachable
+            // A refused move emits ONLY an error and never region_changed, and it is reachable
             // in ordinary operation: the helper plans against the monitor snapshot it took at
             // bootstrap and never re-enumerates, so a move onto a display rearranged mid-session is
             // refused with "The capture region does not intersect any display" and nothing has
             // changed.
-            // command_error carries no correlation id, so consuming one here is an inference — safe
+            // the error carries no correlation id, so consuming one here is an inference — safe
             // because the only commands this page sends during Exiting are the move and nothing
             // else. OnHideToggled and OnShareSettingChanged both refuse while resize is running,
             // which is what keeps that true; anything added here that writes a command mid-move
