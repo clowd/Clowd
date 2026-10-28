@@ -110,12 +110,13 @@ namespace Prisc.UI
         /// <summary>
         /// The exact command line the driver is spawned with. Factored out so the argument
         /// contract is readable in one place: the driver rejects a missing or malformed
-        /// <c>--region</c>/<c>--point</c> outright (as a fatal <c>error</c> event, not a usage
-        /// error).
+        /// <c>--region</c>/<c>--point</c> outright, after <c>hello</c>, as a fatal
+        /// <c>error{code:"usage"}</c> and exit 2. Only clap's own rejection exits 2 with no protocol
+        /// line beyond <c>hello</c>.
         /// <para>Every numeric option is emitted as a single <c>--name=value</c> token. A monitor
         /// left of or above the primary has a negative virtual-desktop origin, and clap reads a
         /// separate value token that begins with '-' as an unknown flag, and the run would die with
-        /// a usage error before emitting a single protocol line. <c>--session-dir</c> stays a
+        /// a usage error and no protocol line beyond <c>hello</c>. <c>--session-dir</c> stays a
         /// two-token pair: a path never starts with '-'.</para>
         /// </summary>
         internal static IReadOnlyList<string> BuildArguments(string sessionDir, ScreenRect region, ScreenPoint point,

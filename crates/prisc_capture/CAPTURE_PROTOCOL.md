@@ -36,7 +36,7 @@ shape (`session.rs`), the recognition contract (`ocr.rs`) and the coordinate
 space (`geometry.rs`). The protocol messages and exit codes are
 `crates/prisc_ipc`. C# counterparts:
 `ScreenCaptureService.cs` (spawn + session dispatch), `Scroll/ScrollDriver.cs`
-+ `Scroll/ScrollDriverProtocol.cs` (driver). There is no C# counterpart for
+(driver; messages in `crates/prisc_ipc`). There is no C# counterpart for
 §3 by design.
 
 ## 1. The capture overlay
