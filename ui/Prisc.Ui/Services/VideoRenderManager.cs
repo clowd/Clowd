@@ -165,7 +165,7 @@ namespace Prisc.UI.Services
             if (String.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
                 return null;
 
-            if (!FFmpegLoader.TryInitialize(FFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 Debug.WriteLine("Auto-render skipped, no FFmpeg: " + FFmpegLoader.FailureReason);
                 return null;
@@ -202,7 +202,7 @@ namespace Prisc.UI.Services
             if (source == null || !source.IsProject)
                 return null;
 
-            if (!FFmpegLoader.TryInitialize(FFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
                     "FFmpeg could not be loaded, so this project cannot be rendered." +
@@ -262,11 +262,6 @@ namespace Prisc.UI.Services
                 ? project
                 : null);
         }
-
-        /// <summary>Where the FFmpeg natives live; see
-        /// <see cref="ObsBinaryLocator.ResolveFFmpegDirectory"/>. Dev machines set
-        /// PRISC_FFMPEG_PATH, which FFmpegLoader checks before calling this.</summary>
-        private static string FFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         /// <summary>
         /// Creates the edited entry for <paramref name="source"/> and returns it immediately — the

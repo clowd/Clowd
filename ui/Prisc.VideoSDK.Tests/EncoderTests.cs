@@ -17,10 +17,8 @@ namespace Prisc.VideoSDK.Tests
 
         /// <summary>
         /// Initializes FFmpeg exactly the way production does (FFmpegLoader: PRISC_FFMPEG_PATH
-        /// first, then a fallback resolver pointing at the recorder build output — the DLLs
-        /// ship alongside that binary). The test resolver walks up from the test assembly to the
-        /// cargo workspace root (the Prisc repository), probing target/release then
-        /// target/debug, mirroring ObsBinaryLocator's dev layout.
+        /// first, then FFmpegLoader.FindBesideRecorder: the DLLs ship alongside the recorder, which
+        /// the dev walk-up finds in the cargo workspace's target directory).
         /// </summary>
         private static bool FFmpegAvailable => TestFFmpeg.Available;
 

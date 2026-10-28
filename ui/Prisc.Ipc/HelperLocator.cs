@@ -32,8 +32,10 @@ namespace Prisc.Ipc
         /// <summary>The one helper that is a .NET project rather than a cargo target.</summary>
         private const string VideoRenderStem = "Prisc.VideoRender";
 
-        /// <summary>Test seam (DenoiseGeneratorTests): when set, it answers every lookup in place of
-        /// the probe, by stem. A path it returns still has to exist. Null in production.</summary>
+        /// <summary>Test seam (DenoiseGeneratorTests, MatteGeneratorTests): when set, it is asked first,
+        /// by stem. A non-null answer is final (the path if it exists, otherwise "not found"); null
+        /// falls through to the normal probe, so a seam for one helper leaves the others alone. Null
+        /// in production.</summary>
         internal static volatile Func<string, string> Override;
 
         /// <summary>The executable for <paramref name="stem"/> (no extension), ready to spawn; null
@@ -55,8 +57,9 @@ namespace Prisc.Ipc
             {
                 string overridden;
                 try { overridden = seam(stem); }
-                catch { overridden = null; }
-                return !String.IsNullOrWhiteSpace(overridden) && File.Exists(overridden) ? Path.GetFullPath(overridden) : null;
+                catch { overridden = ""; }
+                if (overridden != null)
+                    return !String.IsNullOrWhiteSpace(overridden) && File.Exists(overridden) ? Path.GetFullPath(overridden) : null;
             }
 
             return Find(fileName, Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory, library);

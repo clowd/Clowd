@@ -47,8 +47,6 @@ namespace Prisc.UI.Services
     /// </summary>
     internal sealed class VidRenderRunner : IDisposable
     {
-        public const string EnvVarName = "PRISC_VID_RENDER_PATH";
-
         // vid-render honors a quit almost immediately (it polls the cancel token between frames),
         // so anything past this is a wedged child, not a slow one.
         private static readonly TimeSpan CancelGracePeriod = TimeSpan.FromSeconds(10);
@@ -76,44 +74,9 @@ namespace Prisc.UI.Services
         private readonly object _disposeLock = new();
         private Task _shutdownTask;
 
-        public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "Prisc.VideoRender.exe" : "Prisc.VideoRender";
+        public static string BinaryFileName => Prisc.Ipc.Platform.ExeName("Prisc.VideoRender");
 
-        /// <summary>Locates the render tool: the <c>PRISC_VID_RENDER_PATH</c> override first, then
-        /// beside the app executable (Prisc.VideoRender publishes into the same directory as
-        /// Prisc.Ui — see build-ui.yml), then the dev-build output next to this repo's csproj. Returns
-        /// null when it cannot be found.</summary>
-        public static string ResolveBinaryPath()
-        {
-            var env = Environment.GetEnvironmentVariable(EnvVarName);
-            if (!String.IsNullOrWhiteSpace(env) && File.Exists(env))
-                return Path.GetFullPath(env);
-
-            var local = Path.Combine(AppContext.BaseDirectory, BinaryFileName);
-            if (File.Exists(local))
-                return Path.GetFullPath(local);
-
-            // dev layout: walk up from the app's bin directory to the repo root and probe the
-            // Prisc.VideoRender build output (mirrors ObsBinaryLocator's dev probe).
-            var dir = new DirectoryInfo(Path.GetFullPath(AppContext.BaseDirectory));
-            while (dir != null)
-            {
-                var project = Path.Combine(dir.FullName, "ui", "Prisc.VideoRender");
-                if (Directory.Exists(project))
-                {
-                    foreach (var configuration in new[] { "Debug", "Release" })
-                    {
-                        var candidate = Path.Combine(project, "bin", configuration, "net10.0", BinaryFileName);
-                        if (File.Exists(candidate))
-                            return candidate;
-                    }
-                }
-
-                dir = dir.Parent;
-            }
-
-            return null;
-        }
+        public static string ResolveBinaryPath() => Prisc.Ipc.HelperLocator.Find("Prisc.VideoRender");
 
         /// <summary>
         /// Spawns vid-render against an already-written render-args file and resolves once it has
@@ -130,7 +93,7 @@ namespace Prisc.UI.Services
             var exePath = ResolveBinaryPath();
             if (exePath == null)
                 throw new FileNotFoundException(
-                    $"Could not find {BinaryFileName}. It ships alongside the recorder; set {EnvVarName} to its full path to override.",
+                    $"Could not find {BinaryFileName}. It ships alongside the recorder; set {Prisc.Ipc.HelperLocator.EnvVarName} to the folder holding it to override.",
                     BinaryFileName);
 
             var psi = new ProcessStartInfo(exePath)
@@ -153,7 +116,7 @@ namespace Prisc.UI.Services
             // the release layout the DLLs live in the recorder/ subdirectory — hand it the
             // exact directory we already resolved prisc_recorder from so the layouts can never
             // disagree. Harmless when prisc_recorder is missing (the tool's own probing runs).
-            var ffmpegDir = ObsBinaryLocator.ResolveFFmpegDirectory();
+            var ffmpegDir = Prisc.VideoSDK.FFmpegLoader.FindBesideRecorder();
             if (!String.IsNullOrEmpty(ffmpegDir))
                 psi.Environment["PRISC_FFMPEG_PATH"] = ffmpegDir;
 

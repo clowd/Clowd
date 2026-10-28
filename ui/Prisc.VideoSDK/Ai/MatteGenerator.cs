@@ -9,6 +9,7 @@ using Prisc.VideoSDK.Composition;
 using Prisc.VideoSDK.Media;
 using Prisc.VideoSDK.Model;
 using FFmpeg.AutoGen.Abstractions;
+using Prisc.Ipc;
 
 namespace Prisc.VideoSDK.Ai
 {
@@ -54,7 +55,7 @@ namespace Prisc.VideoSDK.Ai
             if (String.IsNullOrEmpty(cacheDir))
                 return false;
 
-            var exe = AiLoader.TryGetPath();
+            var exe = HelperLocator.Find("prisc_ai");
             if (exe == null)
                 return false;
 

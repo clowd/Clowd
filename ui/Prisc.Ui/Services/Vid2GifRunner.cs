@@ -44,8 +44,6 @@ namespace Prisc.UI.Services
     /// </summary>
     internal sealed class Vid2GifRunner : IDisposable
     {
-        public const string EnvVarName = "PRISC_VID2GIF_PATH";
-
         // prisc_vid2gif honors a quit almost immediately (it polls the cancel token between frames), so
         // anything past this is a wedged child, not a slow one.
         private static readonly TimeSpan CancelGracePeriod = TimeSpan.FromSeconds(10);
@@ -73,15 +71,9 @@ namespace Prisc.UI.Services
         private readonly object _disposeLock = new();
         private Task _shutdownTask;
 
-        public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "prisc_vid2gif.exe" : "prisc_vid2gif";
+        public static string BinaryFileName => Prisc.Ipc.Platform.ExeName("prisc_vid2gif");
 
-        /// <summary>Locates prisc_vid2gif: the <c>PRISC_VID2GIF_PATH</c> override first, otherwise the
-        /// directory prisc_recorder was found in — the two binaries ship side by side in every layout
-        /// (release bundle and cargo target dir alike). Returns null when it cannot be found.</summary>
-        public static string ResolveBinaryPath() =>
-            HelperBinary.EnsureExecutable(HelperBinary.ResolveBesideRecorder(
-                Environment.GetEnvironmentVariable(EnvVarName), ObsBinaryLocator.Resolve, BinaryFileName));
+        public static string ResolveBinaryPath() => Prisc.Ipc.HelperLocator.Find("prisc_vid2gif");
 
         /// <summary>
         /// Spawns prisc_vid2gif and resolves once it has exited, with whichever terminal message it sent.
@@ -99,7 +91,7 @@ namespace Prisc.UI.Services
             var exePath = ResolveBinaryPath();
             if (exePath == null)
                 throw new FileNotFoundException(
-                    $"Could not find {BinaryFileName}. It ships alongside the recorder; set {EnvVarName} to its full path to override.",
+                    $"Could not find {BinaryFileName}. It ships alongside the recorder; set {Prisc.Ipc.HelperLocator.EnvVarName} to the folder holding it to override.",
                     BinaryFileName);
 
             var utf8 = new UTF8Encoding(false); // no BOM: prisc_vid2gif reads stdin as lines of text

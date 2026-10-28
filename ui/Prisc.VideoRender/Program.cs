@@ -5,7 +5,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using Prisc.VideoSDK;
-using Prisc.VideoSDK.Ai;
 using Prisc.VideoSDK.Editing;
 using Prisc.VideoSDK.Media;
 using Prisc.VideoSDK.Model;
@@ -70,9 +69,8 @@ namespace Prisc.VideoRender
             {
                 var argsPath = ParseCommandLine(argv, out var outputOverride);
 
-                if (!FFmpegLoader.TryInitialize(FindFFmpegDirectory))
+                if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
                     throw new InvalidOperationException(FFmpegLoader.FailureReason);
-                AiLoader.Configure(FindAiBinary);
 
                 var job = LoadJob(argsPath, outputOverride);
                 output = job.OutputPath;
@@ -297,82 +295,6 @@ namespace Prisc.VideoRender
                 Encoder = encoder,
                 MaxHeight = maxHeight,
             };
-        }
-
-        // ------------------------------------------------------------------------ FFmpeg natives
-
-        /// <summary>
-        /// Where the FFmpeg natives live when <c>PRISC_FFMPEG_PATH</c> is unset. Release layout
-        /// first: the DLLs ship beside this binary (the runner starts us in our own directory for
-        /// exactly that reason, and vid-render loaded them the same way). Then the dev layout: the
-        /// Prisc repository's cargo target directory (built by <c>cargo rec</c>), mirroring
-        /// <c>ObsBinaryLocator</c> and the test suite's resolver.
-        /// </summary>
-        private static string FindFFmpegDirectory()
-        {
-            var baseDirectory = AppContext.BaseDirectory;
-            if (HasFFmpeg(baseDirectory))
-                return baseDirectory;
-
-            // Release layout: this exe publishes beside Prisc.Ui, and the FFmpeg DLLs ship in
-            // the recorder/ subdirectory (ci.yml). The runner also passes PRISC_FFMPEG_PATH
-            // explicitly; this probe keeps a manually-invoked exe working in that layout too.
-            var obsSubdir = Path.Combine(baseDirectory, "recorder");
-            if (HasFFmpeg(obsSubdir))
-                return obsSubdir;
-
-            // …and in a macOS bundle they are one level further in, under Frameworks/.
-            var obsFrameworks = Path.Combine(obsSubdir, "Frameworks");
-            if (HasFFmpeg(obsFrameworks))
-                return obsFrameworks;
-
-            var directory = new DirectoryInfo(baseDirectory);
-            while (directory != null)
-            {
-                if (File.Exists(Path.Combine(directory.FullName, "Cargo.toml")))
-                {
-                    foreach (var configuration in new[] { "release", "debug" })
-                    {
-                        var candidate = Path.Combine(directory.FullName, "target", configuration);
-                        if (HasFFmpeg(candidate))
-                            return candidate;
-                    }
-                }
-
-                directory = directory.Parent;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Where the <c>prisc_ai</c> inference binary ships when <c>PRISC_AI_PATH</c>
-        /// is unset (the loader consults the env var itself): beside this exe, the release
-        /// layout. The probe lives here rather than in the SDK because the SDK cannot know the
-        /// app's layout — the same seam as <see cref="FindFFmpegDirectory"/>.
-        /// </summary>
-        private static string FindAiBinary()
-        {
-            string name = OperatingSystem.IsWindows() ? "prisc_ai.exe" : "prisc_ai";
-            var candidate = Path.Combine(AppContext.BaseDirectory, name);
-            return File.Exists(candidate) ? candidate : null;
-        }
-
-        private static bool HasFFmpeg(string directory)
-        {
-            if (String.IsNullOrEmpty(directory))
-                return false;
-
-            // Named for the major the bindings were generated against, and built from the binding
-            // constant so a FFmpeg.AutoGen bump cannot leave a stale literal here. The unversioned
-            // libavcodec.dylib is deliberately not accepted: it is a dev symlink that says nothing
-            // about the major, and it is not the name the loader goes on to open.
-            int major = FFmpeg.AutoGen.Abstractions.ffmpeg.LIBAVCODEC_VERSION_MAJOR;
-            string probe = OperatingSystem.IsWindows() ? $"avcodec-{major}.dll"
-                : OperatingSystem.IsMacOS() ? $"libavcodec.{major}.dylib"
-                : $"libavcodec.so.{major}";
-
-            return File.Exists(Path.Combine(directory, probe));
         }
 
         // ---------------------------------------------------------------------------- protocol

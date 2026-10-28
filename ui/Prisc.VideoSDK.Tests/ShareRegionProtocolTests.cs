@@ -625,19 +625,6 @@ namespace Prisc.VideoSDK.Tests
             Assert.Equal("obscure blur 100", ShareRegionProtocol.BuildObscureCommand(ShareObscureMode.Blur, 1000));
         }
 
-        // ------------------------------------------------------------------ the binary
-
-        /// <summary>The helper is spawned by name out of the recorder payload, so the name has to
-        /// carry the platform's executable extension — asserted without spawning anything, because
-        /// the one-HWND invariant means a real spawn is never something a test may do.</summary>
-        [Fact]
-        public void The_helper_binary_is_named_for_the_platform()
-        {
-            Assert.Equal(OperatingSystem.IsWindows() ? "prisc_share_region.exe" : "prisc_share_region",
-                ShareRegionDriver.BinaryFileName);
-            Assert.Equal("PRISC_SHARE_REGION_PATH", ShareRegionDriver.EnvVarName);
-        }
-
         /// <summary>The capture API is a spawn-time argument and always emitted, so the helper's own
         /// default can never disagree with what the settings page shows. The values are the Rust
         /// parser's spellings — a mismatch is a spawn failure, not a fallback.</summary>

@@ -114,10 +114,10 @@ namespace Prisc.UI
         {
             var empty = new List<CameraDeviceInfo>();
 
-            var exePath = ObsBinaryLocator.Resolve();
+            var exePath = Prisc.Ipc.HelperLocator.Find("prisc_recorder");
             if (String.IsNullOrEmpty(exePath))
             {
-                Debug.WriteLine("Cannot enumerate cameras: " + ObsBinaryLocator.BinaryFileName + " was not found.");
+                Debug.WriteLine("Cannot enumerate cameras: prisc_recorder was not found.");
                 return empty;
             }
 

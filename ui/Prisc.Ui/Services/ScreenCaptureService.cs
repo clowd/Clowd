@@ -16,125 +16,6 @@ using Prisc.UI.Helpers;
 namespace Prisc.UI
 {
     /// <summary>
-    /// Locates the external Rust capture binaries (see CAPTURE_PROTOCOL.md): the capture overlay
-    /// <c>prisc_capture</c> and, beside it, the scrolling-capture driver
-    /// <c>prisc_scroll_driver</c>.
-    /// Probe order: the <c>PRISC_CAPTURE_PATH</c> environment variable, then alongside the Prisc.Ui
-    /// executable (release layout), then walking up from the app base directory to a cargo workspace
-    /// root and taking the more recently built of <c>target/debug</c> and <c>target/release</c>
-    /// (debug-time layout).
-    /// </summary>
-    public static class CaptureBinaryLocator
-    {
-        public const string EnvVarName = "PRISC_CAPTURE_PATH";
-
-        public static string BinaryFileName => Executable("prisc_capture");
-
-        /// <summary>The scrolling-capture driver (CAPTURE_PROTOCOL.md §2) — a separate process
-        /// from the overlay, spawned once the user has picked the region and the scroll point.
-        /// Windows-only: the overlay's SCROLL button is compiled out elsewhere.</summary>
-        public static string ScrollDriverFileName => Executable("prisc_scroll_driver");
-
-        private static string Executable(string stem) =>
-            OperatingSystem.IsWindows() ? stem + ".exe" : stem;
-
-        public static string Resolve() =>
-            Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory);
-
-        /// <summary>
-        /// Locates the scrolling-capture driver, which ships in the same directory as the overlay
-        /// in every layout — next to Prisc.Ui when installed, and in the same <c>target/</c>
-        /// profile directory when built locally. Deriving it from the overlay's resolved path
-        /// rather than probing again means the <c>PRISC_CAPTURE_PATH</c> override keeps pointing
-        /// both binaries at the same build. Returns null when either is missing.
-        /// </summary>
-        public static string ResolveScrollDriver() => ResolveScrollDriver(Resolve());
-
-        /// <summary>Testable overload. <paramref name="capturePath"/> is the overlay binary's
-        /// resolved path (null when it could not be found).</summary>
-        public static string ResolveScrollDriver(string capturePath)
-        {
-            var dir = String.IsNullOrEmpty(capturePath) ? null : Path.GetDirectoryName(capturePath);
-            if (String.IsNullOrEmpty(dir))
-                return null;
-
-            var driver = Path.Combine(dir, ScrollDriverFileName);
-            return File.Exists(driver) ? Path.GetFullPath(driver) : null;
-        }
-
-        /// <summary>Testable overload. Returns null when the binary cannot be found.</summary>
-        public static string Resolve(string envVarValue, string baseDirectory)
-        {
-            // (a) explicit override via environment variable
-            if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
-                return Path.GetFullPath(envVarValue);
-
-            // (b) next to the Prisc.Ui executable (release layout copies the binary alongside)
-            var local = Path.Combine(baseDirectory, BinaryFileName);
-            if (File.Exists(local))
-                return Path.GetFullPath(local);
-
-            // (c) walk up to a directory containing Cargo.toml (the cargo workspace root) and
-            // probe target/debug and target/release. Keep walking if a Cargo.toml has neither
-            // built binary (a crate manifest may sit below the workspace root that owns target/).
-            var dir = new DirectoryInfo(Path.GetFullPath(baseDirectory));
-            while (dir != null)
-            {
-                if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
-                {
-                    // When both profiles are built, the freshest one is the one being worked on.
-                    // Preferring debug unconditionally (the old behavior) made a just-built
-                    // --release binary unreachable for anyone with a stale target/debug lying
-                    // around, which is everybody who has ever run a plain `cargo build`.
-                    var debug = Path.Combine(dir.FullName, "target", "debug", BinaryFileName);
-                    var release = Path.Combine(dir.FullName, "target", "release", BinaryFileName);
-                    var debugBuilt = LastWriteUtcOrNull(debug);
-                    var releaseBuilt = LastWriteUtcOrNull(release);
-
-                    // Strictly-greater, so an exact tie keeps the old debug-wins behavior. Ties are
-                    // not theoretical: coarse filesystem timestamp granularity makes two builds a
-                    // moment apart compare equal.
-                    if (debugBuilt.HasValue && releaseBuilt.HasValue)
-                        return releaseBuilt.Value > debugBuilt.Value ? release : debug;
-                    if (debugBuilt.HasValue)
-                        return debug;
-                    if (releaseBuilt.HasValue)
-                        return release;
-                }
-
-                dir = dir.Parent;
-            }
-
-            return null;
-        }
-
-        /// <summary>Last-write time of <paramref name="path"/> in UTC, or null when it is absent or
-        /// cannot be stat'd. Doubles as the existence check so that a `cargo build`/`cargo clean`
-        /// running while Prisc is open — the normal state of affairs during development — makes a
-        /// candidate merely unselectable rather than throwing out of binary resolution entirely.
-        /// UTC throughout: comparing a local-time stamp against a UTC one picks the wrong profile
-        /// for most of the world, and by exactly an hour twice a year for the rest.</summary>
-        private static DateTime? LastWriteUtcOrNull(string path)
-        {
-            try
-            {
-                // One FileInfo, not File.Exists + File.GetLastWriteTimeUtc: FileInfo caches a single
-                // stat, so the existence answer and the timestamp describe the same instant.
-                var info = new FileInfo(path);
-                return info.Exists ? info.LastWriteTimeUtc : (DateTime?)null;
-            }
-            catch (IOException)
-            {
-                return null;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return null;
-            }
-        }
-    }
-
-    /// <summary>
     /// <see cref="IScreenCapturePage"/> backed by the external Rust capture process
     /// (CAPTURE_PROTOCOL.md). Mirrors the WPF CaptureWindow callback dispatch: a completed
     /// capture (session.json present) loads the session, names it "Screenshot" and opens the
@@ -205,13 +86,13 @@ namespace Prisc.UI
 
             try
             {
-                var binary = CaptureBinaryLocator.Resolve();
+                var binary = Prisc.Ipc.HelperLocator.Find("prisc_capture");
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The screen capture binary ({CaptureBinaryLocator.BinaryFileName}) could not be found. " +
-                        $"Run 'cargo build' in the Prisc repository, or set the {CaptureBinaryLocator.EnvVarName} " +
-                        "environment variable to its location.",
+                        $"The screen capture binary ({Prisc.Ipc.Platform.ExeName("prisc_capture")}) could not be found. " +
+                        $"Run 'cargo build' in the Prisc repository, or set the {Prisc.Ipc.HelperLocator.EnvVarName} " +
+                        "environment variable to the folder holding it.",
                         "Screen capture unavailable");
                     return;
                 }

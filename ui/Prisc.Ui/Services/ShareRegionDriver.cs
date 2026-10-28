@@ -80,13 +80,6 @@ namespace Prisc.UI
         private const int MaxLogLines = 1000;
         private const int MaxLogChars = 256 * 1024;
 
-        /// <summary>Overrides the located binary, for developers running a helper built somewhere
-        /// else. Mirrors <c>PRISC_RECORDER_PATH</c> / <c>PRISC_VID2GIF_PATH</c>.</summary>
-        public const string EnvVarName = "PRISC_SHARE_REGION_PATH";
-
-        public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "prisc_share_region.exe" : "prisc_share_region";
-
         private readonly ShareRegionProtocol _protocol = new();
         private readonly HelperLog _log = new(MaxLogLines, MaxLogChars);
 
@@ -195,18 +188,6 @@ namespace Prisc.UI
         }
 
         /// <summary>
-        /// Locates prisc_share_region: the <see cref="EnvVarName"/> override first, otherwise the
-        /// directory prisc_recorder was found in — the two ship side by side in every layout (the
-        /// release payload and the cargo target dir alike), so there is deliberately no second
-        /// search of its own to drift out of sync with <see cref="ObsBinaryLocator"/>. Returns null
-        /// when it cannot be found; the caller reports that, because only the caller knows what the
-        /// user was trying to do.
-        /// </summary>
-        public static string ResolveBinary() =>
-            HelperBinary.EnsureExecutable(HelperBinary.ResolveBesideRecorder(
-                Environment.GetEnvironmentVariable(EnvVarName), ObsBinaryLocator.Resolve, BinaryFileName));
-
-        /// <summary>
         /// Spawns the helper and resolves when it reports <c>initialized</c> — that is, when its
         /// "share this window" prompt is actually on screen and the user can point their meeting
         /// app at it. Does NOT wait for the user to answer; that is
@@ -234,7 +215,7 @@ namespace Prisc.UI
         /// ignores it on macOS.</param>
         /// <param name="accent">Fill of the prompt's OK button, or null for the helper's own blue.
         /// Windows only — on macOS the button is a native one in the system accent.</param>
-        /// <param name="exePath">The helper binary, from <see cref="ResolveBinary"/>.</param>
+        /// <param name="exePath">The helper binary, from <see cref="HelperLocator.Find"/>.</param>
         public async Task InitializeAsync(ScreenRect region, string title, bool captureCursor, int fps,
             ScreenCaptureMethod captureMethod, Color? accent, string exePath)
         {

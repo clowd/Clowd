@@ -165,7 +165,7 @@ namespace Prisc.UI
                         return;
                     }
 
-                    var binary = CaptureBinaryLocator.Resolve();
+                    var binary = Prisc.Ipc.HelperLocator.Find("prisc_capture");
                     if (binary == null)
                     {
                         // one-shot shows its "binary missing" dialog on the next attempt

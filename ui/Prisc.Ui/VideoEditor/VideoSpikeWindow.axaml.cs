@@ -66,7 +66,7 @@ namespace Prisc.UI.VideoEditor
 
         private async System.Threading.Tasks.Task StartPlaybackAsync()
         {
-            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 StatsText.Text = "FFmpeg unavailable: " + FFmpegLoader.FailureReason;
                 Console.WriteLine("[spike] FFmpeg unavailable: " + FFmpegLoader.FailureReason);
@@ -158,8 +158,6 @@ namespace Prisc.UI.VideoEditor
                 Console.WriteLine("[spike] seektest FAILED: " + ex);
             }
         }
-
-        private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         private void PrintStats()
         {

@@ -445,7 +445,7 @@ namespace Prisc.UI.VideoEditor
                 return;
             }
 
-            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 // no in-app playback available — hand the file to the OS player so the user still
                 // sees their recording, and say why the editor did not open. A project has no file
@@ -489,7 +489,7 @@ namespace Prisc.UI.VideoEditor
         /// </summary>
         public static void ShowBlankProject()
         {
-            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
                     UnavailableMessage(playerFallback: false), "Can't open the video editor");
@@ -566,8 +566,6 @@ namespace Prisc.UI.VideoEditor
             return Enumerable.Empty<VideoEditorWindow>();
         }
 
-        private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
-
         // ====================================================================
         // Session + playback
         // ====================================================================
@@ -602,7 +600,7 @@ namespace Prisc.UI.VideoEditor
 
         private async Task StartPlaybackAsync()
         {
-            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
             {
                 ShowStatus("Video playback unavailable: " + FFmpegLoader.FailureReason);
                 return;

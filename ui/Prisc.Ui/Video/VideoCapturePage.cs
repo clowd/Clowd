@@ -136,13 +136,13 @@ namespace Prisc.UI
                 if (outputDir != null)
                     _settings.OutputDirectory = outputDir;
 
-                var binary = ObsBinaryLocator.Resolve();
+                var binary = Prisc.Ipc.HelperLocator.Find("prisc_recorder");
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The recording binary ({ObsBinaryLocator.BinaryFileName}) could not be found. " +
-                        $"Run 'cargo rec' in the Prisc repository, or set the {ObsBinaryLocator.EnvVarName} " +
-                        "environment variable to its location.",
+                        $"The recording binary ({Prisc.Ipc.Platform.ExeName("prisc_recorder")}) could not be found. " +
+                        $"Run 'cargo rec' in the Prisc repository, or set the {Prisc.Ipc.HelperLocator.EnvVarName} " +
+                        "environment variable to the folder holding it.",
                         "Screen recording unavailable");
                     DeleteDirectory(_sessionDir);
                     Close();
@@ -1096,7 +1096,7 @@ namespace Prisc.UI
                         };
                 }
 
-                if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+                if (!FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder))
                     return null;
 
                 var info = MediaProbe.Probe(_savedPath);
@@ -1169,10 +1169,6 @@ namespace Prisc.UI
                 return null;
             }
         }
-
-        /// <summary>Production layout: the FFmpeg DLLs sit next to prisc_recorder; dev machines set
-        /// PRISC_FFMPEG_PATH, which FFmpegLoader checks before consulting this.</summary>
-        private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         /// <summary>
         /// Moves the finished mp4 out of the session directory into the folder the user chose,
