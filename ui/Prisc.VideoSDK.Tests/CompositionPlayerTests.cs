@@ -254,10 +254,18 @@ namespace Prisc.VideoSDK.Tests
                 $"did not end (state={player.State}, pos={player.Position})");
             Assert.Equal(player.Duration, player.Position);
 
-            // Play from Ended rewinds and restarts
+            // Play from Ended rewinds and restarts. Observed through StateChanged (raised
+            // synchronously, before the clock starts) rather than by polling: the restart hops the
+            // thread pool twice, and on a loaded runner a poll can miss the whole 1s replay.
+            var restarted = new TaskCompletionSource<TimeSpan>(TaskCreationOptions.RunContinuationsAsynchronously);
+            player.StateChanged += (_, state) =>
+            {
+                if (state == PlayerState.Playing)
+                    restarted.TrySetResult(player.Position);
+            };
             player.Play();
-            Assert.True(WaitUntil(
-                () => player.State == PlayerState.Playing && player.Position < player.Duration, 5000));
+            var restartPos = await restarted.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.True(restartPos < player.Duration, $"restarted at {restartPos}, not rewound");
         }
 
         [Fact]
