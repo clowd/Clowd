@@ -86,6 +86,7 @@ namespace Prisc.UI
         private bool _started;
         private Task _shutdownTask;
         private TaskCompletionSource _pendingShutdown;
+        private bool _startFailed;
 
         // protocol state; touched only by the one event pump (and the obscure counter by the writer)
         private ShareHandshake _handshake = ShareHandshake.Pending;
@@ -190,8 +191,12 @@ namespace Prisc.UI
             }
             catch
             {
-                // StartAsync has already disposed whatever it spawned
-                Volatile.Read(ref _pendingShutdown)?.TrySetResult();
+                // StartAsync has already disposed whatever it spawned, so a shutdown has nothing to wait for
+                lock (_sync)
+                {
+                    _startFailed = true;
+                    _pendingShutdown?.TrySetResult();
+                }
                 throw;
             }
 
@@ -366,7 +371,7 @@ namespace Prisc.UI
                     {
                         _shutdownTask = Task.Run(() => client.DisposeAsync().AsTask());
                     }
-                    else if (_started)
+                    else if (_started && !_startFailed)
                     {
                         // InitializeAsync is still waiting for hello; it completes this once it has the client
                         _pendingShutdown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

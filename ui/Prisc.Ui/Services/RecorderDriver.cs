@@ -105,6 +105,7 @@ namespace Prisc.UI
         private volatile bool _disposed;
         private Task _disposeTask;
         private TaskCompletionSource _pendingDispose;
+        private bool _startFailed;
 
         /// <summary>Raised on the UI thread for every <c>status</c> event while recording.</summary>
         public event EventHandler<RecorderEvent.Status> StatusReceived;
@@ -144,8 +145,12 @@ namespace Prisc.UI
             }
             catch
             {
-                // StartAsync has already disposed whatever it spawned
-                Volatile.Read(ref _pendingDispose)?.TrySetResult();
+                // StartAsync has already disposed whatever it spawned, so a dispose has nothing to wait for
+                lock (_sync)
+                {
+                    _startFailed = true;
+                    _pendingDispose?.TrySetResult();
+                }
                 throw;
             }
 
@@ -284,7 +289,7 @@ namespace Prisc.UI
                     return _disposeTask;
                 if (_client is { } client)
                     return _disposeTask = Task.Run(() => client.DisposeAsync().AsTask());
-                if (_ended == null)
+                if (_ended == null || _startFailed)
                     return _disposeTask = Task.CompletedTask;
 
                 // InitializeAsync is still waiting for hello; it completes this once it has the client
