@@ -17,7 +17,7 @@
 //!
 //! Uses the `windows` crate (0.62) rather than prisc_recorder's `windows-sys`.
 //! The window and the `App` state live for the whole process (exit only ever
-//! happens through `AppEvents::quit` → `prisc_obs_platform::exit_process`), which is
+//! happens through `AppEvents::quit` → `prisc_ipc::lifetime::exit`), which is
 //! why the `Box<App>` is deliberately leaked and no window handle is ever
 //! destroyed or freed here. The only handle that is destroyed is the prompt's
 //! OK button, at the moment the prompt phase ends; GDI+ is started for the
@@ -253,7 +253,7 @@ pub(super) fn wake() {
 
 /// All mutable UI state, reached by the wndproc through the window's
 /// GWLP_USERDATA. Leaked on purpose: the window and this state live exactly as
-/// long as the process, and every exit path diverges through `exit_process`, so
+/// long as the process, and every exit path diverges through `prisc_ipc::lifetime::exit`, so
 /// a Drop would never run anyway.
 ///
 /// Reentrancy note: a wndproc is reentered synchronously (our own SetWindowPos
@@ -291,8 +291,7 @@ struct App {
 }
 
 fn fatal(what: &str) -> ! {
-    eprintln!("Error: {what} failed");
-    prisc_obs_platform::exit_process(1);
+    crate::status::out().fatal(prisc_ipc::catalog::ErrorCode::InitFailed, format_args!("{what} failed"))
 }
 
 // -- offscreen placement ----------------------------------------------------
@@ -1119,13 +1118,13 @@ unsafe fn accept_prompt(app: *mut App) {
 /// is both the first point at which the answers are true — a `move` is not
 /// fully applied until the window itself has been resized, which happens below
 /// and not inside `set_region` — and the only place they can be kept in command
-/// order (see `Command::Error`). Exactly one line per command.
+/// order (see `Command::Malformed`). Exactly one line per command.
 /// (`sharing_started` is the other way round and belongs to main.rs — see
 /// `accept_prompt`.)
 unsafe fn drain_commands(app: *mut App) {
     for cmd in crate::ui::take_commands() {
         match cmd {
-            // Diverges into exit_process; nothing after this runs.
+            // Diverges into prisc_ipc::lifetime::exit; nothing after this runs.
             Command::Quit => (*app).events.quit(),
             Command::Move(requested) => {
                 // The app normalises and re-plans, and the window must adopt
@@ -1148,12 +1147,16 @@ unsafe fn drain_commands(app: *mut App) {
                         if !(*app).prompt_active {
                             park_offscreen((*app).mirror, applied, SET_WINDOW_POS_FLAGS(0));
                         }
-                        crate::status::emit_region_changed(applied);
+                        crate::status::out().emit(&prisc_ipc::catalog::share_region::Event::RegionChanged {
+            region: crate::status::wire_rect(applied),
+        });
                     }
                     // Refused: nothing moved, so there is no region to ack and
                     // an echo of the unchanged one would read as a successful
                     // move to that rect.
-                    Err(reason) => crate::status::emit_command_error(&reason),
+                    Err(reason) => {
+                        crate::status::out().error(prisc_ipc::catalog::ErrorCode::Failed, reason, false)
+                    }
                 }
             }
             Command::Obscure(mode) => {
@@ -1161,11 +1164,13 @@ unsafe fn drain_commands(app: *mut App) {
                 // Acked from the state that was actually stored, not from the
                 // parsed command, so the ack cannot claim a mode the renderer
                 // is not in.
-                crate::status::emit_obscure(crate::obscure::mode());
+                crate::status::out().emit(&crate::status::obscure_event(crate::obscure::mode()));
             }
             // A line the parser refused, answered in the position it arrived in
             // rather than whenever the reader thread happened to reach it.
-            Command::Error(reason) => crate::status::emit_command_error(&reason),
+            Command::Malformed(reason) => {
+                crate::status::out().error(prisc_ipc::catalog::ErrorCode::BadCommand, reason, false)
+            }
         }
     }
 }
@@ -1412,7 +1417,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
         MIRROR_HWND.store(mirror.0 as isize, Ordering::Release);
 
         // Leaked on purpose: process-lifetime window, exit only via
-        // events.quit() → exit_process (see the App doc comment).
+        // events.quit() → prisc_ipc::lifetime::exit (see the App doc comment).
         let app: *mut App = Box::into_raw(Box::new(App {
             events,
             region,
@@ -1459,7 +1464,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
         // window up by title or class to point the user at it, for instance —
         // against a window that has not been created yet. It cannot be emitted
         // after `run` returns, because `run` never returns.
-        crate::status::emit_initialized();
+        crate::status::out().emit(&prisc_ipc::catalog::share_region::Event::Initialized {});
 
         // One priming wake, in case the shell got a command in before the window
         // existed and its `wake` found a null HWND. Costs one message; removes

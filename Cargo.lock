@@ -3691,15 +3691,16 @@ name = "prisc_share_region"
 version = "0.1.0"
 dependencies = [
  "clap",
- "ctrlc",
  "libc",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "prisc_build_support",
+ "prisc_ipc",
  "prisc_obs",
  "prisc_obs_platform",
  "prisc_obs_sys",
+ "prisc_rust_core",
  "serde_json",
  "windows",
 ]

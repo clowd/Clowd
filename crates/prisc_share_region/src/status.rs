@@ -1,27 +1,25 @@
-//! The stdout JSON protocol and the 1 Hz status thread.
+//! The stdout protocol channel and the 1 Hz status thread.
 //!
-//! stdout is the protocol channel and carries nothing but one JSON object per
-//! line; every free-form byte this process produces (libobs chatter, warnings,
-//! panics) goes to stderr instead. The parent — the Prisc shell — reads stdout
-//! line by line, so every emitter here writes exactly one line and flushes it:
-//! a status line still sitting in a buffer is a status line the shell will not
-//! act on until something else happens to push it out.
-//!
-//! The emitters are callable from any thread (they take the stdout lock for the
-//! duration of one line, which is also what keeps two threads from interleaving
-//! halves of two objects). The status thread owns everything else in here.
+//! stdout carries the helper protocol (crates/prisc_capture/HELPER_PROTOCOL.md,
+//! §4.2 for this binary) and nothing else; every free-form byte this process
+//! produces (libobs chatter, warnings, panics) goes to stderr instead. The
+//! channel is callable from any thread and writes each event as one flushed
+//! line, so two threads never interleave halves of two objects. The status
+//! thread owns everything else in here.
 
 use std::collections::VecDeque;
-use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
+use prisc_ipc::catalog::share_region::{self as wire, Event};
+use prisc_ipc::Channel;
 use prisc_obs_platform::region::Rect;
 
 use crate::obscure;
 
-/// Gate on the status thread's output. False during the prompt phase — there
-/// is no mirror yet, so there is no frame rate to report — and flipped on for
+/// Gate on the status thread's output. False during the prompt phase (there
+/// is no mirror yet, so there is no frame rate to report) and flipped on for
 /// good by `set_sharing(true)` when the user presses OK.
 static SHARING: AtomicBool = AtomicBool::new(false);
 
@@ -29,103 +27,56 @@ static SHARING: AtomicBool = AtomicBool::new(false);
 /// `status` lines appear on stdout.
 const TICK_MS: u64 = 1000;
 
-/// Writes one JSON line to stdout (protocol channel; stderr carries all
-/// free-form output).
-///
-/// Write errors are deliberately swallowed: a closed stdout means the parent
-/// is gone, and the stdin reader's EOF path is what turns that into an orderly
-/// quit. Panicking here — on the graphics-adjacent status thread, or worse
-/// inside a command ack — would be a far worse way to discover the same thing.
-pub fn emit_json(value: serde_json::Value) {
-    let stdout = std::io::stdout();
-    let mut lock = stdout.lock();
-    let _ = writeln!(lock, "{value}");
-    let _ = lock.flush();
+static OUT: OnceLock<Channel<Event>> = OnceLock::new();
+
+/// Makes `out` the channel every emitter in the process writes to. Called
+/// once, first thing in `main`.
+pub fn init(out: Channel<Event>) {
+    if OUT.set(out).is_err() {
+        panic!("status::init called twice");
+    }
 }
 
-/// The one place the wire shape of a region is written, so every emitter that
-/// carries one agrees on the field names.
-fn region_json(region: Rect) -> serde_json::Value {
-    serde_json::json!({
-        "x": region.x,
-        "y": region.y,
-        "w": region.w,
-        "h": region.h,
-    })
+/// The process's protocol channel (stdout).
+pub fn out() -> &'static Channel<Event> {
+    OUT.get().expect("status::init runs first thing in main")
 }
 
-/// libobs is up and the prompt window is on screen. The parent may now tell
-/// the user to point their meeting app's share picker at that window.
-pub fn emit_initialized() {
-    emit_json(serde_json::json!({ "type": "initialized" }));
+/// A region as it goes on the wire, in capture space.
+pub fn wire_rect(region: Rect) -> wire::Rect {
+    wire::Rect {
+        x: region.x,
+        y: region.y,
+        w: region.w,
+        h: region.h,
+    }
 }
 
-/// The user pressed OK: the prompt window has shed its chrome, moved off
-/// screen and is now the mirror surface. `region` is what is actually being
-/// mirrored, which is the requested region after clamping.
-pub fn emit_sharing_started(region: Rect) {
-    emit_json(serde_json::json!({
-        "type": "sharing_started",
-        "region": region_json(region),
-    }));
-}
-
-/// Ack for a `move` command. `region` is the region that was ACTUALLY applied
-/// after clamping, not the one the command asked for, so the parent can keep
-/// its own border window in sync with what is really being captured.
-pub fn emit_region_changed(region: Rect) {
-    emit_json(serde_json::json!({
-        "type": "region_changed",
-        "region": region_json(region),
-    }));
-}
-
-/// Ack for an `obscure` / `unobscure` command. Both the mode name and its
-/// strength are reported so the parent never has to remember which modes carry
-/// one — `strength` is 0 for the modes that do not.
-pub fn emit_obscure(mode: obscure::Mode) {
-    emit_json(serde_json::json!({
-        "type": "obscure",
-        "mode": obscure::name(mode),
-        "strength": obscure::strength(mode),
-    }));
-}
-
-/// The process is exiting without ever having started mirroring: the user
-/// dismissed the prompt (the close button, Escape) or a `quit` arrived while
-/// it was still up.
-///
-/// It is the negative counterpart of [`emit_sharing_started`], and the pair is
-/// what lets the parent decide whether to put its own border and floating
-/// controls on screen. Waiting for the exit code instead would not do: the
-/// process exits 0 either way, so "the user shared" and "the user backed out"
-/// are indistinguishable from outside, and the parent would have to guess.
-///
-/// Emitted immediately before the exit, so it is the last protocol line of a
-/// declined session; after it the pipe closes.
-pub fn emit_cancelled() {
-    emit_json(serde_json::json!({ "type": "cancelled" }));
-}
-
-/// A stdin line was malformed, or the command it named failed. Never fatal:
-/// the process keeps mirroring and keeps reading commands.
-pub fn emit_command_error(msg: &str) {
-    emit_json(serde_json::json!({
-        "type": "command_error",
-        "message": msg,
-    }));
+/// The `obscure` ack for the mode the renderer is actually in. Both the mode
+/// and its strength are reported so the parent never has to remember which
+/// modes carry one: `strength` is 0 for the modes that do not.
+pub fn obscure_event(mode: obscure::Mode) -> Event {
+    let wire_mode = match mode {
+        obscure::Mode::None => wire::ObscureMode::None,
+        obscure::Mode::Blur(_) => wire::ObscureMode::Blur,
+        obscure::Mode::Pixelate(_) => wire::ObscureMode::Pixelate,
+        obscure::Mode::Hide => wire::ObscureMode::Hide,
+    };
+    Event::Obscure {
+        mode: wire_mode,
+        strength: obscure::strength(mode),
+    }
 }
 
 /// Opens or closes the gate on `status` lines. Called once with `true` from
-/// the UI thread the moment the mirror starts (right after
-/// [`emit_sharing_started`]).
+/// the UI thread the moment the mirror starts (right after `sharing_started`).
 pub fn set_sharing(on: bool) {
     SHARING.store(on, Ordering::Relaxed);
 }
 
-/// Whether [`emit_sharing_started`] has already gone out, i.e. the user
-/// accepted the prompt. Read on the exit path to decide whether the session
-/// still owes the parent a [`emit_cancelled`] line.
+/// Whether `sharing_started` has already gone out, i.e. the user accepted the
+/// prompt. Read on the exit path to decide whether the session ends
+/// `stopped` or `cancelled`.
 pub fn sharing() -> bool {
     SHARING.load(Ordering::Relaxed)
 }
@@ -193,7 +144,7 @@ impl FpsWindow {
 }
 
 /// Starts the 1 Hz status thread. It runs for the life of the process (there
-/// is no stop flag: every exit is `prisc_obs_platform::exit_process`, which takes the
+/// is no stop flag: every exit is `prisc_ipc::lifetime::exit`, which takes the
 /// whole process down without unwinding) and is silent until
 /// [`set_sharing`]`(true)`.
 ///
@@ -237,10 +188,7 @@ pub fn start_status_thread() {
             // a 5 s window, and it keeps the line free of the long binary
             // tails an f64 division otherwise prints.
             let fps = (window.push(time_ms, frames) * 10.0).round() / 10.0;
-            emit_json(serde_json::json!({
-                "type": "status",
-                "fps": fps,
-            }));
+            out().emit(&Event::Status { fps });
         }
     });
 }
@@ -248,6 +196,15 @@ pub fn start_status_thread() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn obscure_acks_carry_the_mode_and_its_strength() {
+        let line = |mode| serde_json::to_string(&obscure_event(mode)).unwrap();
+        assert_eq!(line(obscure::Mode::Blur(40)), r#"{"type":"obscure","mode":"blur","strength":40}"#);
+        assert_eq!(line(obscure::Mode::Pixelate(7)), r#"{"type":"obscure","mode":"pixelate","strength":7}"#);
+        assert_eq!(line(obscure::Mode::Hide), r#"{"type":"obscure","mode":"hide","strength":0}"#);
+        assert_eq!(line(obscure::Mode::None), r#"{"type":"obscure","mode":"none","strength":0}"#);
+    }
 
     /// Sample stream of a healthy mirror at `fps`: the draw callback is
     /// `deficit` frames behind the clock from the first sample onward and
