@@ -86,7 +86,7 @@ impl fmt::Display for RegionError {
 
 impl std::error::Error for RegionError {}
 
-/// Parses `"x,y,w,h"` (all four components used — x,y included) with the
+/// Parses `"x,y,w,h"` (all four components used, x,y included) with the
 /// parser every Prisc command line shares
 /// (`prisc_rust_core::geometry::parse_rect`), then holds the recorder's
 /// minimum of 2 px a side (the canvas floor).

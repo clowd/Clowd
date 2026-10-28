@@ -261,7 +261,7 @@ fn evaluate_window(
 
     let rect = ScreenRect::from_xy_size(phys_x, phys_y, phys_w, phys_h);
 
-    // Visibility threshold — drop windows with too little visible area.
+    // Visibility threshold: drop windows with too little visible area.
     // Also collect obstruction rects for the peek feature.
     let mut obstruction_rects = Vec::new();
     let window_area = (phys_w as i64) * (phys_h as i64);

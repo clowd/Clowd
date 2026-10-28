@@ -474,7 +474,7 @@ pub(crate) fn set_hardware_cursor_visible(visible: bool) {
 }
 
 /// See the Windows variant: idempotent global cursor show/hide. Never
-/// called from `WindowHandle::new` — `CGDisplayHideCursor` is global, so
+/// called from `WindowHandle::new`: `CGDisplayHideCursor` is global, so
 /// it is bracketed by the capture rather than by window creation.
 #[cfg(target_os = "macos")]
 pub(crate) fn set_hardware_cursor_visible(visible: bool) {
