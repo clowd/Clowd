@@ -125,16 +125,10 @@ jobs:
       - name: "Rust gate: format + lint + tests"
         run: |
           cargo fmt --check
-          cargo clippy -p prisc_rust_core --all-targets -- -D warnings
-          cargo test -p prisc_rust_core
-          cargo clippy -p prisc_hotkeys --all-targets -- -D warnings
-          cargo test -p prisc_hotkeys
+          cargo clippy -p prisc_rust_core -p prisc_hotkeys -p prisc_scroll_driver -p prisc_ai --all-targets -- -D warnings
+          # prisc_capture has always been gated without --all-targets; widening that is a change of its own.
           cargo clippy -p prisc_capture -- -D warnings
-          cargo test -p prisc_capture
-          cargo clippy -p prisc_scroll_driver --all-targets -- -D warnings
-          cargo test -p prisc_scroll_driver
-          cargo clippy -p prisc_ai --all-targets -- -D warnings
-          cargo test -p prisc_ai
+          cargo test -p prisc_rust_core -p prisc_hotkeys -p prisc_capture -p prisc_scroll_driver -p prisc_ai
         shell: bash
 
       # prisc_hotkeys has no Linux backend yet, but Key/Gesture/the C ABI still build there, and
