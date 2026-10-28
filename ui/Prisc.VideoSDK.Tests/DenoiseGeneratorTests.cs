@@ -154,7 +154,7 @@ namespace Prisc.VideoSDK.Tests
             Assert.Null(HelperLocator.Find("prisc_ai"));
 
             // and a throwing seam is treated as "not available", never propagated
-            HelperLocator.Override = _ => throw new InvalidOperationException("boom");
+            HelperLocator.Override = stem => stem == "prisc_ai" ? throw new InvalidOperationException("boom") : null;
             Assert.Null(HelperLocator.Find("prisc_ai"));
         }
 
