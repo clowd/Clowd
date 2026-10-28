@@ -44,7 +44,8 @@ done < <(find "$moved" -type f -print0)
 [ "$bad" -eq 0 ]
 echo "ldd: every ELF file in the relocated bundle resolves, with all symbols defined"
 
-# 2. Record ~3 s under Xvfb, then `quit` on stdin. Without a pulse server the
+# 2. Record ~3 s under Xvfb, then `{"type":"quit"}` on stdin (the helper
+#    protocol, crates/prisc_capture/HELPER_PROTOCOL.md). Without a pulse server the
 #    audio sources still create and record silence, which is enough to prove
 #    the AAC tracks are wired.
 #    The 3 s count from `started_recording`, not from process start: startup
@@ -57,7 +58,8 @@ record() {
   xvfb-run -a -s "-screen 0 1280x720x24 +extension RANDR" \
     sh -c "'$moved/prisc_recorder' $* < '$fifo' > '$out/$name.out' 2> '$out/$name.err'" &
   pid=$!
-  # Read-write open: never blocks, and keeps the pipe open until `quit`.
+  # Read-write open: never blocks, and keeps the pipe open until `quit`
+  # (EOF would be a quit too).
   exec {w}<> "$fifo"
   for _ in $(seq 1 600); do
     grep -q '"type":"started_recording"' "$out/$name.out" 2> /dev/null && break
@@ -79,12 +81,12 @@ record() {
     sleep 0.1
   done
   sleep 3
-  echo quit >&"$w"
+  echo '{"type":"quit"}' >&"$w"
   exec {w}>&-
   wait "$pid" || { echo "::error::$name recording exited non-zero"; tail -40 "$out/$name.err"; exit 1; }
   # Key order in the JSON line is not part of the protocol.
-  grep '"type":"stopped_recording"' "$out/$name.out" | grep -q '"code":0[,}]' \
-    || { echo "::error::$name: no successful stopped_recording"; cat "$out/$name.out"; tail -40 "$out/$name.err"; exit 1; }
+  grep '"type":"done"' "$out/$name.out" | grep '"result":"stopped"' | grep -q '"code":0[,}]' \
+    || { echo "::error::$name: no successful done"; cat "$out/$name.out"; tail -40 "$out/$name.err"; exit 1; }
 }
 streams() {
   ffprobe -v error -count_frames -show_entries stream=codec_name,width,height,nb_read_frames \
@@ -104,8 +106,9 @@ s=$(streams "$out/multi.mp4"); echo "multi.mp4:"; echo "$s"
 [ "$(grep -c '^aac' <<< "$s")" -eq 2 ]  || { echo "::error::multi.mp4: expected 2 audio tracks"; exit 1; }
 grep -q '^h264,640,480,' <<< "$s" || { echo "::error::multi.mp4: screen track is not 640x480"; exit 1; }
 
-# 3. prisc_vid2gif on the recording, from the relocated bundle.
-"$moved/prisc_vid2gif" "$out/single.mp4" "$out/single.gif" --quality fair | tail -1
+# 3. prisc_vid2gif on the recording, from the relocated bundle. stdin is held
+#    open: EOF on it cancels the conversion.
+"$moved/prisc_vid2gif" "$out/single.mp4" "$out/single.gif" --quality fair < <(sleep 600 2> /dev/null) | tail -1
 [ "$(head -c 6 "$out/single.gif")" = "GIF89a" ] || { echo "::error::prisc_vid2gif did not produce a GIF"; exit 1; }
 
 # 4. Out-of-scope features fail fast instead of misbehaving, and the

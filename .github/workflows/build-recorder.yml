@@ -415,7 +415,8 @@ jobs:
           #    cross-compiled x64 slice can only be checked for presence.
           test -f "$dist/prisc_vid2gif" || { echo "::error::prisc_vid2gif missing from dist"; exit 1; }
           if [ "$arch" = "arm64" ]; then
-            "$dist/prisc_vid2gif" crates/prisc_vid2gif/tests/fixtures/clip.mp4 /tmp/prisc-vid2gif-smoke.gif --quality fair
+            # stdin held open: EOF on it cancels the conversion.
+            "$dist/prisc_vid2gif" crates/prisc_vid2gif/tests/fixtures/clip.mp4 /tmp/prisc-vid2gif-smoke.gif --quality fair < <(sleep 600 2> /dev/null)
             [ "$(head -c 6 /tmp/prisc-vid2gif-smoke.gif)" = "GIF89a" ]
             echo "prisc_vid2gif GIF toolchain OK"
           fi
