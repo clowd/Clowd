@@ -123,6 +123,10 @@ jobs:
       # are built and tested in build-recorder.yml (their clippy is not gated yet).
       # `cargo fmt --check` covers the whole workspace; the imported recorder crates opt out
       # of formatting through their own rustfmt.toml.
+      # One clippy/test call over several -p packages unifies dependency features across
+      # them, so a crate that only compiles because a sibling enables a feature on a shared
+      # dependency passes here. build-rust.yml builds them together the same way, so this
+      # gates what ships.
       - name: "Rust gate: format + lint + tests"
         run: |
           cargo fmt --check
