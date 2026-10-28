@@ -43,11 +43,11 @@ namespace Prisc.UI.Services
         /// click handler (the Recent page uses the handler, like the gif row does).</summary>
         public RelayCommand CancelCommand { get; }
 
-        private readonly VidRenderRunner _runner;
+        private readonly JobRunner _runner;
         private string _status = "Rendering…";
         private double _progress;
 
-        internal VideoRender(SessionInfo session, VidRenderRunner runner)
+        internal VideoRender(SessionInfo session, JobRunner runner)
         {
             Session = session;
             _runner = runner;
@@ -389,7 +389,7 @@ namespace Prisc.UI.Services
                 return null;
             }
 
-            var runner = new VidRenderRunner();
+            var runner = JobRunner.ForVideoRender(renderArgsPath);
             var render = new VideoRender(session, runner);
             runner.ProgressChanged += (s, percent) => render.SetProgress(percent);
             session.ActiveRender = render;
@@ -527,19 +527,19 @@ namespace Prisc.UI.Services
         }
 
         private static async Task RenderAsync(SessionInfo source, SessionInfo session, VideoRender render,
-            VidRenderRunner runner, string renderArgsPath, string outputPath, RenderRequest request)
+            JobRunner runner, string renderArgsPath, string outputPath, RenderRequest request)
         {
-            VidRenderResult result;
+            JobRunResult result;
             try
             {
-                result = await runner.RunAsync(renderArgsPath);
+                result = await runner.RunAsync();
             }
             catch (Exception ex)
             {
                 // the process could not be started at all (missing binary, denied) — the run never
                 // began, so there is no protocol result to report.
                 Debug.WriteLine("Video render could not run: " + ex);
-                result = VidRenderResult.Error(ex.Message);
+                result = JobRunResult.Error(ex.Message);
             }
             finally
             {
@@ -550,7 +550,7 @@ namespace Prisc.UI.Services
         }
 
         private static async Task FinishAsync(SessionInfo source, SessionInfo session, VideoRender render,
-            string outputPath, VidRenderResult result, RenderRequest request)
+            string outputPath, JobRunResult result, RenderRequest request)
         {
             // the entry stops being an in-progress row here whatever happened next.
             if (ReferenceEquals(session.ActiveRender, render))
@@ -558,7 +558,7 @@ namespace Prisc.UI.Services
 
             switch (result.Outcome)
             {
-                case VidRenderOutcome.Success:
+                case JobOutcome.Success:
                     // the tool reports the path it actually wrote; trust it over the one we asked for.
                     if (!String.IsNullOrEmpty(result.OutputPath) && IsLive(session))
                     {
@@ -586,7 +586,7 @@ namespace Prisc.UI.Services
                         DeleteSourceSession(source, writtenPath);
                     break;
 
-                case VidRenderOutcome.Canceled:
+                case JobOutcome.Canceled:
                     DeleteQuietly(session);
                     DeletePartialOutput(outputPath);
                     break;
