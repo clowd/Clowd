@@ -1,6 +1,6 @@
 # prisc_recorder
 
-A minimal, headless screen recorder backed by [libobs](https://github.com/obsproject/obs-studio) (the OBS Studio core). It records a screen region or a whole monitor straight to an MP4, driven entirely by command-line flags (plus an optional JSON settings file) and a small line-oriented stdin/stdout protocol — no GUI, no OBS install required.
+A minimal, headless screen recorder backed by [libobs](https://github.com/obsproject/obs-studio) (the OBS Studio core). It records a screen region or a whole monitor straight to an MP4, driven entirely by command-line flags (plus an optional JSON settings file) and Prisc's JSON-lines stdin/stdout helper protocol — no GUI, no OBS install required.
 
 Prisc spawns it for every screen recording and ships it, with the OBS runtime it needs, in the app's `recorder/` folder. It began as a Rust rewrite of the C++ obs-express (github.com/clowd/obs-express). libobs 32.2.2 is built from source from the pinned `crates/obs-studio` submodule; see [BUILDING.md](../../BUILDING.md) for the toolchain and `cargo rec`.
 
@@ -11,7 +11,7 @@ Prisc spawns it for every screen recording and ships it, with the OBS runtime it
 - **Multi-device audio** — any number of speaker (output) and microphone (input) devices: up to 8 total mixed into one audio track, or up to 6 on separate tracks with `--multi-track`.
 - **Multi-track recording** — `--multi-track` writes every stream to its own track in one MP4: video track 0 = clean screen, video track 1 = webcam, and one audio track per capture device. A screen recording with a webcam, a speaker and a microphone is a 4-track file, ready for picture-in-picture compositing and per-source audio mixing at edit time.
 - **Webcam second track** — `--webcam <id>` (requires `--multi-track`) records a camera — DirectShow on Windows, AVFoundation on macOS, V4L2 on Linux — as video track 1; `--list-cameras` enumerates the available devices.
-- **Programmatic control** — a parent process drives recording over stdin (`start` / `pause` / `quit`, per-device mute) and reads structured progress as one JSON object per line on stdout.
+- **Programmatic control** — a parent process drives recording over stdin (`start` / `pause` / `quit`, per-device mute, as JSON lines) and reads structured progress as one JSON object per line on stdout.
 - **Live reconfiguration** — all tunables (fps, quality, encoder, resolution cap, cursor, tracker, audio devices) can be supplied as a JSON file via `--settings` and re-applied at runtime with the stdin `configure` command — in `--pause` mode the whole pipeline is rebuilt in place, no process restart needed.
 - **Aspect-preserving downscale** — cap output resolution with `--max-width` / `--max-height` without distorting the picture (never upscales).
 - **Click highlight** — `--tracker` draws an expanding, fading circle at the pointer on every mouse click, in the recording only.
@@ -87,7 +87,7 @@ prisc_recorder --output clip.mp4 --multi-track --webcam "$(prisc_recorder --list
 | `--microphone <DEVICE>` | — | Input-capture (microphone) device id, or `default`. Repeatable. |
 | `--multi-track` | off | Give every stream its own track (OBS's hybrid MP4 output): video track 0 = screen, video track 1 = webcam, and one audio track per `--speaker` / `--microphone` device — speakers first, in the order given, at most 6 audio tracks. Without it the recording uses the single-track muxer: one video track and all audio mixed into one track, and `--webcam` is rejected. |
 | `--webcam <ID>` | — | Record the given camera as a second video track (track 0 = screen, track 1 = webcam, ≤ 1280x720, x264 CRF). Requires `--multi-track`. `ID` is a device id exactly as printed by `--list-cameras`. The camera's built-in microphone is never recorded — use `--microphone` for that. |
-| `--list-cameras` | — | Enumerate cameras (DirectShow on Windows, AVFoundation on macOS, V4L2 on Linux): prints exactly one JSON line `{"type":"cameras","cameras":[{"id":..,"name":..}]}` on stdout and exits 0 (`{"type":"error","message":..}` and exit 1 on failure). Mutually exclusive with all recording flags; `--output` is not required. |
+| `--list-cameras` | — | Enumerate cameras (DirectShow on Windows, AVFoundation on macOS, V4L2 on Linux): after `hello`, emits one `cameras` line and exits 0 (a fatal `error` and exit 1 on failure). Mutually exclusive with all recording flags; `--output` is not required. |
 | `--speaker-volume-compensation` | off | Windows: boost speaker capture to undo the system master volume when the audio device applies it in software. On such devices (no hardware volume control — common for USB DACs) the loopback stream Windows hands to recorders is already attenuated by the volume slider, so recordings sound quieter than the played content did. Devices with hardware volume are detected and left untouched; no-op on macOS and Linux. Volume changes made while recording are tracked within ~100 ms; the boost is capped at +30 dB. |
 | `--settings <FILE.json>` | — | Read the tunables from a JSON file instead of individual flags (see below). Conflicts with every flag it replaces: `--fps`, `--crf`, `--max-width`, `--max-height`, `--hw-accel`, `--low-cpu`, `--no-cursor`, `--tracker`, `--tracker-color`, `--speaker`, `--microphone`, `--speaker-volume-compensation`. |
 
@@ -147,44 +147,31 @@ prisc_recorder --output demo.mp4 --tracker --tracker-color 0,128,255
 
 ## Controlling a running recording
 
-`prisc_recorder` reads newline-delimited commands on **stdin**. The first whitespace-separated token is matched case-insensitively; unknown lines are logged to stderr and ignored.
+`prisc_recorder` speaks Prisc's helper protocol: one JSON object per line on stdin (commands) and on stdout (events), everything human-readable on stderr. The wire format, every message and field, the reply rules and the exit codes are specified in [`crates/prisc_capture/HELPER_PROTOCOL.md`](../prisc_capture/HELPER_PROTOCOL.md) (§2 for the envelope, §4.1 for the `recorder` catalog); the message types themselves are generated from `crates/prisc_ipc/src/catalog.rs`. What follows is only what is specific to this binary.
 
 | Command | Effect |
 | --- | --- |
-| `start` | Start recording (in `--pause` mode), or resume after `pause`. |
-| `pause` | Pause recording. |
-| `quit` / `q` | Stop the recording, flush the file, and exit. |
-| `mute-speaker <N>` / `unmute-speaker <N>` | Mute/unmute speaker device `N` (0-based, in `--speaker` order). |
-| `mute-mic <N>` / `unmute-mic <N>` | Mute/unmute microphone device `N` (0-based, in `--microphone` order). |
-| `configure <PATH>` | Re-read a settings file (same format as `--settings`) and apply it. The path is the rest of the line, unquoted — spaces allowed. Always answered with exactly one `configure_applied` or `configure_error` on stdout. |
+| `{"type":"start"}` | Start recording (in `--pause` mode), or resume after `pause`. |
+| `{"type":"pause"}` | Pause recording. |
+| `{"type":"quit"}` | Stop the recording, flush the file, emit `done`, and exit. |
+| `{"type":"mute_speaker","index":N}` / `unmute_speaker` | Mute/unmute speaker device `N` (0-based, in `--speaker` order). Never acked. |
+| `{"type":"mute_mic","index":N}` / `unmute_mic` | Mute/unmute microphone device `N` (0-based, in `--microphone` order). Never acked. |
+| `{"type":"configure","path":"..."}` | Re-read a settings file (same format as `--settings`) and apply it. Always answered with exactly one `configure_applied` or `configure_error`. |
+
+**EOF on stdin, `SIGINT` / `SIGTERM` / `SIGHUP`, and `Ctrl+C` / `Ctrl+Break` / console-close on Windows all behave like `quit`**: if the parent dies, the pipe closes and the recording stops and flushes cleanly.
 
 ### `configure`
 
 What a `configure` can change depends on whether recording has started:
 
-- **Before `start`** (the `--pause` wait) — everything applies: fps and the resolution caps rebuild the video pipeline in place, the encoder is recreated for `crf` / `hw_accel` / `low_cpu` changes, audio device lists are rebuilt (the `levels` arrays and mute indices follow the new lists; rebuilt devices come back unmuted, and with `--multi-track` the audio *tracks* are re-laid-out to match), the webcam chain is added/removed/rebuilt when `webcam_device` changes (unless `--webcam` pinned it), and cursor/tracker/color update directly. Repeatable — any number of `configure`s may precede `start`.
-- **After `start`** — only the live-safe keys apply: `cursor`, `tracker`, `tracker_color`, and `speaker_volume_compensation`. Every other key that differs from the active config (including `webcam_device`) is left untouched and reported in the ack's `ignored_keys`; the recording is never disturbed.
+- **Before `start`** (the `--pause` wait): everything applies. fps and the resolution caps rebuild the video pipeline in place, the encoder is recreated for `crf` / `hw_accel` / `low_cpu` changes, audio device lists are rebuilt (the `levels` arrays and mute indices follow the new lists; rebuilt devices come back unmuted, and with `--multi-track` the audio *tracks* are re-laid-out to match), the webcam chain is added/removed/rebuilt when `webcam_device` changes (unless `--webcam` pinned it), and cursor/tracker/color update directly. Repeatable: any number of `configure`s may precede `start`.
+- **After `start`**: only the live-safe keys apply: `cursor`, `tracker`, `tracker_color`, and `speaker_volume_compensation`. Every other key that differs from the active config (including `webcam_device`) is left untouched and reported in the ack's `ignored_keys`; the recording is never disturbed.
 
-On failure the ack is `configure_error` with a `message` and a `fatal` flag. `fatal:false` means the pipeline still matches the config from before the command (bad file, invalid values, a device that failed to open — all validated before anything is committed); `fatal:true` means a mid-rebuild failure may have left the pipeline unusable and the parent should restart the process. Mute state for *unchanged* devices survives a reconfigure; per-device mutes always address the current lists.
+On failure the ack is `configure_error` with a `message` and a `restart_required` flag. `false` means the pipeline still matches the config from before the command (bad file, invalid values, a device that failed to open, all validated before anything is committed); `true` means a mid-rebuild failure may have left the pipeline unusable and the parent should restart the process. Mute state for *unchanged* devices survives a reconfigure; per-device mutes always address the current lists.
 
-**EOF on stdin is treated as `quit`** — if the parent process dies, the pipe closes and the recording stops and flushes cleanly. `Ctrl+C` / `Ctrl+Break` / console-close on Windows and `SIGINT` / `SIGTERM` on POSIX behave the same way.
+### `tracks`
 
-## Output protocol (stdout)
-
-**stdout carries exactly one JSON object per line; all human-readable/log output goes to stderr.** Consumers should parse only lines that begin with `{`.
-
-| Message | When |
-| --- | --- |
-| `{"type":"initialized"}` | Pipeline built and ready (emitted once at startup). |
-| `{"type":"started_recording","tracks":{..}}` | The output actually started rolling. |
-| `{"type":"recording_paused"}` / `{"type":"recording_resumed"}` | In response to `pause` / `start`. |
-| `{"type":"status","timeMs":..,"fps":..,"dropped":..,"droppedPerc":..}` | Once per second while recording and not paused. |
-| `{"type":"levels","speaker":[..],"mic":[..]}` | Every 100 ms from `initialized` on (including the pre-start `--pause` wait), when at least one audio device is configured. Peak dBFS per device (in `--speaker` / `--microphone` order), floored at `-100.0`. |
-| `{"type":"configure_applied","ignored_keys":[..]}` | A `configure` succeeded. `ignored_keys` lists the non-live keys that differed but were skipped because recording had already started (empty before `start`). |
-| `{"type":"configure_error","message":..,"fatal":..}` | A `configure` failed; nothing applied unless `fatal` is `true`, in which case the pipeline may be broken and the process should be restarted. |
-| `{"type":"stopped_recording","code":..,"message":..,"error":..,"tracks":{..}}` | Final line before exit. |
-
-`tracks` describes the streams of the mp4:
+`started_recording` and `done` describe the streams of the file:
 
 ```json
 {
@@ -195,35 +182,9 @@ On failure the ack is `configure_error` with a `message` and a `fatal` flag. `fa
 }
 ```
 
-`index` is the stream index *within its media type* (video / audio), matching the container's per-type numbering. For the video entries, `width`/`height` are the encoded dimensions (the screen canvas after any `max_width`/`max_height` downscale; the webcam's ≤ 1280x720 mix canvas), and the `webcam` entry is **absent** (not `null`) when no webcam is configured. `audio` always holds at least one entry: with `--multi-track` one per device (`kind` is `speaker` or `microphone`, in `--speaker`-then-`--microphone` order), otherwise a single `{"kind":"mixed","device":null}` track carrying all devices mixed together (silence when none is configured). `name` is the track name written into the mp4, which is what a player shows in its track menu.
+`index` is the stream index *within its media type* (video / audio), matching the container's per-type numbering. For the video entries, `width`/`height` are the encoded dimensions (the screen canvas after any `max_width`/`max_height` downscale; the webcam's 1280x720-or-smaller mix canvas), and `webcam` is absent when no webcam is configured. `audio` always holds at least one entry: with `--multi-track` one per device (`kind` is `speaker` or `microphone`, in `--speaker`-then-`--microphone` order), otherwise a single `mixed` track with no `device`, carrying all devices mixed together (silence when none is configured). `name` is the track name written into the file, which is what a player shows in its track menu. `done` carries no `tracks` when nothing was ever recorded (cancelled during `--pause`, or a start failure).
 
-`tracks` is present on both `started_recording` and `stopped_recording` (but absent from a `stopped_recording` emitted before recording ever started, e.g. cancellation during `--pause` or a start failure).
-
-`status` fields: `timeMs` is elapsed recording time in milliseconds (excluding paused spans), `fps` is the measured frame rate over the trailing 5 seconds of that clock (a lifetime average would read permanently low, since the frame counter trails the clock by the encoder's startup and in-flight frames), and `dropped` / `droppedPerc` report dropped frames. The final `stopped_recording.code` mirrors the OBS output stop code (`0` = success; negative values indicate invalid path, unsupported format, out of disk space, encoder error, etc.), with a human-readable `message`.
-
-Example session (`--pause` mode), stdin on the left, stdout on the right:
-
-```
-                                {"type":"initialized"}
-configure /path/to/s.json ->
-                                {"type":"configure_applied","ignored_keys":[]}
-start                     ->
-                                {"type":"started_recording","tracks":{"screen":{"index":0,"width":1920,"height":1080}}}
-                                {"type":"status","timeMs":1000,"fps":24.0,"dropped":0,"droppedPerc":0.0}
-                                {"type":"status","timeMs":2000,"fps":24.0,"dropped":0,"droppedPerc":0.0}
-configure /path/to/s.json ->
-                                {"type":"configure_applied","ignored_keys":["fps"]}
-quit                      ->
-                                {"type":"stopped_recording","code":0,"message":"Successfully stopped","error":null,"tracks":{..}}
-```
-
-### Exit codes
-
-| Code | Meaning |
-| --- | --- |
-| `0` | Recording stopped successfully (or was cancelled before it started). |
-| `1` | Recording or initialization failure. |
-| `2` | Invalid command-line arguments. |
+`status.time_ms` is elapsed recording time excluding paused spans, and `fps` is the frame rate over the trailing 5 seconds of that clock (a lifetime average would read permanently low, since the frame counter trails the clock by the encoder's startup and in-flight frames). `done.code` mirrors the OBS output stop code (`0` = success; negative values indicate invalid path, unsupported format, out of disk space, encoder error, etc.), with its fixed `message`.
 
 ## Encoding
 

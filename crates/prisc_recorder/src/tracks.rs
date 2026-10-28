@@ -32,27 +32,11 @@ const _: () = assert!(MAX_AUDIO_TRACKS <= prisc_obs_sys::MAX_OUTPUT_AUDIO_ENCODE
 // a screen + webcam recording needs two video encoder slots.
 const _: () = assert!(prisc_obs_sys::MAX_OUTPUT_VIDEO_ENCODERS >= 2);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AudioKind {
-    /// One speaker (output/system audio) device.
-    Speaker,
-    /// One microphone (input) device.
-    Microphone,
-    /// Every configured device mixed together (single-track mode), or silence
-    /// when no device is configured at all.
-    Mixed,
-}
-
-impl AudioKind {
-    /// The `kind` string in the `tracks` protocol payload.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            AudioKind::Speaker => "speaker",
-            AudioKind::Microphone => "microphone",
-            AudioKind::Mixed => "mixed",
-        }
-    }
-}
+/// What feeds an audio track: one speaker (output/system audio) device, one
+/// microphone (input) device, or every configured device mixed together
+/// (single-track mode; silence when no device is configured at all). The
+/// protocol's own enum, so the `tracks` payload cannot drift from it.
+pub use prisc_ipc::catalog::recorder::AudioKind;
 
 /// One audio track of the recording, in output track order.
 #[derive(Debug, Clone, PartialEq, Eq)]

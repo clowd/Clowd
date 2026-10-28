@@ -27,9 +27,9 @@
 //! (encoder-level pause: ticks and hooks keep firing, so the gate is
 //! explicit).
 //!
-//! Lifetime: exit paths skip Drop (`platform::exit_process`), so the recorder
-//! calls [`InputCapture::close`] explicitly before *every*
-//! `emit_stopped_recording` — finish, start-failure and pre-start quit. Close
+//! Lifetime: exit paths skip Drop (they end in `platform::exit_process`), so
+//! the recorder calls [`InputCapture::close`] explicitly before *every* final
+//! `done`: finish, start-failure and pre-start quit. Close
 //! disarms the pipeline (the graphics thread keeps ticking and the hooks keep
 //! firing after `output.stop()`, so without disarming rows would keep landing
 //! after the final flush) and then flushes.
@@ -736,7 +736,7 @@ impl InputCapture {
     }
 
     /// Disarms the pipeline and makes the file durable. MUST run before every
-    /// `emit_stopped_recording` — exit paths skip Drop, and losing the tail
+    /// final `done`: exit paths skip Drop, and losing the tail
     /// of the sidecar silently desyncs the editor overlays.
     ///
     /// Remove the tick callback before the flush barrier: an in-flight tick
