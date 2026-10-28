@@ -475,6 +475,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # cargo wrote the mounted ~/.cargo/registry and git as root in the image.
+      # rust-cache's post step prunes them with host-side cargo, so hand them
+      # back to the runner user first or its cleanup and save can fail.
+      - name: Return the cargo caches to the runner user
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$HOME/.cargo/registry" "$HOME/.cargo/git"
+
   # ---------------------------------------------------------------------------
   # Linux portability: the bundle tarball, unpacked on stock Ubuntu runners
   # with only runtime packages installed (tools/linux-build/

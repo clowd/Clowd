@@ -37,7 +37,8 @@ runs:
     # OBS build tree, which the cache below owns under its own key, and
     # rust-cache's target cleanup would prune it. On Linux cargo runs in the
     # build image with the host's ~/.cargo mounted (run-in-image.sh), so the
-    # same host-side cache serves it.
+    # same host-side cache serves it; the Linux job chowns those dirs back from
+    # root as its last step, before this cache's post step prunes and saves.
     - name: Cache cargo registry
       uses: Swatinem/rust-cache@v2
       with:
