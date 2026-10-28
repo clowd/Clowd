@@ -48,9 +48,25 @@ fn main() {
     let cli = cli::Cli::parse();
 
     // --list-cameras: no recording pipeline and no commands. Enumerate, emit
-    // `cameras`, exit. A quit only arms the hard-exit timer.
+    // `cameras`, exit. Nothing here can be stopped part way, so a quit (in
+    // practice a signal; stdin is not read) ends the run at once with a fatal
+    // `error`, from a thread of its own because `on_quit` must not block. If
+    // `cameras` already went out, the channel drops the error and only the
+    // exit remains.
     if cli.list_cameras {
-        prisc_ipc::lifetime::install(|_| {}, wire::QUIT_GRACE + prisc_ipc::SELF_EXIT_MARGIN);
+        prisc_ipc::lifetime::install(
+            |reason| {
+                let _ = std::thread::Builder::new()
+                    .name("cameras-quit".into())
+                    .spawn(move || {
+                        status::out().fatal(
+                            ErrorCode::Failed,
+                            format!("camera enumeration stopped ({reason:?})"),
+                        )
+                    });
+            },
+            wire::QUIT_GRACE + prisc_ipc::SELF_EXIT_MARGIN,
+        );
         cameras::run();
     }
 
