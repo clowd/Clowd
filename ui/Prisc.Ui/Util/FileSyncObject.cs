@@ -131,7 +131,7 @@ namespace Prisc.Util
 
         // write-to-temp then rename, so the file on disk is never observable half-written. A crash
         // (or power loss) mid-WriteAllText used to leave a truncated session.json that then failed
-        // to parse on every subsequent launch (CLOWD-9).
+        // to parse on every subsequent launch.
         private void WriteToDisk()
         {
             var tmp = FilePath + ".tmp";

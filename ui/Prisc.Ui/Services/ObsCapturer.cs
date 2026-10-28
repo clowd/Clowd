@@ -266,7 +266,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         /// <see cref="SentryConfig.ProcessLogKey"/>) so whichever layer ultimately reports it —
         /// usually a <c>video.*</c> catch several frames up the page — attaches the log to the
         /// Sentry event. A bare "exited unexpectedly" or "timed out" is undiagnosable without
-        /// libobs's stderr (CLOWD-Z, CLOWD-C).</summary>
+        /// libobs's stderr.</summary>
         private Exception AttachProcessLog(Exception ex) => _log.Attach(ex);
 
         /// <summary>Awaits a protocol ack, replacing the bare <c>WaitAsync</c> timeout with one

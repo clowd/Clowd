@@ -239,4 +239,4 @@ dotnet test ui/Prisc.Drawing.Tests/Prisc.Drawing.Tests.csproj
 
 The recorder crates' tests are listed under [Recording stack (libobs)](#recording-stack-libobs).
 
-The upload relay server lives in its own repository, [clowd/Clowd.Server](https://github.com/clowd/Clowd.Server).
+The upload relay server lives in its own repository, [priscapp/Prisc.Server](https://github.com/priscapp/Prisc.Server).
