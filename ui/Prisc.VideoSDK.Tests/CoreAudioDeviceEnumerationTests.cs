@@ -53,15 +53,23 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Fact]
-        public void Verify_keeps_a_listed_id_and_maps_anything_else_to_default()
+        public void Verify_maps_an_unlisted_or_missing_id_to_default()
+        {
+            // no hardware needed: on a machine with no microphone the list is the default alone
+            InteropTestGate.Require();
+
+            Assert.Equal(AudioDeviceManager.DefaultDeviceId, AudioDeviceManager.VerifyMicrophoneOrDefault("prisc-no-such-device"));
+            Assert.Equal(AudioDeviceManager.DefaultDeviceId, AudioDeviceManager.VerifyMicrophoneOrDefault(null));
+        }
+
+        [Fact]
+        public void Verify_keeps_a_listed_id()
         {
             InteropTestGate.Require();
 
             var microphones = AudioDeviceManager.GetMicrophones();
-            Assert.SkipWhen(microphones.Count < 2, "this machine reports no microphone");
+            Assert.SkipWhen(microphones.Count < 2, "this machine reports no microphone to keep");
             Assert.Equal(microphones[1].DeviceId, AudioDeviceManager.VerifyMicrophoneOrDefault(microphones[1].DeviceId));
-            Assert.Equal(AudioDeviceManager.DefaultDeviceId, AudioDeviceManager.VerifyMicrophoneOrDefault("prisc-no-such-device"));
-            Assert.Equal(AudioDeviceManager.DefaultDeviceId, AudioDeviceManager.VerifyMicrophoneOrDefault(null));
         }
 
         [Fact]
