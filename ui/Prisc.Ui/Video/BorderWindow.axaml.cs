@@ -2,6 +2,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Prisc.Interop;
 using Prisc.PlatformUtil;
 using Prisc.UI.Helpers;
 
@@ -119,7 +120,7 @@ namespace Prisc.UI
         ///   RemoveWindowStylesCallback, and removing a callback would not un-apply bits already on
         ///   the HWND anyway, so any runtime attempt to clear WS_EX_TRANSPARENT can be silently
         ///   re-OR'd back on by the next Avalonia style re-application.
-        /// - WS_EX_LAYERED must stay live (with SetLayeredFullyOpaque) or the window is never
+        /// - WS_EX_LAYERED must stay live (with the OpaqueLayered setup) or the window is never
         ///   repainted at all, so the ex-style mask is not something to toggle casually.
         /// - Focusable="False" plus WS_EX_NOACTIVATE are exactly right for a passive frame and
         ///   exactly wrong for a window that must hold pointer capture through a drag.
@@ -205,14 +206,12 @@ namespace Prisc.UI
 
         private void OnOpened(object sender, EventArgs e)
         {
-            // Mandatory: a window that gains WS_EX_LAYERED without a subsequent
-            // SetLayeredWindowAttributes call is never repainted (design §4.2).
-            WindowNativeExtensions.SetLayeredFullyOpaque(this);
-            WindowNativeExtensions.SetIgnoresMouseEvents(this);
-            // Raise above the menu bar BEFORE re-applying geometry: at the default level AppKit
-            // constrains the frame away from the menu bar at Show(), so the position set below
-            // only sticks once the level is lifted (issue #56).
-            WindowNativeExtensions.SetCanCoverMenuBar(this);
+            // One native call, BEFORE re-applying geometry: the menu-bar level first (at the default
+            // level AppKit constrains the frame away from the menu bar at Show(), so the position set
+            // below only sticks once the level is lifted, issue #56), the mandatory layered follow-up
+            // (a window that gains WS_EX_LAYERED without SetLayeredWindowAttributes is never
+            // repainted, design 4.2) and macOS click-through.
+            WindowNativeExtensions.PrepareOverlay(this, OverlayFlags.CoverMenuBar | OverlayFlags.OpaqueLayered | OverlayFlags.ClickThrough);
             ApplyGeometry(RenderScaling);
         }
 

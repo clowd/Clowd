@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Prisc.Interop;
 
 namespace Prisc.UI.Helpers
 {
@@ -34,7 +35,7 @@ namespace Prisc.UI.Helpers
             Height = 1;
 
             // registered before Show() so they apply from the first frame; never repainted as
-            // layered without SetLayeredFullyOpaque, which suits a window with nothing to draw
+            // layered without the OpaqueLayered setup, which suits a window with nothing to draw
             WindowNativeExtensions.AddExStyles(this,
                 WindowNativeExtensions.WS_EX_TRANSPARENT | WindowNativeExtensions.WS_EX_LAYERED | WindowNativeExtensions.WS_EX_TOOLWINDOW);
             WindowNativeExtensions.AddHitTestTransparentHook(this);
@@ -49,7 +50,8 @@ namespace Prisc.UI.Helpers
 
         private void OnOpened(object sender, EventArgs e)
         {
-            WindowNativeExtensions.SetIgnoresMouseEvents(this);
+            // click-through only: no OpaqueLayered (nothing to draw) and no menu-bar level
+            WindowNativeExtensions.PrepareOverlay(this, OverlayFlags.ClickThrough);
             WindowNativeExtensions.ForceForeground(this);
             Activate();
         }

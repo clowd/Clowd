@@ -835,12 +835,12 @@ namespace Prisc.UI.DrawOnScreen
         // Focus
         // ====================================================================
 
-        /// <summary>Whether the toolbar or a canvas has the keyboard right now (unsettled). On Windows
-        /// that is the system's foreground window, not <see cref="WindowBase.IsActive"/>, which a
-        /// refused SetForegroundWindow still sets (see <see cref="WindowNativeExtensions.IsForeground"/>).</summary>
-        private bool HasKeyboard => OperatingSystem.IsWindows()
-            ? WindowNativeExtensions.IsForeground(_toolbar) || _overlays.Any(o => WindowNativeExtensions.IsForeground(o.Window))
-            : _toolbar?.IsActive == true || _overlays.Any(o => o.Window.IsActive);
+        /// <summary>Whether the toolbar or a canvas has the keyboard right now (unsettled): the system's
+        /// foreground window on Windows, not <see cref="WindowBase.IsActive"/>, which a refused
+        /// SetForegroundWindow still sets; the key window of the active app on macOS (see
+        /// <see cref="WindowNativeExtensions.IsForeground"/>).</summary>
+        private bool HasKeyboard =>
+            WindowNativeExtensions.IsForeground(_toolbar) || _overlays.Any(o => WindowNativeExtensions.IsForeground(o.Window));
 
         /// <summary>
         /// Puts the keyboard on the toolbar: past the foreground lock on Windows

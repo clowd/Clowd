@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Prisc.Drawing;
+using Prisc.Interop;
 using Prisc.PlatformUtil;
 using Prisc.UI.Helpers;
 
@@ -189,7 +190,7 @@ namespace Prisc.UI
             // at the default level AppKit constrains the frame away from the menu bar at Show(),
             // so a position set below would not stick and the handles would sit off the region
             // near the top of the screen (issue #56).
-            WindowNativeExtensions.SetCanCoverMenuBar(this);
+            WindowNativeExtensions.PrepareOverlay(this, OverlayFlags.CoverMenuBar);
             ApplyGeometry(RenderScaling);
 
             // Activation is the page's job (Activate() right after Show(), because ShowActivated

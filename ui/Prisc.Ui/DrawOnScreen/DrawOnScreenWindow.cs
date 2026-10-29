@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Prisc.Config;
 using Prisc.Drawing;
+using Prisc.Interop;
 using Prisc.Localization;
 using Prisc.UI.Helpers;
 
@@ -128,7 +129,7 @@ namespace Prisc.UI.DrawOnScreen
             SeedGeometry();
 
             // registered before Show() so the always-on bits are in from the first frame. Only
-            // TRANSPARENT ever toggles; LAYERED needs the SetLayeredFullyOpaque follow-up in Opened.
+            // TRANSPARENT ever toggles; LAYERED needs the OpaqueLayered follow-up in Opened.
             _styles = new ToggleableExStyles(this,
                 WindowNativeExtensions.WS_EX_LAYERED | WindowNativeExtensions.WS_EX_TOOLWINDOW | WindowNativeExtensions.WS_EX_NOACTIVATE,
                 WindowNativeExtensions.WS_EX_TRANSPARENT,
@@ -187,8 +188,10 @@ namespace Prisc.UI.DrawOnScreen
                 Canvas.CancelCurrentOperation();
             }
 
-            _styles.Set(on);
-            WindowNativeExtensions.SetIgnoresMouseEvents(this, on);
+            // the styles callback's desire first, so a style re-application keeps the new state,
+            // then the live switch on the native window (WS_EX_TRANSPARENT / setIgnoresMouseEvents:)
+            _styles.IsOn = on;
+            WindowNativeExtensions.SetClickThrough(this, on);
 
             // belt and braces under the native styles, and it clears any stale hover outline
             Canvas.IsHitTestVisible = !on;
@@ -286,14 +289,14 @@ namespace Prisc.UI.DrawOnScreen
 
         private void OnOpened(object sender, EventArgs e)
         {
-            // order matters: the level lift before positioning (AppKit constrains a window below
-            // NSStatusWindowLevel away from the menu bar, so a frame set earlier would not stick),
-            // the layered attributes right away (a layered window without them is never repainted),
-            // an explicit mouse-events state (AppKit's default is a third state the window would
-            // otherwise never leave once YES was sent), then the real geometry.
-            WindowNativeExtensions.SetCanCoverMenuBar(this);
-            WindowNativeExtensions.SetLayeredFullyOpaque(this);
-            WindowNativeExtensions.SetIgnoresMouseEvents(this, ClickThrough);
+            // order matters: the overlay setup before positioning (AppKit constrains a window below
+            // the overlay level away from the menu bar, so a frame set earlier would not stick) with
+            // the layered attributes (a layered window without them is never repainted), then the
+            // current input state as an explicit choice either way (on macOS a window drawing in its
+            // transparent pixels must say NO: AppKit's never-set default lets those clicks through),
+            // then the real geometry.
+            WindowNativeExtensions.PrepareOverlay(this, OverlayFlags.CoverMenuBar | OverlayFlags.OpaqueLayered);
+            WindowNativeExtensions.SetClickThrough(this, ClickThrough);
             ApplyGeometry();
         }
 
