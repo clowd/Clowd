@@ -131,8 +131,9 @@ namespace Prisc.UI.Harness
                 .Select(encoder => H264EncoderSettings.For(encoder, 23, 1920, 1080, 30000, 1001).Description)
                 .ToList(), anyThread: true);
 
-            // the FFmpeg libraries of the recorder payload (PRISC_HELPERS_DIR or beside the app)
-            run.Item("facade.ffmpeg.load", () => FFmpegLoader.TryInitialize()
+            // the FFmpeg libraries of the recorder payload (PRISC_HELPERS_DIR or beside the app),
+            // resolved the way every production caller resolves them
+            run.Item("facade.ffmpeg.load", () => FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder)
                 ? FFmpegLoader.LibrariesDirectory
                 : ProbeOutcome.Unavailable(FFmpegLoader.FailureReason ?? "FFmpeg is not available"));
         }
