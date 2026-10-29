@@ -56,7 +56,8 @@ impl PriscGestureOs {
 
 /// The gesture raw C values name, or the refusal (and its text) for values that name none: a key
 /// outside the key table, `Key::None`, or an unknown modifier bit. Registration and
-/// `prisc_gesture_check` both read raw gestures through it, so the two refuse alike.
+/// `prisc_gesture_check` both read raw gestures through it (`hotkeys_host` imports it), so the
+/// two refuse alike.
 pub(crate) fn gesture_from_raw(key: i32, modifiers: u32) -> std::result::Result<Gesture, (PriscGestureRefusal, String)> {
     let Some(key) = Key::from_i32(key) else {
         return Err((

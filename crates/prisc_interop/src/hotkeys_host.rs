@@ -9,9 +9,9 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
 use prisc_hotkeys::supervise::{Down, Status, Supervised, SupervisedEvent};
-use prisc_hotkeys::{Gesture, Key, Modifiers};
 
 use crate::error::{Error, Result};
+use crate::ffi::gesture::{gesture_from_raw, refusal_of};
 use crate::ffi::hotkeys::{PriscHookState, PriscHotkeysEvent, PriscHotkeysEventFlags, PriscHotkeysEventKind};
 use crate::ffi::types::{PriscGestureRefusal, PriscString};
 
@@ -83,43 +83,6 @@ impl HotkeysHost {
 
     pub(crate) fn stop(&self) {
         self.supervised.stop();
-    }
-}
-
-/// The gesture raw C values name, or the refusal (and its text) for values that name none: a key
-/// outside the key table, `Key::None`, or an unknown modifier bit. Registration and
-/// `prisc_gesture_check` (WP-KEYS) both read raw gestures through it, so the two refuse alike.
-pub(crate) fn gesture_from_raw(key: i32, modifiers: u32) -> std::result::Result<Gesture, (PriscGestureRefusal, String)> {
-    let Some(key) = Key::from_i32(key) else {
-        return Err((
-            PriscGestureRefusal::InvalidKey,
-            format!("{key} is not a key of the hotkey key table"),
-        ));
-    };
-    if key == Key::None {
-        return Err((PriscGestureRefusal::NoKey, prisc_hotkeys::Error::NoKey.to_string()));
-    }
-    let Some(modifiers) = Modifiers::from_bits(modifiers) else {
-        return Err((
-            PriscGestureRefusal::InvalidModifiers,
-            format!("the modifiers 0x{modifiers:X} carry an unknown bit"),
-        ));
-    };
-    Ok(Gesture::new(key, modifiers))
-}
-
-/// The refusal a hotkey error is about a gesture, or None for one about the hook (it cannot start,
-/// it stopped): the one table from prisc_hotkeys' validation errors onto `PriscGestureRefusal`.
-pub(crate) fn refusal_of(error: &prisc_hotkeys::Error) -> Option<PriscGestureRefusal> {
-    match error {
-        prisc_hotkeys::Error::NoKey => Some(PriscGestureRefusal::NoKey),
-        prisc_hotkeys::Error::ModifierKey => Some(PriscGestureRefusal::ModifierOnly),
-        prisc_hotkeys::Error::UnsupportedKey(_) => Some(PriscGestureRefusal::UnsupportedKey),
-        prisc_hotkeys::Error::Duplicate => Some(PriscGestureRefusal::Duplicate),
-        prisc_hotkeys::Error::Unsupported
-        | prisc_hotkeys::Error::PermissionDenied
-        | prisc_hotkeys::Error::HookFailed(_)
-        | prisc_hotkeys::Error::Stopped => None,
     }
 }
 
@@ -214,7 +177,7 @@ pub(crate) fn to_ffi(event: SupervisedEvent) -> PriscHotkeysEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prisc_hotkeys::KeyEvent;
+    use prisc_hotkeys::{Gesture, Key, KeyEvent, Modifiers};
 
     fn take_reason(event: &mut PriscHotkeysEvent) -> String {
         let text = unsafe { event.reason.as_str() }.to_string();
