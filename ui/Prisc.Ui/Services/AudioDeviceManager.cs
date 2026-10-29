@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using NAudio.CoreAudioApi;
+using Prisc.Interop;
 
 namespace Prisc.UI
 {
@@ -13,7 +14,8 @@ namespace Prisc.UI
     /// <summary>
     /// Cross-platform audio device enumeration (mirrors the WPF Prisc.Video.AudioDeviceManager
     /// API). Windows uses NAudio.Wasapi (MMDevice ids match what the recorder's wasapi sources
-    /// expect); macOS uses a CoreAudio P/Invoke shim (device UIDs, matching the coreaudio sources).
+    /// expect); macOS asks the CoreAudio HAL through <see cref="CaptureDevices"/> (prisc_interop;
+    /// device UIDs, matching the coreaudio sources).
     /// </summary>
     public static class AudioDeviceManager
     {
@@ -76,7 +78,7 @@ namespace Prisc.UI
                 list.Add(new AudioDeviceInfo(DefaultDeviceId, type, "Default device"));
 
                 if (OperatingSystem.IsMacOS())
-                    list.AddRange(CoreAudioInterop.GetDevices(type == TypeSpeaker, type));
+                    list.AddRange(GetCoreAudioDevices(type));
             }
             catch (Exception ex)
             {
@@ -87,6 +89,22 @@ namespace Prisc.UI
             }
 
             return list;
+        }
+
+        /// <summary>The macOS HAL list for <paramref name="type"/>. Empty on any failure (logged): the
+        /// caller always has the "default" pseudo-device first.</summary>
+        private static IEnumerable<AudioDeviceInfo> GetCoreAudioDevices(string type)
+        {
+            var kind = type == TypeSpeaker ? DeviceKind.AudioOutput : DeviceKind.AudioInput;
+            var devices = CaptureDevices.TryEnumerate(kind, out var error);
+            if (devices == null)
+            {
+                Debug.WriteLine("CoreAudio enumeration failed: " + error?.Message);
+                SentryConfig.CaptureHandled(error, "audio.coreaudio-enumerate");
+                return Array.Empty<AudioDeviceInfo>();
+            }
+
+            return devices.Select(device => new AudioDeviceInfo(device.Id, type, device.Name)).ToList();
         }
     }
 }
