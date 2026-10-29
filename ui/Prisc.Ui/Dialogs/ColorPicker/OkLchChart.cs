@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Prisc.Interop;
 
 namespace Prisc.UI.Dialogs.ColorPicker
 {
@@ -81,17 +82,9 @@ namespace Prisc.UI.Dialogs.ColorPicker
         public double Chroma { get; private set; }
         public double Hue { get; private set; }
 
-        // linear light (0..1, in 4096 steps) to 8-bit sRGB: a table, since a slice is ~100k pixels
-        // and the exact curve is three Math.Pow calls each
-        private static readonly byte[] EncodeTable = BuildEncodeTable();
-
         private WriteableBitmap _bitmap;
         private int[] _pixels;
-        private bool[] _inside;
         private bool _sliceDirty = true;
-
-        // an edge pixel is sampled this many times a side to find how much of it the gamut covers
-        private const int EdgeSamples = 4;
 
         static OkLchChart()
         {
@@ -132,6 +125,13 @@ namespace Prisc.UI.Dialogs.ColorPicker
             OkLchChartPlane.Lightness => (Lightness, y, x),
             OkLchChartPlane.Chroma => (y, Chroma, x),
             _ => (x, y, Hue),
+        };
+
+        private OkLchChannel FixedChannel => Plane switch
+        {
+            OkLchChartPlane.Lightness => OkLchChannel.Lightness,
+            OkLchChartPlane.Chroma => OkLchChannel.Chroma,
+            _ => OkLchChannel.Hue,
         };
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -189,13 +189,16 @@ namespace Prisc.UI.Dialogs.ColorPicker
                 _bitmap?.Dispose();
                 _bitmap = new WriteableBitmap(pixelSize, new Vector(96 * scale, 96 * scale), PixelFormat.Bgra8888, AlphaFormat.Premul);
                 _pixels = new int[pixelSize.Width * pixelSize.Height];
-                _inside = new bool[_pixels.Length];
                 _sliceDirty = true;
             }
 
             if (_sliceDirty)
             {
-                PaintSlice(pixelSize.Width, pixelSize.Height);
+                // one native call per slice: prisc_rust_core::color::chart samples every pixel
+                // centre, then resamples the pixels on the gamut's edge on a grid and gives them
+                // the share that is in gamut as their alpha, so the cut-out edge is smooth
+                OkLch.PaintSlice(FixedChannel, Lightness, Chroma, Hue, pixelSize.Width, pixelSize.Height,
+                    MemoryMarshal.Cast<int, uint>(_pixels.AsSpan()));
                 using var buffer = _bitmap.Lock();
                 for (var row = 0; row < pixelSize.Height; row++)
                     Marshal.Copy(_pixels, row * pixelSize.Width, buffer.Address + row * buffer.RowBytes, pixelSize.Width);
@@ -203,92 +206,6 @@ namespace Prisc.UI.Dialogs.ColorPicker
             }
 
             return _bitmap;
-        }
-
-        /// <summary>
-        /// Renders the slice: every pixel is first sampled once, at its centre, then the pixels on
-        /// the gamut's edge (any whose neighbours disagree with it) are sampled again on a grid and
-        /// given the share of it that is in gamut as their alpha, so the cut-out edge is smooth.
-        /// </summary>
-        private void PaintSlice(int width, int height)
-        {
-            double xMax = XMax, yMax = YMax;
-            for (var py = 0; py < height; py++)
-            {
-                var y = (1 - (py + 0.5) / height) * yMax;
-                var row = py * width;
-                for (var px = 0; px < width; px++)
-                {
-                    var (l, c, h) = At((px + 0.5) / width * xMax, y);
-                    var inside = OkLchColor.ToLinearSrgb(l, c, h, out var r, out var g, out var b);
-                    _inside[row + px] = inside;
-                    _pixels[row + px] = inside ? Opaque(r, g, b) : 0;
-                }
-            }
-
-            for (var py = 0; py < height; py++)
-            {
-                for (var px = 0; px < width; px++)
-                {
-                    if (IsOnEdge(px, py, width, height))
-                        _pixels[py * width + px] = EdgePixel(px, py, width, height);
-                }
-            }
-        }
-
-        private bool IsOnEdge(int px, int py, int width, int height)
-        {
-            var inside = _inside[py * width + px];
-            for (var ny = Math.Max(0, py - 1); ny <= Math.Min(height - 1, py + 1); ny++)
-            {
-                for (var nx = Math.Max(0, px - 1); nx <= Math.Min(width - 1, px + 1); nx++)
-                {
-                    if (_inside[ny * width + nx] != inside)
-                        return true;
-                }
-            }
-            return false;
-        }
-
-        /// <summary>A premultiplied pixel: the mean of its in-gamut samples, at the coverage they make up.</summary>
-        private int EdgePixel(int px, int py, int width, int height)
-        {
-            double xMax = XMax, yMax = YMax, r = 0, g = 0, b = 0;
-            var hits = 0;
-            for (var sy = 0; sy < EdgeSamples; sy++)
-            {
-                var y = (1 - (py + (sy + 0.5) / EdgeSamples) / height) * yMax;
-                for (var sx = 0; sx < EdgeSamples; sx++)
-                {
-                    var (l, c, h) = At((px + (sx + 0.5) / EdgeSamples) / width * xMax, y);
-                    if (OkLchColor.ToLinearSrgb(l, c, h, out var sr, out var sg, out var sb))
-                    {
-                        (r, g, b) = (r + sr, g + sg, b + sb);
-                        hits++;
-                    }
-                }
-            }
-
-            if (hits == 0)
-                return 0;
-
-            var alpha = (int)Math.Round(255d * hits / (EdgeSamples * EdgeSamples));
-            int Premultiplied(double linear) => (Encoded(linear / hits) * alpha + 127) / 255;
-            return alpha << 24 | Premultiplied(r) << 16 | Premultiplied(g) << 8 | Premultiplied(b);
-        }
-
-        /// <summary>An opaque BGRA pixel for a linear-light color (for the tab's slider tracks too).</summary>
-        internal static int Opaque(double r, double g, double b) =>
-            unchecked((int)0xFF000000) | Encoded(r) << 16 | Encoded(g) << 8 | Encoded(b);
-
-        private static int Encoded(double linear) => EncodeTable[(int)(Math.Clamp(linear, 0, 1) * 4096 + 0.5)];
-
-        private static byte[] BuildEncodeTable()
-        {
-            var table = new byte[4097];
-            for (var i = 0; i < table.Length; i++)
-                table[i] = OkLchColor.Encode(i / 4096d);
-            return table;
         }
 
         protected override void OnPointerPressed(PointerPressedEventArgs e)

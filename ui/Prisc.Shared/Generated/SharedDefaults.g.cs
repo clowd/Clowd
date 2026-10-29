@@ -7,5 +7,28 @@ namespace Prisc
     /// <summary>Defaults and accent constants the Rust helpers and Prisc.Ui share.</summary>
     public static partial class SharedDefaults
     {
+        /// <summary>The filename pattern (a .NET custom date format) captures and recordings are named with when the setting is blank, and the capture overlay's default --filename-pattern.</summary>
+        public const string DefaultFilenamePattern = "yyyy-MM-dd HH-mm-ss";
+
+        /// <summary>The accent the app ships with, the legacy "prisc blue" (sRGB 0x00RRGGBB): the stored default pick, and the capture overlay's default --accent-color.</summary>
+        public const uint PriscBlue = 0x3B97D2u;
+
+        /// <summary>WCAG AA for normal text (4.5:1), measured against the white glyphs drawn on top of the accent.</summary>
+        public const double MinimumContrastWithWhite = 4.5;
+
+        /// <summary>The shipped accent after the contrast rule (sRGB 0x00RRGGBB): prisc blue taken down to the minimum contrast with white.</summary>
+        public const uint DefaultAccent = 0x2F7CAEu;
+
+        /// <summary>The lowest OKLab lightness of the hint comet's body. The band straddles the graphite tray (L about 0.27) and its dark shadow, so a body below the floor sinks into them.</summary>
+        public const double CometMinLightness = 0.62;
+
+        /// <summary>The highest OKLab lightness of the hint comet's body: above it there is too little room left for chroma and the body washes out to a pastel.</summary>
+        public const double CometMaxLightness = 0.72;
+
+        /// <summary>The OKLCH chroma scale's top, as oklch.com draws it: just past the most saturated colour P3 can show (sRGB tops out near 0.32, at a deep blue).</summary>
+        public const double OklchChromaMax = 0.37;
+
+        /// <summary>OKLCH chroma below this is a grey as far as 8-bit sRGB can tell, and its hue is noise.</summary>
+        public const double OklchAchromaticChroma = 0.0002;
     }
 }

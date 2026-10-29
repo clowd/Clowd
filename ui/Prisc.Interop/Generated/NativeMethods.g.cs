@@ -124,10 +124,11 @@ namespace Prisc.Interop
         internal static extern int prisc_audio_output_destroy(PriscAudioOutput* output);
 
         /// <summary>
-        ///  The effective accent, the comet colours and the three ramps for one accent colour.
+        ///  The effective accent, the comet colours and the three ramps for the accent `accent_rgb` as the
+        ///  user picked it, with the contrast rule on (`maintain_contrast` non-zero) or off. One call per
+        ///  accent change; `out` is written only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out` or an `accent_rgb` past `0xFFFFFF`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -135,10 +136,10 @@ namespace Prisc.Interop
         internal static extern int prisc_color_accent_palette(uint accent_rgb, byte maintain_contrast, PriscAccentPalette* @out);
 
         /// <summary>
-        ///  The WCAG relative luminance of an sRGB colour.
+        ///  The WCAG relative luminance of an sRGB colour (0 = black, 1 = white), for the draw-time callers
+        ///  that pick ink or an edge by it.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out` or an `rgb` past `0xFFFFFF`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -146,10 +147,9 @@ namespace Prisc.Interop
         internal static extern int prisc_color_relative_luminance(uint rgb, double* @out);
 
         /// <summary>
-        ///  Converts an sRGB colour to OKLCH.
+        ///  Converts an sRGB colour to OKLCH. A grey (no chroma 8-bit sRGB can tell) comes back with hue 0.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out` or an `rgb` past `0xFFFFFF`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -157,10 +157,13 @@ namespace Prisc.Interop
         internal static extern int prisc_oklch_from_srgb(uint rgb, PriscOkLch* @out);
 
         /// <summary>
-        ///  Converts OKLCH to sRGB (gamut-clipped) and reports whether it was in gamut.
+        ///  Converts OKLCH to the nearest sRGB colour: a lightness past either end is white or black, and
+        ///  out of gamut the chroma is lowered (never the lightness or the hue) until it fits.
+        ///  `out_in_gamut` (optional) is 1 when `value` is inside sRGB as it stands, before either
+        ///  adjustment.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `value` or `out_rgb`, or a component that
+        ///  is not finite.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -168,21 +171,28 @@ namespace Prisc.Interop
         internal static extern int prisc_oklch_to_srgb(PriscOkLch* value, uint* out_rgb, byte* out_in_gamut);
 
         /// <summary>
-        ///  Paints a `PriscOkLchPlane` slice through `value` into `pixels` (BGRA premultiplied).
+        ///  Paints the colour picker's gamut chart through `value` that holds `fixed_channel` (a
+        ///  `PriscOkLchChannel`) fixed into `pixels`: `width * height` premultiplied BGRA pixels
+        ///  (`0xAARRGGBB` words), top row first, transparent where sRGB cannot show the colour and with an
+        ///  anti-aliased edge. Lightness held: hue across, chroma up; chroma held: hue across, lightness up;
+        ///  hue held: lightness across, chroma up.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for an unknown channel, a null `value`, a component
+        ///  that is not finite, a zero size, or a `pixels` buffer whose `len` is not `width * height`.
         ///
         ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_oklch_paint_slice", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern int prisc_oklch_paint_slice(int plane, PriscOkLch* value, uint width, uint height, uint* pixels, nuint len);
+        internal static extern int prisc_oklch_paint_slice(int fixed_channel, PriscOkLch* value, uint width, uint height, uint* pixels, nuint len);
 
         /// <summary>
-        ///  Paints a `PriscOkLchChannel` slider track through `value` into `pixels`.
+        ///  Paints a slider track into `pixels`: `channel` (a `PriscOkLchChannel`) swept across its range
+        ///  left to right over `len` samples (lightness 0 to 1, chroma 0 to `OklchChromaMax`, hue 0 to 360)
+        ///  at `value`'s other two channels, an opaque BGRA pixel where sRGB has the colour and a
+        ///  transparent one where it does not.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for an unknown channel, a null `value`, a component
+        ///  that is not finite, or a null `pixels` with a length.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -224,11 +234,12 @@ namespace Prisc.Interop
         internal static extern int prisc_devices_free(PriscDevice* devices, nuint count);
 
         /// <summary>
-        ///  Maps `crf` onto NVENC CQ and VideoToolbox quality and bitrate for a frame size and rational
-        ///  frame rate.
+        ///  Maps `crf` (0 best to 51 worst, x264's scale) onto NVENC CQ and VideoToolbox quality and bitrate
+        ///  for a `width` x `height` output at `fps_num` / `fps_den` frames per second (the size and rate
+        ///  only matter to the bitrate). `out` is written only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out`, a crf outside 0 to 51, or a size or
+        ///  rate component that is not positive.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -865,10 +876,11 @@ namespace Prisc.Interop
         internal static extern int prisc_services_register_provider_macos(byte* port_name, nuint len, delegate* unmanaged[Cdecl]<void*, PriscString*, nuint, void> on_files, void* user);
 
         /// <summary>
-        ///  The region clamped to the minimum size the helper accepts.
+        ///  The region the helper would mirror for `rect`: each side floored at the minimum region size
+        ///  (`ShareRegionGeometry.MinRegion`) and then rounded down to even, the origin untouched.
+        ///  Idempotent.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `rect` or `out`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -876,10 +888,12 @@ namespace Prisc.Interop
         internal static extern int prisc_share_region_normalize(PriscRect* rect, PriscRect* @out);
 
         /// <summary>
-        ///  The region after dragging `handle` (a `PriscShareRegionHandle`) by (`dx`, `dy`) from `anchor`.
+        ///  The region after dragging `handle` (a `PriscShareRegionHandle`) by (`dx`, `dy`) from `anchor`,
+        ///  the region as the drag began. The body moves the region unchanged in size; any other handle
+        ///  moves only its own edges, swaps an edge that crosses its opposite (and which one is moving), and
+        ///  normalizes the result by pushing back the moving edge, so the anchored edge stays pinned.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `anchor` or `out`, or an unknown `handle`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -1131,7 +1145,8 @@ namespace Prisc.Interop
     }
 
     /// <summary>
-    ///  An OKLCH colour (24 bytes); hue in degrees.
+    ///  An OKLCH colour (24 bytes): lightness 0 to 1, chroma, hue in degrees. A value outside sRGB is
+    ///  valid input; the conversions say whether it is displayable.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe partial struct PriscOkLch
@@ -1142,7 +1157,10 @@ namespace Prisc.Interop
     }
 
     /// <summary>
-    ///  Everything one accent colour drives (136 bytes).
+    ///  Everything one accent colour drives (136 bytes, `0x00RRGGBB` throughout): the effective accent
+    ///  (the pick, darkened for white text when the contrast rule is on), the hint comet's body and
+    ///  head (from the pick itself), and the light, dark and dark-text ramps of ten steps each with the
+    ///  base at step 5.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe partial struct PriscAccentPalette
@@ -1179,7 +1197,8 @@ namespace Prisc.Interop
     }
 
     /// <summary>
-    ///  One crf mapped onto every encoder (16 bytes).
+    ///  One crf mapped onto every encoder (16 bytes): x264's crf (and AMF's qp), NVENC's constant-quality
+    ///  target, VideoToolbox's quality slider, and the Intel-Mac VideoToolbox average bitrate in kbps.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe partial struct PriscH264Quality

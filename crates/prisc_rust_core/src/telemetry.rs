@@ -25,14 +25,9 @@ use std::borrow::Cow;
 
 use sentry::integrations::log::{LogFilter, SentryLogger};
 
-/// Client-side DSN. These are not secrets — they are meant to ship inside the
-/// application and only grant permission to submit events.
-const DSN: &str = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.sentry.io/4511796263387136";
-
-/// Set to any non-empty value to turn reporting off. The shell honors the same
-/// variable, and every process it spawns inherits its environment, so opting
-/// out once covers all of them.
-const OPT_OUT_VAR: &str = prisc_ipc::env::DISABLE_TELEMETRY;
+// The DSN, the opt-out variable, the release format and the environment are the contract every
+// process shares, the C# shell included (`contract::telemetry`, generated as `TelemetryContract`).
+use crate::contract::telemetry::{DSN, ENVIRONMENT, OPT_OUT_VARIABLE as OPT_OUT_VAR, RELEASE_FORMAT};
 
 /// True when this build reports at all. Debug builds never do.
 const fn reporting_compiled_in() -> bool {
@@ -115,7 +110,7 @@ fn start(app: &'static str, sessions: bool) -> Option<sentry::ClientInitGuard> {
         DSN,
         sentry::ClientOptions {
             release: Some(release()),
-            environment: Some(Cow::Borrowed("production")),
+            environment: Some(Cow::Borrowed(ENVIRONMENT)),
             attach_stacktrace: true,
             auto_session_tracking: sessions,
             session_mode: sentry::SessionMode::Application,
@@ -178,7 +173,7 @@ fn opted_out() -> bool {
     std::env::var_os(OPT_OUT_VAR).is_some_and(|v| !v.is_empty())
 }
 
-/// `prisc@<version>`, matching the shell's release name. `PRISC_VERSION` is stamped
+/// `prisc@<version>` (`RELEASE_FORMAT`), the shell's release name too. `PRISC_VERSION` is stamped
 /// at build time by build.sh and CI from the same nbgv version that stamps
 /// Prisc.Ui; a build without it falls back to this crate's version. That fallback
 /// is reachable in a local `cargo build --release` — reporting is gated on
@@ -190,5 +185,5 @@ fn opted_out() -> bool {
 /// a cached object file cannot keep the old one.
 fn release() -> Cow<'static, str> {
     let version = option_env!("PRISC_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
-    Cow::Owned(format!("prisc@{version}"))
+    Cow::Owned(RELEASE_FORMAT.replace("{0}", version))
 }

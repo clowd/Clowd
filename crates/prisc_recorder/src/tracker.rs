@@ -25,15 +25,15 @@ use prisc_obs::tick::TickCallback;
 use crate::platform::{self, MouseInfo};
 use crate::region::Rect;
 
-/// How long one click's animation runs.
-const DURATION_MS: f64 = 400.0;
-/// Peak opacity, in `color_filter`'s 0-100 units (never fully opaque, so the
-/// content under the highlight stays readable).
-const MAX_OPACITY: f64 = 85.0;
-/// Radius at the moment of the click, and how much it grows over `DURATION_MS`
-/// — both in density-independent units (see `MouseInfo::scale`).
-const RADIUS_START: f64 = 10.0;
-const RADIUS_GROWTH: f64 = 30.0;
+// How long one click's animation runs, its peak opacity (as a fraction; never
+// fully opaque, so the content under the highlight stays readable), and the
+// radius at the moment of the click and how much it grows over the animation,
+// both in density-independent units (see `MouseInfo::scale`). Shared with the
+// video editor's composition (C# `ClickHighlight`), so a click highlighted live
+// and one composed in the editor animate alike.
+use prisc_rust_core::contract::click_highlight::{
+    DURATION_MS, MAX_OPACITY, RADIUS_GROWTH_DIP as RADIUS_GROWTH, RADIUS_START_DIP as RADIUS_START,
+};
 /// `tracker.png` is 100x100 with the disc inscribed, so its native radius is 50
 /// image px; the scene-item scale is the wanted radius over that.
 const IMAGE_RADIUS: f64 = 50.0;
@@ -118,8 +118,8 @@ pub fn animation_frame(
     }
     let t = elapsed_ms / DURATION_MS;
 
-    // Fades linearly from 85 to 0.
-    let opacity = ((1.0 - t) * MAX_OPACITY) as i32;
+    // Fades linearly from 85 to 0, in `color_filter`'s 0-100 units.
+    let opacity = ((1.0 - t) * (MAX_OPACITY * 100.0)) as i32;
 
     // Grows from 10 to 40 units, scaled for the density of the display the
     // click happened on.

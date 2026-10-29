@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Prisc.Interop;
 using Prisc.UI.Converters;
 
 namespace Prisc.UI.Dialogs.ColorPicker
@@ -126,9 +127,9 @@ namespace Prisc.UI.Dialogs.ColorPicker
             chartC.SetValues(l, c, h);
             chartH.SetValues(l, c, h);
 
-            sliderL.SliderBrush = Track(_trackL, t => (t, c, h));
-            sliderC.SliderBrush = Track(_trackC, t => (l, t * OkLchColor.ChromaMax, h));
-            sliderH.SliderBrush = Track(_trackH, t => (l, c, t * 360));
+            sliderL.SliderBrush = Track(_trackL, OkLchChannel.Lightness, l, c, h);
+            sliderC.SliderBrush = Track(_trackC, OkLchChannel.Chroma, l, c, h);
+            sliderH.SliderBrush = Track(_trackH, OkLchChannel.Hue, l, c, h);
             sliderA.SliderBrush = new LinearGradientBrush
             {
                 StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
@@ -155,16 +156,14 @@ namespace Prisc.UI.Dialogs.ColorPicker
         private static WriteableBitmap NewTrack() =>
             new(new PixelSize(TrackSamples, 1), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
 
-        /// <summary>Paints a slider's track across its channel's range (<c>t</c> 0 to 1, left to
-        /// right) at the other two channels' values, transparent wherever sRGB has no such color.</summary>
-        private static IBrush Track(WriteableBitmap bitmap, Func<double, (double L, double C, double H)> at)
+        /// <summary>Paints a slider's track across its channel's range (left to right: lightness 0
+        /// to 1, chroma 0 to <see cref="OkLchColor.ChromaMax"/>, hue 0 to 360) at the other two
+        /// channels' values, transparent wherever sRGB has no such color: one native call
+        /// (<see cref="OkLch.PaintTrack"/>).</summary>
+        private static IBrush Track(WriteableBitmap bitmap, OkLchChannel channel, double l, double c, double h)
         {
             var row = new int[TrackSamples];
-            for (var i = 0; i < TrackSamples; i++)
-            {
-                var (l, c, h) = at((i + 0.5) / TrackSamples);
-                row[i] = OkLchColor.ToLinearSrgb(l, c, h, out var r, out var g, out var b) ? OkLchChart.Opaque(r, g, b) : 0;
-            }
+            OkLch.PaintTrack(channel, l, c, h, MemoryMarshal.Cast<int, uint>(row.AsSpan()));
 
             using (var buffer = bitmap.Lock())
                 Marshal.Copy(row, 0, buffer.Address, TrackSamples);

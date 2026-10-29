@@ -28,11 +28,7 @@ fn stub_exports_of_three_areas_answer_unsupported() {
         unsafe { prisc_interop::ffi::idle::prisc_idle_seconds(&mut seconds) },
         S::Unsupported as i32
     );
-    let mut quality = prisc_interop::ffi::encoding::PriscH264Quality::default();
-    assert_eq!(
-        unsafe { prisc_interop::ffi::encoding::prisc_encoding_h264_quality(23, 1920, 1080, 30, 1, &mut quality) },
-        S::Unsupported as i32
-    );
+    // (the pure area's prisc_encoding_h264_quality is implemented)
     assert_eq!(
         unsafe { prisc_interop::ffi::gpu::prisc_gpu_nv12_texture_release_windows(std::ptr::null_mut()) },
         S::Unsupported as i32

@@ -5,6 +5,7 @@
 use prisc_obs::data::ObsData;
 use prisc_obs::encoder::ObsEncoder;
 use prisc_obs::error::ObsError;
+use prisc_rust_core::encoding;
 
 pub struct EncoderConfig {
     pub hw_accel: bool,
@@ -12,7 +13,8 @@ pub struct EncoderConfig {
     pub low_cpu: bool,
     /// Output (post-downscale) frame size and rate. Only the bitrate-driven
     /// fallback paths need them (Intel-Mac VideoToolbox, see
-    /// [`vt_abr_bitrate_kbps`]); the quality-driven mappings ignore them.
+    /// `encoding::video_toolbox_bitrate_kbps`); the quality-driven mappings
+    /// ignore them.
     pub width: u32,
     pub height: u32,
     pub fps: u32,
@@ -119,40 +121,12 @@ fn select_videotoolbox_encoder(available: &[String]) -> Option<String> {
     matches.first().map(|id| (*id).clone())
 }
 
-/// Maps x264-style CRF (0 best - 51 worst) onto VideoToolbox's quality slider
-/// (0 worst - 100 best; the plugin divides by 100 for
-/// kVTCompressionPropertyKey_Quality). VT ignores the x264 "crf" key entirely,
-/// so without this mapping every recording used the plugin default of 60.
-///
-/// The linear slope was measured on an M2 Pro (2026-09-10) to track x264
-/// `veryfast` at the same CRF to within ~0.6 VMAF across crf 16-24, so it is
-/// kept. What the slider does not have is a sane top end: past ~70 each
-/// point buys a fraction of a VMAF for a multiple of the bytes (q65 ≈ 11
-/// Mbps, q70 ≈ 17.5 Mbps, q80 ≈ 38 Mbps, q90 ≈ 113 Mbps at 1080p30), so the
-/// result is clamped to 15..=70 — crf 15 and below all land on 70.
-fn vt_quality_from_crf(crf: u16) -> i64 {
-    let q = ((51u16.saturating_sub(crf) as f64) * 100.0 / 51.0).round() as i64;
-    q.clamp(VT_QUALITY_MIN, VT_QUALITY_MAX)
-}
-
-const VT_QUALITY_MIN: i64 = 15;
-const VT_QUALITY_MAX: i64 = 70;
-
-/// Intel-Mac VideoToolbox has no quality mode, so it records at an average
-/// bitrate. Scale a 4 Mbps-at-3440x1440@30 budget by pixel rate and clamp to
-/// 1.5-6 Mbps: enough for a screen recording at the common sizes, and a hard
-/// ceiling so a 4K60 capture on an old Mac cannot balloon (6 Mbps is still
-/// ~1.35 GB per 30 minutes). This is a size compromise by design, not an
-/// equivalent of the CRF tiers; Apple Silicon takes the quality path instead.
-fn vt_abr_bitrate_kbps(width: u32, height: u32, fps: u32) -> i64 {
-    const REF_PIXELS: f64 = 3440.0 * 1440.0;
-    let pixel_rate = (width as f64 * height as f64 / REF_PIXELS) * (fps.max(1) as f64 / 30.0);
-    (4000.0 * pixel_rate).round().clamp(1500.0, 6000.0) as i64
-}
-
-/// Upper bound shared by x264's CRF and NVENC's target quality; both are
-/// 0-51-ish scales where 51 is the worst quality the encoder accepts.
-const MAX_QUALITY: i64 = 51;
+// The crf mappings (NVENC cq, the VideoToolbox quality slider and its Intel-Mac
+// average bitrate) and their bounds are `prisc_rust_core::encoding`, the one
+// implementation the video renderer's `H264EncoderSettings` also calls, so a
+// recording and a render at the same crf hand their encoders the same numbers.
+// VideoToolbox ignores the x264 "crf" key entirely, so without the slider
+// mapping every recording used the plugin default of 60.
 
 /// Encoder-specific settings (§2.5 table). `crf` is an x264-style CRF
 /// (0 best - 51 worst) and is the single quality knob the caller sees; each
@@ -168,8 +142,8 @@ const MAX_QUALITY: i64 = 51;
 ///   probe as OBS's recording presets. The plugin only validates the rate
 ///   control when the output starts, so the probe has to happen up front.
 /// - VideoToolbox: its inverted 0-100 quality slider on Apple Silicon, see
-///   [`vt_quality_from_crf`]; Intel Macs fall back to ABR at
-///   [`vt_abr_bitrate_kbps`].
+///   `encoding::video_toolbox_quality`; Intel Macs fall back to ABR at
+///   `encoding::video_toolbox_bitrate_kbps`.
 pub fn encoder_settings(encoder_id: &str, config: &EncoderConfig, caps: &EncoderCaps) -> ObsData {
     let settings = ObsData::new();
     let crf = config.crf as i64;
@@ -189,7 +163,7 @@ pub fn encoder_settings(encoder_id: &str, config: &EncoderConfig, caps: &Encoder
             // content, and a pure byte cost at lighter presets. p7 produced
             // byte-identical H.264 output to p6, and 4 B-frames matched 2.
             settings.set_string("rate_control", "CQVBR");
-            settings.set_int("target_quality", (crf + 4).clamp(1, MAX_QUALITY));
+            settings.set_int("target_quality", encoding::nvenc_cq(config.crf.into()).into());
             // The plugin still hands its `max_bitrate` default (10 Mbps) to
             // NVENC as maxBitRate in CQVBR mode, which caps quality on bursts
             // (a page jump at 4K60) instead of letting the target quality
@@ -233,7 +207,7 @@ pub fn encoder_settings(encoder_id: &str, config: &EncoderConfig, caps: &Encoder
                 // CABAC and is ~6% faster than `veryfast`; it still drops
                 // mbtree, which shifts its CRF scale, so +2 re-centers it on
                 // `veryfast`'s bytes.
-                settings.set_int("crf", (crf + 2).min(MAX_QUALITY));
+                settings.set_int("crf", (crf + 2).min(encoding::MAX_CRF.into()));
                 settings.set_string("preset", "superfast");
             } else {
                 settings.set_int("crf", crf);
@@ -247,10 +221,10 @@ pub fn encoder_settings(encoder_id: &str, config: &EncoderConfig, caps: &Encoder
             // rather than inheriting the plugin default (or a flat number that
             // is far too much for 720p and too little for 4K).
             settings.set_string("rate_control", "CRF");
-            settings.set_int("quality", vt_quality_from_crf(config.crf));
+            settings.set_int("quality", encoding::video_toolbox_quality(config.crf.into()).into());
             settings.set_int(
                 "bitrate",
-                vt_abr_bitrate_kbps(config.width, config.height, config.fps),
+                encoding::video_toolbox_bitrate_kbps(config.width, config.height, config.fps, 1).into(),
             );
             // Plugin default, made explicit: frame reordering is part of the
             // 2 B-frame policy every other encoder here runs.
@@ -446,21 +420,17 @@ mod tests {
         assert_eq!(select_videotoolbox_encoder(&available), None);
     }
 
+    /// The crf to slider mapping's own vectors live with it in
+    /// `prisc_rust_core::encoding`; this pins that the recorder routes its
+    /// u16 crf through it, saturating past 51.
     #[test]
-    fn vt_quality_mapping_inverts_crf() {
-        // both ends are clamped: the slider turns over past ~70 (bytes
-        // explode for no visible gain) and below 15 is unwatchable
-        assert_eq!(vt_quality_from_crf(0), 70);
-        assert_eq!(vt_quality_from_crf(15), 70);
-        assert_eq!(vt_quality_from_crf(16), 69);
-        assert_eq!(vt_quality_from_crf(18), 65);
-        assert_eq!(vt_quality_from_crf(51), 15);
-        assert_eq!(vt_quality_from_crf(24), 53);
-        // Prisc presets must be distinguishable: High(16) > Medium(23) > Low(29)
-        assert!(vt_quality_from_crf(16) > vt_quality_from_crf(23));
-        assert!(vt_quality_from_crf(23) > vt_quality_from_crf(29));
-        // out-of-range input saturates instead of wrapping
-        assert_eq!(vt_quality_from_crf(60), 15);
+    fn vt_quality_mapping_is_the_shared_one() {
+        let vt = "com.apple.videotoolbox.videoencoder.ave.avc";
+        for crf in [0u16, 16, 23, 51, 60] {
+            let s = encoder_settings(vt, &cfg(crf, false), &NO_CAPS);
+            assert_eq!(s.get_int("quality"), i64::from(encoding::video_toolbox_quality(crf.into())));
+        }
+        assert_eq!(encoder_settings(vt, &cfg(60, false), &NO_CAPS).get_int("quality"), 15);
     }
 
     fn cfg(crf: u16, low_cpu: bool) -> EncoderConfig {
@@ -585,20 +555,12 @@ mod tests {
 
     #[test]
     fn videotoolbox_abr_fallback_scales_with_pixel_rate_and_clamps() {
-        // reference point: 3440x1440@30 -> 4 Mbps
-        assert_eq!(vt_abr_bitrate_kbps(3440, 1440, 30), 4000);
-        // 1080p30 scales down proportionally, 720p30 hits the floor
-        assert_eq!(vt_abr_bitrate_kbps(1920, 1080, 30), 1674);
-        assert_eq!(vt_abr_bitrate_kbps(1280, 720, 30), 1500);
-        // 4K60 hits the ceiling
-        assert_eq!(vt_abr_bitrate_kbps(3840, 2160, 60), 6000);
-        // 60 fps doubles the 30 fps budget at the same size
-        assert_eq!(vt_abr_bitrate_kbps(1920, 1080, 60), 3349);
-
+        // the scaling's own vectors live in prisc_rust_core::encoding; the
+        // reference point (3440x1440@30 -> 4 Mbps) is what reaches ObsData
         let vt = "com.apple.videotoolbox.videoencoder.ave.avc";
         let s = encoder_settings(vt, &cfg(18, false), &NO_CAPS);
         assert_eq!(s.get_string("rate_control"), "CRF");
-        assert_eq!(s.get_int("quality"), vt_quality_from_crf(18));
+        assert_eq!(s.get_int("quality"), i64::from(encoding::video_toolbox_quality(18)));
         assert_eq!(s.get_int("bitrate"), 4000);
         assert!(s.get_bool("bframes"));
         assert_eq!(s.get_int("keyint_sec"), KEYINT_SEC);

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -27,17 +28,19 @@ namespace Prisc
     /// </remarks>
     internal static class SentryConfig
     {
-        /// <summary>Client-side DSN. These are not secrets — they are meant to ship inside the
-        /// application and only grant permission to submit events.</summary>
-        private const string Dsn = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.sentry.io/4511796263387136";
+        // The DSN, the opt-out variable, the release format and the environment are one contract
+        // with every Rust process (prisc_rust_core::contract::telemetry, generated as
+        // TelemetryContract), so a failure anywhere lands in one project under one release.
 
-        /// <summary>Set to any non-empty value to turn reporting off. The capturer honors the same
-        /// variable, so clearing it once in the environment covers both processes.</summary>
-        public const string OptOutVariable = "PRISC_DISABLE_TELEMETRY";
+        /// <summary>Set to any non-empty value to turn reporting off
+        /// (<see cref="TelemetryContract.OptOutVariable"/>). Every process honors the same variable,
+        /// so clearing it once in the environment covers all of them.</summary>
+        public const string OptOutVariable = TelemetryContract.OptOutVariable;
 
-        /// <summary>Sentry release identifier, <c>prisc@&lt;version&gt;</c>. Kept in the same shape as
-        /// the capturer's so both processes report against one release.</summary>
-        public static string Release { get; } = "prisc@" + GetVersion();
+        /// <summary>Sentry release identifier, <c>prisc@&lt;version&gt;</c>
+        /// (<see cref="TelemetryContract.ReleaseFormat"/>), the capturer's too, so every process
+        /// reports against one release.</summary>
+        public static string Release { get; } = String.Format(CultureInfo.InvariantCulture, TelemetryContract.ReleaseFormat, GetVersion());
 
         /// <summary>Key under which an exception carries the recent output of the child process it
         /// relates to (a string in <see cref="Exception.Data"/>). <see cref="CaptureHandled"/>
@@ -74,9 +77,9 @@ namespace Prisc
 
             return SentrySdk.Init(o =>
             {
-                o.Dsn = Dsn;
+                o.Dsn = TelemetryContract.Dsn;
                 o.Release = Release;
-                o.Environment = "production";
+                o.Environment = TelemetryContract.Environment;
 
                 // desktop app: one process, one user, no per-request scope isolation to preserve.
                 // Without this the scope is async-local and breadcrumbs set on one thread are

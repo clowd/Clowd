@@ -7,5 +7,16 @@ namespace Prisc
     /// <summary>The crash and error reporting contract every process shares.</summary>
     internal static partial class TelemetryContract
     {
+        /// <summary>The Sentry project's client-side DSN. Not a secret: it ships inside the application and only grants permission to submit events.</summary>
+        public const string Dsn = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.sentry.io/4511796263387136";
+
+        /// <summary>Any non-empty value turns reporting off. Every process honours it, and every process the shell spawns inherits its environment, so opting out once covers all of them.</summary>
+        public const string OptOutVariable = "PRISC_DISABLE_TELEMETRY";
+
+        /// <summary>The release name, with the version as {0}: every process reports against one release.</summary>
+        public const string ReleaseFormat = "prisc@{0}";
+
+        /// <summary>The Sentry environment every process reports under.</summary>
+        public const string Environment = "production";
     }
 }

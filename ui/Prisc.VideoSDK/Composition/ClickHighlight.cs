@@ -33,28 +33,18 @@ namespace Prisc.VideoSDK.Composition
     /// from the same ones, so the picker shows what the render will do.
     /// </summary>
     /// <remarks>
-    /// The constants are the obs tracker's, verbatim (<c>tracker.rs</c>): 400 ms, 85% peak opacity
-    /// fading linearly to nothing, radius 10 → 40 density-independent units. The tracker re-anchors
+    /// The constants are the obs tracker's (<c>tracker.rs</c>), one table both read
+    /// (<c>prisc_rust_core::contract::click_highlight</c>, generated into ClickHighlight.g.cs as
+    /// <see cref="DurationMs"/>, <see cref="MaxOpacity"/>, <see cref="RadiusStartDip"/> and
+    /// <see cref="RadiusGrowthDip"/>): 400 ms, 85% peak opacity fading linearly to nothing, radius
+    /// 10 → 40 density-independent units. The tracker re-anchors
     /// its animation to the pointer on every sample while a button is held, so a held button shows
     /// the animation's first frame and nothing else — which is why the held indicator here is
     /// <see cref="RadiusStartDip"/> at <see cref="MaxOpacity"/>, and why the animation proper runs
     /// off the <b>release</b>.
     /// </remarks>
-    public static class ClickHighlight
+    public static partial class ClickHighlight
     {
-        /// <summary>How long one release animation runs, in project-time milliseconds.</summary>
-        public const double DurationMs = 400.0;
-
-        /// <summary>Peak opacity — never fully opaque, so what is under the highlight stays
-        /// readable.</summary>
-        public const double MaxOpacity = 0.85;
-
-        /// <summary>Radius at the moment of the click, and how much it grows over
-        /// <see cref="DurationMs"/>, in DIP (scaled by the monitor's DPI at draw time).</summary>
-        public const double RadiusStartDip = 10.0;
-
-        public const double RadiusGrowthDip = 30.0;
-
         /// <summary>The widest the animation ever gets — what a preview scales its box against.</summary>
         public const double RadiusEndDip = RadiusStartDip + RadiusGrowthDip;
 

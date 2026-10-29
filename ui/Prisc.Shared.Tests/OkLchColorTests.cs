@@ -1,29 +1,34 @@
 using System;
 using Avalonia.Media;
+using Prisc.Interop.Testing;
 using Xunit;
 
 namespace Prisc.Shared.Tests
 {
+    /// <summary>
+    /// <see cref="OkLchColor"/>: its conversions are <c>prisc_rust_core::color</c>'s (vectors there:
+    /// the CSS reference values, the sRGB round trip, greys, the gamut mapping), so these check the
+    /// hand-off, alpha and the gamut flag; the CSS text is this type's own and is pinned in full.
+    /// </summary>
     public class OkLchColorTests
     {
-        [Theory]
-        [InlineData(0xFF, 0x00, 0x00, 0.6280, 0.2577, 29.23)] // CSS Color 4's worked values
-        [InlineData(0x00, 0xFF, 0x00, 0.8664, 0.2948, 142.50)]
-        [InlineData(0x00, 0x00, 0xFF, 0.4520, 0.3132, 264.05)]
-        [InlineData(0xFF, 0xFF, 0xFF, 1.0000, 0.0000, 0.00)]
-        public void FromColor_MatchesReferenceValues(byte r, byte g, byte b, double l, double c, double h)
+        [Fact]
+        public void FromColor_MatchesTheReferenceRed_AndKeepsAlpha()
         {
-            var oklch = OkLchColor.FromColor(Color.FromRgb(r, g, b));
-            Assert.Equal(l, oklch.L, 0.0005);
-            Assert.Equal(c, oklch.C, 0.0005);
-            Assert.Equal(h, oklch.H, 0.05);
+            InteropTestGate.Require();
+            var oklch = OkLchColor.FromColor(Color.FromArgb(0x80, 0xFF, 0x00, 0x00));
+            Assert.Equal(0.6280, oklch.L, 0.0005);
+            Assert.Equal(0.2577, oklch.C, 0.0005);
+            Assert.Equal(29.23, oklch.H, 0.05);
+            Assert.Equal(0x80 / 255d, oklch.Alpha, 6);
         }
 
         [Fact]
-        public void EverySrgbColor_RoundTripsAndIsInGamut()
+        public void SrgbColors_RoundTripAndAreInGamut()
         {
+            InteropTestGate.Require();
             var random = new Random(1234);
-            for (var i = 0; i < 2000; i++)
+            for (var i = 0; i < 200; i++)
             {
                 var color = Color.FromArgb((byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256));
                 var oklch = OkLchColor.FromColor(color);
@@ -35,27 +40,26 @@ namespace Prisc.Shared.Tests
         [Fact]
         public void Grays_AreAchromatic()
         {
-            for (var v = 0; v < 256; v += 15)
+            InteropTestGate.Require();
+            for (var v = 0; v < 256; v += 51)
                 Assert.True(OkLchColor.FromColor(Color.FromRgb((byte)v, (byte)v, (byte)v)).IsAchromatic);
+            Assert.Equal(SharedDefaults.OklchChromaMax, OkLchColor.ChromaMax);
         }
 
         [Fact]
-        public void ToColor_OutsideSrgb_LowersChromaOnly()
+        public void ToColor_OutsideSrgb_LowersChromaOnly_AndPastEitherEndIsWhiteOrBlack()
         {
+            InteropTestGate.Require();
             var vivid = new OkLchColor(0.7, 0.35, 150);
             Assert.False(vivid.IsInSrgb);
-
             var mapped = OkLchColor.FromColor(vivid.ToColor());
             Assert.Equal(0.7, mapped.L, 2);
             Assert.Equal(150, mapped.H, 0);
             Assert.True(mapped.C < 0.35);
-        }
 
-        [Fact]
-        public void ToColor_PastEitherEnd_IsWhiteOrBlack()
-        {
             Assert.Equal(Colors.White, new OkLchColor(1.2, 0.1, 40).ToColor());
             Assert.Equal(Colors.Black, new OkLchColor(-0.1, 0.1, 40).ToColor());
+            Assert.Equal(0x80, new OkLchColor(0.5, 0.1, 40, 0x80 / 255d).ToColor().A);
         }
 
         [Theory]

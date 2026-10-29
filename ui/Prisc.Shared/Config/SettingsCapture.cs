@@ -222,9 +222,10 @@ namespace Prisc.Config
         /// <summary>
         /// Applied when the setting is left blank, and the value the capture overlay already
         /// defaults to — so the shell only spends a <c>--filename-pattern</c> argument on a
-        /// pattern the user actually changed.
+        /// pattern the user actually changed (one constant with the overlay's default:
+        /// <see cref="SharedDefaults.DefaultFilenamePattern"/>).
         /// </summary>
-        public const string DefaultFilenamePattern = "yyyy-MM-dd HH-mm-ss";
+        public const string DefaultFilenamePattern = SharedDefaults.DefaultFilenamePattern;
 
         [Category("Saving")]
         [DisplayName("Filename pattern")]

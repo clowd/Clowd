@@ -4,8 +4,18 @@
 // </auto-generated>
 namespace Prisc.VideoSDK.Composition
 {
-    /// <summary>The recorded click highlight's animation, shared with the recorder.</summary>
-    public static partial class ClickHighlightContract
+    public static partial class ClickHighlight
     {
+        /// <summary>How long one click's animation runs, in milliseconds.</summary>
+        public const double DurationMs = 400.0;
+
+        /// <summary>Peak opacity as a fraction: never fully opaque, so what is under the highlight stays readable.</summary>
+        public const double MaxOpacity = 0.85;
+
+        /// <summary>Radius at the moment of the click, in density-independent units (scaled by the monitor's DPI at draw time).</summary>
+        public const double RadiusStartDip = 10.0;
+
+        /// <summary>How much the radius grows over the animation, in density-independent units.</summary>
+        public const double RadiusGrowthDip = 30.0;
     }
 }

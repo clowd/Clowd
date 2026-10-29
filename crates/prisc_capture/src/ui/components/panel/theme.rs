@@ -3,9 +3,12 @@
 //! [`crate::ui::fonts`], which every context loads before this applies a
 //! style over them.
 //!
-//! The values mirror the C# `TrayTokens` the floating strips share, so the
-//! Rust overlay and the WPF windows keep looking like one product. Nothing
-//! else in the panel hard-codes a colour, a radius or a font size.
+//! The tokens the Avalonia floating strips share with this panel (colours,
+//! radius, padding, sizes, veils, the tooltip and the shadow) come from
+//! `prisc_rust_core::contract::tray`, which C#'s `TrayTokens` is generated from,
+//! so the Rust overlay and the C# windows keep looking like one product; the rest
+//! are this panel's own. Nothing else in the panel hard-codes a colour, a radius
+//! or a font size.
 
 use std::sync::Arc;
 
@@ -15,6 +18,12 @@ use super::model::GroupTone;
 
 pub mod tokens {
     use egui::{vec2, Color32, CornerRadius, Shadow, Stroke, Vec2};
+    use prisc_rust_core::contract::{tray as shared, Rgb};
+
+    /// A shared `0x00RRGGBB` token as an opaque egui colour.
+    const fn rgb(c: Rgb) -> Color32 {
+        Color32::from_rgb((c.0 >> 16) as u8, (c.0 >> 8) as u8, c.0 as u8)
+    }
 
     /// Premultiplied white at `a`: `Color32::from_white_alpha` is not a
     /// `const fn`, and on white every premultiplied channel equals the
@@ -24,37 +33,35 @@ pub mod tokens {
     }
 
     /// Chassis fill, `#25272B`.
-    pub const TRAY_FILL: Color32 = Color32::from_rgb(0x25, 0x27, 0x2B);
+    pub const TRAY_FILL: Color32 = rgb(shared::TRAY_FILL);
     /// Secondary group fill, `#3A3E44`.
-    pub const SEG_FILL: Color32 = Color32::from_rgb(0x3A, 0x3E, 0x44);
+    pub const SEG_FILL: Color32 = rgb(shared::SEG_FILL);
     /// The hairline ring just inside the chassis edge, baked opaque so
-    /// it never shows the desktop through it. The C# strips paint
-    /// `#3B3D40` (`TRAY_FILL` + 10 % white) on a pixel row of its own;
-    /// egui feathers a 1 pt stroke across two half-covered rows, so the
-    /// same colour read as half the step. `#515255` (`TRAY_FILL` + 20 %)
-    /// lands the same visible edge.
+    /// it never shows the desktop through it: egui's own value of the
+    /// shared ring (`RING_EGUI`, see its docs for why it differs from the
+    /// C# strips' `RING_AVALONIA`).
     pub const RING: Stroke = Stroke {
         width: 1.0,
-        color: Color32::from_rgb(0x51, 0x52, 0x55),
+        color: rgb(shared::RING_EGUI),
     };
     /// `ShadowCompact`: `0 3 10 #59000000`.
     pub const SHADOW: Shadow = Shadow {
-        offset: [0, 3],
-        blur: 10,
+        offset: [0, shared::SHADOW_OFFSET_Y as i8],
+        blur: shared::SHADOW_BLUR as u8,
         spread: 0,
-        color: Color32::from_black_alpha(89),
+        color: Color32::from_black_alpha(shared::SHADOW_ALPHA as u8),
     };
     /// Corner radius of the chassis and of every item box.
-    pub const RADIUS: CornerRadius = CornerRadius::same(8);
+    pub const RADIUS: CornerRadius = CornerRadius::same(shared::RADIUS as u8);
     /// Inset from the tray edge to its first item. The ring is part of the
     /// frame's margin, so `tray_frame` subtracts its width from this.
-    pub const PAD: f32 = 4.0;
+    pub const PAD: f32 = shared::TRAY_PAD;
     /// Between items inside the tray.
-    pub const GAP: f32 = 4.0;
+    pub const GAP: f32 = shared::GAP;
     /// A button is never shorter than this along a row.
-    pub const BUTTON_MIN_LENGTH: f32 = 40.0;
+    pub const BUTTON_MIN_LENGTH: f32 = shared::BUTTON_MIN_WIDTH;
     /// The emblem's slot along the strip.
-    pub const EMBLEM_SLOT: f32 = 40.0;
+    pub const EMBLEM_SLOT: f32 = shared::EMBLEM_LENGTH;
     /// The emblem mark, centred in its slot.
     pub const EMBLEM_MARK: f32 = 32.0;
     /// Between the emblem and the readout. The mark is smaller than its
@@ -63,17 +70,17 @@ pub mod tokens {
     /// gaps further along the strip.
     pub const EMBLEM_GAP: f32 = GAP - 4.0;
     /// Button icon cell.
-    pub const ICON: f32 = 20.0;
+    pub const ICON: f32 = shared::ICON_SIZE;
     pub const ICON_SIZE: Vec2 = vec2(ICON, ICON);
     /// Clearance kept from the monitor edge in the placement fit test.
     pub const NEAR_MIN: f32 = 2.0;
     /// Gap between the selection and the chassis.
     pub const NEAR_MAX: f32 = 15.0;
     /// Hover fade, linear, in and out.
-    pub const HOVER_FADE_SECS: f32 = 0.18;
+    pub const HOVER_FADE_SECS: f32 = shared::FILL_TRANSITION.as_secs_f32();
     /// Hover veil on a grey group: white at 12 % over the group fill
     /// (the C# strips' `WhiteVeil12`).
-    pub const HOVER_VEIL: f32 = 0.12;
+    pub const HOVER_VEIL: f32 = shared::HOVER_VEIL_ALPHA;
     /// Hover veil on the accent group: white at 28 %. The accent is a
     /// saturated mid tone, so the grey group's 12 % step reads as barely
     /// a change on it.
@@ -82,7 +89,7 @@ pub mod tokens {
     /// capture strip's second row): white at 18 %. The chassis is darker
     /// than the segment grey, so the grey group's 12 % step would land
     /// short of `SEG_FILL` and the button would not read as lit at all.
-    pub const HOVER_VEIL_BARE: f32 = 0.18;
+    pub const HOVER_VEIL_BARE: f32 = shared::HOVER_VEIL_BARE_ALPHA;
 
     pub const FG: Color32 = Color32::WHITE;
     /// White text at 85 %: the readout's number.
@@ -96,11 +103,11 @@ pub mod tokens {
 
     /// `key` style: a 40 pt square holding the icon and the accelerator
     /// letter side by side.
-    pub const KEY_TILE: f32 = 40.0;
+    pub const KEY_TILE: f32 = shared::BUTTON_HEIGHT;
     pub const KEY_PAD_H: f32 = 4.0;
     pub const KEY_GAP: f32 = 3.0;
     /// 9 pt accelerator letter in the `key` button style.
-    pub const KEY_FONT: f32 = 9.0;
+    pub const KEY_FONT: f32 = shared::KEY_HINT_FONT_SIZE;
 
     /// `below` style: icon over the label, 48 pt tall.
     pub const BELOW_HEIGHT: f32 = 48.0;
@@ -166,14 +173,19 @@ pub mod tokens {
     /// The hover tooltip on a `key`-style button (the C# strips' tip chip,
     /// spec §10): `#F2141619`, white 11 pt text, padding 8 × 4, radius 6,
     /// shown after 350 ms, 7 pt below a row / 8 pt beside a column.
-    pub const TIP_FILL: Color32 = Color32::from_rgba_unmultiplied_const(0x14, 0x16, 0x19, 0xF2);
+    pub const TIP_FILL: Color32 = Color32::from_rgba_unmultiplied_const(
+        (shared::TIP_FILL_RGB.0 >> 16) as u8,
+        (shared::TIP_FILL_RGB.0 >> 8) as u8,
+        shared::TIP_FILL_RGB.0 as u8,
+        shared::TIP_FILL_ALPHA as u8,
+    );
     pub const TIP_FONT: f32 = 11.0;
     pub const TIP_PAD_H: f32 = 8.0;
     pub const TIP_PAD_V: f32 = 4.0;
     pub const TIP_RADIUS: f32 = 6.0;
-    pub const TIP_GAP_BOTTOM: f32 = 7.0;
-    pub const TIP_GAP_RIGHT: f32 = 8.0;
-    pub const TIP_DELAY_SECS: f64 = 0.35;
+    pub const TIP_GAP_BOTTOM: f32 = shared::TOOL_TIP_GAP_BOTTOM;
+    pub const TIP_GAP_RIGHT: f32 = shared::TOOL_TIP_GAP_RIGHT;
+    pub const TIP_DELAY_SECS: f64 = shared::TOOL_TIP_SHOW_DELAY.as_secs_f64();
 
     /// 12 pt debug-panel body.
     pub const DEBUG_FONT: f32 = 12.0;
