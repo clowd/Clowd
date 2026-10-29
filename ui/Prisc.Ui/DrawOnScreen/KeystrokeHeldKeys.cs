@@ -15,7 +15,8 @@ namespace Prisc.UI.DrawOnScreen
     /// no longer holds it, and any other key only once it has been quiet for <see cref="StaleMs"/>
     /// and the OS says it is up.
     /// </para>
-    /// Pure (the OS query is passed in) and single-threaded.
+    /// Pure (the OS query is passed in, and asked once per press for every stale key together) and
+    /// single-threaded.
     /// </summary>
     public sealed class KeystrokeHeldKeys
     {
@@ -30,21 +31,43 @@ namespace Prisc.UI.DrawOnScreen
         // observing started are never taken for modifiers
         private HotkeyModifiers? _lastModifiers;
 
+        /// <summary>The most stale keys one press asks the OS about (one bit each in the answer);
+        /// any beyond it are asked about on a later press.</summary>
+        public const int MaxQueried = 64;
+
         /// <summary>A press or auto-repeat of <paramref name="code"/>, with the hook's modifiers at
-        /// it. Returns the held keys to release before it, in no particular order.</summary>
-        public IReadOnlyList<int> Down(int code, HotkeyModifiers modifiers, double nowMs, Func<int, bool> isPhysicallyDown)
+        /// it. Returns the held keys to release before it, in no particular order.
+        /// <paramref name="keysDown"/> is the OS query: given the codes it is asked about, bit i of
+        /// its answer says the i-th is physically down. It is called at most once per press, and only
+        /// when some key has gone quiet for <see cref="StaleMs"/>.</summary>
+        public IReadOnlyList<int> Down(int code, HotkeyModifiers modifiers, double nowMs, Func<IReadOnlyList<int>, ulong> keysDown)
         {
             List<int> released = null;
+            List<int> stale = null;
             foreach (var (held, state) in _held)
             {
                 if (held == code)
                     continue;
 
-                var gone = state.Flag != HotkeyModifiers.None
-                    ? (modifiers & state.Flag) == 0
-                    : nowMs - state.LastMs >= StaleMs && !isPhysicallyDown(held);
-                if (gone)
-                    (released ??= new()).Add(held);
+                if (state.Flag != HotkeyModifiers.None)
+                {
+                    if ((modifiers & state.Flag) == 0)
+                        (released ??= new()).Add(held);
+                }
+                else if (nowMs - state.LastMs >= StaleMs && (stale?.Count ?? 0) < MaxQueried)
+                {
+                    (stale ??= new()).Add(held);
+                }
+            }
+
+            if (stale != null)
+            {
+                var down = keysDown(stale);
+                for (int i = 0; i < stale.Count; i++)
+                {
+                    if ((down & (1UL << i)) == 0)
+                        (released ??= new()).Add(stale[i]);
+                }
             }
 
             if (released != null)

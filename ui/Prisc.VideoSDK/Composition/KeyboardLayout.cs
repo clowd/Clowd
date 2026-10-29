@@ -372,254 +372,31 @@ namespace Prisc.VideoSDK.Composition
         };
 
         /// <summary>
-        /// Display name for a Windows virtual-key code. Every name is plain ASCII on purpose: the
-        /// overlay draws with the platform's default typeface, and a symbol glyph it happens not
-        /// to carry (⌫, ⇧, ↵ …) renders as a tofu box. Where a symbol is genuinely wanted the
-        /// keycap draws it as a vector icon instead — see <see cref="Keycap"/>. Unknown codes fall
-        /// back to <c>VK</c>+code, which is ugly but always legible and never empty.
+        /// Display name for a Windows virtual-key code: the keycap legend from the prisc_hotkeys key
+        /// table (<see cref="KeycapLegends"/>, generated). Every legend is plain ASCII on purpose: the
+        /// overlay draws with the platform's default typeface, and a symbol glyph it happens not to
+        /// carry (⌫, ⇧, ↵ …) renders as a tofu box. Where a symbol is genuinely wanted the keycap
+        /// draws it as a vector icon instead; see <see cref="Keycap"/>. Unknown codes fall back to
+        /// <c>VK</c>+code, which is ugly but always legible and never empty.
         /// </summary>
-        internal static string VkName(int vk) => vk switch
-        {
-            1 => "LMouse",
-            2 => "RMouse",
-            3 => "Cancel",
-            4 => "MMouse",
-            5 => "Mouse4",
-            6 => "Mouse5",
-            8 => "Bksp",
-            9 => "Tab",
-            12 => "Clear",
-            13 => "Enter",
-            19 => "Pause",
-            20 => "Caps",
-            21 => "Kana",
-            23 => "Junja",
-            24 => "Final",
-            25 => "Kanji",
-            27 => "Esc",
-            28 => "Convert",
-            29 => "NoConvert",
-            30 => "Accept",
-            31 => "ModeChg",
-            32 => "Space",
-            33 => "PgUp",
-            34 => "PgDn",
-            35 => "End",
-            36 => "Home",
-            37 => "Left",
-            38 => "Up",
-            39 => "Right",
-            40 => "Down",
-            41 => "Select",
-            42 => "Print",
-            43 => "Exec",
-            44 => "PrtSc",
-            45 => "Ins",
-            46 => "Del",
-            47 => "Help",
-            16 or 160 or 161 => "Shift",
-            17 or 162 or 163 => "Ctrl",
-            18 or 164 or 165 => "Alt",
-            91 or 92 => "Win",
-            93 => "Menu",
-            95 => "Sleep",
-            >= 48 and <= 57 => ((char)vk).ToString(),   // top-row digits
-            >= 65 and <= 90 => ((char)vk).ToString(),   // letters
-            >= 96 and <= 105 => ((char)(vk - 48)).ToString(), // numpad digits
-            106 => "*",
-            107 => "+",
-            108 => "Sep",
-            109 => "-",
-            110 => ".",
-            111 => "/",
-            >= 112 and <= 135 => "F" + (vk - 111),
-            144 => "NumLk",
-            145 => "ScrLk",
-            166 => "Back",
-            167 => "Fwd",
-            168 => "Refresh",
-            169 => "Stop",
-            170 => "Search",
-            171 => "Favs",
-            172 => "Home",
-            173 => "Mute",
-            174 => "Vol-",
-            175 => "Vol+",
-            176 => "Next",
-            177 => "Prev",
-            178 => "Stop",
-            179 => "Play",
-            180 => "Mail",
-            181 => "Media",
-            182 => "App1",
-            183 => "App2",
-            186 => ";",
-            187 => "=",
-            188 => ",",
-            189 => "-",
-            190 => ".",
-            191 => "/",
-            192 => "`",
-            219 => "[",
-            220 => "\\",
-            221 => "]",
-            222 => "'",
-            223 => "OEM8",
-            226 => "\\",
-            229 => "Process",
-            231 => "Packet",
-            246 => "Attn",
-            247 => "CrSel",
-            248 => "ExSel",
-            249 => "ErEOF",
-            250 => "Play",
-            251 => "Zoom",
-            253 => "PA1",
-            254 => "Clear",
-            _ => "VK" + vk.ToString(CultureInfo.InvariantCulture),
-        };
+        internal static string VkName(int vk) =>
+            KeycapLegends.Windows(vk) ?? "VK" + vk.ToString(CultureInfo.InvariantCulture);
 
         /// <summary>
-        /// Display name for a macOS <c>CGKeyCode</c>, the numbering a <c>CGEventTap</c> reports.
-        /// These are positional hardware codes with no relationship to <see cref="VkName"/>'s
-        /// Win32 space — 13 is W here and Enter there, 51 is Delete here and nothing there — which
-        /// is exactly why the header carries the platform and why reading a Mac capture through
-        /// the Win32 table produced the garbage this method replaces.
-        ///
-        /// Names follow the legends molded into an Apple keyboard, not the PC words for the same
-        /// physical keys: Return not Enter, Delete not Bksp, Option not Alt, Cmd not Win. A Mac
-        /// user watching their own recording should recognize the caps they pressed.
-        ///
-        /// Plain ASCII for the same reason <see cref="VkName"/> is — the overlay draws with the
-        /// platform default typeface and the wanted symbols (⌘ ⌥ ⌫ ↩ ⇧ ⇪) are precisely the
-        /// glyphs such a font tends to lack, so <see cref="Keycap"/> draws them as vector icons
-        /// keyed off these names. Unknown codes fall back to <c>Key</c>+code, which is ugly but
-        /// legible and never empty. Codes above 126 do not exist in this space at all.
+        /// Display name for a macOS <c>CGKeyCode</c>, the numbering a <c>CGEventTap</c> reports:
+        /// the keycap legend from the prisc_hotkeys key table (<see cref="KeycapLegends"/>, generated).
+        /// These are positional hardware codes with no relationship to <see cref="VkName"/>'s Win32
+        /// space (13 is W here and Enter there, 51 is Delete here and nothing there), which is why
+        /// the header carries the platform. The legends are the ones molded into an Apple keyboard,
+        /// not the PC words for the same physical keys: Return not Enter, Delete not Bksp, Option
+        /// not Alt, Cmd not Win, so a Mac user watching their own recording recognizes the caps
+        /// they pressed. Plain ASCII for the same reason as <see cref="VkName"/>, bar the ISO and
+        /// JIS legends (§, ¥) the default typeface carries; <see cref="Keycap"/> draws the symbol
+        /// keys as vector icons keyed off these names. Unknown codes fall back to <c>Key</c>+code,
+        /// which is ugly but legible and never empty.
         /// </summary>
-        internal static string MacKeyName(int code) => code switch
-        {
-            // letters and the punctuation that shares their block, in Apple's scattered
-            // positional order (kVK_ANSI_* in <Carbon/HIToolbox/Events.h>) — a lookup, not a
-            // range, because the codes follow the 1984 Macintosh's key matrix, not the alphabet.
-            0 => "A",
-            1 => "S",
-            2 => "D",
-            3 => "F",
-            4 => "H",
-            5 => "G",
-            6 => "Z",
-            7 => "X",
-            8 => "C",
-            9 => "V",
-            10 => "§",  // kVK_ISO_Section: the extra key an ISO board grows left of Z
-            11 => "B",
-            12 => "Q",
-            13 => "W",
-            14 => "E",
-            15 => "R",
-            16 => "Y",
-            17 => "T",
-            18 => "1",
-            19 => "2",
-            20 => "3",
-            21 => "4",
-            22 => "6",  // 6 and 5 really are transposed in the matrix
-            23 => "5",
-            24 => "=",
-            25 => "9",
-            26 => "7",
-            27 => "-",
-            28 => "8",
-            29 => "0",
-            30 => "]",
-            31 => "O",
-            32 => "U",
-            33 => "[",
-            34 => "I",
-            35 => "P",
-            36 => "Return",
-            37 => "L",
-            38 => "J",
-            39 => "'",
-            40 => "K",
-            41 => ";",
-            42 => "\\",
-            43 => ",",
-            44 => "/",
-            45 => "N",
-            46 => "M",
-            47 => ".",
-            48 => "Tab",
-            49 => "Space",
-            50 => "`",
-            51 => "Delete",  // the ⌫ key; macOS calls it Delete, Windows calls it Backspace
-            53 => "Esc",
-
-            // modifiers. Left/right twins share a name — the overlay legends the key, and both
-            // shifts are Shift.
-            54 or 55 => "Cmd",
-            56 or 60 => "Shift",
-            57 => "Caps",
-            58 or 61 => "Option",
-            59 or 62 => "Ctrl",
-            63 => "Fn",
-
-            // keypad, media and the upper function keys, interleaved the same way the matrix is
-            65 => ".",
-            67 => "*",
-            69 => "+",
-            71 => "Clear",
-            72 => "Vol+",
-            73 => "Vol-",
-            74 => "Mute",
-            75 => "/",
-            76 => "Enter",  // the keypad's own Enter, a distinct key from Return
-            78 => "-",
-            81 => "=",
-            >= 82 and <= 89 => ((char)(code - 34)).ToString(), // keypad 0..7
-            91 => "8",
-            92 => "9",
-            93 => "¥",  // kVK_JIS_Yen
-            94 => "_",  // kVK_JIS_Underscore
-            95 => ",",  // kVK_JIS_KeypadComma
-            102 => "Eisu",
-            104 => "Kana",
-            110 => "Menu",
-            114 => "Help",
-            115 => "Home",
-            116 => "PgUp",
-            117 => "Fwd Del",  // ⌦, the other Delete — spelled out so the two cannot be confused
-            119 => "End",
-            121 => "PgDn",
-            123 => "Left",
-            124 => "Right",
-            125 => "Down",
-            126 => "Up",
-
-            // F1..F20, whose codes are scattered worse than anything else in the space
-            122 => "F1",
-            120 => "F2",
-            99 => "F3",
-            118 => "F4",
-            96 => "F5",
-            97 => "F6",
-            98 => "F7",
-            100 => "F8",
-            101 => "F9",
-            109 => "F10",
-            103 => "F11",
-            111 => "F12",
-            105 => "F13",
-            107 => "F14",
-            113 => "F15",
-            106 => "F16",
-            64 => "F17",
-            79 => "F18",
-            80 => "F19",
-            90 => "F20",
-
-            _ => "Key" + code.ToString(CultureInfo.InvariantCulture),
-        };
+        internal static string MacKeyName(int code) =>
+            KeycapLegends.MacOS(code) ?? "Key" + code.ToString(CultureInfo.InvariantCulture);
 
         /// <summary>
         /// Which board a capture's codes came off, read from the header row the recorder writes.

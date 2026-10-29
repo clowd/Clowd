@@ -1,6 +1,6 @@
 //! The Win32 half of [`crate::input`]: `SendInput` for the wheel,
 //! `WM_MOUSEWHEEL` for the second rung, `SetForegroundWindow` /
-//! `SetWindowPos` for the raise, `GetAsyncKeyState` for the Esc poll.
+//! `SetWindowPos` for the raise, `prisc_platform::input` for the Esc poll.
 //!
 //! Everything here is in physical virtual-desktop pixels, which is what the
 //! marker carries on this platform and what every call below takes — as long
@@ -14,7 +14,7 @@ use windows::Win32::{
     Graphics::Gdi::ScreenToClient,
     UI::{
         HiDpi::{GetAwarenessFromDpiAwarenessContext, GetThreadDpiAwarenessContext, DPI_AWARENESS_PER_MONITOR_AWARE},
-        Input::KeyboardAndMouse::{GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_WHEEL, MOUSEINPUT, VK_ESCAPE},
+        Input::KeyboardAndMouse::{SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_WHEEL, MOUSEINPUT, VK_ESCAPE},
         WindowsAndMessaging::{
             ChildWindowFromPointEx, GetAncestor, GetWindowRect, IsWindow, SendMessageTimeoutW, SetForegroundWindow, SetWindowPos,
             WindowFromPoint, CWP_SKIPINVISIBLE, CWP_SKIPTRANSPARENT, GA_ROOT, GA_ROOTOWNER, HWND_TOP, SMTO_ABORTIFHUNG, SWP_NOACTIVATE,
@@ -230,13 +230,12 @@ pub fn cursor_pos() -> Option<ScreenPoint> {
 
 /// Is Escape physically down right now?
 ///
-/// The high bit is the current key state; `GetAsyncKeyState`'s low bit
-/// ("pressed since the last call") is deliberately ignored — Esc belongs to
-/// the foreground app, which is the *target*, so all we can honestly ask is
-/// whether the user is holding it, and racing another poller for the edge
-/// bit would lose the answer at random.
+/// `prisc_platform::input::is_key_down` reads `GetAsyncKeyState`'s high bit, the current key
+/// state, and ignores its low bit ("pressed since the last call"): Esc belongs to the foreground
+/// app, which is the *target*, so all we can honestly ask is whether the user is holding it, and
+/// racing another poller for the edge bit would lose the answer at random.
 pub fn escape_pressed() -> bool {
-    (unsafe { GetAsyncKeyState(VK_ESCAPE.0 as i32) } as u16 & 0x8000) != 0
+    prisc_platform::input::is_key_down(u32::from(VK_ESCAPE.0)).unwrap_or(false)
 }
 
 /// Inject `ticks` wheel notches at the current (parked) cursor position.
