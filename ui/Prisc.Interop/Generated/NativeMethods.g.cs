@@ -23,11 +23,15 @@ namespace Prisc.Interop
 
 
         /// <summary>
-        ///  macOS: sets the activation policy (a `PriscActivationPolicy`) and, for Regular when asked,
-        ///  activates the app, in one hop.
+        ///  macOS: sets `-[NSApplication setActivationPolicy:]` to `policy` (a `PriscActivationPolicy`)
+        ///  and, when `activate_if_regular` is non-zero and the policy is Regular, follows it with
+        ///  `activateIgnoringOtherApps:YES` in the same main-thread hop: an Accessory to Regular flip on its
+        ///  own leaves the app behind whichever app was frontmost, and the window that caused it opens
+        ///  behind that app. Owns nothing.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_UNSUPPORTED` off macOS.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for an unknown policy (checked first, on every OS and
+        ///  thread); `PRISC_E_STATE` off the main thread; `PRISC_E_OS` (code 0) when AppKit refused the
+        ///  policy; `PRISC_E_UNSUPPORTED` off macOS.
         ///
         ///  Thread: must be the macOS main thread.
         /// </summary>
@@ -774,11 +778,12 @@ namespace Prisc.Interop
         internal static extern int prisc_log_set_callback(delegate* unmanaged[Cdecl]<int, byte*, nuint, void*, void> callback, void* user);
 
         /// <summary>
-        ///  The current state of a permission (a `PriscPermissionKind`) as a `PriscPermissionState`. Never
-        ///  prompts.
+        ///  The current state of a permission (a `PriscPermissionKind`), written to `out_state` as a
+        ///  `PriscPermissionState`. Never prompts and never caches. Screen Recording and Accessibility are
+        ///  Granted or Denied on macOS; Microphone and Camera may also be NotDetermined (Restricted reads as
+        ///  Denied). Every kind is NotApplicable off macOS.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for an unknown kind or a null `out_state`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -786,11 +791,17 @@ namespace Prisc.Interop
         internal static extern int prisc_permission_state(int kind, int* out_state);
 
         /// <summary>
-        ///  Makes sure a permission is granted, prompting only when it is not (an idempotent "ensure"), and
-        ///  writes the state read afterwards. Microphone and Camera are `PRISC_E_INVALID_ARG`.
+        ///  Makes sure a permission is granted, prompting only when it is not (an idempotent "ensure"),
+        ///  and writes the state read afterwards with the same rule as `prisc_permission_state`. Already
+        ///  Granted (or NotApplicable) returns at once without prompting. Otherwise Screen Recording calls
+        ///  `CGRequestScreenCaptureAccess`; Accessibility calls `AXIsProcessTrustedWithOptions` with the
+        ///  prompt option when AX is not trusted, or `CGRequestPostEventAccess` when only post-event access
+        ///  is missing. macOS offers each prompt once per app, and a fresh Screen Recording grant reaches a
+        ///  running process only after a restart, so Denied afterwards means "not usable yet", not "refused".
+        ///  Microphone and Camera are not requested through this export (no caller asks for them).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for an unknown kind, Microphone or Camera, or a null
+        ///  `out_state`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -949,11 +960,20 @@ namespace Prisc.Interop
         internal static extern int prisc_interop_selftest(int kind, long* out_value);
 
         /// <summary>
-        ///  macOS: registers the Services provider under the UTF-8 `port_name` and refreshes the dynamic
-        ///  services; `on_files` receives the paths of each request.
+        ///  macOS: registers the Services provider under the UTF-8 `port_name` (`len` bytes, not
+        ///  NUL-terminated; it must equal the bundle's `NSServices` `NSPortName`) and refreshes the
+        ///  pasteboard server's services cache (`NSUpdateDynamicServices`), so an updated bundle's menu
+        ///  entry shows without a re-login.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_UNSUPPORTED` off macOS.
+        ///  `on_files` runs on the main thread, inside AppKit's dispatch, once per invocation that carried
+        ///  at least one file: `paths` points at `count` borrowed UTF-8 paths (mode 3, valid only during
+        ///  the call). It must not let an exception escape. `user` is handed back unchanged and never
+        ///  dereferenced. The registration lasts for the process (no caller unregisters; AppKit holds the
+        ///  provider unretained), so `user` must stay valid for the process too.
+        ///
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for an empty or non-UTF-8 `port_name` or a null
+        ///  `on_files` (checked first, on every OS and thread); `PRISC_E_STATE` off the main thread or when
+        ///  a provider is already registered; `PRISC_E_UNSUPPORTED` off macOS.
         ///
         ///  Thread: must be the macOS main thread.
         /// </summary>
