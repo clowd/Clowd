@@ -43,6 +43,7 @@ use crate::ffi::log::{self, PriscInteropLogLevel};
 use crate::ffi::types::PriscString;
 use crate::panic::{self, CallbackPanic};
 use crate::platform::macos::devices::{self, coreaudio_error, float32_interleaved};
+use crate::platform::macos::permissions;
 
 /// The host's callback, as the export receives it.
 pub(crate) type InputFn = unsafe extern "C" fn(user: *mut c_void, event: *const PriscAudioInputEvent) -> u8;
@@ -151,7 +152,7 @@ impl Input {
     /// Opens the input: authorization, device, format, queue, three buffers. Nothing is left open
     /// on failure.
     pub(crate) fn open(uid: &str, sample_rate_hz: u32, buffer_ms: u32, callback: InputFn, user: *mut c_void) -> Result<Arc<Input>> {
-        let status = devices::authorization(true);
+        let status = permissions::authorization(true);
         if status == AVAuthorizationStatus::Denied || status == AVAuthorizationStatus::Restricted {
             return Err(Error::permission(
                 "Microphone access is denied for Prisc (System Settings > Privacy & Security > Microphone).",
@@ -530,7 +531,7 @@ mod tests {
     /// Opens the default input, or `None` (with the reason) where the test cannot: no grant on this
     /// machine (asserting the documented answer), or no input device.
     fn open_default(seen: &'static Seen) -> Option<Arc<Input>> {
-        let status = devices::authorization(true);
+        let status = permissions::authorization(true);
         if status != AVAuthorizationStatus::Authorized {
             if status == AVAuthorizationStatus::Denied || status == AVAuthorizationStatus::Restricted {
                 let e = Input::open("", 48_000, 50, record, user(seen))
@@ -635,7 +636,7 @@ mod tests {
     #[test]
     fn an_unknown_uid_falls_back_to_the_default() {
         let seen = seen();
-        if devices::authorization(true) != AVAuthorizationStatus::Authorized {
+        if permissions::authorization(true) != AVAuthorizationStatus::Authorized {
             return;
         }
         match Input::open("prisc-no-such-microphone", 48_000, 50, record, user(seen)) {
@@ -658,7 +659,7 @@ mod tests {
         };
         use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFType};
 
-        if devices::authorization(true) != AVAuthorizationStatus::Authorized {
+        if permissions::authorization(true) != AVAuthorizationStatus::Authorized {
             eprintln!("skipped: no microphone grant");
             return;
         }
@@ -746,7 +747,7 @@ mod tests {
     #[test]
     fn an_oversized_buffer_is_refused_before_anything_opens() {
         let seen = seen();
-        if devices::authorization(true) != AVAuthorizationStatus::Authorized || devices::default_device(false).is_none() {
+        if permissions::authorization(true) != AVAuthorizationStatus::Authorized || devices::default_device(false).is_none() {
             return;
         }
         let e = Input::open("", 192_000, u32::MAX, record, user(seen))

@@ -14,8 +14,7 @@ use std::ptr::{self, NonNull};
 
 use objc2::rc::autoreleasepool;
 use objc2_av_foundation::{
-    AVAuthorizationStatus, AVCaptureDevice, AVCaptureDeviceDiscoverySession, AVCaptureDevicePosition, AVCaptureDeviceType, AVMediaType,
-    AVMediaTypeAudio, AVMediaTypeMuxed, AVMediaTypeVideo,
+    AVCaptureDeviceDiscoverySession, AVCaptureDevicePosition, AVCaptureDeviceType, AVMediaTypeMuxed, AVMediaTypeVideo,
 };
 use objc2_core_audio::{
     kAudioDevicePropertyDeviceUID, kAudioDevicePropertyStreamConfiguration, kAudioHardwarePropertyDefaultInputDevice,
@@ -132,26 +131,6 @@ fn string_constant(symbol: &CStr) -> Option<&'static NSString> {
     // SAFETY: the symbol is an `NSString *const` global of a framework that is never unloaded, so
     // both the global and the constant string it points at live for the process.
     unsafe { (*address).as_ref() }
-}
-
-/// What AVFoundation has stored about this process's access to the microphone (`audio`) or the
-/// camera. Never prompts. The one reader of that status: the microphone open checks it, and the
-/// permission exports can read it from here too.
-#[allow(dead_code)] // the camera half has no caller in this area
-pub(crate) fn authorization(audio: bool) -> AVAuthorizationStatus {
-    // SAFETY: AVMediaTypeAudio / AVMediaTypeVideo are AVFoundation constants; the class method
-    // accepts exactly those two.
-    let media: Option<&AVMediaType> = unsafe {
-        if audio {
-            AVMediaTypeAudio
-        } else {
-            AVMediaTypeVideo
-        }
-    };
-    match media {
-        Some(media) => unsafe { AVCaptureDevice::authorizationStatusForMediaType(media) },
-        None => AVAuthorizationStatus::NotDetermined,
-    }
 }
 
 // ---------------------------------------------------------------------------- CoreAudio HAL

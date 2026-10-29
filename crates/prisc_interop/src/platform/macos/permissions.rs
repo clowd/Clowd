@@ -6,7 +6,8 @@ use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaType, A
 use crate::ffi::permissions::PriscPermissionState;
 
 /// What AVFoundation has stored about this process's access to the microphone (`audio`) or the
-/// camera. Never prompts; any thread.
+/// camera. Never prompts; any thread. The one reader of that status: the permission exports and
+/// the microphone open (`audio_input.rs`) both call it.
 pub(crate) fn authorization(audio: bool) -> AVAuthorizationStatus {
     // SAFETY: AVMediaTypeAudio / AVMediaTypeVideo are AVFoundation constants, the only two media
     // types authorizationStatusForMediaType: accepts.
