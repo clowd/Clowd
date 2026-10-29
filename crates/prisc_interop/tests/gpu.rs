@@ -33,7 +33,7 @@ fn empty_info() -> PriscGpuDeviceInfo {
 
 /// `PRISC_GPU_ALLOW_WARP=1` (CI) lets Windows pick WARP, as the C# tests do.
 fn create_flags() -> u32 {
-    if std::env::var("PRISC_GPU_ALLOW_WARP").as_deref() == Ok("1") {
+    if std::env::var(prisc_ipc::env::GPU_ALLOW_WARP).as_deref() == Ok("1") {
         PriscGpuDeviceFlags::AllowSoftwareAdapter as u32
     } else {
         0
@@ -175,10 +175,6 @@ fn windows_exports_are_unsupported_off_windows() {
             (
                 "prisc_gpu_nv12_converter_create_windows",
                 prisc_gpu_nv12_converter_create_windows(device, ring, &mut converter_out),
-            ),
-            (
-                "prisc_gpu_nv12_converter_self_check_windows",
-                prisc_gpu_nv12_converter_self_check_windows(converter, 0),
             ),
             (
                 "prisc_gpu_nv12_converter_convert_windows",

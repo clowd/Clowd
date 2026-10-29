@@ -74,7 +74,7 @@ mod harness {
     }
 
     fn create_device(test: &str) -> Option<(*mut PriscGpuDevice, PriscGpuDeviceInfo)> {
-        let flags = if std::env::var("PRISC_GPU_ALLOW_WARP").as_deref() == Ok("1") {
+        let flags = if std::env::var(prisc_ipc::env::GPU_ALLOW_WARP).as_deref() == Ok("1") {
             PriscGpuDeviceFlags::AllowSoftwareAdapter as u32
         } else {
             0
@@ -313,13 +313,8 @@ mod harness {
             }
             return;
         }
+        // Creation ran the conversion self-check, so the converter is known to convert correctly.
         assert_eq!(status, S::Ok as i32, "{}", last_error());
-        assert_eq!(
-            unsafe { prisc_gpu_nv12_converter_self_check_windows(converter, WAIT_MS) },
-            S::Ok as i32,
-            "{}",
-            last_error()
-        );
 
         let mut texture: *mut c_void = ptr::null_mut();
         assert_eq!(

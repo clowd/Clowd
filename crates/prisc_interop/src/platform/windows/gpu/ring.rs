@@ -16,7 +16,9 @@
 //!   previous execution completed before the next one is queued;
 //! * one monotonic counter feeds both submit protocols and every slot, and only advances past a
 //!   `Signal` the runtime accepted, so a refused signal cannot park teardown on a value the fence
-//!   will never reach;
+//!   will never reach. Taking the next value and queuing its signals is one critical section
+//!   (`RingInner::timeline`), so two slots submitted from two threads at once never share a value
+//!   and the fences are signalled in value order;
 //! * every CPU wait on the consumed fence runs under one mutex on one auto-reset event and
 //!   re-checks the fence after each wake. `abandon_shared`'s read-then-signal takes that mutex too.
 //!
@@ -80,6 +82,40 @@ pub(crate) const SELF_CHECK_TIMEOUT_MS: u32 = 30_000;
 /// value the C# smoke test used, so a byte-order mistake shows up the same way.
 const SELF_CHECK_RGB: [u8; 3] = [0x11, 0x22, 0x33];
 
+/// How a shared slot whose consumer failed was handed back (`RingInner::recover_shared_slot`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SlotRecovery {
+    /// The consumer's signal was queued and landed in time: the slot was released normally.
+    Released,
+    /// Nothing will signal the slot (or not in time): the CPU signalled the consumed fence.
+    Abandoned,
+}
+
+/// Faults the tests inject into the creation self-check, per thread. Outside `#[cfg(test)]` there
+/// is no way to set one, and `injected` is a constant false.
+pub(crate) mod fault {
+    /// Compare the readback against a colour other than the one cleared.
+    pub(crate) const MISMATCH: u32 = 1;
+    /// Answer the self-check's wait as if the copy never landed.
+    pub(crate) const TIMEOUT: u32 = 2;
+
+    #[cfg(test)]
+    thread_local! {
+        pub(crate) static SELF_CHECK: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    }
+}
+
+/// Whether the test running on this thread injected `kind` into the creation self-check.
+#[cfg(test)]
+fn injected(kind: u32) -> bool {
+    fault::SELF_CHECK.with(std::cell::Cell::get) == kind
+}
+
+#[cfg(not(test))]
+const fn injected(_kind: u32) -> bool {
+    false
+}
+
 /// One slot: the render target, the readback buffer its pixels land in, and its one copy.
 struct Slot {
     /// The BGRA render target, `DEFAULT` heap, created in `COMMON`. Lent to C# by `begin` as a raw
@@ -128,6 +164,10 @@ pub(crate) struct RingInner {
     shareable: bool,
     /// One monotonic counter across both protocols and every slot.
     last_signaled: AtomicU64,
+    /// Held from reading `last_signaled` to storing the value it gave out, across every `Signal`,
+    /// `Wait` and `ExecuteCommandLists` a submit queues (and around the self-check clear's
+    /// execution and its `pending` value), so the submit exports are safe from any thread.
+    timeline: Mutex<()>,
     /// The event every consumed-fence wait uses; `None` once teardown closed it.
     wait: Mutex<Option<Event>>,
     clear: Mutex<ClearList>,
@@ -196,6 +236,10 @@ impl RingInner {
         let slot = self.slot(index)?;
         begin_submission(slot, index, false)?;
 
+        let _timeline = self
+            .timeline
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let value = self.last_signaled.load(Ordering::Acquire) + 1;
         unsafe {
             self.device
@@ -224,6 +268,10 @@ impl RingInner {
         let slot = self.slot(index)?;
         begin_submission(slot, index, true)?;
 
+        let _timeline = self
+            .timeline
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let value = self.last_signaled.load(Ordering::Acquire) + 1;
         unsafe {
             self.device
@@ -292,6 +340,18 @@ impl RingInner {
         slot.state
             .store(SLOT_IDLE, Ordering::Release);
         Ok(())
+    }
+
+    /// Hands back a shared slot whose consumer failed: when the consumer's signal was queued
+    /// (`signal_queued`), it is waited for like any frame's (the consumer may still be reading the
+    /// slot) and the slot released; when nothing was queued, or the signal did not land within
+    /// `timeout_ms`, the slot is abandoned. Either way the slot is idle on `Ok`.
+    pub(crate) fn recover_shared_slot(&self, index: u32, signal_queued: bool, timeout_ms: u32) -> Result<SlotRecovery> {
+        if signal_queued && matches!(self.release_shared(index, timeout_ms), Ok(PRISC_OK)) {
+            return Ok(SlotRecovery::Released);
+        }
+        self.abandon_shared(index)?;
+        Ok(SlotRecovery::Abandoned)
     }
 
     /// Blocks until the consumed fence reaches `value`: `PRISC_OK` or `PRISC_S_TIMEOUT`.
@@ -390,11 +450,17 @@ impl RingInner {
                 .list
                 .cast::<ID3D12CommandList>()
                 .map_err(|e| os_error(&e, "QueryInterface(ID3D12CommandList)"))?;
+            // Under the timeline lock, every render-fence value from `pending` on is signalled on
+            // the direct queue behind this execution, so reaching it means the clear completed.
+            let _timeline = self
+                .timeline
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             self.device
                 .direct_queue()
                 .ExecuteCommandLists(&[Some(list)]);
+            clear.pending = self.last_signaled.load(Ordering::Acquire) + 1;
         }
-        clear.pending = self.last_signaled.load(Ordering::Acquire) + 1;
         Ok(())
     }
 
@@ -407,12 +473,20 @@ impl RingInner {
             return Err(e);
         }
         self.submit(0)?;
-        let Some((address, row_bytes)) = self.wait(0, SELF_CHECK_TIMEOUT_MS)? else {
+        let waited = if injected(fault::TIMEOUT) {
+            None
+        } else {
+            self.wait(0, SELF_CHECK_TIMEOUT_MS)?
+        };
+        let Some((address, row_bytes)) = waited else {
             return Err(Error::capability(
                 "the readback ring's self-check copy did not complete within 30 s",
             ));
         };
-        let expected = [SELF_CHECK_RGB[2], SELF_CHECK_RGB[1], SELF_CHECK_RGB[0], 0xFF];
+        let mut expected = [SELF_CHECK_RGB[2], SELF_CHECK_RGB[1], SELF_CHECK_RGB[0], 0xFF];
+        if injected(fault::MISMATCH) {
+            expected[0] ^= 0xFF;
+        }
         let corners = [(0u32, 0u32), (self.width - 1, self.height - 1)];
         for (x, y) in corners {
             let offset = y as usize * row_bytes as usize + x as usize * 4;
@@ -644,6 +718,7 @@ pub(crate) fn create_inner(device: &Arc<DeviceInner>, width: u32, height: u32, s
         row_pitch,
         shareable,
         last_signaled: AtomicU64::new(0),
+        timeline: Mutex::new(()),
         wait: Mutex::new(Some(Event::new()?)),
         clear: Mutex::new(clear),
     });
@@ -998,6 +1073,135 @@ pub(crate) mod tests {
         };
         drop(device);
         assert_eq!(round_trip(&ring, [0x44, 0x55, 0x66]), [0x66, 0x55, 0x44, 0xFF]);
+    }
+
+    /// Two threads submitting different slots at once never share a fence value: the values
+    /// handed out are exactly the next ones, each once, for both protocols. (The protocols are
+    /// not mixed on one ring at once: a consumer's signal of the consumed fence is not ordered
+    /// against the copy queue's.)
+    #[test]
+    fn ring_submits_from_two_threads_take_distinct_values() {
+        let Some((_device, ring)) = ring_or_skip("ring_submits_from_two_threads_take_distinct_values", 32, 32, 2) else {
+            return;
+        };
+        const FRAMES: usize = 100;
+
+        fn on_two_threads(ring: &Arc<RingInner>, frame: fn(&RingInner, u32) -> u64) -> Vec<u64> {
+            let threads: Vec<_> = (0..2u32)
+                .map(|slot| {
+                    let ring = ring.clone();
+                    thread::spawn(move || {
+                        (0..FRAMES)
+                            .map(|_| frame(&ring, slot))
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            let mut values: Vec<u64> = threads
+                .into_iter()
+                .flat_map(|t| t.join().expect("a submitting thread"))
+                .collect();
+            values.sort_unstable();
+            values
+        }
+
+        let start = ring.last_signaled();
+        let copies = on_two_threads(&ring, |ring, slot| {
+            ring.begin(slot).expect("the slot is idle");
+            let value = ring
+                .submit(slot)
+                .expect("the submit is accepted");
+            ring.wait(slot, 30_000)
+                .expect("wait")
+                .expect("the copy completes");
+            value
+        });
+        let expected: Vec<u64> = (start + 1..=start + 2 * FRAMES as u64).collect();
+        assert_eq!(copies, expected, "every copy value handed out once, none skipped");
+
+        let start = ring.last_signaled();
+        let shared = on_two_threads(&ring, |ring, slot| {
+            ring.begin(slot).expect("the slot is idle");
+            let value = ring
+                .submit_shared(slot)
+                .expect("the shared submit is accepted");
+            ring.abandon_shared(slot).expect("abandon");
+            value
+        });
+        let expected: Vec<u64> = (start + 1..=start + 2 * FRAMES as u64).collect();
+        assert_eq!(shared, expected, "every shared value handed out once, none skipped");
+        assert_eq!(round_trip(&ring, [0x10, 0x20, 0x30]), [0x30, 0x20, 0x10, 0xFF]);
+    }
+
+    /// The release-or-abandon decision the converter's self-check makes on failure, without a
+    /// converter (so it runs on WARP): nothing queued abandons, a queued signal that lands
+    /// releases, a queued signal that never lands abandons after the wait. The slot is idle and
+    /// usable for readback after each.
+    #[test]
+    fn recover_shared_slot_releases_or_abandons_and_leaves_the_slot_idle() {
+        let Some((_device, ring)) = ring_or_skip("recover_shared_slot_releases_or_abandons_and_leaves_the_slot_idle", 32, 32, 1) else {
+            return;
+        };
+
+        ring.begin(0).expect("slot 0 is idle");
+        let value = ring
+            .submit_shared(0)
+            .expect("the shared submit is accepted");
+        assert_eq!(
+            ring.recover_shared_slot(0, false, 30_000)
+                .expect("recover"),
+            SlotRecovery::Abandoned
+        );
+        assert_eq!(ring.wait_consumed(value, 0).expect("wait"), PRISC_OK);
+        assert_eq!(round_trip(&ring, [0x10, 0x20, 0x30]), [0x30, 0x20, 0x10, 0xFF]);
+
+        ring.begin(0).expect("slot 0 is idle");
+        let value = ring
+            .submit_shared(0)
+            .expect("the shared submit is accepted");
+        unsafe { ring.consumed_fence().Signal(value) }.expect("the consumer's signal");
+        assert_eq!(
+            ring.recover_shared_slot(0, true, 30_000)
+                .expect("recover"),
+            SlotRecovery::Released
+        );
+        assert_eq!(round_trip(&ring, [0x40, 0x50, 0x60]), [0x60, 0x50, 0x40, 0xFF]);
+
+        ring.begin(0).expect("slot 0 is idle");
+        ring.submit_shared(0)
+            .expect("the shared submit is accepted");
+        assert_eq!(
+            ring.recover_shared_slot(0, true, 50)
+                .expect("recover"),
+            SlotRecovery::Abandoned,
+            "a queued signal that never lands is abandoned after the wait"
+        );
+        assert_eq!(round_trip(&ring, [0x70, 0x80, 0x90]), [0x90, 0x80, 0x70, 0xFF]);
+    }
+
+    /// Critique F22's failure path: a mismatch and a copy that never lands are both
+    /// `PRISC_E_CAPABILITY`, the failed ring is torn down and dropped whole (nothing keeps the
+    /// device), and the next ring on the same device comes up.
+    #[test]
+    fn a_failed_ring_self_check_is_capability_and_releases_everything() {
+        let Some(device) = device_or_skip("a_failed_ring_self_check_is_capability_and_releases_everything") else {
+            return;
+        };
+        let holders = Arc::strong_count(&device);
+        for (kind, words) in [(fault::MISMATCH, "read back"), (fault::TIMEOUT, "did not complete")] {
+            fault::SELF_CHECK.with(|f| f.set(kind));
+            let result = create(&device, 32, 32, 2);
+            fault::SELF_CHECK.with(|f| f.set(0));
+            let Err(e) = result else {
+                panic!("an injected self-check fault {kind} must fail the create");
+            };
+            assert_eq!(e.status, PriscInteropStatus::Capability, "{}", e.message);
+            assert!(e.message.contains(words), "{}", e.message);
+            assert_eq!(Arc::strong_count(&device), holders, "the failed ring released its device");
+
+            let ring = create(&device, 32, 32, 2).unwrap_or_else(|e| panic!("a healthy ring after a failed one: {}", e.message));
+            assert_eq!(round_trip(&ring, [1, 2, 3]), [3, 2, 1, 0xFF]);
+        }
     }
 
     #[test]

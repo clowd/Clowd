@@ -359,7 +359,9 @@ pub unsafe extern "C" fn prisc_gpu_readback_ring_cancel_begin_windows(ring: *mut
 /// Windows: ends drawing on a composing `slot` (after Skia flushed and submitted it on the direct
 /// queue) and queues its copy to the readback buffer: the render fence is signalled behind the
 /// draws, the copy queue waits for it on the GPU, copies and signals the consumed fence. Writes the
-/// fence value the copy reaches. Nothing waits on the CPU.
+/// fence value the copy reaches. Nothing waits on the CPU. Taking the value and queuing its signals
+/// is serialised inside the ring, so submits of different slots from different threads each get
+/// their own value, in queue order.
 ///
 /// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_OS`;
 /// `PRISC_E_UNSUPPORTED` off Windows.
@@ -389,7 +391,8 @@ pub unsafe extern "C" fn prisc_gpu_readback_ring_submit_windows(
 
 /// Windows: ends drawing on a composing `slot` for an external GPU consumer (the zero-copy path):
 /// signals the render fence and writes its value, which the consumer waits for and then signals on
-/// the consumed fence; no copy is queued.
+/// the consumed fence; no copy is queued. Serialised with the other submits like
+/// `prisc_gpu_readback_ring_submit_windows`.
 ///
 /// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_OS`;
 /// `PRISC_E_UNSUPPORTED` off Windows.
@@ -533,15 +536,22 @@ pub unsafe extern "C" fn prisc_gpu_readback_ring_wait_consumed_windows(
     })
 }
 
-/// Windows: opens the ring's shared slots and fences on the D3D11 twin and creates the BT.601
-/// limited-range video processor. `PRISC_E_CAPABILITY` for exactly the conditions the C# skip
-/// predicate names (a ring that is not shareable, no ID3D11Device5 / ID3D11DeviceContext4 /
-/// ID3D11VideoDevice / ID3D11VideoContext, a refused processor enumerator or processor); the
-/// message keeps the `"{step} failed (0x{hr})"` shape. A ring from another device is
-/// `PRISC_E_INVALID_ARG`.
+/// Windows: opens the ring's shared slots and fences on the D3D11 twin, creates the BT.601
+/// limited-range video processor, and self-checks it: one known colour through the whole zero-copy
+/// path (slot 0 cleared on the direct queue, submitted for the shared protocol, converted into a
+/// fresh texture, read back and compared at three points with BT.601 limited range, tolerance 4,
+/// each fence wait bounded at 30 s). Slot 0 must be idle and is idle again on every outcome
+/// (released when the consumed signal was queued, abandoned otherwise), so a caller that falls back
+/// carries on with readback over the same ring.
 ///
-/// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_CAPABILITY`; `PRISC_E_OS`;
-/// `PRISC_E_UNSUPPORTED` off Windows.
+/// `PRISC_E_CAPABILITY` is exactly the seven conditions under which this GPU cannot run the
+/// zero-copy path (a ring that is not shareable, no ID3D11Device5 / ID3D11DeviceContext4 /
+/// ID3D11VideoDevice / ID3D11VideoContext, a refused processor enumerator or processor): callers
+/// skip on it. A capable GPU whose processor refuses the formats or whose self-check samples are
+/// off is `PRISC_E_OS`. A ring from another device is `PRISC_E_INVALID_ARG`.
+///
+/// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_CAPABILITY`; `PRISC_E_STATE` (slot 0 not
+/// idle); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
 ///
 /// Thread: any thread.
 #[no_mangle]
@@ -567,40 +577,13 @@ pub unsafe extern "C" fn prisc_gpu_nv12_converter_create_windows(
     })
 }
 
-/// Windows: one known colour through the whole zero-copy path: slot 0 cleared on the direct queue,
-/// submitted for the shared protocol, converted into a fresh texture, read back and compared at
-/// three points with BT.601 limited range (tolerance 4). Slot 0 must be idle and is idle again on
-/// every outcome (released when the consumed signal was queued, abandoned otherwise), so a caller
-/// that falls back carries on with readback over the same ring. Each fence wait is bounded by
-/// `timeout_ms`.
-///
-/// Status: `PRISC_OK`; `PRISC_E_CAPABILITY` (the samples are off: a driver that ignores the colour
-/// space); `PRISC_E_STATE` (slot 0 not idle); `PRISC_E_OS`; `PRISC_E_INVALID_ARG`;
-/// `PRISC_E_UNSUPPORTED` off Windows.
-///
-/// Thread: any thread, never concurrently with another call on the same handle.
-#[no_mangle]
-pub unsafe extern "C" fn prisc_gpu_nv12_converter_self_check_windows(converter: *mut PriscGpuNv12Converter, timeout_ms: u32) -> i32 {
-    panic::guard("prisc_gpu_nv12_converter_self_check_windows", || {
-        #[cfg(windows)]
-        {
-            live::<nv12::ConverterInner, _>(converter, "converter")?.self_check(timeout_ms)?;
-            Ok(PRISC_OK)
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (converter, timeout_ms);
-            Err(windows_only("prisc_gpu_nv12_converter_self_check_windows"))
-        }
-    })
-}
-
 /// Windows: converts shared `slot` (ready at `fence_value`, from the ring's shared submit) into
 /// `dst_texture`, a texture from `prisc_gpu_nv12_texture_acquire_windows` on this converter.
 /// Queues a GPU wait on the render fence, the blit, a signal of the consumed fence with the same
 /// value, and a flush; nothing waits on the CPU. `out_signal_queued` is written on every path:
 /// 1 when the consumed signal reached the GPU timeline (release the slot), 0 when nothing was
-/// queued (abandon it). The signal goes out even when the blit was refused.
+/// queued (abandon it). The signal goes out even when the blit was refused. The four calls are one
+/// critical section inside the converter, so converts from different threads never interleave.
 ///
 /// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (slot out of range, a texture not from this
 /// converter); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.

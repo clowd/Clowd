@@ -87,12 +87,12 @@ impl<T: Interface> Deref for FreeThreaded<T> {
 /// `PRISC_E_CAPABILITY` for a step the hardware or driver cannot do, with the HRESULT as the
 /// last-error code.
 ///
-/// The set of callers is closed: the conditions `D3D11EncodeBridge.IsMissingCapability` matches on
-/// (the four QueryInterface tiers, `CreateVideoProcessorEnumerator`, `CreateVideoProcessor`; the
-/// non-shareable ring sets the status directly). Everything else, including a refused
-/// `D3D11CreateDevice`, a LUID mismatch and an absent `CheckVideoProcessorFormat` support bit, is
-/// `PRISC_E_OS` through `hresult_error`. The message keeps the `"{step} failed (0x{hr:08X})"`
-/// shape and the step names the C# predicate matches.
+/// The set of callers is closed: the four QueryInterface tiers, `CreateVideoProcessorEnumerator`
+/// and `CreateVideoProcessor` (the non-shareable ring, the seventh condition, sets the status
+/// directly). `D3D11EncodeBridge` reads the status, not the text, to skip rather than fail.
+/// Everything else, including a refused `D3D11CreateDevice`, a LUID mismatch, an absent
+/// `CheckVideoProcessorFormat` support bit and a failed conversion self-check, is `PRISC_E_OS`.
+/// The message keeps the `"{step} failed (0x{hr:08X})"` shape.
 pub(crate) fn capability_error(hr: HRESULT, what: &str) -> Error {
     Error {
         code: i64::from(hr.0),

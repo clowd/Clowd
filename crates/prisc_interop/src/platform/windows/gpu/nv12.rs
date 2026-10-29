@@ -8,9 +8,15 @@
 //!   then `ID3D11Device1::OpenSharedResource1`) and both ring fences through
 //!   `ID3D11Device5::OpenSharedFence`, each NT handle closed the moment it has been opened;
 //! * per frame, on the immediate context and with nothing waited for on the CPU:
-//!   `Wait(renderFence, v)`, `VideoProcessorBlt`, `Signal(consumedFence, v)`, `Flush`. The consumed
-//!   signal goes out **even when the blit was refused**, because the ring's slot waits for exactly
-//!   that value; a refused `Wait` returns before both, so nothing is queued.
+//!   `Wait(renderFence, v)`, `VideoProcessorBlt`, `Signal(consumedFence, v)`, `Flush`, as one
+//!   critical section (`ConverterInner::queue`), so two converts on two threads cannot interleave
+//!   their waits and signals. The consumed signal goes out **even when the blit was refused**,
+//!   because the ring's slot waits for exactly that value; a refused `Wait` returns before both,
+//!   so nothing is queued.
+//!
+//! Creation ends with the conversion self-check (one known colour through slot 0, converted and
+//! compared with BT.601 limited range), so one call builds a converter that is known to produce
+//! the right colours, the way the readback ring's creation ends with its own self-check.
 //!
 //! The encoder textures live in a crate-global registry keyed by the raw `ID3D11Texture2D*` that
 //! FFmpeg carries, and each entry owns an `Arc<ConverterInner>` (critique F9): FFmpeg's free path
@@ -18,8 +24,10 @@
 //! converter handle was destroyed still finds its view and its device, and the last texture back
 //! drops the converter's innards.
 //!
-//! Which failures are `PRISC_E_CAPABILITY` is a contract: exactly the conditions
-//! `D3D11EncodeBridge.IsMissingCapability` matches on (see `capability_error`).
+//! Which failures are `PRISC_E_CAPABILITY` is a contract: exactly the seven conditions under which
+//! this GPU cannot run the zero-copy path at all (see `capability_error`). `D3D11EncodeBridge`
+//! reads that status to tell "skip" from "fail"; a capable GPU whose processor refuses the formats
+//! or produces the wrong colours is `PRISC_E_OS`, so it keeps failing the suite.
 
 use std::collections::BTreeMap;
 use std::ffi::c_void;
@@ -46,7 +54,7 @@ use windows_core::{Interface, PCWSTR};
 use crate::error::{Error, Result};
 use crate::ffi::status::{PRISC_OK, PRISC_S_NONE};
 use crate::platform::windows::gpu::device::{D3d11, DeviceInner};
-use crate::platform::windows::gpu::ring::RingInner;
+use crate::platform::windows::gpu::ring::{RingInner, SlotRecovery, SELF_CHECK_TIMEOUT_MS};
 use crate::platform::windows::gpu::{capability_error, missing_object, FreeThreaded};
 use crate::platform::windows::os_error;
 
@@ -118,6 +126,9 @@ pub(crate) struct ConverterInner {
     height: u32,
     /// The highest consumed-fence value this converter's own `Signal` was accepted for.
     last_signaled: AtomicU64,
+    /// Held across one convert's `Wait`, blit, `Signal` and `Flush`: multithread protection makes
+    /// each call atomic, not the sequence.
+    queue: Mutex<()>,
     /// Test-only fault injection for the self-check's recovery paths.
     #[cfg(test)]
     pub(crate) fault: std::sync::atomic::AtomicU32,
@@ -169,6 +180,10 @@ impl ConverterInner {
             return (Err(Error::os(0, "injected: the conversion was refused")), false);
         }
 
+        let _queue = self
+            .queue
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         unsafe {
             // A GPU-side wait: the convert thread never blocks here.
             if let Err(e) = self
@@ -356,11 +371,12 @@ impl ConverterInner {
         Ok(raw)
     }
 
-    /// The conversion self-check: slot 0 cleared to a known colour, submitted for the shared
-    /// protocol, converted into a fresh texture, read back and compared at three points with the
-    /// BT.601-limited expectation. On any failure slot 0 is left idle (released when the consumed
-    /// signal was queued, abandoned otherwise), so the caller can carry on with readback over the
-    /// same ring. A mismatch is `PRISC_E_CAPABILITY`.
+    /// The conversion self-check creation ends with: slot 0 cleared to a known colour, submitted
+    /// for the shared protocol, converted into a fresh texture, read back and compared at three
+    /// points with the BT.601-limited expectation. On any failure slot 0 is left idle
+    /// (`RingInner::recover_shared_slot`), so the caller carries on with readback over the same
+    /// ring. Samples off the expectation are `PRISC_E_OS`: the GPU has every capability and still
+    /// converts wrongly, which must fail the suite rather than skip it.
     pub(crate) fn self_check(self: &Arc<Self>, timeout_ms: u32) -> Result<()> {
         let ring = &self.ring;
         ring.begin(0)?;
@@ -372,20 +388,20 @@ impl ConverterInner {
             Ok(value) => value,
             Err(e) => {
                 // The slot is in flight and nothing will signal it.
-                let _ = ring.abandon_shared(0);
+                let _ = ring.recover_shared_slot(0, false, timeout_ms);
                 return Err(e);
             }
         };
         #[cfg(test)]
         if self.fault.load(Ordering::Acquire) == fault::AFTER_SUBMIT {
-            let _ = ring.abandon_shared(0);
+            let _ = ring.recover_shared_slot(0, false, timeout_ms);
             return Err(Error::os(0, "injected: the self-check failed after its submit"));
         }
 
         let texture = match self.acquire() {
             Ok(texture) => texture,
             Err(e) => {
-                let _ = ring.abandon_shared(0);
+                let _ = ring.recover_shared_slot(0, false, timeout_ms);
                 return Err(e);
             }
         };
@@ -401,20 +417,13 @@ impl ConverterInner {
         if let Err(e) = converted {
             // A queued signal is waited for like any frame's (the blit, if it ran, may still be
             // reading the slot); otherwise nothing will ever signal it and the slot is given up.
-            if !queued || !matches!(ring.release_shared(0, timeout_ms), Ok(PRISC_OK)) {
-                let _ = ring.abandon_shared(0);
-            }
+            let _ = ring.recover_shared_slot(0, queued, timeout_ms);
             return Err(e);
         }
-        match ring.release_shared(0, timeout_ms) {
-            Ok(PRISC_OK) => {}
-            Ok(_) => {
-                let _ = ring.abandon_shared(0);
+        match ring.recover_shared_slot(0, true, timeout_ms)? {
+            SlotRecovery::Released => {}
+            SlotRecovery::Abandoned => {
                 return Err(Error::os(0, "the conversion self-check's consumed signal did not land in time"));
-            }
-            Err(e) => {
-                let _ = ring.abandon_shared(0);
-                return Err(e);
             }
         }
 
@@ -432,10 +441,13 @@ impl ConverterInner {
                 || (f64::from(vs) - ev).abs() > SELF_CHECK_TOLERANCE
             {
                 let [r, g, b] = SELF_CHECK_RGB;
-                return Err(Error::capability(format!(
-                    "the video processor produced YUV ({ys},{us},{vs}) at ({px},{py}) for RGB ({r},{g},{b}), \
-                     expected BT.601 limited ({ey:.0},{eu:.0},{ev:.0})"
-                )));
+                return Err(Error::os(
+                    0,
+                    format!(
+                        "the video processor produced YUV ({ys},{us},{vs}) at ({px},{py}) for RGB ({r},{g},{b}), \
+                         expected BT.601 limited ({ey:.0},{eu:.0},{ev:.0})"
+                    ),
+                ));
             }
         }
         Ok(())
@@ -461,8 +473,20 @@ pub(crate) fn release_texture(texture: *mut c_void) -> i32 {
 }
 
 /// Builds the converter over a ring: opens the shares, builds the video processor, configures the
-/// colour spaces and rects, and creates one input view per slot. All or nothing.
+/// colour spaces and rects, creates one input view per slot, and self-checks the result through
+/// slot 0 (which must be idle and is idle again on every outcome). All or nothing.
 pub(crate) fn create(device: &Arc<DeviceInner>, ring: &Arc<RingInner>) -> Result<Arc<ConverterInner>> {
+    let converter = build(device, ring)?;
+    if let Err(e) = converter.self_check(SELF_CHECK_TIMEOUT_MS) {
+        teardown(&converter);
+        return Err(e);
+    }
+    Ok(converter)
+}
+
+/// Everything `create` does before its self-check; the tests build through it to inject faults
+/// into the check.
+fn build(device: &Arc<DeviceInner>, ring: &Arc<RingInner>) -> Result<Arc<ConverterInner>> {
     if !Arc::ptr_eq(device, ring.device()) {
         return Err(Error::invalid_arg(
             "the readback ring was built on a different GPU device than the one given",
@@ -585,6 +609,7 @@ pub(crate) fn create(device: &Arc<DeviceInner>, ring: &Arc<RingInner>) -> Result
         width: info.width,
         height: info.height,
         last_signaled: AtomicU64::new(0),
+        queue: Mutex::new(()),
         #[cfg(test)]
         fault: std::sync::atomic::AtomicU32::new(0),
     }))
