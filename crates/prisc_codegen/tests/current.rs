@@ -383,13 +383,14 @@ fn lint_finds_an_em_dash_and_skips_build_output() {
     std::fs::create_dir_all(dir.join("obj")).unwrap();
     std::fs::write(dir.join("src/lib.rs"), "// fine\n// not \u{2014} fine\n").unwrap();
     std::fs::write(dir.join("obj/skipped.cs"), "\u{2014}\n").unwrap();
-    let found: Vec<(String, usize, &str)> = lint::lint_em_dash(&dir, &dir)
+    let found: Vec<(std::path::PathBuf, usize, &str)> = lint::lint_em_dash(&dir, &dir)
         .expect("scan")
         .into_iter()
-        .map(|v| (v.file.display().to_string(), v.line, v.rule))
+        .map(|v| (v.file, v.line, v.rule))
         .collect();
     let _ = std::fs::remove_dir_all(&dir);
-    assert_eq!(found, [("src/lib.rs".to_string(), 2, "9-no-em-dash")]);
+    // Paths compare by component, so this holds with either separator.
+    assert_eq!(found, [(std::path::PathBuf::from("src/lib.rs"), 2, "9-no-em-dash")]);
 }
 
 /// Rule 12 checks what this walk returns, so an empty walk would pass vacuously.

@@ -1062,7 +1062,10 @@ pub fn dependency_sources(root: &Path) -> anyhow::Result<Vec<(PathBuf, String)>>
                 .unwrap_or_default(),
         );
         if let Some(dir) = manifest.parent() {
+            // Canonical like `repo_root`, so the paths come out repo-relative on Windows too
+            // (cargo reports `D:\...`, canonicalize gives `\\?\D:\...`).
             let src = dir.join("src");
+            let src = src.canonicalize().unwrap_or(src);
             if src.is_dir() {
                 files.extend(read_rs(root, &src, true)?);
             }
