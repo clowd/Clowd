@@ -299,7 +299,8 @@ namespace Prisc.VideoSDK.Tests
         /// native self-check's own recovery of slot 0 (released or abandoned on each failure path)
         /// is covered by the crate's Windows tests (ring.rs,
         /// recover_shared_slot_releases_or_abandons_and_leaves_the_slot_idle, which runs on WARP,
-        /// and nv12.rs, a_failed_self_check_leaves_slot_zero_idle).</summary>
+        /// and nv12.rs, a_failed_self_check_leaves_slot_zero_idle, which needs a hardware GPU with
+        /// a D3D11 video device and prints a skip on WARP).</summary>
         [Fact]
         public void Failed_creation_leaves_the_ring_idle_for_readback()
         {

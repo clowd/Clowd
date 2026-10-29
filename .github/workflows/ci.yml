@@ -406,14 +406,17 @@ jobs:
 
       # New Rust code with no BASE counterpart, so it gates outright: the export-level harness, then
       # the in-crate ring, NV12 and device unit tests (the timeline lock, the self-check faults and
-      # slot recovery), which skip on a runner unless WARP is admitted.
+      # slot recovery), which skip on a runner unless WARP is admitted. A test that cannot run on
+      # WARP (the NV12 converter needs a D3D11 video device) returns early with a printed reason,
+      # which libtest would hide inside a pass: each one is surfaced here as a skip notice.
       - name: Rust ring harness on WARP (Windows)
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         env:
           PRISC_GPU_ALLOW_WARP: "1"
         run: |
           cargo test -p prisc_interop --test ring_harness
-          cargo test -p prisc_interop --lib platform::windows::gpu
+          cargo test -p prisc_interop --lib platform::windows::gpu -- --show-output 2>&1 | tee gpu-unit.log
+          grep -h "^skipping " gpu-unit.log | sort -u | sed 's/^/::notice title=Skipped on WARP::/' || true
         shell: bash
 
       # The FFmpeg dylib closure prisc_interop loads ahead of FFmpeg.AutoGen, against the real
