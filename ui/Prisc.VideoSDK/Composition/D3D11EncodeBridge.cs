@@ -129,11 +129,6 @@ namespace Prisc.VideoSDK.Composition
             }
         }
 
-        /// <summary><see cref="TryCreate(D3D12ReadbackRing, out string, out bool, Action{D3D11EncodeBridge})"/>
-        /// for a caller that falls back the same way whatever the cause (the render).</summary>
-        public static D3D11EncodeBridge TryCreate(D3D12ReadbackRing ring, out string failureReason)
-            => TryCreate(ring, out failureReason, out _);
-
         // -------------------------------------------------------------------- per frame
 
         /// <summary>

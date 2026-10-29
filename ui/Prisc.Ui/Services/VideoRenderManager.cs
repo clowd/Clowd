@@ -8,6 +8,7 @@ using Prisc.Config;
 using Prisc.UI.Helpers;
 using Prisc.UI.VideoEditor;
 using Prisc.VideoSDK;
+using Prisc.VideoSDK.Composition;
 using Prisc.VideoSDK.Editing;
 using Prisc.VideoSDK.Media;
 using Prisc.VideoSDK.Model;
@@ -559,6 +560,8 @@ namespace Prisc.UI.Services
             switch (result.Outcome)
             {
                 case JobOutcome.Success:
+                    ReportReadbackFallbackOnce(result.Diagnostics);
+
                     // the tool reports the path it actually wrote; trust it over the one we asked for.
                     if (!String.IsNullOrEmpty(result.OutputPath) && IsLive(session))
                     {
@@ -604,6 +607,21 @@ namespace Prisc.UI.Services
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, message, "Video render failed");
                     break;
             }
+        }
+
+        private static int _readbackFallbackReported;
+
+        /// <summary>A render that fell back from the asynchronous Direct3D 12 readback ring still
+        /// succeeds, only slower, so nothing else would ever hear of it. Its log line (the reason the
+        /// ring or its self-check gave) goes to Sentry once per run of the app.</summary>
+        private static void ReportReadbackFallbackOnce(string diagnostics)
+        {
+            if (String.IsNullOrEmpty(diagnostics))
+                return;
+            var line = diagnostics.Split('\n').FirstOrDefault(l => l.Contains(GpuSurfaceFactory.AsyncReadbackUnavailable, StringComparison.Ordinal));
+            if (line == null || System.Threading.Interlocked.Exchange(ref _readbackFallbackReported, 1) != 0)
+                return;
+            SentryConfig.CaptureHandled(new InvalidOperationException(line.Trim()), "render.readback-fallback");
         }
 
         /// <summary>The dialog's "Delete session", run once the render has succeeded. Skipped (the

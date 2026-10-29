@@ -161,6 +161,11 @@ namespace Prisc.VideoSDK.Composition
             return surface.ReadPixels(SurfacePixels.Bgra(width, height), dst, rowBytes, 0, 0);
         }
 
+        /// <summary>The start of the diagnostic line <see cref="CreateReadbackRing"/> logs when Direct3D 12
+        /// falls back to the synchronous ring. The shell reports a render log holding it to Sentry, once
+        /// per run of the app (a capable GPU whose ring failed its self-check is a bug to look at).</summary>
+        public const string AsyncReadbackUnavailable = "Direct3D 12 asynchronous readback unavailable";
+
         /// <summary>
         /// Direct3D 12: the asynchronous <see cref="D3D12ReadbackRing"/> (copy-queue readback,
         /// no GPU wait on this thread), falling back to the synchronous ring, with the reason
@@ -175,8 +180,7 @@ namespace Prisc.VideoSDK.Composition
                 var ring = D3D12ReadbackRing.TryCreate(_context, _device, width, height, slots, out var reason);
                 if (ring != null)
                     return ring;
-                diagnosticLog?.Invoke(
-                    $"Direct3D 12 asynchronous readback unavailable ({reason}); using synchronous readback.");
+                diagnosticLog?.Invoke($"{AsyncReadbackUnavailable} ({reason}); using synchronous readback.");
             }
 
             return new SyncReadbackRing(this, width, height, SyncReadbackRing.UsefulSlots(slots));

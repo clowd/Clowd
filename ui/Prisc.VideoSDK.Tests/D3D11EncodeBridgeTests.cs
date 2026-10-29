@@ -322,7 +322,7 @@ namespace Prisc.VideoSDK.Tests
             Marshal.Copy(pixels.Address, first, 0, 4);
             Assert.Equal(new byte[] { 0x33, 0x22, 0x11, 0xFF }, first);
 
-            rig.Bridge = D3D11EncodeBridge.TryCreate(rig.Ring, out reason);
+            rig.Bridge = D3D11EncodeBridge.TryCreate(rig.Ring, out reason, out _);
             Assert.True(rig.Bridge != null, "the bridge did not come up after a failed attempt: " + reason);
             var probe = new SKColor(200, 60, 30);
             using var frame = RoundTrip(rig, 0, c => c.Clear(probe));

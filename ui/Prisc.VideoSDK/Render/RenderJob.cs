@@ -849,9 +849,16 @@ namespace Prisc.VideoSDK.Render
         {
             D3D11EncodeBridge bridge = null;
             string reason = null;
-            composer.Send(() => bridge = D3D11EncodeBridge.TryCreate(ring, out reason));
+            bool missingCapability = false;
+            composer.Send(() => bridge = D3D11EncodeBridge.TryCreate(ring, out reason, out missingCapability));
             if (bridge == null)
-                log?.Invoke($"RenderJob: zero-copy encode unavailable ({reason}); using readback");
+            {
+                // either way the render falls back to readback; the log says whether this machine
+                // simply cannot run the bridge or a capable one failed to
+                log?.Invoke(missingCapability
+                    ? $"RenderJob: zero-copy encode unavailable on this machine ({reason}); using readback"
+                    : $"RenderJob: zero-copy encode unavailable (it failed on a capable GPU: {reason}); using readback");
+            }
             return bridge;
         }
 

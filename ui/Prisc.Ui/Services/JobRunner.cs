@@ -19,11 +19,11 @@ namespace Prisc.UI.Services
     }
 
     /// <summary>The terminal state of a job run. <see cref="Message"/> is user-facing;
-    /// <see cref="Diagnostics"/> is the helper's stderr tail, for the crash report only.</summary>
+    /// <see cref="Diagnostics"/> is the helper's stderr tail, for reports only.</summary>
     internal sealed record JobRunResult(JobOutcome Outcome, string OutputPath, long Bytes, string Message, string Diagnostics)
     {
-        public static JobRunResult Success(string outputPath, long bytes) =>
-            new(JobOutcome.Success, outputPath, bytes, null, null);
+        public static JobRunResult Success(string outputPath, long bytes, string diagnostics = null) =>
+            new(JobOutcome.Success, outputPath, bytes, null, diagnostics);
 
         public static JobRunResult Canceled() =>
             new(JobOutcome.Canceled, null, 0, null, null);
@@ -172,7 +172,7 @@ namespace Prisc.UI.Services
             switch (outcome.Terminal)
             {
                 case JobEvent.Done { Result: JobResult.Ok } done when outcome.Failure == HelperFailure.None:
-                    return JobRunResult.Success(done.Path, (long)(done.Bytes ?? 0));
+                    return JobRunResult.Success(done.Path, (long)(done.Bytes ?? 0), outcome.StderrTail);
                 case JobEvent.Done { Result: JobResult.Cancelled } when outcome.Failure == HelperFailure.None:
                     return JobRunResult.Canceled();
             }
