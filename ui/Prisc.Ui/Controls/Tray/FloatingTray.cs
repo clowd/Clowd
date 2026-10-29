@@ -91,7 +91,8 @@ namespace Prisc.UI.Controls.Tray
         /// <summary>
         /// Swells an accent glow round the strip and lets it fade, to draw the eye to it; a second burst
         /// restarts the first. Only a tray in a window that reserves the glow's room may call it
-        /// (<see cref="FloatingTrayOptions.EngagedFrame"/>). Skipped with Windows' animation effects off.
+        /// (<see cref="FloatingTrayOptions.EngagedFrame"/>). Skipped when the user turned animations off
+        /// (Windows' animation effects, macOS Reduce Motion).
         /// </summary>
         public void PlayGlowBurst()
         {

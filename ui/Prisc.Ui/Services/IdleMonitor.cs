@@ -59,6 +59,14 @@ namespace Prisc.UI
             {
                 return IdleTime.SinceLastInput();
             }
+            catch (InteropException ex) when (ex.Status == InteropStatus.Os)
+            {
+                // GetLastInputInfo refused (a disconnected RDP session, for one). That can repeat on
+                // every poll while an update waits and was never reported, so it stays quiet: no
+                // idle time, and IsGoodTimeToRestart falls back to the last Prisc interaction.
+                Debug.WriteLine("IdleMonitor: the OS gave no idle time: " + ex.Message);
+                return null;
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine("IdleMonitor: failed to read system idle time: " + ex);
