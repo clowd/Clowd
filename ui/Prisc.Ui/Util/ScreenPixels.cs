@@ -30,9 +30,13 @@ namespace Prisc.Util
     /// <see cref="IsPermitted"/> is something the user can fix in System Settings. Missing
     /// permission is worse than useless rather than merely unavailable: an unpermitted
     /// <c>CGWindowListCreateImage</c> succeeds and hands back the desktop picture instead of the
-    /// windows in front of it, so it would silently read the wrong pixels (the native reads refuse
-    /// it too). Callers must gate on <see cref="IsAvailable"/>, not on <see cref="IsSupported"/>
-    /// alone.
+    /// windows in front of it, so it would silently read the wrong pixels. UI that decides what to
+    /// offer gates on <see cref="IsAvailable"/>, not on <see cref="IsSupported"/> alone.
+    ///
+    /// The reads themselves do not ask <see cref="IsPermitted"/>: the native read is the gate. It
+    /// checks Screen Recording before it captures anything and answers a permission failure, which
+    /// both reads map to null. A second lookup here would run on every pointer move of an
+    /// eyedropper drag and turn one read into two native calls.
     /// </remarks>
     internal static class ScreenPixels
     {
@@ -54,7 +58,7 @@ namespace Prisc.Util
         /// </summary>
         public static Color? GetColorAt(PixelPoint point)
         {
-            if (!IsSupported || !IsPermitted)
+            if (!IsSupported)
                 return null;
 
             try
@@ -65,7 +69,7 @@ namespace Prisc.Util
             }
             catch (InteropException ex)
             {
-                // the permission was revoked between the check and the read, or the OS refused
+                // Screen Recording is not granted (the native read refuses first), or the OS refused
                 Debug.WriteLine("ScreenPixels.GetColorAt: " + ex.Message);
                 return null;
             }
@@ -86,7 +90,7 @@ namespace Prisc.Util
         public static WriteableBitmap Grab(PixelRect bounds, double scaling)
         {
             _ = scaling;
-            if (!IsSupported || !IsPermitted || bounds.Width <= 0 || bounds.Height <= 0)
+            if (!IsSupported || bounds.Width <= 0 || bounds.Height <= 0)
                 return null;
 
             try
@@ -97,6 +101,7 @@ namespace Prisc.Util
             catch (InteropException ex)
             {
                 Debug.WriteLine($"ScreenPixels.Grab {bounds}: {ex.Message}");
+                // a missing Screen Recording grant is the user's to fix, not a fault to report
                 if (ex.Status != InteropStatus.Permission)
                     SentryConfig.CaptureHandled(ex, "pixels.grab");
                 return null;
