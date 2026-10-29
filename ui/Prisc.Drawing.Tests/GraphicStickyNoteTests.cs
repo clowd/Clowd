@@ -13,6 +13,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Prisc.Drawing.Graphics;
 using Prisc.Drawing.Rendering;
+using Prisc.Interop.Testing;
 using Xunit;
 
 namespace Prisc.Drawing.Tests
@@ -194,6 +195,7 @@ namespace Prisc.Drawing.Tests
         [InlineData(0x30, 0x20, 0x60)] // a dark paper gets pale ink
         public void Ink_IsTheShadeOfThePaper_AtStrongContrast(byte r, byte g, byte b)
         {
+            InteropTestGate.Require();
             var paper = Color.FromRgb(r, g, b);
             var ink = GraphicStickyNote.GetInk(paper);
             Assert.True(RenderResources.GetContrastRatio(ink, paper) >= GraphicStickyNote.InkContrast, $"{ink} on {paper}");

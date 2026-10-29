@@ -207,7 +207,7 @@ namespace Prisc.Drawing.Graphics
         internal static Color GetInk(Color paper)
         {
             var (h, s, l) = ToHsl(paper);
-            var darkInk = RenderResources.GetLuminance(paper) > 0.18;
+            var darkInk = AccentColors.IsLight(RenderResources.OverWhite(paper));
             s = Math.Min(s, 0.75);
 
             var ink = darkInk ? Colors.Black : Colors.White;

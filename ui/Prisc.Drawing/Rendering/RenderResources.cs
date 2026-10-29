@@ -83,18 +83,14 @@ namespace Prisc.Drawing.Rendering
         }
 
         /// <summary>WCAG relative luminance (0 black – 1 white); translucent colors are judged
-        /// as if over white.</summary>
-        public static double GetLuminance(Color color)
-        {
-            static double Channel(byte v, byte a)
-            {
-                var c = (v * a + 255 * (255 - a)) / (255.0 * 255.0); // composite over white
-                return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
-            }
+        /// as if over white. The luminance itself is the shared one (<see cref="AccentColors.RelativeLuminance"/>).</summary>
+        public static double GetLuminance(Color color) => AccentColors.RelativeLuminance(OverWhite(color));
 
-            return 0.2126 * Channel(color.R, color.A)
-                   + 0.7152 * Channel(color.G, color.A)
-                   + 0.0722 * Channel(color.B, color.A);
+        /// <summary><paramref name="color"/> composited over white, to the nearest 8-bit colour.</summary>
+        public static Color OverWhite(Color color)
+        {
+            static byte Channel(byte v, byte a) => (byte)Math.Round((v * a + 255 * (255 - a)) / 255.0);
+            return Color.FromRgb(Channel(color.R, color.A), Channel(color.G, color.A), Channel(color.B, color.A));
         }
 
         /// <summary>WCAG contrast ratio between two colors, 1 (none) to 21 (black on white).</summary>
