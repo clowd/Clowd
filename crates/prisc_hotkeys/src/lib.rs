@@ -1,8 +1,10 @@
 //! Prisc's global keyboard hook: registered hotkeys, one-shot gesture recording and the keystroke
-//! observe stream, all from one hook per process. Linked into `prisc_capture` and `prisc_interop`
-//! (Rust API) and, until prisc_interop serves the hook, built as `prisc_hotkeys.dll` /
-//! `libprisc_hotkeys.dylib` for Prisc.Ui (legacy C ABI, `ffi.rs`).
+//! observe stream, all from one hook per process. An rlib only: linked into `prisc_capture`,
+//! `prisc_recorder` and `prisc_interop`, whose `prisc_hotkeys_*` exports serve it to Prisc.Ui.
 //!
+//! - [`supervise`] keeps a hook coming back by itself (retry, stale-grant back-off, the recovery
+//!   policy per OS, registrations with stable ids): `Supervisor` for a host with an event loop
+//!   (the standby capturer), `Supervised` with its own thread for the rest (prisc_interop).
 //! - [`Key`] is the only key type for global hotkeys anywhere in Prisc; the C# `HotkeyKey` is
 //!   generated from the same table. The only other key maps live inside this crate: `Key` to
 //!   Windows VK and `Key` to macOS CGKeyCode / NX media keytype.
@@ -45,17 +47,13 @@
 #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 mod core;
 mod error;
-/// The legacy C ABI (`prisc_hotkeys_legacy_*`); public only so prisc_codegen can read its tables.
-#[doc(hidden)]
-pub mod ffi;
 mod gesture;
 mod hotkeys;
 mod key;
 mod modifiers;
 /// The system-reserved gesture table per OS (filled when the C# IsSystemReserved table moves here).
 pub mod reserved;
-/// The supervised hook: retry, stale-grant backoff and recovery policy in one place (filled when
-/// the restart loop moves out of prisc_capture and Prisc.Ui).
+/// The supervised hook: retry, stale-grant back-off and the recovery policy in one place.
 pub mod supervise;
 // Used only by windows.rs outside tests; compiled and tested on every OS.
 #[cfg_attr(not(windows), allow(dead_code))]

@@ -247,12 +247,6 @@ namespace Prisc.UI
         /// ends. Read-only, never prompts; false off macOS. Replaced by tests.</summary>
         internal Func<bool> SecureInputProbe { get; set; } = SecureInput.IsEnabled;
 
-        /// <summary>Whether macOS lists Prisc as trusted for Accessibility (AXIsProcessTrusted),
-        /// which tells a stale grant from a missing one; false off macOS. Never prompts. Replaced
-        /// by tests.</summary>
-        internal Func<bool> AccessibilityTrustedProbe { get; set; } =
-            () => OperatingSystem.IsMacOS() && MacPermissions.HasAccessibility;
-
         private readonly IGlobalTriggerHost _host;
         private readonly SettingsHotkey _settings;
         private readonly Func<HotkeyGesture, bool> _isReserved;
@@ -401,11 +395,11 @@ namespace Prisc.UI
         /// screenshot hotkeys), keyed by the gesture as that process received it —
         /// <see cref="HotkeyGesture.ToSerializedString"/>. A gesture with no report keeps the
         /// status it has: the report may predate the settings snapshot that added it, and the
-        /// snapshot's own report follows. Ignored while this manager owns the action itself. A
-        /// missing Accessibility grant (keyed off <see cref="ExternalGestureStatus.ErrorCode"/>)
-        /// shows <see cref="NativeHotkeyHost.PermissionMessage"/>, or
-        /// <see cref="NativeHotkeyHost.StaleGrantMessage"/> while macOS lists Prisc as trusted (the
-        /// shell's own host chooses the same way); any other error, the text as sent.
+        /// snapshot's own report follows. Ignored while this manager owns the action itself. The
+        /// text shown is the shell's own for the status's <see cref="ExternalGestureStatus.ErrorCode"/>
+        /// (<see cref="HotkeyStatusText"/>, the same table the in-process hook renders through, so
+        /// a missing grant and a stale one read alike on both paths); a status with no code, or one
+        /// the table does not know, shows the text as sent.
         /// </summary>
         public void ApplyExternalStatus(HotkeyId id, IReadOnlyList<ExternalGestureStatus> statuses)
         {
@@ -431,14 +425,14 @@ namespace Prisc.UI
                     if (used[i] || statuses[i].Gesture != token)
                         continue;
                     used[i] = true;
-                    // the capturer's hook shares the shell's Accessibility grant: show the text the
-                    // shell's own host would, which says how to fix it and that the hotkeys then
-                    // recover. A trusted process got a stale grant, which re-adding fixes, not granting.
-                    var error = statuses[i].ErrorCode != CaptureStandbySupervisor.PermissionErrorCode
-                        ? statuses[i].Error
-                        : AccessibilityTrustedProbe()
-                            ? NativeHotkeyHost.StaleGrantMessage
-                            : NativeHotkeyHost.PermissionMessage;
+                    // the capturer's hook runs under the same supervisor and shares the shell's
+                    // Accessibility grant: show the text the shell's own host would. The capturer
+                    // retries a stopped hook by itself only on macOS (elsewhere it exits, and the
+                    // shell takes the hotkeys back).
+                    var error = statuses[i].IsRegistered
+                        ? ""
+                        : HotkeyStatusText.For(statuses[i].ErrorCode, statuses[i].Error, recoverable: OperatingSystem.IsMacOS(),
+                            shortcut.Gesture);
                     shortcut.SetStatus(statuses[i].IsRegistered, error);
                     break;
                 }

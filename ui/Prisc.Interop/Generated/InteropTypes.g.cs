@@ -92,20 +92,44 @@ namespace Prisc.Interop
     /// <summary>What a <c>PriscHotkeysEvent</c> reports.</summary>
     public enum HotkeysEventKind : uint
     {
+        /// <summary>Registration <c>id</c> was pressed (<c>Repeat</c>: an auto-repeat of a press that fired).</summary>
         Hotkey = 1,
+        /// <summary>While recording session <c>id</c>: the modifiers held changed.</summary>
         RecordingModifiers = 2,
+        /// <summary>Recording session <c>id</c> finished with <c>key</c> + <c>modifiers</c> (swallowed).</summary>
         Recorded = 3,
+        /// <summary>The observe stream: one key edge (<c>Down</c>, <c>Repeat</c>), with <c>raw_code</c> and the typed <c>ch</c>.</summary>
         Key = 4,
+        /// <summary>The hook came up or went down: <c>hook_state</c>, <c>Recoverable</c>, and for a down state <c>reason</c>.</summary>
         Status = 5,
     }
 
     /// <summary>The hook's state in a Status event.</summary>
     public enum HookState : int
     {
+        /// <summary>The hook runs; every registration is live.</summary>
         Running = 0,
+        /// <summary>macOS: the Accessibility permission is missing (or was revoked).</summary>
         PermissionMissing = 1,
+        /// <summary>macOS: Accessibility reads as granted, yet the tap gets no key events (a stale grant that only removing and re-adding the app fixes).</summary>
         PermissionStale = 2,
+        /// <summary>The hook could not start (the OS refused it; <c>reason</c> says how).</summary>
         Failed = 3,
+        /// <summary>The hook ran and stopped (<c>reason</c> says why).</summary>
+        Stopped = 4,
+    }
+
+    /// <summary><c>PriscHotkeysEvent.flags</c>; bit flags (<c>[Flags]</c> in C#).</summary>
+    [Flags]
+    public enum HotkeysEventFlags : uint
+    {
+        None = 0,
+        /// <summary>Key: a key-down (else a key-up).</summary>
+        Down = 1,
+        /// <summary>Hotkey, Key: an auto-repeat.</summary>
+        Repeat = 2,
+        /// <summary>Status: the supervisor tries again by itself, so the hook may come back without a restart.</summary>
+        Recoverable = 4,
     }
 
     /// <summary>How serious a log line is.</summary>

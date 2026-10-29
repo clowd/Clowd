@@ -22,157 +22,15 @@
 //! comes up or goes down.
 
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use prisc_hotkeys::{Error, Event, Gesture, HotkeyId, Hotkeys};
+use prisc_hotkeys::supervise::{Change, Down, Hook, HookEvent, PauseHandle, Recovery, Routed, Router, Supervisor};
+use prisc_hotkeys::{Error, Gesture, Hotkeys};
 use prisc_ipc::catalog::capture::{self, HotkeyStatus};
 use winit::event_loop::EventLoopProxy;
 
 use crate::settings::{CaptureMode, CliArgs};
-
-/// How often a hook that is down for a retryable reason is tried again. A
-/// grant in System Settings notifies nobody, so this is how the standby finds
-/// out; each try is a thread start plus one tccd query (about 10 ms), and the
-/// user who just flipped the switch expects the hotkey to work within seconds.
-pub const RETRY_INTERVAL: Duration = Duration::from_secs(2);
-
-/// What standby needs of a running hook — `Hotkeys` outside tests, so the
-/// retry and registration logic can be tested without installing one.
-pub trait Hook: Send + Sync + 'static {
-    type Id: Copy + Eq + Hash + Send + 'static;
-    fn register(&self, gesture: Gesture) -> Result<Self::Id, Error>;
-    fn unregister(&self, id: Self::Id);
-    fn set_paused(&self, paused: bool);
-}
-
-impl Hook for Hotkeys {
-    type Id = HotkeyId;
-
-    fn register(&self, gesture: Gesture) -> Result<HotkeyId, Error> {
-        Hotkeys::register(self, gesture)
-    }
-
-    fn unregister(&self, id: HotkeyId) {
-        Hotkeys::unregister(self, id);
-    }
-
-    fn set_paused(&self, paused: bool) {
-        Hotkeys::set_paused(self, paused);
-    }
-}
-
-/// The two hook events standby acts on.
-pub enum HookEvent<I> {
-    Fired(I),
-    /// The hook died; the last event.
-    Stopped(String),
-}
-
-/// A hook's events, blocking; None once its queue closed.
-type Source<I> = Box<dyn FnMut() -> Option<HookEvent<I>> + Send>;
-type Starter<H> = Box<dyn FnMut() -> Result<(Arc<H>, Source<<H as Hook>::Id>), Error>>;
-
-fn start_hotkeys() -> Result<(Arc<Hotkeys>, Source<HotkeyId>), Error> {
-    let (hotkeys, events) = Hotkeys::start()?;
-    let source: Source<HotkeyId> = Box::new(move || loop {
-        match events.recv()? {
-            Event::Hotkey {
-                id,
-                repeat: false,
-            } => return Some(HookEvent::Fired(id)),
-            Event::Stopped(reason) => return Some(HookEvent::Stopped(reason)),
-            _ => {}
-        }
-    });
-    Ok((Arc::new(hotkeys), source))
-}
-
-/// What the standby does while the hook is down for `err`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum Recovery {
-    /// Stay up for tray captures, report `err` on every gesture, and try
-    /// the hook again at most every `RETRY_INTERVAL`: from the event loop's
-    /// timer, or from a settings snapshot once that interval has passed.
-    Retry,
-    /// As `Retry`, but trying again is pointless (no Linux backend).
-    Report,
-    /// Exit, so the shell's crash accounting restarts us or falls back to
-    /// its own prisc_hotkeys registrations.
-    Exit,
-}
-
-fn recovery(err: &Error) -> Recovery {
-    match err {
-        // macOS: a NULL tap, a stale grant and a revocation all come down to
-        // the Accessibility grant, which the shell's own tap shares (same
-        // crate, same TCC answer for Prisc.app), so exiting would only burn
-        // crash strikes. Granting it later must make the hotkeys work without
-        // restarting Prisc.
-        Error::PermissionDenied | Error::HookFailed(_) | Error::Stopped if cfg!(target_os = "macos") => Recovery::Retry,
-        // Windows: the OS refused or lost this process's hook (a failed
-        // SetWindowsHookEx, a message-loop error, or a silently removed hook
-        // that could not be re-installed), which a fresh process or
-        // the shell's own hook need not share.
-        Error::HookFailed(_) | Error::Stopped => Recovery::Exit,
-        _ => Recovery::Report,
-    }
-}
-
-/// The machine-readable twin of an error's text in `settings_status`:
-/// the shell keys behaviour (the Accessibility prompt) off this, never off
-/// the display text. Exhaustive on purpose, so a new variant picks a code.
-fn error_code(err: &Error) -> &'static str {
-    match err {
-        Error::Unsupported => "unsupported",
-        Error::PermissionDenied => "permission",
-        Error::HookFailed(_) => "hook_failed",
-        Error::Stopped => "hook_stopped",
-        Error::NoKey => "no_key",
-        Error::ModifierKey => "modifier_key",
-        Error::UnsupportedKey(_) => "unsupported_key",
-        Error::Duplicate => "duplicate",
-    }
-}
-
-struct Slot<H> {
-    paused: bool,
-    hook: Option<Arc<H>>,
-}
-
-/// The stdin reader's pause switch. It reaches whichever hook is running,
-/// including one started after the reader got this, and a hook started while
-/// paused starts paused.
-pub struct PauseHandle<H>(Arc<Mutex<Slot<H>>>);
-
-impl<H> Clone for PauseHandle<H> {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl<H: Hook> PauseHandle<H> {
-    pub fn set_paused(&self, paused: bool) {
-        let mut slot = lock(&self.0);
-        slot.paused = paused;
-        if let Some(hook) = &slot.hook {
-            hook.set_paused(paused);
-        }
-    }
-
-    fn hook(&self) -> Option<Arc<H>> {
-        lock(&self.0).hook.clone()
-    }
-
-    fn install(&self, hook: Option<Arc<H>>) {
-        let mut slot = lock(&self.0);
-        if let Some(hook) = &hook {
-            hook.set_paused(slot.paused);
-        }
-        slot.hook = hook;
-    }
-}
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
@@ -193,46 +51,43 @@ pub enum Poll {
 
 type Requested = Vec<(&'static str, Vec<String>, CaptureMode)>;
 
+/// The standby's gestures on a supervised hook. The retry interval, the
+/// stale-grant back-off, the recovery policy per OS, re-registration after a
+/// restart and the pause switch are prisc_hotkeys' `Supervisor`, the same one
+/// Prisc.Ui's in-process hook runs under; this module plans the gestures of
+/// each settings snapshot, maps a fired registration to its capture mode,
+/// drives the supervisor from the event loop and logs what it reports.
 pub struct StandbyHotkeys<H: Hook = Hotkeys> {
-    starter: Starter<H>,
+    supervisor: Supervisor<H>,
     wake: Arc<dyn Fn() + Send + Sync>,
-    /// Holds the running hook (None while it is down), shared with the stdin
-    /// reader so a pause reaches a hook started later.
-    slot: PauseHandle<H>,
-    /// Why the hook is down: the last start failure, or `Stopped` once it
-    /// died. Reported per gesture, so the shell's settings UI shows the real,
-    /// actionable reason. None while it runs.
-    error: Option<Error>,
-    /// The earliest the next start may be tried: at most one per
-    /// `RETRY_INTERVAL`, so a hook that dies at once cannot spin.
-    next_try: Instant,
     /// True once a retried death was logged at error: a tap that keeps dying
     /// is restarted every time, and each error! is a Sentry event.
     reported_death: bool,
+    /// The code of the down state last logged, so a retry that keeps failing
+    /// the same way is logged once per change of reason. None while it runs.
+    logged_down: Option<&'static str>,
     /// The gesture lists of the last settings snapshot, applied again when
     /// the hook comes or goes. None until the first snapshot, which is when
     /// hotkeys take effect.
     requested: Option<Requested>,
-    /// True when `requested` holds a gesture the hook would register; a hook
-    /// that is down is retried only then.
-    wants_hook: bool,
-    /// What the running hook holds.
-    registered: HashMap<Gesture, H::Id>,
+    /// What the supervisor holds for us: each gesture's stable id.
+    registered: HashMap<Gesture, u32>,
     /// Read by the forwarding thread to turn a fired registration into a mode.
-    modes: Arc<Mutex<HashMap<H::Id, CaptureMode>>>,
+    modes: Arc<Mutex<HashMap<u32, CaptureMode>>>,
     fired_tx: mpsc::Sender<CaptureMode>,
     fired_rx: mpsc::Receiver<CaptureMode>,
-    /// Kept apart from `fired_rx` so `drain` can never drop a hook death.
-    lost_tx: mpsc::Sender<String>,
-    lost_rx: mpsc::Receiver<String>,
+    /// A hook's death (its generation and reason), kept apart from
+    /// `fired_rx` so `drain` can never drop one.
+    lost_tx: mpsc::Sender<(u64, String)>,
+    lost_rx: mpsc::Receiver<(u64, String)>,
 }
 
 impl StandbyHotkeys {
     pub fn new(proxy: EventLoopProxy<()>) -> Self {
         // Send but not Sync on Windows (it holds an HWND), and the wake is shared.
         let proxy = Mutex::new(proxy);
-        Self::with_starter(
-            Box::new(start_hotkeys),
+        Self::with_supervisor(
+            Supervisor::new(),
             Arc::new(move || {
                 let _ = lock(&proxy).send_event(());
             }),
@@ -241,24 +96,17 @@ impl StandbyHotkeys {
 }
 
 impl<H: Hook> StandbyHotkeys<H> {
-    /// Starts the hook once through `starter`; `wake` rouses the event loop
-    /// after a press or a hook death.
-    fn with_starter(starter: Starter<H>, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
+    /// Starts the hook once through `supervisor`; `wake` rouses the event
+    /// loop after a press or a hook death.
+    fn with_supervisor(supervisor: Supervisor<H>, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
         let (fired_tx, fired_rx) = mpsc::channel();
         let (lost_tx, lost_rx) = mpsc::channel();
-        let now = Instant::now();
         let mut hotkeys = Self {
-            starter,
+            supervisor,
             wake,
-            slot: PauseHandle(Arc::new(Mutex::new(Slot {
-                paused: false,
-                hook: None,
-            }))),
-            error: None,
-            next_try: now,
             reported_death: false,
+            logged_down: None,
             requested: None,
-            wants_hook: false,
             registered: HashMap::new(),
             modes: Arc::default(),
             fired_tx,
@@ -266,28 +114,27 @@ impl<H: Hook> StandbyHotkeys<H> {
             lost_tx,
             lost_rx,
         };
-        hotkeys.start(now);
+        hotkeys.supervisor.start(Instant::now());
+        hotkeys.absorb();
         hotkeys
     }
 
     /// Why the hook is down, if it is.
-    pub fn listener_error(&self) -> Option<&Error> {
-        self.error.as_ref()
+    pub fn listener_error(&self) -> Option<&Down> {
+        self.supervisor.down()
     }
 
     /// True when the hook is down for a reason another process would not
-    /// share (see `recovery`) — standby then exits so the shell falls back to
+    /// share (`Recovery::Exit`): standby then exits so the shell falls back to
     /// its own registrations.
     pub fn should_bail(&self) -> bool {
-        self.error
-            .as_ref()
-            .is_some_and(|err| recovery(err) == Recovery::Exit)
+        self.supervisor.recovery() == Some(Recovery::Exit)
     }
 
     /// For the stdin reader thread: applies `{"type":"pause"}` immediately,
     /// even mid-capture, to whichever hook is running then or later.
     pub fn pause_handle(&self) -> PauseHandle<H> {
-        self.slot.clone()
+        self.supervisor.pause_handle()
     }
 
     /// When the event loop must wake to retry the hook; None while it runs,
@@ -295,60 +142,54 @@ impl<H: Hook> StandbyHotkeys<H> {
     /// on it (a snapshot that adds one retries), so the loop can block
     /// indefinitely.
     pub fn next_retry(&self) -> Option<Instant> {
-        match &self.error {
-            Some(err) if self.wants_hook && recovery(err) == Recovery::Retry => Some(self.next_try),
-            _ => None,
-        }
+        self.supervisor.next_retry()
     }
 
     /// Replaces the whole gesture set from a CLI snapshot and returns the
     /// per-gesture statuses for `settings_status`. Hook-based hotkeys
     /// cannot conflict with other applications, so a gesture is active exactly
     /// when it parses, is usable on this OS, is not a duplicate, and the hook
-    /// accepted it. A hook that is down is tried again first if
-    /// `RETRY_INTERVAL` has passed since the last attempt (see `next_retry`).
+    /// holds it. A hook that is down is tried again first if its retry is due
+    /// (see `next_retry`).
     pub fn apply(&mut self, args: &CliArgs) -> capture::Hotkeys {
+        self.apply_at(args, Instant::now())
+    }
+
+    fn apply_at(&mut self, args: &CliArgs, now: Instant) -> capture::Hotkeys {
         self.requested = Some(vec![
             ("main", args.hk_main.clone(), CaptureMode::Region),
             ("window", args.hk_window.clone(), CaptureMode::Window),
             ("monitor", args.hk_monitor.clone(), CaptureMode::Screen),
         ]);
-        self.wants_hook = self
-            .plan(None)
-            .is_some_and(|plan| !plan.wanted.is_empty());
-        self.retry(Instant::now());
+        // The supervisor retries only a hook something would be registered
+        // on, so the gestures go to it first.
+        self.sync_registrations();
+        self.supervisor.poll(now);
+        self.absorb();
         self.sync()
     }
 
     /// One look at the hook's health from the event loop, which calls this
     /// on every pass: notices a death the forwarding thread reported and
     /// retries a hook that is down once `next_retry` has passed. A death is
-    /// reported even when the restart in the same pass succeeds, since the
-    /// new hook holds nothing until `sync` registers the gestures on it.
+    /// reported even when the restart in the same pass succeeds.
     pub fn poll(&mut self, now: Instant) -> Poll {
-        let before = (self.slot.hook().is_some(), self.error.clone());
-        let died = match self.lost_rx.try_recv() {
-            Ok(reason) => {
-                self.stop();
-                self.error = Some(Error::Stopped);
-                if recovery(&Error::Stopped) == Recovery::Exit {
-                    log::error!("standby hotkey hook died: {reason}");
-                    return Poll::Fatal(reason);
-                }
-                // Retried, so reported once per run like the shell's own hook:
-                // a revoked grant is the user's choice, not a defect.
-                if reason == prisc_hotkeys::REVOKED_REASON || self.reported_death {
-                    log::warn!("standby hotkey hook died: {reason}");
-                } else {
-                    self.reported_death = true;
-                    log::error!("standby hotkey hook died: {reason}");
-                }
-                true
+        let before = self.supervisor.down().cloned();
+        let mut lost = None;
+        while let Ok((generation, reason)) = self.lost_rx.try_recv() {
+            self.supervisor
+                .died(generation, reason.clone());
+            lost = Some(reason);
+        }
+        let mut died = self.absorb();
+        if let Some(reason) = lost.clone().or(died.clone()) {
+            if self.should_bail() {
+                return Poll::Fatal(reason);
             }
-            Err(_) => false,
-        };
-        self.retry(now);
-        if self.requested.is_none() || (!died && (self.slot.hook().is_some(), &self.error) == (before.0, &before.1)) {
+        }
+        self.supervisor.poll(now);
+        died = died.or(self.absorb());
+        if self.requested.is_none() || (died.is_none() && lost.is_none() && self.supervisor.down() == before.as_ref()) {
             return Poll::Unchanged;
         }
         Poll::Statuses(self.sync())
@@ -362,126 +203,192 @@ impl<H: Hook> StandbyHotkeys<H> {
         while self.fired_rx.try_recv().is_ok() {}
     }
 
-    fn retry(&mut self, now: Instant) {
-        if self.next_retry().is_some_and(|at| now >= at) {
-            self.start(now);
+    /// Acts on what the supervisor did: forwards each new hook's events from
+    /// a thread of its own, and logs failures and deaths. Returns the reason
+    /// of a death, if one happened.
+    fn absorb(&mut self) -> Option<String> {
+        let mut died = None;
+        // Until quiet: a hook whose forwarding thread cannot start dies here,
+        // which is another change.
+        loop {
+            let changes = self.supervisor.take_changes();
+            if changes.is_empty() {
+                return died;
+            }
+            for change in changes {
+                if let Some(reason) = self.absorb_one(change) {
+                    died = Some(reason);
+                }
+            }
         }
     }
 
-    fn start(&mut self, now: Instant) {
-        self.next_try = now + RETRY_INTERVAL;
-        let started = (self.starter)().and_then(|(hook, events)| {
-            let modes = Arc::clone(&self.modes);
-            let (fired, lost, wake) = (self.fired_tx.clone(), self.lost_tx.clone(), Arc::clone(&self.wake));
-            std::thread::Builder::new()
-                .name("standby-hotkeys".into())
-                .spawn(move || forward(events, &modes, &fired, &lost, &*wake))
-                .map(|_| hook)
-                .map_err(|err| Error::HookFailed(format!("failed to start the hotkey thread: {err}")))
-        });
-        match started {
-            Ok(hook) => {
-                self.slot.install(Some(hook));
-                self.error = None;
+    fn absorb_one(&mut self, change: Change<H>) -> Option<String> {
+        match change {
+            Change::Started {
+                generation,
+                events,
+            } => {
+                self.logged_down = None;
+                let router = self.supervisor.router();
+                let (modes, fired, lost, wake) = (
+                    Arc::clone(&self.modes),
+                    self.fired_tx.clone(),
+                    self.lost_tx.clone(),
+                    Arc::clone(&self.wake),
+                );
+                let spawned = std::thread::Builder::new()
+                    .name("standby-hotkeys".into())
+                    .spawn(move || forward::<H>(generation, &events, &router, &modes, &fired, &lost, &*wake));
+                if let Err(err) = spawned {
+                    // Nothing would read the hook: count it as dead.
+                    self.supervisor
+                        .died(generation, format!("failed to start the hotkey thread: {err}"));
+                }
             }
-            Err(err) => {
+            Change::StartFailed(down) => {
                 // Logged once per change of reason: the retry repeats this every
                 // RETRY_INTERVAL, and in release builds each error! is a Sentry event.
-                match should_report(self.error.as_ref(), &err) {
+                let news = self.logged_down != Some(down.code());
+                self.logged_down = Some(down.code());
+                match news {
                     // A missing grant is the user's choice, not a defect.
-                    true if matches!(err, Error::PermissionDenied) => log::warn!("standby hotkey hook unavailable: {err}"),
-                    true => log::error!("standby hotkey hook unavailable: {err}"),
-                    false => log::debug!("standby hotkey hook still unavailable: {err}"),
+                    true if matches!(down, Down::Error(Error::PermissionDenied)) => {
+                        log::warn!("standby hotkey hook unavailable: {down}")
+                    }
+                    true => log::error!("standby hotkey hook unavailable: {down}"),
+                    false => log::debug!("standby hotkey hook still unavailable: {down}"),
                 }
-                self.error = Some(err);
+            }
+            Change::Died {
+                reason,
+                down,
+            } => {
+                self.logged_down = Some(down.code());
+                if prisc_hotkeys::supervise::recovery(&down) == Recovery::Exit {
+                    log::error!("standby hotkey hook died: {reason}");
+                // Retried, so reported once per run like the shell's own hook:
+                // a revoked grant is the user's choice, not a defect.
+                } else if reason == prisc_hotkeys::REVOKED_REASON || self.reported_death {
+                    log::warn!("standby hotkey hook died: {reason}");
+                } else {
+                    self.reported_death = true;
+                    log::error!("standby hotkey hook died: {reason}");
+                }
+                return Some(reason);
             }
         }
+        None
     }
 
-    /// Drops a dead hook and everything it held; `sync` registers the
-    /// gestures again on the next one.
-    fn stop(&mut self) {
-        self.slot.install(None);
-        self.registered.clear();
-        lock(&self.modes).clear();
-    }
-
-    /// `requested` planned against `hook_error`; None before the first snapshot.
-    fn plan(&self, hook_error: Option<&Error>) -> Option<HotkeyPlan<'static>> {
+    /// `requested` planned against the hook's state; None before the first
+    /// snapshot.
+    fn plan(&self) -> Option<HotkeyPlan<'static>> {
         let requested: Vec<(&'static str, &[String], CaptureMode)> = self
             .requested
             .as_ref()?
             .iter()
             .map(|(name, gestures, mode)| (*name, gestures.as_slice(), *mode))
             .collect();
-        Some(plan_hotkeys(&requested, hook_error))
+        Some(plan_hotkeys(&requested, self.supervisor.down()))
     }
 
-    /// Brings the hook in line with `requested` and reports every gesture.
-    /// Only called once a snapshot set `requested`.
-    fn sync(&mut self) -> capture::Hotkeys {
-        let mut plan = self
-            .plan(self.error.as_ref())
-            .expect("sync runs after the first settings snapshot");
-        let Some(hook) = self.slot.hook() else {
-            return plan.statuses;
+    /// Brings the supervisor's registrations in line with `requested`, held
+    /// whether or not the hook runs. A gesture present in both snapshots is
+    /// never unregistered, so it keeps firing throughout. Returns the statuses
+    /// of the gestures the supervisor refused (by slot), which the plan has
+    /// already refused in practice.
+    fn sync_registrations(&mut self) -> Vec<((&'static str, usize), HotkeyStatus)> {
+        let Some(mut plan) = self.plan() else {
+            return Vec::new();
         };
-
         // Held for the whole sync, so the forwarding thread can never see a
-        // registration without its mode. A gesture present in both snapshots
-        // is never unregistered, so it keeps firing throughout.
-        let mut modes = lock(&self.modes);
+        // registration without its mode.
+        let modes_arc = Arc::clone(&self.modes);
+        let mut modes = lock(&modes_arc);
         let mut kept = Vec::with_capacity(plan.wanted.len());
-        for (&(gesture, mode), &(name, index)) in plan.wanted.iter().zip(&plan.slots) {
+        let mut refused = Vec::new();
+        for (&(gesture, mode), &slot) in plan.wanted.iter().zip(&plan.slots) {
             if let Some(&id) = self.registered.get(&gesture) {
                 modes.insert(id, mode);
                 kept.push(gesture);
                 continue;
             }
-            match hook.register(gesture) {
+            match self.supervisor.register(gesture) {
                 Ok(id) => {
                     self.registered.insert(gesture, id);
                     modes.insert(id, mode);
                     kept.push(gesture);
                 }
                 Err(err) => {
-                    let status = &mut entries_mut(&mut plan.statuses, name)[index];
-                    *status = status_entry(std::mem::take(&mut status.gesture), Some((err.to_string(), error_code(&err))));
+                    let echo = entries_mut(&mut plan.statuses, slot.0)[slot.1]
+                        .gesture
+                        .clone();
+                    refused.push((slot, status_entry(echo, Some((err.to_string(), err.code())))));
                 }
             }
         }
+        let supervisor = &mut self.supervisor;
         self.registered.retain(|gesture, id| {
             let keep = kept.contains(gesture);
             if !keep {
-                hook.unregister(*id);
+                supervisor.unregister(*id);
                 modes.remove(id);
             }
             keep
         });
+        refused
+    }
+
+    /// Brings the hook in line with `requested` and reports every gesture.
+    /// Only called once a snapshot set `requested`.
+    fn sync(&mut self) -> capture::Hotkeys {
+        let refused = self.sync_registrations();
+        // A register that found the hook dead counts as its death, which the
+        // statuses then report.
+        self.absorb();
+        let mut plan = self
+            .plan()
+            .expect("sync runs after the first settings snapshot");
+        for ((name, index), status) in refused {
+            entries_mut(&mut plan.statuses, name)[index] = status;
+        }
         plan.statuses
     }
 }
 
-/// True when a start failing with `new` is news: the first failure, or a
-/// different reason than `prev`. Compared by code, so a `HookFailed` whose
-/// detail text changes is still the same failure.
-fn should_report(prev: Option<&Error>, new: &Error) -> bool {
-    prev.map(error_code) != Some(error_code(new))
-}
-
-/// The forwarding thread: turns the hook's events into modes on `fired`, and
-/// hands a hook death to the event loop rather than acting on it here, where
-/// a capture in progress cannot be seen.
-fn forward<I: Copy + Eq + Hash>(
-    mut events: Source<I>,
-    modes: &Mutex<HashMap<I, CaptureMode>>,
+/// The forwarding thread of the hook started as `generation`: turns its
+/// presses into modes on `fired`, and hands its death to the event loop
+/// rather than acting on it here, where a capture in progress cannot be seen.
+fn forward<H: Hook>(
+    generation: u64,
+    events: &H::Events,
+    router: &Router<H::Id>,
+    modes: &Mutex<HashMap<u32, CaptureMode>>,
     fired: &mpsc::Sender<CaptureMode>,
-    lost: &mpsc::Sender<String>,
+    lost: &mpsc::Sender<(u64, String)>,
     wake: &(dyn Fn() + Send + Sync),
 ) {
-    while let Some(event) = events() {
-        match event {
-            HookEvent::Fired(id) => {
+    loop {
+        match H::next_event(events, Duration::from_secs(3600)) {
+            Ok(HookEvent::Stopped(reason)) => {
+                let _ = lost.send((generation, reason));
+                wake();
+                return;
+            }
+            Ok(
+                event @ HookEvent::Hotkey {
+                    repeat: false,
+                    ..
+                },
+            ) => {
+                let Some(Routed::Hotkey {
+                    id,
+                    ..
+                }) = router.route(generation, event)
+                else {
+                    continue;
+                };
                 let mode = lock(modes).get(&id).copied();
                 if let Some(mode) = mode {
                     if fired.send(mode).is_err() {
@@ -490,15 +397,12 @@ fn forward<I: Copy + Eq + Hash>(
                     wake();
                 }
             }
-            HookEvent::Stopped(reason) => {
-                let _ = lost.send(reason);
-                wake();
-                return;
-            }
+            Ok(_) | Err(mpsc::RecvTimeoutError::Timeout) => {}
+            // The queue closed because the hook was dropped (a normal shutdown,
+            // or a death already reported): not a failure.
+            Err(mpsc::RecvTimeoutError::Disconnected) => return,
         }
     }
-    // The queue closed because the hook was dropped (a normal shutdown, or
-    // `stop` after a death already reported): not a failure.
 }
 
 /// The outcome of one settings snapshot, computed without touching the hook
@@ -513,7 +417,7 @@ struct HotkeyPlan<'a> {
 }
 
 /// One gesture's status; `error` is the text and `error_code` its stable code
-/// (see `error_code`), both absent when active.
+/// (prisc_hotkeys' code table), both absent when active.
 fn status_entry(gesture: String, error: Option<(String, &str)>) -> HotkeyStatus {
     let (error, code) = error.unzip();
     HotkeyStatus {
@@ -537,8 +441,10 @@ fn entries_mut<'h>(hotkeys: &'h mut capture::Hotkeys, name: &str) -> &'h mut Vec
 /// Resolves every gesture of every mode, in request order. Each name maps to
 /// an array with one status entry per gesture received, and "gesture" echoes
 /// the received string verbatim — the shell matches statuses back to its own
-/// gestures by that string, so it must never be normalized here.
-fn plan_hotkeys<'a>(requested: &[(&'a str, &[String], CaptureMode)], hook_error: Option<&Error>) -> HotkeyPlan<'a> {
+/// gestures by that string, so it must never be normalized here. A gesture the
+/// hook would hold is `wanted` whatever the hook's state; while the hook is
+/// down (`hook_error`) its status reports why.
+fn plan_hotkeys<'a>(requested: &[(&'a str, &[String], CaptureMode)], hook_error: Option<&Down>) -> HotkeyPlan<'a> {
     let mut wanted: Vec<(Gesture, CaptureMode)> = Vec::new();
     let mut slots = Vec::new();
     let mut statuses = capture::Hotkeys {
@@ -552,22 +458,17 @@ fn plan_hotkeys<'a>(requested: &[(&'a str, &[String], CaptureMode)], hook_error:
             let error = match gesture.parse::<Gesture>() {
                 Err(err) => Some((err.to_string(), "invalid_gesture")),
                 Ok(parsed) => match parsed.validate() {
-                    Err(err) => Some((err.to_string(), error_code(&err))),
+                    Err(err) => Some((err.to_string(), err.code())),
                     // The shell already gives each gesture to at most one action, so
                     // this is defense in depth: the hook refuses an equal gesture
                     // anyway. Compared parsed, so a respelling ("Shift+Control+A")
                     // counts as the gesture it duplicates.
-                    Ok(()) if wanted.iter().any(|(g, _)| *g == parsed) => {
-                        Some((Error::Duplicate.to_string(), error_code(&Error::Duplicate)))
+                    Ok(()) if wanted.iter().any(|(g, _)| *g == parsed) => Some((Error::Duplicate.to_string(), Error::Duplicate.code())),
+                    Ok(()) => {
+                        wanted.push((parsed, mode));
+                        slots.push((name, entries.len()));
+                        hook_error.map(|down| (down.to_string(), down.code()))
                     }
-                    Ok(()) => match hook_error {
-                        Some(err) => Some((err.to_string(), error_code(err))),
-                        None => {
-                            wanted.push((parsed, mode));
-                            slots.push((name, entries.len()));
-                            None
-                        }
-                    },
                 },
             };
             entries.push(status_entry(gesture.clone(), error));
@@ -594,7 +495,7 @@ mod tests {
         list.iter().map(|g| g.to_string()).collect()
     }
 
-    fn plan(main: &[&str], window: &[&str], monitor: &[&str], hook_error: Option<&Error>) -> HotkeyPlan<'static> {
+    fn plan(main: &[&str], window: &[&str], monitor: &[&str], hook_error: Option<&Down>) -> HotkeyPlan<'static> {
         let (main, window, monitor) = (gestures(main), gestures(window), gestures(monitor));
         plan_hotkeys(
             &[
@@ -700,8 +601,9 @@ mod tests {
 
     #[test]
     fn listener_error_reports_on_every_gesture() {
-        let plan = plan(&["F12", "Control+D1"], &[], &[], Some(&Error::PermissionDenied));
-        assert!(plan.wanted.is_empty());
+        let plan = plan(&["F12", "Control+D1"], &[], &[], Some(&Down::Error(Error::PermissionDenied)));
+        // still wanted: the supervisor holds them for the hook's return
+        assert_eq!(plan.wanted.len(), 2);
         for status in json(&plan.statuses)["main"]
             .as_array()
             .unwrap()
@@ -733,9 +635,9 @@ mod tests {
             ]
         );
 
-        let denied = plan(&["F12"], &[], &[], Some(&Error::PermissionDenied));
+        let denied = plan(&["F12"], &[], &[], Some(&Down::Error(Error::PermissionDenied)));
         assert_eq!(json(&denied.statuses)["main"][0]["error_code"], "permission");
-        let unsupported = plan(&["F12"], &[], &[], Some(&Error::Unsupported));
+        let unsupported = plan(&["F12"], &[], &[], Some(&Down::Error(Error::Unsupported)));
         assert_eq!(json(&unsupported.statuses)["main"][0]["error_code"], "unsupported");
     }
 
@@ -817,25 +719,32 @@ mod tests {
 
     // The hook's lifecycle, against a fake hook: nothing here installs a real one.
 
+    use prisc_hotkeys::supervise::{Platform, Probe, Starter, RETRY_INTERVAL};
+
     #[derive(Default)]
-    struct FakeHook {
+    struct FakeState {
         registered: Mutex<Vec<Gesture>>,
         paused: std::sync::atomic::AtomicBool,
         /// Refuses registrations like a real hook whose thread has exited.
         dead: std::sync::atomic::AtomicBool,
     }
 
+    /// The fake as the supervisor owns it; the test keeps the state to look inside.
+    struct FakeHook(Arc<FakeState>);
+
     impl Hook for FakeHook {
         type Id = usize;
+        type Events = mpsc::Receiver<HookEvent<usize>>;
 
         fn register(&self, gesture: Gesture) -> Result<usize, Error> {
             if self
+                .0
                 .dead
                 .load(std::sync::atomic::Ordering::SeqCst)
             {
                 return Err(Error::Stopped);
             }
-            let mut registered = lock(&self.registered);
+            let mut registered = lock(&self.0.registered);
             registered.push(gesture);
             Ok(registered.len())
         }
@@ -843,15 +752,28 @@ mod tests {
         fn unregister(&self, _id: usize) {}
 
         fn set_paused(&self, paused: bool) {
-            self.paused
+            self.0
+                .paused
                 .store(paused, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        fn set_observe(&self, _observe: bool) {}
+
+        fn start_recording(&self) -> Option<u32> {
+            None
+        }
+
+        fn stop_recording(&self, _session: u32) {}
+
+        fn next_event(events: &Self::Events, timeout: Duration) -> Result<HookEvent<usize>, mpsc::RecvTimeoutError> {
+            events.recv_timeout(timeout)
         }
     }
 
     struct Rig {
         hotkeys: StandbyHotkeys<FakeHook>,
         /// One entry per successful start: the hook, and where to send its events.
-        hooks: mpsc::Receiver<(Arc<FakeHook>, mpsc::Sender<HookEvent<usize>>)>,
+        hooks: mpsc::Receiver<(Arc<FakeState>, mpsc::Sender<HookEvent<usize>>)>,
         woke: mpsc::Receiver<()>,
     }
 
@@ -862,22 +784,24 @@ mod tests {
         let (hooks_tx, hooks) = mpsc::channel();
         let (wake_tx, woke) = mpsc::channel();
         let wake_tx = Mutex::new(wake_tx);
+        let hooks_tx = Mutex::new(hooks_tx);
         let starter: Starter<FakeHook> = Box::new(move || {
             script
                 .pop_front()
                 .expect("unexpected hook start")?;
-            let hook = Arc::new(FakeHook::default());
+            let state = Arc::new(FakeState::default());
             let (events_tx, events) = mpsc::channel();
-            hooks_tx
-                .send((Arc::clone(&hook), events_tx))
+            lock(&hooks_tx)
+                .send((Arc::clone(&state), events_tx))
                 .unwrap();
-            Ok((hook, Box::new(move || events.recv().ok()) as Source<usize>))
+            Ok((FakeHook(state), events))
         });
+        let probe: Probe = Box::new(|| true);
         let wake = Arc::new(move || {
             let _ = lock(&wake_tx).send(());
         });
         Rig {
-            hotkeys: StandbyHotkeys::with_starter(starter, wake),
+            hotkeys: StandbyHotkeys::with_supervisor(Supervisor::with_starter(starter, probe, Platform::CURRENT), wake),
             hooks,
             woke,
         }
@@ -991,7 +915,12 @@ mod tests {
         rig.hotkeys.apply(&snapshot(&["F12"]));
         let (first, events) = rig.hooks.try_recv().unwrap();
         assert_eq!(*lock(&first.registered), [gesture("F12")]);
-        events.send(HookEvent::Fired(1)).unwrap();
+        events
+            .send(HookEvent::Hotkey {
+                id: 1,
+                repeat: false,
+            })
+            .unwrap();
         events
             .send(HookEvent::Stopped("the Accessibility permission was revoked".into()))
             .unwrap();
@@ -1236,8 +1165,9 @@ mod tests {
         assert!(rig.hooks.try_recv().is_err(), "never started");
 
         // Past the rate limit already, so the snapshot itself retries.
-        rig.hotkeys.next_try = Instant::now();
-        let statuses = rig.hotkeys.apply(&snapshot(&["F12"]));
+        let statuses = rig
+            .hotkeys
+            .apply_at(&snapshot(&["F12"]), later);
         assert_eq!(json(&statuses)["main"][0]["active"], true);
         assert!(rig.hooks.try_recv().is_ok(), "started for the new gesture");
     }

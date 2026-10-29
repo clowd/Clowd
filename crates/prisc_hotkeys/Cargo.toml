@@ -13,9 +13,9 @@ rust-version.workspace = true
 # (`cargo codegen`).
 
 [lib]
-# rlib: linked statically into prisc_capture and prisc_interop. cdylib: prisc_hotkeys.dll /
-# libprisc_hotkeys.dylib, P/Invoked by Prisc.Ui through the legacy prisc_hotkeys_legacy_* exports.
-crate-type = ["rlib", "cdylib"]
+# rlib only: linked statically into prisc_capture, prisc_recorder and prisc_interop, whose
+# prisc_hotkeys_* exports serve the hook to Prisc.Ui.
+crate-type = ["rlib"]
 
 [dependencies]
 # std otherwise (Modifiers is a hand-written newtype, the queue is std::sync::mpsc). prisc_platform
