@@ -13,6 +13,11 @@ prisc_obs_platform = { workspace = true }
 # The keyboard half of --input-capture: the observe stream of Prisc's one keyboard hook
 # (src/input_hook.rs). The mouse hook stays local; prisc_hotkeys is keyboard only.
 prisc_hotkeys = { workspace = true }
+# The physical key state behind the stranded-key release (src/input_hook.rs), shared with the hook.
+prisc_platform = { workspace = true }
+# The pure shared logic (crf mapping, contracts) on every OS, Linux included. The telemetry
+# feature is added off Linux below; Cargo unions the two entries.
+prisc_rust_core = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

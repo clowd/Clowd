@@ -1,0 +1,40 @@
+[package]
+name = "prisc_platform"
+version = "1.0.0"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+# Leaf OS primitives that crates below prisc_rust_core need, so each question has one answer:
+# the macOS permission checks (Screen Recording, Accessibility), the physical key state, Secure
+# Event Input, and the Windows foreground grant. No serde, no image, no sentry, no prisc crate:
+# prisc_hotkeys is std-only and depends on this, as do prisc_interop, prisc_capture,
+# prisc_scroll_driver, prisc_shell_ext and the recorder stack. Every function exists on every
+# OS; where a concept is absent it answers "not applicable" or None, so callers carry no cfg.
+
+[dependencies]
+# none on Linux
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    # GetAsyncKeyState (input::is_key_down)
+    "Win32_UI_Input_KeyboardAndMouse",
+    # AllowSetForegroundWindow, ASFW_ANY (foreground::grant)
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-core-foundation = { workspace = true, features = ["CFBase", "CFDictionary", "CFNumber", "CFString"] }
+objc2-core-graphics = { workspace = true, features = [
+    # CGPreflightPostEventAccess, CGRequestPostEventAccess
+    "CGEvent",
+    # CGEventSourceKeyState
+    "CGEventSource",
+    "CGEventTypes",
+    "CGRemoteOperation",
+    # CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess
+    "CGWindow",
+] }

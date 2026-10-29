@@ -22,7 +22,13 @@
 //! can use it without pulling the recorder stack in.
 
 mod filter;
+/// The screen grab every reader of screen pixels shares (filled by the desktop work package).
+pub mod grab;
 mod icon;
+/// The macOS overlay window level and collection behaviour.
+pub mod overlay;
+/// The monitor list every reader of screens shares (filled by the desktop work package).
+pub mod screens;
 
 pub use filter::*;
 pub use icon::*;

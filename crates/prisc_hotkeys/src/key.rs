@@ -1,7 +1,7 @@
 //! The key table: every key a global hotkey can name, with its Avalonia value, its alias names
-//! and its platform codes, on one row per key. This is the only global-hotkey key map in Prisc —
-//! the C# `HotkeyKey` mirror is generated from it (`csharp.rs`), and the backends map OS codes
-//! through it.
+//! and its platform codes, on one row per key. This is the only global-hotkey key map in Prisc:
+//! the C# `HotkeyKey` mirror is generated from it (`crates/prisc_codegen/src/hotkey_keys.rs`,
+//! `cargo codegen`), and the backends map OS codes through it.
 
 /// `Some(first code)` or `None` for an empty code list.
 macro_rules! first {
@@ -25,8 +25,8 @@ macro_rules! keys {
         }
 
         impl Key {
-            /// Every key, in declaration order (= ascending value).
-            pub(crate) const ALL: &'static [Key] = &[$(Key::$name),*];
+            /// Every key, in declaration order (= ascending value). Public for prisc_codegen.
+            pub const ALL: &'static [Key] = &[$(Key::$name),*];
 
             /// The canonical name: what settings store and `Gesture` prints.
             pub fn name(self) -> &'static str {
@@ -36,7 +36,8 @@ macro_rules! keys {
             }
 
             /// Other names that parse to this key (Avalonia's duplicate enum names, e.g. `Snapshot`).
-            pub(crate) fn aliases(self) -> &'static [&'static str] {
+            /// Public for prisc_codegen.
+            pub fn aliases(self) -> &'static [&'static str] {
                 match self {
                     $(Key::$name => &[$($alias),*],)*
                 }

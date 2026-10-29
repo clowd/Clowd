@@ -9,14 +9,18 @@ rust-version.workspace = true
 
 # Global hotkeys, gesture recording and the keystroke observe stream, through one keyboard hook
 # (WH_KEYBOARD_LL on Windows, a CGEventTap on macOS). The key table in src/key.rs is the only
-# global-hotkey key map in Prisc; the C# mirror is generated from it (src/csharp.rs).
+# global-hotkey key map in Prisc; the C# mirror is generated from it by crates/prisc_codegen
+# (`cargo codegen`).
 
 [lib]
-# rlib: linked statically into prisc_capture. cdylib: prisc_hotkeys.dll / libprisc_hotkeys.dylib, P/Invoked by Prisc.Ui.
+# rlib: linked statically into prisc_capture and prisc_interop. cdylib: prisc_hotkeys.dll /
+# libprisc_hotkeys.dylib, P/Invoked by Prisc.Ui through the legacy prisc_hotkeys_legacy_* exports.
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-# none: std only (Modifiers is a hand-written newtype, the queue is std::sync::mpsc)
+# std otherwise (Modifiers is a hand-written newtype, the queue is std::sync::mpsc). prisc_platform
+# answers the permission and physical key state questions the same way as every other crate.
+prisc_platform.workspace = true
 
 [dev-dependencies]
 # tests/avalonia_snapshot.rs reads the json

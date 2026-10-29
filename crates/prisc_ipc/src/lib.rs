@@ -4,7 +4,7 @@
 //!
 //! The message catalogs in [`catalog`] are the single source of truth: the C# records, codecs
 //! and golden samples in `ui/Prisc.Ipc/Generated/HelperMessages.g.cs` are generated from them
-//! (`src/csharp.rs`).
+//! by `crates/prisc_codegen` (`cargo codegen`), as is the environment variable table in [`env`].
 //!
 //! A helper's `main` starts like this (§3.1):
 //!
@@ -26,14 +26,12 @@ pub const SELF_EXIT_MARGIN: Duration = Duration::from_secs(5);
 
 pub mod catalog;
 mod channel;
+pub mod env;
 pub mod exit;
 mod guard;
 pub mod lifetime;
 pub mod locate;
 mod stdin;
-
-#[cfg(test)]
-mod csharp;
 
 pub use channel::{open, Channel};
 pub use guard::claim_stdout;

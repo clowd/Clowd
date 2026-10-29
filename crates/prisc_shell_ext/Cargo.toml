@@ -13,6 +13,8 @@ crate-type = ["cdylib"]
 
 # Entirely #[cfg(windows)]; elsewhere the crate builds as an empty library so workspace-wide builds stay green.
 [target.'cfg(windows)'.dependencies]
+# The foreground grant handed to Prisc.Ui, shared with the other processes that grant it.
+prisc_platform.workspace = true
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",

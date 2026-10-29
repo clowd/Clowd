@@ -119,6 +119,39 @@ fn format_iso8601_utc(unix_secs: u64) -> String {
     format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, hh, mm, ss)
 }
 
+/// A `session.json` with every field set, the golden sample prisc_codegen renders into
+/// `SessionContract.RustSample` for the C# contract test (`cargo codegen`). A stub until the
+/// contract test lands: the field values are what that test will assert arrive non-default.
+#[doc(hidden)]
+pub fn contract_sample() -> SessionJson {
+    SessionJson {
+        created_utc: "2026-01-02T03:04:05Z".to_string(),
+        name: "Screenshot",
+        desktop_img_path: "/sessions/1/desktop.png".to_string(),
+        preview_img_path: "/sessions/1/cropped.png".to_string(),
+        cursor_img_path: Some("/sessions/1/cursor.png".to_string()),
+        cursor_position: Some(RectJson {
+            x: 11,
+            y: 12,
+            width: 32,
+            height: 32,
+        }),
+        cropped_rect: RectJson {
+            x: -20,
+            y: 30,
+            width: 640,
+            height: 480,
+        },
+        original_bounds: RectJson {
+            x: -100,
+            y: 0,
+            width: 2560,
+            height: 1440,
+        },
+        corner_radius: 16.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
