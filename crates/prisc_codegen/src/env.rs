@@ -30,7 +30,7 @@ fn render(_root: &Path) -> anyhow::Result<String> {
         if i > 0 {
             out.push('\n');
         }
-        out.push_str(&cs::summary(var.doc, "        "));
+        out.push_str(&cs::summary(var.doc.trim(), "        "));
         let _ = writeln!(out, "        public const string {} = {};", var.name, cs::string_literal(var.value));
     }
     out.push_str("    }\n}\n");

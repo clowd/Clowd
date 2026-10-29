@@ -13,7 +13,7 @@ namespace Prisc.Interop
         /// <summary>Any non-empty value turns crash and error reporting off in every process.</summary>
         public const string DisableTelemetry = "PRISC_DISABLE_TELEMETRY";
 
-        /// <summary>The prisc_interop library to load, authoritative: set but not naming an existing file means the library is unavailable.</summary>
+        /// <summary>The prisc_interop library to load, authoritative: set but not naming an existing file means the library is unavailable (no fallback to the normal probe).</summary>
         public const string InteropPath = "PRISC_INTEROP_PATH";
 
         /// <summary>1 makes every test that needs prisc_interop fail instead of skipping when the library is missing (CI sets it).</summary>

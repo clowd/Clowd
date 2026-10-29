@@ -32,7 +32,7 @@ const DSN: &str = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.se
 /// Set to any non-empty value to turn reporting off. The shell honors the same
 /// variable, and every process it spawns inherits its environment, so opting
 /// out once covers all of them.
-const OPT_OUT_VAR: &str = "PRISC_DISABLE_TELEMETRY";
+const OPT_OUT_VAR: &str = prisc_ipc::env::DISABLE_TELEMETRY;
 
 /// True when this build reports at all. Debug builds never do.
 const fn reporting_compiled_in() -> bool {
