@@ -40,6 +40,13 @@ namespace Prisc.VideoSDK.Media
     /// disposed) is ignored rather than dereferenced. Dispose the encoder and every frame before
     /// the pool: <see cref="Dispose"/> destroys the textures whether or not they are still lent
     /// out (<see cref="InUse"/> tells).</para>
+    ///
+    /// <para><b>Where the textures come from.</b> On the zero-copy path the two delegates are
+    /// <c>Prisc.Interop.GpuNv12Converter.AcquireTexture</c> and the static
+    /// <c>GpuNv12Converter.ReleaseTexture</c>, so the NV12 texture and the video-processor output
+    /// view that goes with it are created and destroyed inside prisc_interop. The release needs no
+    /// converter and never throws (a pointer the crate does not know is a no-op), which keeps
+    /// <see cref="Dispose"/>'s release loop running to the end even after the converter is gone.</para>
     /// </summary>
     internal sealed unsafe class EncoderTexturePool : IDisposable
     {

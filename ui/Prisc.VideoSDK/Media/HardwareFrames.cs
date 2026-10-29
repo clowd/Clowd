@@ -22,7 +22,7 @@ namespace Prisc.VideoSDK.Media
     /// </summary>
     public sealed unsafe class HardwareFrames : IDisposable
     {
-        // D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE — what the pool's textures
+        // D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE: what the pool's textures
         // carry; recorded on the frames context for consumers that read it (nothing here
         // allocates through the context's own pool).
         private const uint PoolBindFlags = 0x20 | 0x8;
@@ -32,17 +32,16 @@ namespace Prisc.VideoSDK.Media
         private EncoderTexturePool _pool;
         private bool _disposed;
 
-        /// <summary>Builds the contexts over <paramref name="d3d11Device"/> (an <c>ID3D11Device*</c>;
-        /// one reference is taken and released with the device context) for
+        /// <summary>Builds the contexts over <paramref name="gpuDevice"/>'s Direct3D 11 device (one
+        /// reference is acquired from it and released with the device context) for
         /// <paramref name="width"/> x <paramref name="height"/> NV12 frames whose textures the
         /// two delegates create and destroy. Throws <see cref="InvalidOperationException"/> when
         /// FFmpeg refuses the device or the frame format.</summary>
-        internal HardwareFrames(IntPtr d3d11Device, int width, int height,
+        internal HardwareFrames(Prisc.Interop.GpuDevice gpuDevice, int width, int height,
             Func<IntPtr> allocateTexture, Action<IntPtr> releaseTexture, string description)
         {
             FFmpegLoader.EnsureInitialized();
-            if (d3d11Device == IntPtr.Zero)
-                throw new ArgumentNullException(nameof(d3d11Device));
+            ArgumentNullException.ThrowIfNull(gpuDevice);
             if (width <= 0 || height <= 0)
                 throw new ArgumentOutOfRangeException(nameof(width), $"Frame size {width}x{height} is not positive.");
             if ((width & 1) != 0 || (height & 1) != 0)
@@ -60,9 +59,9 @@ namespace Prisc.VideoSDK.Media
                     throw new InvalidOperationException("Could not allocate the D3D11VA device context (not in this FFmpeg build?).");
                 var hwctx = (AVD3D11VADeviceContext*)((AVHWDeviceContext*)_device->data)->hwctx;
                 // The device context releases the device once when it is freed (on every path,
-                // including a failed init), so it gets a reference of its own.
-                Composition.D3D12Backend.AddRef(d3d11Device);
-                hwctx->device = (ID3D11Device*)d3d11Device;
+                // including a failed init), so it gets a reference of its own: the acquire hands
+                // one over, which is why nothing here calls AddRef.
+                hwctx->device = (ID3D11Device*)gpuDevice.AcquireD3D11Device();
                 Check(ffmpeg.av_hwdevice_ctx_init(_device), "av_hwdevice_ctx_init(D3D11VA)");
 
                 _frames = ffmpeg.av_hwframe_ctx_alloc(_device);

@@ -99,9 +99,20 @@ namespace Prisc.VideoSDK.Tests
         private static (int Y, int U, int V) Sample((byte[] Y, byte[] Uv) planes, int w, int x, int y)
             => (planes.Y[y * w + x], planes.Uv[(y / 2) * w + (x / 2) * 2], planes.Uv[(y / 2) * w + (x / 2) * 2 + 1]);
 
+        /// <summary>The BT.601 limited-range NV12 samples of an opaque colour (the test's own
+        /// oracle; the crate's self-check computes the same in Rust).</summary>
+        private static (double Y, double U, double V) Bt601Limited(SKColor color)
+        {
+            double r = color.Red, g = color.Green, b = color.Blue;
+            double ey = 0.299 * r + 0.587 * g + 0.114 * b;
+            double eu = (b - ey) / 1.772; // 0.5 / (1 - Kb)
+            double ev = (r - ey) / 1.402; // 0.5 / (1 - Kr)
+            return (16 + 219 * ey / 255, 128 + 224 * eu / 255, 128 + 224 * ev / 255);
+        }
+
         private static void AssertBt601(SKColor color, (int Y, int U, int V) sample, string where, int tolerance = 4)
         {
-            var (ey, eu, ev) = D3D11EncodeBridge.Bt601Limited(color);
+            var (ey, eu, ev) = Bt601Limited(color);
             Assert.True(Math.Abs(sample.Y - ey) <= tolerance && Math.Abs(sample.U - eu) <= tolerance && Math.Abs(sample.V - ev) <= tolerance,
                 $"{where}: got YUV ({sample.Y},{sample.U},{sample.V}) for {color}, expected BT.601 limited ({ey:F1},{eu:F1},{ev:F1})");
         }
@@ -282,27 +293,27 @@ namespace Prisc.VideoSDK.Tests
             rig.Ring.Wait(1);
         }
 
-        /// <summary>A self-check that fails after the slot was submitted — here the first pool
-        /// allocation, standing in for a driver refusing the first GPU wait or blit — must hand
-        /// slot 0 back to the ring idle: TryCreate's caller falls back to readback over the same
-        /// ring, and its first Begin is on that very slot. The frame count must not move either
-        /// (nothing was wrapped), and a healthy bridge must still come up over the ring.</summary>
+        /// <summary>A bridge whose creation fails after the converter and the frames context are up
+        /// leaves nothing behind: no frame, slot 0 idle for the readback protocol (what RenderJob
+        /// does next), and a healthy bridge still comes up over the same ring. The native
+        /// self-check's own recovery of slot 0 (released or abandoned on each failure path) is
+        /// covered by the crate's Windows tests (nv12.rs, a_failed_self_check_leaves_slot_zero_idle).</summary>
         [Fact]
-        public void Failed_self_check_leaves_the_ring_idle_for_readback()
+        public void Failed_creation_leaves_the_ring_idle_for_readback()
         {
             const int w = 48, h = 32;
             using var rig = RequireShareableRing(w, h, 2);
             int live = HardwareFrame.LiveCount;
 
-            var failed = D3D11EncodeBridge.TryCreate(rig.Ring, out var reason, bridge => bridge.Frames.Dispose());
+            var failed = D3D11EncodeBridge.TryCreate(rig.Ring, out var reason,
+                _ => throw new InvalidOperationException("injected before the self-check"));
             Assert.Null(failed);
-            // a GPU that cannot run the bridge fails before the self-check ever runs
+            // a GPU that cannot run the bridge fails before the hook ever runs
             Assert.SkipWhen(D3D11EncodeBridge.IsMissingCapability(reason),
                 "this GPU cannot run the D3D11 encode bridge: " + reason);
-            Assert.Contains("HardwareFrames", reason, StringComparison.Ordinal); // the disposed pool, not a ring-state message
+            Assert.Equal("injected before the self-check", reason);
             Assert.Equal(live, HardwareFrame.LiveCount);
 
-            // the readback protocol on slot 0: what RenderJob does next
             rig.Ring.Begin(0).Clear(new SKColor(0x11, 0x22, 0x33));
             rig.Ring.Submit(0);
             var pixels = rig.Ring.Wait(0);
@@ -310,13 +321,36 @@ namespace Prisc.VideoSDK.Tests
             Marshal.Copy(pixels.Address, first, 0, 4);
             Assert.Equal(new byte[] { 0x33, 0x22, 0x11, 0xFF }, first);
 
-            // and the shared protocol again, through a bridge that does come up
             rig.Bridge = D3D11EncodeBridge.TryCreate(rig.Ring, out reason);
             Assert.True(rig.Bridge != null, "the bridge did not come up after a failed attempt: " + reason);
             var probe = new SKColor(200, 60, 30);
             using var frame = RoundTrip(rig, 0, c => c.Clear(probe));
             AssertBt601(probe, Sample(rig.Bridge.ReadNv12(frame.Texture), w, w / 2, h / 2), "after recovery");
             Assert.Equal(live + 1, HardwareFrame.LiveCount);
+        }
+
+        /// <summary>The skip/fail partition against the crate's own sentences (nv12.rs): the
+        /// capability conditions carry a marker, the hard failures do not. No GPU needed.</summary>
+        [Fact]
+        public void Capability_markers_match_the_crate_messages()
+        {
+            Assert.True(D3D11EncodeBridge.IsMissingCapability("the readback ring's textures and fences are not shareable on this driver"));
+            Assert.True(D3D11EncodeBridge.IsMissingCapability(
+                "prisc_gpu_nv12_converter_create_windows failed: Capability. QueryInterface(ID3D11Device5, which needs the Direct3D 11.4 runtime) failed (0x80004002)"));
+            Assert.True(D3D11EncodeBridge.IsMissingCapability("QueryInterface(ID3D11DeviceContext4) failed (0x80004002)"));
+            Assert.True(D3D11EncodeBridge.IsMissingCapability("QueryInterface(ID3D11VideoDevice) failed (0x80004002)"));
+            Assert.True(D3D11EncodeBridge.IsMissingCapability("QueryInterface(ID3D11VideoContext) failed (0x80004002)"));
+            Assert.True(D3D11EncodeBridge.IsMissingCapability("ID3D11VideoDevice::CreateVideoProcessorEnumerator failed (0x80004005)"));
+            Assert.True(D3D11EncodeBridge.IsMissingCapability("ID3D11VideoDevice::CreateVideoProcessor failed (0x887A0004)"));
+
+            Assert.False(D3D11EncodeBridge.IsMissingCapability("the video processor does not produce NV12 output"));
+            Assert.False(D3D11EncodeBridge.IsMissingCapability("D3D11CreateDevice failed (0x887A0004): unsupported"));
+            Assert.False(D3D11EncodeBridge.IsMissingCapability(
+                "the Direct3D 11 device landed on adapter LUID 0x1234 but the composer's is 0x5678"));
+            Assert.False(D3D11EncodeBridge.IsMissingCapability(
+                "the video processor produced YUV (91,94,200) at (0,0) for RGB (200,60,30), expected BT.601 limited (100,94,192)"));
+            Assert.False(D3D11EncodeBridge.IsMissingCapability(null));
+            Assert.False(D3D11EncodeBridge.IsMissingCapability(""));
         }
 
         /// <summary>The convert stage's half of the protocol on its own thread, as the pipeline
