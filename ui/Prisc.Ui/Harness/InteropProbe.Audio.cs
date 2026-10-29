@@ -13,8 +13,8 @@ namespace Prisc.UI.Harness
         /// opened (which reads the stored grant and never prompts) and closed without a start.</summary>
         static partial void ProbeAudio(ProbeRun run)
         {
-            // Success: each list as names (what system_profiler shows), ids only by count and default
-            // flag, so two runs on one machine compare equal.
+            // Success: each list with the ids obs-express takes (stable on one machine: camera unique
+            // ids, CoreAudio UIDs), the names system_profiler shows, the default flag and channels.
             foreach (var kind in new[] { DeviceKind.Video, DeviceKind.AudioInput, DeviceKind.AudioOutput })
             {
                 run.Item("audio.devices." + kind.ToString().ToLowerInvariant(), () =>
@@ -22,6 +22,7 @@ namespace Prisc.UI.Harness
                     var devices = CaptureDevices.Enumerate(kind);
                     return new Dictionary<string, object>
                     {
+                        ["ids"] = devices.Select(d => d.Id).ToList(),
                         ["names"] = devices.Select(d => d.Name).ToList(),
                         ["defaults"] = devices.Where(d => d.IsDefault).Select(d => d.Name).ToList(),
                         ["inputChannels"] = devices.Select(d => d.InputChannels).ToList(),

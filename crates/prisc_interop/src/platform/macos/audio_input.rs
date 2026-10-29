@@ -655,6 +655,75 @@ mod tests {
         }
     }
 
+    /// A private aggregate device over the default input, destroyed mid-capture: the is-alive
+    /// listener turns its disappearance into exactly one Stopped(DeviceLost), delivery ends, and a
+    /// destroy afterwards is clean. This is the unplug path, without unplugging anything.
+    #[test]
+    fn losing_the_device_raises_one_stopped_device_lost() {
+        use objc2_core_audio::{
+            kAudioAggregateDeviceIsPrivateKey, kAudioAggregateDeviceNameKey, kAudioAggregateDeviceSubDeviceListKey,
+            kAudioAggregateDeviceUIDKey, kAudioSubDeviceUIDKey, AudioHardwareCreateAggregateDevice, AudioHardwareDestroyAggregateDevice,
+        };
+        use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFType};
+
+        if devices::authorization(true) != AVAuthorizationStatus::Authorized {
+            eprintln!("skipped: no microphone grant");
+            return;
+        }
+        let Some(sub_uid) = devices::default_device(false).and_then(|d| devices::string_property(d, kAudioDevicePropertyDeviceUID)) else {
+            eprintln!("skipped: no default input");
+            return;
+        };
+        let key = |k: &std::ffi::CStr| CFString::from_str(k.to_str().unwrap());
+        let sub_uid = CFString::from_str(&sub_uid);
+        let sub = CFDictionary::<CFString, CFType>::from_slices(&[&*key(kAudioSubDeviceUIDKey)], &[sub_uid.as_ref()]);
+        let subs = CFArray::from_objects(&[&*sub]);
+        let uid_text = format!("com.prisc.interop-test.lost.{}", std::process::id());
+        let uid = CFString::from_str(&uid_text);
+        let name = CFString::from_str("Prisc interop test (device loss)");
+        let private = CFNumber::new_i32(1);
+        let keys = [
+            key(kAudioAggregateDeviceUIDKey),
+            key(kAudioAggregateDeviceNameKey),
+            key(kAudioAggregateDeviceSubDeviceListKey),
+            key(kAudioAggregateDeviceIsPrivateKey),
+        ];
+        let description = CFDictionary::<CFString, CFType>::from_slices(
+            &keys.iter().map(|k| &**k).collect::<Vec<_>>(),
+            &[uid.as_ref(), name.as_ref(), subs.as_ref(), private.as_ref()],
+        );
+        let mut aggregate: AudioObjectID = 0;
+        let status = unsafe { AudioHardwareCreateAggregateDevice(description.as_ref(), NonNull::from(&mut aggregate)) };
+        if status != 0 {
+            eprintln!("skipped: the HAL would not create an aggregate device ({status})");
+            return;
+        }
+        // The HAL publishes a new aggregate asynchronously.
+        assert!(
+            wait(|| devices::device_for_uid(&uid_text) == Some(aggregate)),
+            "the aggregate never appeared"
+        );
+
+        let seen = seen();
+        let input = Input::open(&uid_text, 48_000, 50, record, user(seen)).expect("open the aggregate");
+        assert!(!input.used_default, "the aggregate's UID must resolve");
+        assert!(input.start().expect("start"), "the is-alive watch must be on");
+        assert!(wait(|| seen.data.load(Ordering::Acquire) >= 1), "no data from the aggregate");
+
+        assert_eq!(unsafe { AudioHardwareDestroyAggregateDevice(aggregate) }, 0);
+        assert!(
+            wait(|| seen.stopped.load(Ordering::Acquire) >= 1),
+            "no Stopped after the device went away"
+        );
+        sleep(Duration::from_millis(300));
+        assert_eq!(seen.stopped.load(Ordering::Acquire), 1, "Stopped fires at most once");
+        let latched = seen.data.load(Ordering::Acquire);
+        sleep(Duration::from_millis(200));
+        assert_eq!(seen.data.load(Ordering::Acquire), latched, "data after Stopped");
+        assert!(!input.request_stop(), "delivery had already ended");
+        close(input);
+    }
+
     #[test]
     fn an_oversized_buffer_is_refused_before_anything_opens() {
         let seen = seen();
