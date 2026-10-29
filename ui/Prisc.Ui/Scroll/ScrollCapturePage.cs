@@ -175,7 +175,7 @@ namespace Prisc.UI
         /// </summary>
         private static async Task<bool> EnsureAccessibilityPermissionAsync()
         {
-            if (MacPermissions.HasAccessibility || MacPermissions.Request(MacPermission.Accessibility))
+            if (MacPermissions.Request(MacPermission.Accessibility))
                 return true;
 
             var openSettings = await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Warning,

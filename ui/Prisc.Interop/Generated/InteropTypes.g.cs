@@ -9,8 +9,11 @@ namespace Prisc.Interop
     /// <summary><c>NSApplicationActivationPolicy</c>.</summary>
     public enum ActivationPolicy : int
     {
+        /// <summary>A normal app with a dock icon and a menu bar.</summary>
         Regular = 0,
+        /// <summary>No dock icon and no menu bar; windows are still allowed (the tray-resident state).</summary>
         Accessory = 1,
+        /// <summary>The app cannot be activated at all.</summary>
         Prohibited = 2,
     }
 
@@ -124,7 +127,9 @@ namespace Prisc.Interop
     /// <summary>A permission <c>prisc_permission_state</c> / <c>prisc_permission_request</c> know.</summary>
     public enum PermissionKind : int
     {
+        /// <summary>Capturing the screen and other apps' windows.</summary>
         ScreenRecording = 0,
+        /// <summary>Event taps and posted events (the hotkey hook, the scrolling driver).</summary>
         Accessibility = 1,
         Microphone = 2,
         Camera = 3,

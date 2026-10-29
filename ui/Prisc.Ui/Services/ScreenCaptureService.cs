@@ -281,7 +281,7 @@ namespace Prisc.UI
         /// </summary>
         internal static async Task<bool> EnsureScreenRecordingPermissionAsync()
         {
-            if (MacPermissions.HasScreenRecording || MacPermissions.Request(MacPermission.ScreenRecording))
+            if (MacPermissions.Request(MacPermission.ScreenRecording))
                 return true;
 
             await PromptForScreenRecordingPermissionAsync();
