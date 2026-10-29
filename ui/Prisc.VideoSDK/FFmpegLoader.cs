@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Prisc.Interop;
 using Prisc.Ipc;
 using FFmpeg.AutoGen.Abstractions;
 using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
@@ -22,6 +23,7 @@ namespace Prisc.VideoSDK
         private static string _failureReason;
         private static string _librariesDirectory;
         private static string _attemptedDirectory;
+        private static int _preparedImages;
 
         /// <summary>True once <see cref="TryInitialize"/> has succeeded.</summary>
         public static bool IsAvailable
@@ -39,6 +41,13 @@ namespace Prisc.VideoSDK
         public static string LibrariesDirectory
         {
             get { lock (_sync) return _librariesDirectory; }
+        }
+
+        /// <summary>How many images the native directory preparation loaded ahead of the bindings
+        /// (the macOS dylib closure; 0 elsewhere and before an attempt).</summary>
+        public static int PreparedImages
+        {
+            get { lock (_sync) return _preparedImages; }
         }
 
         /// <summary>
@@ -76,19 +85,13 @@ namespace Prisc.VideoSDK
                     _attemptedDirectory = dir;
                     dir = Path.GetFullPath(dir);
 
-                    // The FFmpeg DLLs link against siblings that live in the same folder
-                    // (libx264, zlib, srt, ...). The bindings load avcodec-62.dll by absolute
-                    // path, but Windows resolves *its* imports via the normal search order, which
-                    // does not include the DLL's own directory — add it explicitly.
-                    if (OperatingSystem.IsWindows())
-                        SetDllDirectoryW(dir);
-
-                    // The macOS counterpart of the same problem, and it needs the opposite trick:
-                    // the payload's dylibs reference each other by @rpath and carry no LC_RPATH of
-                    // their own, so there is no directory to point dyld at — the libraries have to
-                    // already be in the process. See MacDylibPreloader.
-                    else if (OperatingSystem.IsMacOS())
-                        MacDylibPreloader.Preload(dir);
+                    // FFmpeg links against siblings in the same folder (libx264, zlib, srt, ...), and
+                    // the bindings load it by absolute path, which does not make those resolvable:
+                    // Windows searches the normal DLL order, and the macOS payload asks for them by
+                    // @rpath with no LC_RPATH anywhere. prisc_interop makes the directory loadable,
+                    // the right way for each OS, in one call.
+                    _preparedImages = ProcessNative.PrepareFfmpegDirectory(dir);
+                    Console.Error.WriteLine($"FFmpegLoader: prepared '{dir}': {_preparedImages} libraries loaded ahead");
 
                     DynamicallyLoadedBindings.LibrariesPath = dir;
                     DynamicallyLoadedBindings.Initialize();
@@ -142,7 +145,7 @@ namespace Prisc.VideoSDK
         /// </summary>
         public static string FindBesideRecorder()
         {
-            var recorder = HelperLocator.Find("prisc_recorder");
+            var recorder = HelperLocator.Find(HelperNames.Recorder);
             if (String.IsNullOrEmpty(recorder))
                 return null;
 
@@ -178,10 +181,6 @@ namespace Prisc.VideoSDK
                 throw new InvalidOperationException(
                     "FFmpeg is not available: " + (FailureReason ?? "FFmpegLoader.TryInitialize has not been called."));
         }
-
-        [System.Runtime.InteropServices.DllImport("kernel32", CharSet = System.Runtime.InteropServices.CharSet.Unicode,
-            EntryPoint = "SetDllDirectoryW", SetLastError = true)]
-        private static extern bool SetDllDirectoryW(string lpPathName);
 
         /// <summary>Formats an FFmpeg error code (no allocation on success paths — call on errors only).</summary>
         public static unsafe string ErrorToString(int error)

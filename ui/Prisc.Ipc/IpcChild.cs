@@ -1,33 +1,41 @@
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using Microsoft.Win32.SafeHandles;
+using Prisc.Interop;
 
 namespace Prisc.Ipc
 {
     /// <summary>
     /// The child side of the protocol for a .NET helper (Prisc.VideoRender; HELPER_PROTOCOL.md §7.6):
-    /// claims stdout, says <c>hello</c>, reads commands, and turns <c>quit</c>, stdin EOF and a dead
-    /// stdout into one <see cref="OnQuit"/>.
+    /// claims stdout, says <c>hello</c>, reads commands, and turns <c>quit</c>, stdin EOF, SIGTERM,
+    /// SIGINT, SIGHUP and a dead stdout into one <see cref="OnQuit"/>.
     /// </summary>
+    /// <remarks>The stdout guard is prisc_interop's (<see cref="StdoutGuard"/>), the same code every
+    /// Rust helper runs. The command loop stays managed (a native callback per command would cost more
+    /// than it shares), and is held to the Rust loop by data: its limit and refusal texts are the
+    /// generated <see cref="IpcProtocol"/> constants, and Prisc.Ipc.Tests runs it over the golden
+    /// framing vectors prisc_ipc's own tests run.</remarks>
     public static class IpcChild
     {
-        private const int MaxLineBytes = 1024 * 1024;
-
         private static readonly object Sync = new();
+        private static readonly string QuitType = IpcCodec.ReadType(IpcCodec.QuitLine);
         private static bool _opened;
         private static bool _readerStarted;
         private static int _quit;
         private static TimeSpan? _hardExitGrace;
         private static bool _hardExitArmed;
+        /// <summary>Held for the process lifetime: a collected registration unregisters itself.</summary>
+        private static List<PosixSignalRegistration> _signals;
 
-        /// <summary>Raised once, on whichever thread noticed: a <c>quit</c> command, stdin EOF, or the
-        /// first failed write to stdout. Handlers must only flag or cancel; they must not block or emit.</summary>
+        /// <summary>Raised once, on whichever thread noticed: a <c>quit</c> command, stdin EOF, a
+        /// termination signal (SIGTERM, SIGINT, SIGHUP; their console-event equivalents on Windows), or
+        /// the first failed write to stdout. Handlers must only flag or cancel; they must not block or
+        /// emit.</summary>
         public static event Action OnQuit;
 
         /// <summary>
@@ -35,7 +43,12 @@ namespace Prisc.Ipc
         /// library (FFmpeg, Skia, a GPU driver) is initialised: after this, fd 1 and the managed
         /// <see cref="Console.Out"/> both point at stderr, and only the returned writer reaches the
         /// parent's pipe. Hardware encoders and GPU drivers have been known to print to fd 1, and one
-        /// stray line there would corrupt the protocol. Throws if called twice.
+        /// stray line there would corrupt the protocol. Also routes the termination signals into
+        /// <see cref="OnQuit"/>, like a <c>quit</c> command (prisc_ipc lifetime.rs does the same for
+        /// the Rust helpers). Throws if called twice.
+        /// <para>prisc_interop is a hard requirement (R12): without it this writes <c>hello</c> and one
+        /// fatal <c>init_failed</c> error naming the reason, and exits with
+        /// <see cref="HelperExit.Failed"/>.</para>
         /// </summary>
         public static IpcWriter<TEvent> Open<TEvent, TCommand>(string helper, HelperSpec<TEvent, TCommand> spec)
             where TEvent : class where TCommand : class
@@ -47,18 +60,25 @@ namespace Prisc.Ipc
                 _opened = true;
             }
 
+            var hello = IpcCodec.EncodeHello(new IpcHello(IpcProtocol.Version, spec.Catalog, spec.CatalogHash,
+                helper, Version(), (uint)Environment.ProcessId));
+            if (!InteropLibrary.IsAvailable)
+                ExitWithoutLibrary(hello);
+
             var writer = new IpcWriter<TEvent>(ClaimStdout(), spec.EncodeEvent);
-            writer.WriteLine(IpcCodec.EncodeHello(new IpcHello(IpcProtocol.Version, spec.Catalog, spec.CatalogHash,
-                helper, Version(), (uint)Environment.ProcessId)));
+            writer.WriteLine(hello);
+            RouteSignals();
             return writer;
         }
 
         /// <summary>
         /// Starts the one stdin thread. Each line is stripped of a trailing <c>\r</c> and a leading BOM,
         /// decoded as (lossy) UTF-8, and either raises <see cref="OnQuit"/> (<c>quit</c>), goes to
-        /// <paramref name="onCommand"/>, or (not JSON, an unknown <c>type</c>, a bad field, or longer
-        /// than 1 MiB) to <paramref name="onBadCommand"/> with the reason. EOF raises
-        /// <see cref="OnQuit"/>. Empty lines are skipped.
+        /// <paramref name="onCommand"/>, or (not JSON, no string <c>type</c>, an unknown <c>type</c>, a
+        /// bad field, or longer than <see cref="IpcProtocol.MaxLineBytes"/>) to
+        /// <paramref name="onBadCommand"/> with the <see cref="IpcProtocol"/> reason. Reading goes on
+        /// after <c>quit</c> (later lines are still delivered, HELPER_PROTOCOL.md §2.3). EOF raises
+        /// <see cref="OnQuit"/>. Blank lines are skipped.
         /// </summary>
         public static void ReadCommands<TCommand>(Func<string, TCommand> decode, Action<TCommand> onCommand,
             Action<string> onBadCommand) where TCommand : class
@@ -136,55 +156,104 @@ namespace Prisc.Ipc
             timer.Start();
         }
 
+        /// <summary>SIGTERM, SIGINT and SIGHUP become the quit path instead of the runtime's default
+        /// shutdown, so a signalled helper ends the way a <c>quit</c> command ends it. A signal this
+        /// platform cannot register is skipped.</summary>
+        private static void RouteSignals()
+        {
+            lock (Sync)
+            {
+                if (_signals != null)
+                    return;
+            }
+
+            var registrations = new List<PosixSignalRegistration>();
+            foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT, PosixSignal.SIGHUP })
+            {
+                try
+                {
+                    registrations.Add(PosixSignalRegistration.Create(signal, context =>
+                    {
+                        context.Cancel = true;
+                        Console.Error.WriteLine($"ipc: quitting ({context.Signal})");
+                        TriggerQuit();
+                    }));
+                }
+                catch (Exception ex) when (ex is PlatformNotSupportedException or IOException)
+                {
+                    Console.Error.WriteLine($"ipc: cannot route {signal} into the quit path: {ex.Message}");
+                }
+            }
+
+            lock (Sync)
+                _signals = registrations;
+        }
+
         private static void ReadLoop<TCommand>(Func<string, TCommand> decode, Action<TCommand> onCommand,
             Action<string> onBadCommand) where TCommand : class
         {
             try
             {
                 using var stdin = Console.OpenStandardInput();
-                var buffer = new MemoryStream();
-                var oversize = false;
-                var chunk = new byte[4096];
-                while (true)
+                Pump(stdin, decode, onCommand, reason =>
                 {
-                    int read = stdin.Read(chunk, 0, chunk.Length);
-                    if (read <= 0)
-                        break;
-
-                    int start = 0;
-                    for (int i = 0; i < read; i++)
-                    {
-                        if (chunk[i] != (byte)'\n')
-                            continue;
-
-                        Append(buffer, chunk, start, i - start, ref oversize);
-                        start = i + 1;
-                        if (!Dispatch(buffer, oversize, decode, onCommand, onBadCommand))
-                            return;
-                        buffer.SetLength(0);
-                        oversize = false;
-                    }
-
-                    Append(buffer, chunk, start, read - start, ref oversize);
-                }
-
-                // a final line without a newline still counts
-                if (buffer.Length > 0 || oversize)
-                    Dispatch(buffer, oversize, decode, onCommand, onBadCommand);
+                    Console.Error.WriteLine("ipc: bad command: " + reason);
+                    onBadCommand?.Invoke(reason);
+                }, TriggerQuit);
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine("ipc: reading stdin failed: " + ex.Message);
             }
 
+            // EOF, or a read error treated as one
             TriggerQuit();
+        }
+
+        /// <summary>
+        /// The command loop over <paramref name="stdin"/> up to EOF, the twin of prisc_ipc's
+        /// <c>stdin::pump</c> (both run the golden framing vectors). <paramref name="onQuitCommand"/>
+        /// runs for every <c>quit</c> line, in order with the lines around it; reading goes on after it.
+        /// The caller handles EOF.
+        /// </summary>
+        internal static void Pump<TCommand>(Stream stdin, Func<string, TCommand> decode, Action<TCommand> onCommand,
+            Action<string> onBadCommand, Action onQuitCommand) where TCommand : class
+        {
+            var buffer = new MemoryStream();
+            var oversize = false;
+            var chunk = new byte[4096];
+            while (true)
+            {
+                int read = stdin.Read(chunk, 0, chunk.Length);
+                if (read <= 0)
+                    break;
+
+                int start = 0;
+                for (int i = 0; i < read; i++)
+                {
+                    if (chunk[i] != (byte)'\n')
+                        continue;
+
+                    Append(buffer, chunk, start, i - start, ref oversize);
+                    start = i + 1;
+                    Dispatch(buffer, oversize, decode, onCommand, onBadCommand, onQuitCommand);
+                    buffer.SetLength(0);
+                    oversize = false;
+                }
+
+                Append(buffer, chunk, start, read - start, ref oversize);
+            }
+
+            // a final line without a newline still counts
+            if (buffer.Length > 0 || oversize)
+                Dispatch(buffer, oversize, decode, onCommand, onBadCommand, onQuitCommand);
         }
 
         private static void Append(MemoryStream buffer, byte[] chunk, int offset, int count, ref bool oversize)
         {
             if (oversize || count <= 0)
                 return;
-            if (buffer.Length + count > MaxLineBytes)
+            if (buffer.Length + count > IpcProtocol.MaxLineBytes)
             {
                 oversize = true;
                 buffer.SetLength(0);
@@ -193,41 +262,64 @@ namespace Prisc.Ipc
             buffer.Write(chunk, offset, count);
         }
 
-        /// <summary>Handles one complete line; false once the reader should stop (after quit).</summary>
-        private static bool Dispatch<TCommand>(MemoryStream buffer, bool oversize, Func<string, TCommand> decode,
-            Action<TCommand> onCommand, Action<string> onBadCommand) where TCommand : class
+        /// <summary>Handles one complete line, classifying it exactly as prisc_ipc's <c>parse</c> does:
+        /// blank, not JSON, no string <c>type</c>, <c>quit</c>, then the catalog's decode.</summary>
+        private static void Dispatch<TCommand>(MemoryStream buffer, bool oversize, Func<string, TCommand> decode,
+            Action<TCommand> onCommand, Action<string> onBadCommand, Action onQuitCommand) where TCommand : class
         {
             if (oversize)
             {
-                onBadCommand?.Invoke("command line longer than 1 MiB");
-                return true;
+                onBadCommand?.Invoke(IpcProtocol.OversizeReason);
+                return;
             }
 
             var line = DecodeLine(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
-            if (line.Trim().Length == 0)
-                return true;
+            if (String.IsNullOrWhiteSpace(line))
+                return;
 
+            string type;
             try
             {
-                var type = IpcCodec.ReadType(line);
-                if (type == "quit")
-                {
-                    TriggerQuit();
-                    return false;
-                }
-
-                var command = decode(line);
-                if (command == null)
-                    onBadCommand?.Invoke(type == null ? "command has no type" : $"unknown command '{type}'");
-                else
-                    onCommand?.Invoke(command);
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                type = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("type", out var value)
+                       && value.ValueKind == JsonValueKind.String
+                    ? value.GetString()
+                    : null;
             }
-            catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException)
+            catch (JsonException ex)
             {
-                onBadCommand?.Invoke("malformed command: " + ex.Message);
+                onBadCommand?.Invoke(String.Format(IpcProtocol.NotJsonReason, ex.Message));
+                return;
             }
 
-            return true;
+            if (type == null)
+            {
+                onBadCommand?.Invoke(IpcProtocol.NoTypeReason);
+                return;
+            }
+
+            if (type == QuitType)
+            {
+                onQuitCommand?.Invoke();
+                return;
+            }
+
+            TCommand command;
+            try
+            {
+                command = decode(line);
+            }
+            catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException or FormatException)
+            {
+                onBadCommand?.Invoke(String.Format(IpcProtocol.InvalidCommandReason, type, ex.Message));
+                return;
+            }
+
+            if (command == null)
+                onBadCommand?.Invoke(String.Format(IpcProtocol.UnknownCommandReason, type));
+            else
+                onCommand?.Invoke(command);
         }
 
         private static string DecodeLine(ReadOnlySpan<byte> bytes)
@@ -248,96 +340,54 @@ namespace Prisc.Ipc
         }
 
         /// <summary>
-        /// The stdout guard (HELPER_PROTOCOL.md §3.2 and §7.6): a private, non-inheritable stream onto
-        /// the real stdout, then fd 1 / STD_OUTPUT_HANDLE pointed at stderr, then the managed
+        /// The stdout guard (HELPER_PROTOCOL.md §3.2 and §7.6): prisc_interop's private,
+        /// non-inheritable handle onto the real stdout, with fd 1 (and on Windows
+        /// <c>STD_OUTPUT_HANDLE</c> and the UCRT's fd 1) already pointed at stderr, then the managed
         /// <see cref="Console.Out"/> after it. Non-inheritable matters: a grandchild (prisc_ai) that
-        /// inherited the protocol pipe would keep the parent's stdout pump from ever seeing EOF.
+        /// inherited the protocol pipe would keep the parent's stdout pump from ever seeing EOF. A
+        /// failed redirect was logged natively and is not fatal: stdout then still reaches the pipe.
+        /// A <see cref="FileStream"/>, not <see cref="Console.OpenStandardOutput()"/>, which swallows
+        /// EPIPE: a dead parent must surface as a failed write.
         /// </summary>
         private static Stream ClaimStdout()
         {
-            Stream stream;
-            if (OperatingSystem.IsWindows())
-            {
-                var original = GetStdHandle(StdOutputHandle);
-                var self = GetCurrentProcess();
-                if (!DuplicateHandle(self, original, self, out var duplicate, 0, false, DuplicateSameAccess))
-                    throw new IOException("DuplicateHandle(stdout) failed (error " + Marshal.GetLastWin32Error() + ")");
-
-                stream = new FileStream(new SafeFileHandle(duplicate, ownsHandle: true), FileAccess.Write, 1);
-
-                // The original handle is closed only by a successful _dup2 below; if that fails it stays
-                // open, so it must at least not be inherited by a grandchild (§3.2).
-                if (!SetHandleInformation(original, HandleFlagInherit, 0))
-                    Console.Error.WriteLine("ipc: could not make the original stdout non-inheritable (error "
-                                            + Marshal.GetLastWin32Error() + ")");
-
-                SetStdHandle(StdOutputHandle, GetStdHandle(StdErrorHandle));
-                try
-                {
-                    // the CRT's fd 1, so native printf follows; assumes every native library shares the
-                    // dynamic UCRT (§3.2).
-                    if (UcrtDup2(2, 1) != 0)
-                        Console.Error.WriteLine("ipc: _dup2(2, 1) failed; the CRT's stdout still points at the pipe");
-                }
-                catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
-                {
-                    Console.Error.WriteLine("ipc: could not redirect the CRT's stdout: " + ex.Message);
-                }
-            }
-            else
-            {
-                // Opening /dev/fd/1 yields a new descriptor onto the same pipe, and .NET opens every
-                // file O_CLOEXEC: the private, non-inheritable copy, with no variadic fcntl to P/Invoke
-                // (which arm64 macOS cannot call correctly). Not Console.OpenStandardOutput: it is
-                // close-on-exec too, but swallows EPIPE, and a dead parent must surface as a failed
-                // write. Taken before fd 1 is repointed.
-                var handle = File.OpenHandle("/dev/fd/1", FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
-                stream = new FileStream(handle, FileAccess.Write, 1);
-                int rc = OperatingSystem.IsMacOS() ? MacDup2(2, 1) : LinuxDup2(2, 1);
-                if (rc < 0)
-                    throw new IOException("dup2(2, 1) failed (errno " + Marshal.GetLastPInvokeError() + ")");
-            }
-
+            var handle = StdoutGuard.Claim(out _);
+            var stream = new FileStream(handle, FileAccess.Write, 1);
             Console.SetOut(Console.Error);
             return stream;
         }
 
-        private const int StdOutputHandle = -11;
-        private const int StdErrorHandle = -12;
-        private const uint DuplicateSameAccess = 2;
-        private const uint HandleFlagInherit = 1;
+        /// <summary>No prisc_interop: <c>hello</c> and one fatal <c>init_failed</c> error on the
+        /// unguarded stdout (nothing native has run, so nothing else can be on it), then exit.</summary>
+        private static void ExitWithoutLibrary(string hello)
+        {
+            var message = SingleLine(InteropLibrary.LibraryFileName + " is not available: " + InteropLibrary.UnavailableReason);
+            var error = IpcJson.Write(w =>
+            {
+                w.WriteString("type", "error");
+                w.WriteString("code", IpcErrorCodes.InitFailed);
+                w.WriteString("message", message);
+                w.WriteBoolean("fatal", true);
+            });
+            Console.Error.WriteLine("Fatal " + IpcErrorCodes.InitFailed + ": " + message);
+            try
+            {
+                using var stdout = Console.OpenStandardOutput();
+                var bytes = Encoding.UTF8.GetBytes(hello + "\n" + error + "\n");
+                stdout.Write(bytes, 0, bytes.Length);
+                stdout.Flush();
+            }
+            catch (IOException)
+            {
+                // the parent is gone; the exit code still says it
+            }
+            Environment.Exit(HelperExit.Failed);
+        }
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern bool SetHandleInformation(IntPtr hObject, uint dwMask, uint dwFlags);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern IntPtr GetStdHandle(int nStdHandle);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern bool SetStdHandle(int nStdHandle, IntPtr hHandle);
-
-        [DllImport("kernel32.dll")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern IntPtr GetCurrentProcess();
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern bool DuplicateHandle(IntPtr hSourceProcessHandle, IntPtr hSourceHandle,
-            IntPtr hTargetProcessHandle, out IntPtr lpTargetHandle, uint dwDesiredAccess, bool bInheritHandle,
-            uint dwOptions);
-
-        [DllImport("ucrtbase.dll", EntryPoint = "_dup2")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern int UcrtDup2(int fd1, int fd2);
-
-        [DllImport("libc", EntryPoint = "dup2", SetLastError = true)]
-        private static extern int MacDup2(int fd1, int fd2);
-
-        [DllImport("libc.so.6", EntryPoint = "dup2", SetLastError = true)]
-        private static extern int LinuxDup2(int fd1, int fd2);
+        /// <summary>Every whitespace run as one space (prisc_ipc <c>single_line</c>), so the message
+        /// cannot break the line protocol.</summary>
+        private static string SingleLine(string text)
+            => String.Join(' ', text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>The child's protocol writer: one line per event, written and flushed under a lock.</summary>

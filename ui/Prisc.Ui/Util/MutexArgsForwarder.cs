@@ -33,9 +33,6 @@ namespace Prisc.Util
 
         private const int MaxMessageSize = 1024 * 1024;
 
-        // AllowSetForegroundWindow(ASFW_ANY): any process may take the foreground
-        private const int ASFW_ANY = -1;
-
         private bool _ready;
         private bool _showPending;
         private List<string> _batch;
@@ -141,11 +138,8 @@ namespace Prisc.Util
             // were just launched (from the shell extension or a shortcut) so we hold them,
             // and it needs them to raise its window. Best-effort — it only works while we
             // are still the foreground interaction.
-            if (OperatingSystem.IsWindows())
-            {
-                try { AllowSetForegroundWindow(ASFW_ANY); }
-                catch { }
-            }
+            try { Prisc.Interop.Foreground.AllowAny(); }
+            catch (Exception ex) { Debug.WriteLine("MutexArgsForwarder: foreground grant failed: " + ex.Message); }
 
             try
             {
@@ -223,10 +217,6 @@ namespace Prisc.Util
             }
         }
 
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
-        private static extern bool AllowSetForegroundWindow(int dwProcessId);
-
         private static void TryDeleteStalePipe()
         {
             if (OperatingSystem.IsWindows())
@@ -300,10 +290,10 @@ namespace Prisc.Util
 
             if (_mutex != null)
             {
-                // I don't know why this fails, but the process is exiting so I also don't care
-                try { _mutex.ReleaseMutex(); }
-                catch { }
-
+                // Never owned: the mutex is constructed with initiallyOwned:false purely to detect a
+                // second instance, so there is nothing to release (ReleaseMutex always threw
+                // ApplicationException here). Disposing closes our handle, which frees the name for
+                // the next instance.
                 try { _mutex.Dispose(); }
                 catch { }
 

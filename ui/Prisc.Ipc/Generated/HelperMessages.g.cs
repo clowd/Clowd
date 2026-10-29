@@ -10,8 +10,26 @@ using System.Text.Json;
 
 namespace Prisc.Ipc
 {
-    /// <summary>The envelope version every <c>hello</c> carries (HELPER_PROTOCOL.md §2.5).</summary>
-    public static class IpcProtocol { public const int Version = 1; }
+    /// <summary>The protocol constants prisc_ipc defines (HELPER_PROTOCOL.md §2.1, §2.5, §3.3).</summary>
+    public static class IpcProtocol
+    {
+        /// <summary>The envelope version every <c>hello</c> carries (§2.5).</summary>
+        public const int Version = 1;
+        /// <summary>The longest line accepted in either direction, in UTF-8 bytes without the newline (§2.1).</summary>
+        public const int MaxLineBytes = 1048576;
+        /// <summary>Added to a catalog's quit grace for a helper's own hard-exit timer, so a living parent's kill fires first (§3.3).</summary>
+        public const int SelfExitMarginMs = 5000;
+        /// <summary>Command-line refusal (§2.4). A command line longer than MaxLineBytes.</summary>
+        public const string OversizeReason = "command line longer than 1048576 bytes";
+        /// <summary>Command-line refusal (§2.4). Valid JSON that is not an object with a string type.</summary>
+        public const string NoTypeReason = "not a JSON object with a string \"type\"";
+        /// <summary>Command-line refusal (§2.4). Not JSON; {0} is the parser's message.</summary>
+        public const string NotJsonReason = "not JSON ({0})";
+        /// <summary>Command-line refusal (§2.4). A type the catalog does not have; {0} is the type.</summary>
+        public const string UnknownCommandReason = "unknown command '{0}'";
+        /// <summary>Command-line refusal (§2.4). A known type with a missing or invalid field; {0} is the type, {1} the parser's message.</summary>
+        public const string InvalidCommandReason = "invalid '{0}' command: {1}";
+    }
 
     /// <summary>Helper exit codes (HELPER_PROTOCOL.md §5).</summary>
     public static class HelperExit
@@ -88,6 +106,18 @@ namespace Prisc.Ipc
             w.WritePropertyName("version"); w.WriteStringValue(hello.Version ?? "");
             w.WritePropertyName("pid"); w.WriteNumberValue(hello.Pid);
         });
+    }
+
+    /// <summary>The executable stem of every helper the apps locate and spawn (<c>prisc_ipc::locate::helper_names</c>).</summary>
+    public static class HelperNames
+    {
+        public const string Recorder = "prisc_recorder";
+        public const string ShareRegion = "prisc_share_region";
+        public const string Vid2gif = "prisc_vid2gif";
+        public const string VideoRender = "Prisc.VideoRender";
+        public const string ScrollDriver = "prisc_scroll_driver";
+        public const string Capture = "prisc_capture";
+        public const string Ai = "prisc_ai";
     }
 
     // --- recorder (prisc_recorder) ---

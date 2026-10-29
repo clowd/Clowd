@@ -9,6 +9,23 @@
 
 use std::fs::File;
 use std::io;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// The private protocol handle [`claim`] returns, and whether the fd 1 redirect took.
+#[derive(Debug)]
+pub struct ClaimedStdout {
+    /// A non-inheritable duplicate of the real stdout: the only way left to reach the pipe.
+    pub file: File,
+    /// Whether fd 1 now points at stderr: `dup2(2, 1)` on Unix; on Windows `SetStdHandle` and,
+    /// when the process has loaded the UCRT, its `_dup2(2, 1)`. A failure was already logged to
+    /// stderr, and stdout then still reaches the pipe, which is how a helper behaved before the
+    /// guard existed.
+    pub redirected: bool,
+}
+
+/// Set by the first [`claim`] that duplicated stdout. A second claim would duplicate what fd 1
+/// points at by then, which is stderr, so it is refused instead.
+static CLAIMED: AtomicBool = AtomicBool::new(false);
 
 /// Duplicates the real stdout into a private handle, then points fd 1 (and on Windows the
 /// process's `STD_OUTPUT_HANDLE`) at stderr. Returns the private handle.
@@ -20,11 +37,37 @@ use std::io;
 ///
 /// Call it before any native library is initialised or called. A failure to redirect fd 1 is
 /// logged, not returned: stdout then still reaches the pipe, which is exactly how the helper
-/// behaved before the guard existed.
+/// behaved before the guard existed. Once per process: a second call is
+/// [`io::ErrorKind::AlreadyExists`] (see [`claim`]).
 pub fn claim_stdout() -> io::Result<File> {
-    let private = duplicate_stdout()?;
-    redirect_stdout_to_stderr();
-    Ok(private)
+    claim().map(|claimed| claimed.file)
+}
+
+/// [`claim_stdout`], also reporting whether the redirect took. The one implementation of the
+/// guard: the Rust helpers reach it through [`claim_stdout`] and `open`, the C# helpers through
+/// prisc_interop's `prisc_ipc_claim_stdout`.
+///
+/// Once per process: a second call answers [`io::ErrorKind::AlreadyExists`] and changes
+/// nothing. A failed duplicate changes nothing either, and may be retried.
+pub fn claim() -> io::Result<ClaimedStdout> {
+    if CLAIMED.swap(true, Ordering::SeqCst) {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "stdout was already claimed by this process",
+        ));
+    }
+    let file = match duplicate_stdout() {
+        Ok(file) => file,
+        Err(e) => {
+            CLAIMED.store(false, Ordering::SeqCst);
+            return Err(e);
+        }
+    };
+    let redirected = redirect_stdout_to_stderr();
+    Ok(ClaimedStdout {
+        file,
+        redirected,
+    })
 }
 
 #[cfg(unix)]
@@ -34,7 +77,7 @@ fn duplicate_stdout() -> io::Result<File> {
 }
 
 #[cfg(unix)]
-fn redirect_stdout_to_stderr() {
+fn redirect_stdout_to_stderr() -> bool {
     // SAFETY: a plain descriptor-table edit. dup2 closes the old fd 1, the pipe, but the
     // duplicate above already holds it open, so nothing the parent reads from is released.
     if unsafe { libc::dup2(2, 1) } < 0 {
@@ -43,7 +86,9 @@ fn redirect_stdout_to_stderr() {
              protocol",
             io::Error::last_os_error()
         );
+        return false;
     }
+    true
 }
 
 #[cfg(windows)]
@@ -67,7 +112,7 @@ fn duplicate_stdout() -> io::Result<File> {
 /// UCRT (`ucrtbase.dll`); a library with its own CRT keeps the old handle value in its own fd
 /// table (§3.2).
 #[cfg(windows)]
-fn redirect_stdout_to_stderr() {
+fn redirect_stdout_to_stderr() -> bool {
     use windows::core::{s, w};
     use windows::Win32::Foundation::{SetHandleInformation, HANDLE_FLAGS, HANDLE_FLAG_INHERIT};
     use windows::Win32::System::Console::{GetStdHandle, SetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
@@ -83,26 +128,30 @@ fn redirect_stdout_to_stderr() {
 
     // SAFETY: handle-table edits on this process's own standard handles.
     let redirected = unsafe { GetStdHandle(STD_ERROR_HANDLE).and_then(|stderr| SetStdHandle(STD_OUTPUT_HANDLE, stderr)) };
-    if let Err(e) = redirected {
+    if let Err(e) = &redirected {
         eprintln!("prisc_ipc: could not point STD_OUTPUT_HANDLE at stderr ({e})");
     }
+    let std_handle_moved = redirected.is_ok();
 
     // Only when something already loaded the UCRT: a process without it has no CRT fd 1 a
     // native library could print through. The binaries themselves link the CRT statically, and
     // no native code of ours prints through that copy.
     // SAFETY: looking up an export of an already-loaded module; the signature is `_dup2`'s.
-    unsafe {
+    let crt_fd_moved = unsafe {
         let Ok(ucrt) = GetModuleHandleW(w!("ucrtbase.dll")) else {
-            return;
+            return std_handle_moved;
         };
         let Some(dup2) = GetProcAddress(ucrt, s!("_dup2")) else {
-            return;
+            return std_handle_moved;
         };
         let dup2: unsafe extern "C" fn(i32, i32) -> i32 = std::mem::transmute(dup2);
-        if dup2(2, 1) != 0 {
+        let moved = dup2(2, 1) == 0;
+        if !moved {
             eprintln!("prisc_ipc: the UCRT's _dup2(2, 1) failed; native stdout output is not redirected");
         }
-    }
+        moved
+    };
+    std_handle_moved && crt_fd_moved
 }
 
 #[cfg(test)]
@@ -129,8 +178,15 @@ mod tests {
     fn guard_child_role() {
         match std::env::var(ROLE_VAR).as_deref() {
             Ok("child") => {
-                let mut private = super::claim_stdout().unwrap();
+                let claimed = super::claim().unwrap();
+                let mut private = claimed.file;
                 private.write_all(b"PROTOCOL\n").unwrap();
+                writeln!(private, "REDIRECTED {}", claimed.redirected).unwrap();
+                // Once per process: the second claim changes nothing and says so.
+                let second = super::claim_stdout()
+                    .map(drop)
+                    .map_err(|e| e.kind());
+                writeln!(private, "SECOND {second:?}").unwrap();
                 // Through fd 1, which now goes to stderr.
                 println!("STRAY");
                 self_command("guard::tests::guard_child_role", "grandchild")
@@ -164,6 +220,8 @@ mod tests {
         let elapsed = started.elapsed();
         child.wait().unwrap();
         assert!(stdout.contains("PROTOCOL\n"), "stdout: {stdout:?}");
+        assert!(stdout.contains("REDIRECTED true\n"), "stdout: {stdout:?}");
+        assert!(stdout.contains("SECOND Err(AlreadyExists)\n"), "stdout: {stdout:?}");
         assert!(!stdout.contains("STRAY"), "fd 1 still reaches the pipe: {stdout:?}");
         assert!(
             elapsed < GRANDCHILD_LIFETIME / 2,

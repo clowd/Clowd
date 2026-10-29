@@ -21,14 +21,16 @@ use std::time::Duration;
 pub const PROTOCOL: u32 = 1;
 
 /// Added to a catalog's `QUIT_GRACE` for the helper's own hard-exit timer (§3.3), so a living
-/// parent's kill always fires first and the timer only matters for orphans.
+/// parent's kill always fires first and the timer only matters for orphans. The C# side reads it
+/// from the generated `IpcProtocol.SelfExitMarginMs`.
 pub const SELF_EXIT_MARGIN: Duration = Duration::from_secs(5);
 
 pub mod catalog;
 mod channel;
 pub mod env;
 pub mod exit;
-mod guard;
+pub mod framing;
+pub mod guard;
 pub mod lifetime;
 pub mod locate;
 mod stdin;

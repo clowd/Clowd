@@ -43,8 +43,8 @@ namespace Prisc.VideoRender
     internal static class Program
     {
         /// <summary>Beyond the catalog's quit grace: the parent kills us first if it is alive, so this
-        /// only ends an orphan.</summary>
-        private static readonly TimeSpan SelfExitMargin = TimeSpan.FromSeconds(5);
+        /// only ends an orphan. prisc_ipc's <c>SELF_EXIT_MARGIN</c>, the Rust helpers' margin.</summary>
+        private static readonly TimeSpan SelfExitMargin = TimeSpan.FromMilliseconds(IpcProtocol.SelfExitMarginMs);
 
         /// <summary>Tests only: with this set to <c>1</c> the render waits after its first encoded
         /// frame until it is told to quit (bounded by <see cref="HoldForQuitBound"/>), so a cancel
@@ -59,7 +59,7 @@ namespace Prisc.VideoRender
         private static int Main(string[] argv)
         {
             // first, before FFmpeg, Skia or a GPU driver can print to fd 1
-            var events = IpcChild.Open("Prisc.VideoRender", HelperSpecs.Job);
+            var events = IpcChild.Open(HelperNames.VideoRender, HelperSpecs.Job);
 
             using var cancel = new CancellationTokenSource();
             IpcChild.OnQuit += () =>
@@ -108,7 +108,7 @@ namespace Prisc.VideoRender
                         // when no usable GPU context exists, so this is a test/diagnostic knob,
                         // not something the app needs to set.
                         PreferGpu = !String.Equals(
-                            Environment.GetEnvironmentVariable("PRISC_RENDER_BACKEND"), "cpu",
+                            Environment.GetEnvironmentVariable(Prisc.Interop.EnvVars.RenderBackend), "cpu",
                             StringComparison.OrdinalIgnoreCase),
                         // PRISC_RENDER_ZEROCOPY=0 forces the readback path for NVENC/AMF renders
                         // (the zero-copy Direct3D 11 hand-off falls back to it on its own when

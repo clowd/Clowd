@@ -639,13 +639,19 @@ namespace Prisc.Interop
         internal static extern int prisc_idle_seconds(double* out_seconds);
 
         /// <summary>
-        ///  Claims the process stdout for the protocol (`prisc_ipc::guard::claim_stdout`): a private,
+        ///  Claims the process stdout for the protocol (`prisc_ipc::guard::claim`): a private,
         ///  non-inheritable copy of it goes to `out_handle` (a HANDLE on Windows, an fd elsewhere; ownership
-        ///  passes to the caller, README C2), and fd 1 is redirected to stderr. A failed fd 1 redirect is
-        ///  `out_redirected = 0`, not an error.
+        ///  passes to the caller, README C2), the original stdout's inherit flag is cleared (Windows), and
+        ///  fd 1 is redirected to stderr: `STD_OUTPUT_HANDLE` and the UCRT's fd 1 on Windows, `dup2(2, 1)`
+        ///  elsewhere. `out_redirected` is 1 when that redirect took and 0 when it failed (already logged to
+        ///  stderr; stdout then still reaches the pipe), which is not an error. Both outputs are written
+        ///  only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE` (second call), `PRISC_E_OS`.
+        ///  Once per process: a second call (from this export or a Rust helper's `prisc_ipc::open`) changes
+        ///  nothing and answers `PRISC_E_STATE`.
+        ///
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null output; `PRISC_E_STATE` for a second call;
+        ///  `PRISC_E_OS` when the duplicate failed (no usable stdout), with the OS error as the code.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -749,11 +755,16 @@ namespace Prisc.Interop
         internal static extern int prisc_screen_image_free(PriscScreenImage* image);
 
         /// <summary>
-        ///  Windows: puts the process into the one process-wide kill-on-close job (created on first use,
-        ///  never closed; a creation failure is latched).
+        ///  Windows: puts the process behind `process_handle` (a HANDLE with `PROCESS_SET_QUOTA` and
+        ///  `PROCESS_TERMINATE`, borrowed for the call) into the one process-wide kill-on-close job, so it
+        ///  dies when this process exits, crashes or is killed (HELPER_PROTOCOL.md section 7.4). The job is
+        ///  created on first use with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK`
+        ///  (whatever the child spawns stays out of it) and never closed; a failure to create it is
+        ///  latched, so every later call answers the same error without trying again.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle; `PRISC_E_OS` when the job could
+        ///  not be created or the process could not be assigned (a host job that forbids nesting or
+        ///  breakaway); `PRISC_E_UNSUPPORTED` off Windows (stdin EOF and EPIPE end a helper there).
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -761,11 +772,13 @@ namespace Prisc.Interop
         internal static extern int prisc_process_assign_kill_on_close_job_windows(nint process_handle);
 
         /// <summary>
-        ///  Windows: lets `process_id` (0 = any process) take the foreground once
-        ///  (`prisc_platform::foreground::grant`).
+        ///  Windows: lets `process_id` (0 = any process, `ASFW_ANY`) take the foreground once
+        ///  (`prisc_platform::foreground::grant`, the same call prisc_capture and the shell extension
+        ///  make). Windows refuses unless this process may itself set the foreground right now, so callers
+        ///  treat a refusal as harmless.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_OS` when Windows refused, with the Win32 code;
+        ///  `PRISC_E_UNSUPPORTED` off Windows (there is no foreground lock to hand over).
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -773,12 +786,22 @@ namespace Prisc.Interop
         internal static extern int prisc_process_allow_foreground_windows(uint process_id);
 
         /// <summary>
-        ///  Makes the FFmpeg libraries in the UTF-8 directory `path` loadable: `SetDllDirectoryW` on
-        ///  Windows (empty clears it), the Mach-O dependency closure plus `dlopen` on macOS (`out_loaded` =
-        ///  images loaded), nothing on Linux.
+        ///  Makes the FFmpeg libraries in the UTF-8 directory `path` loadable by absolute path, one call on
+        ///  every OS:
+        ///  - Windows: `SetDllDirectoryW(path)`, so avcodec's own imports (libx264, zlib, srt) resolve
+        ///    beside it; an empty path restores the default search order. Process-wide, last caller wins.
+        ///    `out_loaded` = 0.
+        ///  - macOS: the payload's dylibs ask for each other by `@rpath` and carry no `LC_RPATH`, so they
+        ///    are loaded here first, by absolute path: the closure of the seven FFmpeg roots
+        ///    (`libavutil.dylib` ... `libavdevice.dylib`, unversioned) over their `@rpath`
+        ///    `LC_LOAD_DYLIB` / `LC_LOAD_WEAK_DYLIB` / `LC_REEXPORT_DYLIB` commands (fat and thin Mach-O),
+        ///    then `dlopen` in passes until a pass loads nothing. Best-effort: what will not load is left for
+        ///    the later load to fail on with its own message. `out_loaded` = images loaded; 0 for a
+        ///    directory that is missing or holds no root.
+        ///  - Elsewhere: nothing to do, `out_loaded` = 0.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null output, a null path with a non-zero length,
+        ///  bytes that are not UTF-8 or an interior NUL; `PRISC_E_OS` when `SetDllDirectoryW` failed.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -786,10 +809,14 @@ namespace Prisc.Interop
         internal static extern int prisc_process_prepare_ffmpeg_dir(byte* path, nuint len, uint* out_loaded);
 
         /// <summary>
-        ///  Windows: the package full name of this process (mode 1, free with `prisc_string_free`).
+        ///  Windows: the MSIX package full name this process was created under (the `package_identity`
+        ///  diagnostics tag), sized in two passes so no name is too long. Written to `out_name` as a mode 1
+        ///  string (free with `prisc_string_free`); the empty string with `PRISC_S_NONE`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_NONE` (no package identity), `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE` when the process has no package identity
+        ///  (`APPMODEL_ERROR_NO_PACKAGE`, a normal launch); `PRISC_E_INVALID_ARG` for a null output;
+        ///  `PRISC_E_OS` for any other `APPMODEL_ERROR_*`, with the Win32 code; `PRISC_E_UNSUPPORTED` off
+        ///  Windows.
         ///
         ///  Thread: any thread.
         /// </summary>

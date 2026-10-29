@@ -8,9 +8,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde::de::DeserializeOwned;
 
 use crate::catalog::QUIT;
+use crate::framing::{fill, INVALID_COMMAND_REASON, NOT_JSON_REASON, NO_TYPE_REASON, OVERSIZE_REASON, UNKNOWN_COMMAND_REASON};
 use crate::lifetime::{self, Lifetime, QuitReason};
 
-/// Longest line accepted in either direction (§2.1).
+/// Longest line accepted in either direction (§2.1). The C# side reads it from the generated
+/// `IpcProtocol.MaxLineBytes`.
 pub const MAX_LINE: usize = 1024 * 1024;
 
 /// One stdin line, as the helper sees it.
@@ -29,7 +31,8 @@ pub enum Inbound<C> {
 /// trailing `\r` and a leading UTF-8 BOM, decodes lossily and parses. `{"type":"quit"}` and
 /// EOF or a read error fire the quit path ([`QuitReason::Command`] / [`QuitReason::StdinClosed`])
 /// and never reach `sink`. Empty lines are skipped. The thread ends when `sink` returns
-/// `ControlFlow::Break` or at EOF.
+/// `ControlFlow::Break` or at EOF; after `quit` it keeps reading (the quit-then-read rule,
+/// [`crate::framing`]). The C# loop in IpcChild.cs runs the same golden vectors.
 ///
 /// `quit` is triggered on this thread after `sink` has returned for every earlier line, so a
 /// helper whose `on_quit` posts into the same queue `sink` feeds keeps arrival order (§2.3).
@@ -56,7 +59,7 @@ pub(crate) fn pump<C: DeserializeOwned>(
                 break;
             }
             Ok(Line::TooLong) => Inbound::Malformed {
-                reason: format!("command line longer than {MAX_LINE} bytes"),
+                reason: OVERSIZE_REASON.to_owned(),
             },
             Ok(Line::Complete) => match parse(&buf) {
                 Some(Parsed::Quit) => {
@@ -147,7 +150,7 @@ fn parse<C: DeserializeOwned>(raw: &[u8]) -> Option<Parsed<C>> {
         Ok(value) => value,
         Err(e) => {
             return Some(Parsed::Inbound(Inbound::Malformed {
-                reason: format!("not JSON ({e})"),
+                reason: fill(NOT_JSON_REASON, &[&e.to_string()]),
             }))
         }
     };
@@ -157,7 +160,7 @@ fn parse<C: DeserializeOwned>(raw: &[u8]) -> Option<Parsed<C>> {
         .map(str::to_owned);
     let Some(kind) = kind else {
         return Some(Parsed::Inbound(Inbound::Malformed {
-            reason: "not a JSON object with a string \"type\"".to_owned(),
+            reason: NO_TYPE_REASON.to_owned(),
         }));
     };
     if kind == QUIT.name {
@@ -167,10 +170,10 @@ fn parse<C: DeserializeOwned>(raw: &[u8]) -> Option<Parsed<C>> {
         Ok(command) => Inbound::Command(command),
         // The parser's own words, except for the one case it words badly.
         Err(e) if e.to_string().starts_with("unknown variant") => Inbound::Malformed {
-            reason: format!("unknown command '{kind}'"),
+            reason: fill(UNKNOWN_COMMAND_REASON, &[&kind]),
         },
         Err(e) => Inbound::Malformed {
-            reason: format!("invalid '{kind}' command: {e}"),
+            reason: fill(INVALID_COMMAND_REASON, &[&kind, &e.to_string()]),
         },
     }))
 }
@@ -199,61 +202,9 @@ mod tests {
         (seen, calls)
     }
 
-    fn pause(paused: bool) -> Inbound<capture::Command> {
-        Inbound::Command(capture::Command::Pause {
-            paused,
-        })
-    }
-
-    #[test]
-    fn parses_commands_and_skips_blank_lines() {
-        let (seen, quits) =
-            run::<capture::Command>(b"{\"type\":\"pause\",\"paused\":true}\r\n\n   \r\n{\"type\":\"pause\",\"paused\":false}");
-        assert_eq!(seen, [pause(true), pause(false)]);
-        assert_eq!(quits, [QuitReason::StdinClosed]);
-    }
-
-    #[test]
-    fn strips_a_bom_on_any_line() {
-        let (seen, _) = run::<capture::Command>(
-            b"\xEF\xBB\xBF{\"type\":\"pause\",\"paused\":true}\n\xEF\xBB\xBF{\"type\":\"pause\",\"paused\":false}\n",
-        );
-        assert_eq!(seen, [pause(true), pause(false)]);
-    }
-
-    #[test]
-    fn invalid_utf8_is_decoded_lossily() {
-        let (seen, _) = run::<capture::Command>(b"{\"type\":\"settings\",\"args\":[\"a\xFFb\"]}\n");
-        assert_eq!(
-            seen,
-            [Inbound::Command(capture::Command::Settings {
-                args: vec!["a\u{FFFD}b".to_owned()],
-            })]
-        );
-    }
-
-    #[test]
-    fn an_oversize_line_is_malformed_and_the_next_line_still_parses() {
-        let mut input = b"{\"type\":\"settings\",\"args\":[\"".to_vec();
-        input.extend(std::iter::repeat_n(b'x', MAX_LINE));
-        input.extend_from_slice(b"\"]}\n{\"type\":\"pause\",\"paused\":true}\n");
-        let (seen, _) = run::<capture::Command>(&input);
-        assert_eq!(seen.len(), 2, "{:?}", seen.first());
-        assert!(matches!(&seen[0], Inbound::Malformed { reason } if reason.contains("longer than")));
-        assert_eq!(seen[1], pause(true));
-    }
-
-    #[test]
-    fn a_line_of_exactly_the_limit_is_accepted() {
-        let prefix = b"{\"type\":\"settings\",\"args\":[\"";
-        let suffix = b"\"]}";
-        let mut input = prefix.to_vec();
-        input.extend(std::iter::repeat_n(b'x', MAX_LINE - prefix.len() - suffix.len()));
-        input.extend_from_slice(suffix);
-        input.push(b'\n');
-        let (seen, _) = run::<capture::Command>(&input);
-        assert!(matches!(&seen[..], [Inbound::Command(capture::Command::Settings { .. })]));
-    }
+    // The framing itself (blank lines, CR and BOM stripping, lossy UTF-8, the 1 MiB cap, quit and
+    // EOF) is pinned by the golden vectors in framing.rs, which the C# loop runs too. These tests
+    // cover what the vectors cannot: the real catalogs' serde messages and the sink's own control.
 
     #[test]
     fn malformed_lines_name_the_problem() {
@@ -278,24 +229,6 @@ mod tests {
         );
         assert!(reasons[3].contains("\"type\""), "{}", reasons[3]);
         assert!(reasons[4].contains("unknown ObscureMode value 'sepia'"), "{}", reasons[4]);
-    }
-
-    #[test]
-    fn quit_never_reaches_the_sink_and_fires_once() {
-        let (seen, quits) = run::<capture::Command>(
-            b"{\"type\":\"pause\",\"paused\":true}\n{\"type\":\"quit\"}\n{\"type\":\"quit\"}\n{\"type\":\"pause\",\"paused\":false}\n",
-        );
-        // Lines after quit are still delivered; the helper is on its way out regardless.
-        assert_eq!(seen, [pause(true), pause(false)]);
-        // quit, a second quit, then EOF: one call, with the first reason.
-        assert_eq!(quits, [QuitReason::Command]);
-    }
-
-    #[test]
-    fn eof_alone_quits() {
-        let (seen, quits) = run::<capture::Command>(b"");
-        assert!(seen.is_empty());
-        assert_eq!(quits, [QuitReason::StdinClosed]);
     }
 
     #[test]

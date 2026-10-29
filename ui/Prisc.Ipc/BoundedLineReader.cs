@@ -13,8 +13,9 @@ namespace Prisc.Ipc
     /// </summary>
     internal sealed class BoundedLineReader
     {
-        /// <summary>The §2.1 cap, counted in UTF-8 bytes like the child side's.</summary>
-        public const int MaxLineBytes = 1024 * 1024;
+        /// <summary>The §2.1 cap, counted in UTF-8 bytes like the child side's (prisc_ipc's
+        /// <c>MAX_LINE</c>).</summary>
+        public const int MaxLineBytes = IpcProtocol.MaxLineBytes;
 
         private readonly TextReader _reader;
         private readonly int _maxLineBytes;
