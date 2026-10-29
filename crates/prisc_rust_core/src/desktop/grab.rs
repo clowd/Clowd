@@ -9,7 +9,8 @@
 //! 800x600 image).
 //!
 //! - Windows draws into a top-down 32 bpp DIB section ([`render`]): [`grab`] blits the screen DC
-//!   into it, the overlay's window peek draws a `PrintWindow` into it. GDI leaves the fourth byte
+//!   into it, the overlay's window peek draws a `PrintWindow` into it, and the cursor reader draws
+//!   an icon into it over black and over white ([`render_over`]). GDI leaves the fourth byte
 //!   undefined, so a caller that hands the pixels on as an opaque picture asks for
 //!   [`Options::opaque`].
 //! - macOS copies a `CGWindowListCreateImage` of the on-screen windows ([`grab`]), or any other
@@ -230,10 +231,10 @@ fn rgb_of(bgra: &[u8]) -> Option<u32> {
 }
 
 #[cfg(windows)]
-pub use imp::render;
+pub use imp::{render, render_over};
 
 #[cfg(target_os = "macos")]
-pub use imp::from_cg_image;
+pub use imp::{cg_layout, from_cg_image};
 
 #[cfg(windows)]
 mod imp {
@@ -312,6 +313,28 @@ mod imp {
     /// is the top-left) and returns what it painted. The shared half of every Windows grab: the
     /// screen blit below and the overlay's `PrintWindow` peek.
     pub fn render(width: i32, height: i32, opaque: bool, draw: impl FnOnce(HDC) -> windows::core::Result<()>) -> Result<Image, GrabError> {
+        paint(width, height, None, opaque, draw)
+    }
+
+    /// [`render`] over a solid background: every byte of the canvas, alpha included, is
+    /// `background` before `draw` paints. The cursor reader draws an icon over black and over
+    /// white and reads the coverage from the difference.
+    pub fn render_over(
+        width: i32,
+        height: i32,
+        background: u8,
+        draw: impl FnOnce(HDC) -> windows::core::Result<()>,
+    ) -> Result<Image, GrabError> {
+        paint(width, height, Some(background), false, draw)
+    }
+
+    fn paint(
+        width: i32,
+        height: i32,
+        background: Option<u8>,
+        opaque: bool,
+        draw: impl FnOnce(HDC) -> windows::core::Result<()>,
+    ) -> Result<Image, GrabError> {
         if width <= 0 || height <= 0 {
             return Err(GrabError::Empty {
                 width,
@@ -351,6 +374,9 @@ mod imp {
             }
             canvas.bits = bits as *const u8;
             canvas.previous = SelectObject(dc, canvas.dib);
+            if let Some(byte) = background {
+                std::ptr::write_bytes(bits.cast::<u8>(), byte, len);
+            }
 
             draw(dc).map_err(|e| os(e, "drawing into the grab canvas"))?;
             // GDI may batch; the bits are read directly, so the batch has to land first.
@@ -400,17 +426,25 @@ mod imp {
     use crate::desktop::{CGPoint, CGRect, CGSize, ImageBytes};
     use crate::geometry::{ScreenPoint, ScreenRect};
 
-    /// A `CGImage`'s pixels as an [`Image`], converted from whichever 32-bit, 8-bit-per-component
-    /// layout CoreGraphics chose; [`GrabError::Format`] for anything else.
-    pub fn from_cg_image(image: &CGImage, opaque: bool) -> Result<Image, GrabError> {
+    /// The pixel layout of a `CGImage`: one of the 32-bit, 8-bit-per-component [`Layout`]s, or
+    /// [`GrabError::Format`] for anything else. The one rule every reader of a CoreGraphics image
+    /// applies ([`from_cg_image`], and the capture overlay's per-display composite, which copies
+    /// [`Layout::Bgra`] rows straight in).
+    pub fn cg_layout(image: &CGImage) -> Result<Layout, GrabError> {
         let bits = CGImage::bitmap_info(Some(image)).0;
         let bpp = CGImage::bits_per_pixel(Some(image));
         let bpc = CGImage::bits_per_component(Some(image));
-        let layout = match (bpp, bpc) {
+        match (bpp, bpc) {
             (32, 8) => Layout::from_cg_bitmap_info(bits),
             _ => None,
         }
-        .ok_or_else(|| GrabError::Format(format!("{bpp} bits per pixel, {bpc} per component, bitmap info 0x{bits:X}")))?;
+        .ok_or_else(|| GrabError::Format(format!("{bpp} bits per pixel, {bpc} per component, bitmap info 0x{bits:X}")))
+    }
+
+    /// A `CGImage`'s pixels as an [`Image`], converted from whichever 32-bit, 8-bit-per-component
+    /// layout CoreGraphics chose ([`cg_layout`]); [`GrabError::Format`] for anything else.
+    pub fn from_cg_image(image: &CGImage, opaque: bool) -> Result<Image, GrabError> {
+        let layout = cg_layout(image)?;
         let pixels = ImageBytes::of(image).ok_or_else(|| GrabError::Format("the image has no readable pixels".into()))?;
         if pixels.width == 0 || pixels.height == 0 {
             return Err(GrabError::Format(format!("the image is {}x{}", pixels.width, pixels.height)));

@@ -11,9 +11,9 @@ use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT, TRUE};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DWMWINDOWATTRIBUTE};
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, EnumDisplayDevicesW, EnumDisplayMonitors, GdiFlush, GetDC, GetDIBits,
-    GetMonitorInfoW, GetObjectW, MonitorFromPoint, MonitorFromWindow, ReleaseDC, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER,
-    BI_RGB, DIB_RGB_COLORS, DISPLAY_DEVICEW, HBITMAP, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, RGBQUAD,
+    DeleteObject, EnumDisplayDevicesW, EnumDisplayMonitors, GetDC, GetDIBits, GetMonitorInfoW, GetObjectW, MonitorFromPoint,
+    MonitorFromWindow, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, DISPLAY_DEVICEW, HBITMAP, HDC, HMONITOR,
+    MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, RGBQUAD,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::Threading::{
@@ -372,6 +372,11 @@ impl Monitor {
     pub fn dpi(&self) -> Option<u32> {
         monitor_dpi(self.handle)
     }
+
+    /// The monitor's DPI zoom ([`dpi_scale`] of [`Monitor::dpi`]).
+    pub fn scale(&self) -> f64 {
+        dpi_scale(self.dpi())
+    }
 }
 
 /// Every connected monitor, in `EnumDisplayMonitors` order. A monitor whose
@@ -417,8 +422,20 @@ fn monitor_dpi(handle: HMONITOR) -> Option<u32> {
     Some(dpi_x)
 }
 
+/// The DPI zoom of an effective DPI: `dpi / 96`, and 1.0 when the DPI is
+/// unknown or 0. The one spelling of the rule, shared by [`Monitor::scale`]
+/// (the screens list) and [`dpi_scale_at`] (the recorder's per-sample cursor
+/// scale).
+pub fn dpi_scale(dpi: Option<u32>) -> f64 {
+    match dpi {
+        Some(dpi) if dpi > 0 => f64::from(dpi) / 96.0,
+        _ => 1.0,
+    }
+}
+
 /// The DPI zoom (effective DPI / 96) of the monitor nearest `point`; 1.0 when
-/// it cannot be read.
+/// it cannot be read. One `MonitorFromPoint` and one `GetDpiForMonitor`, cheap
+/// enough for a per-sample caller.
 pub fn dpi_scale_at(point: ScreenPoint) -> f64 {
     let hmon = unsafe {
         MonitorFromPoint(
@@ -432,10 +449,7 @@ pub fn dpi_scale_at(point: ScreenPoint) -> f64 {
     if hmon.is_invalid() {
         return 1.0;
     }
-    match monitor_dpi(hmon) {
-        Some(dpi) if dpi != 0 => dpi as f64 / 96.0,
-        _ => 1.0,
-    }
+    dpi_scale(monitor_dpi(hmon))
 }
 
 /// The graphics adapter behind one DXGI output.
@@ -608,7 +622,7 @@ unsafe fn read_icon_planes(hdc: HDC, icon: HICON, ii: &ICONINFO) -> Option<IconB
         let stride = mono_stride(w);
         let mut planes = vec![0u8; stride * full_h as usize];
         if !get_dibits(hdc, ii.hbmMask, w, full_h, 1, &mut planes) {
-            return Some(bitmap(w, h, render_both(hdc, icon, w, h)?));
+            return Some(bitmap(w, h, render_both(icon, w, h)?));
         }
         let (and, xor) = split_mono_planes(&planes, h, stride)?;
         let pixels = IconPixels::Mono {
@@ -621,7 +635,7 @@ unsafe fn read_icon_planes(hdc: HDC, icon: HICON, ii: &ICONINFO) -> Option<IconB
     let (w, h) = bitmap_size(ii.hbmColor)?;
     let mut bgra = vec![0u8; (w as usize) * (h as usize) * 4];
     if !get_dibits(hdc, ii.hbmColor, w, h, 32, &mut bgra) {
-        return Some(bitmap(w, h, render_both(hdc, icon, w, h)?));
+        return Some(bitmap(w, h, render_both(icon, w, h)?));
     }
     if has_alpha(&bgra) {
         return Some(bitmap(
@@ -637,7 +651,7 @@ unsafe fn read_icon_planes(hdc: HDC, icon: HICON, ii: &ICONINFO) -> Option<IconB
     // ownership.
     let mut and = vec![0u8; mono_stride(w) * h as usize];
     if !get_dibits(hdc, ii.hbmMask, w, h, 1, &mut and) {
-        return Some(bitmap(w, h, render_both(hdc, icon, w, h)?));
+        return Some(bitmap(w, h, render_both(icon, w, h)?));
     }
     Some(bitmap(
         w,
@@ -703,48 +717,19 @@ unsafe fn get_dibits(hdc: HDC, hbm: HBITMAP, w: u32, h: u32, bpp: u16, buf: &mut
         == h
 }
 
-unsafe fn render_both(hdc: HDC, icon: HICON, w: u32, h: u32) -> Option<IconPixels> {
+fn render_both(icon: HICON, w: u32, h: u32) -> Option<IconPixels> {
     Some(IconPixels::Rendered {
-        over_black: render_on(hdc, icon, w, h, 0x00)?,
-        over_white: render_on(hdc, icon, w, h, 0xFF)?,
+        over_black: render_on(icon, w, h, 0x00)?,
+        over_white: render_on(icon, w, h, 0xFF)?,
     })
 }
 
-/// Draws the icon over a solid background (`bg` per channel) into a 32bpp
-/// top-down DIB section and returns its BGRA bytes.
-unsafe fn render_on(hdc: HDC, icon: HICON, w: u32, h: u32, bg: u8) -> Option<Vec<u8>> {
-    let memdc = CreateCompatibleDC(Some(hdc));
-    if memdc.is_invalid() {
-        return None;
-    }
-    let result = (|| {
-        let bi = top_down_info(w, h, 32);
-        let mut bits: *mut c_void = std::ptr::null_mut();
-        let dib = CreateDIBSection(
-            Some(memdc),
-            &bi as *const BitmapInfo2 as *const BITMAPINFO,
-            DIB_RGB_COLORS,
-            &mut bits,
-            None,
-            0,
-        )
-        .ok()?;
-        if bits.is_null() {
-            let _ = DeleteObject(dib.into());
-            return None;
-        }
-        let len = (w as usize) * (h as usize) * 4;
-        let old = SelectObject(memdc, dib.into());
-        std::ptr::write_bytes(bits as *mut u8, bg, len);
-        let drawn = DrawIconEx(memdc, 0, 0, icon, w as i32, h as i32, 0, None, DI_NORMAL);
-        let _ = GdiFlush();
-        let out = drawn
-            .is_ok()
-            .then(|| std::slice::from_raw_parts(bits as *const u8, len).to_vec());
-        SelectObject(memdc, old);
-        let _ = DeleteObject(dib.into());
-        out
-    })();
-    let _ = DeleteDC(memdc);
-    result
+/// Draws the icon over a solid background (every byte `bg`, alpha included)
+/// on the shared grab canvas ([`super::grab::render_over`]) and returns its
+/// BGRA bytes.
+fn render_on(icon: HICON, w: u32, h: u32, bg: u8) -> Option<Vec<u8>> {
+    let (w, h) = (i32::try_from(w).ok()?, i32::try_from(h).ok()?);
+    super::grab::render_over(w, h, bg, |dc| unsafe { DrawIconEx(dc, 0, 0, icon, w, h, 0, None, DI_NORMAL) })
+        .ok()
+        .map(|image| image.bgra)
 }

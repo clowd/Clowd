@@ -88,22 +88,38 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
                 continue;
             }
         };
+        // The layout rule every CoreGraphics reader shares (grab::cg_layout). Screen captures are
+        // BGRA and their rows are copied straight in; any other 32-bit layout is converted first
+        // by the shared grab, and a format it cannot convert skips the display.
+        let layout = match grab::cg_layout(&image) {
+            Ok(layout) => layout,
+            Err(e) => {
+                warn!("Display {} image: {e}, skipping", display_ids[i]);
+                continue;
+            }
+        };
         let Some(pixels) = ImageBytes::of(&image) else {
             warn!("Display {} image has no readable pixels, skipping", display_ids[i]);
             continue;
         };
-
-        let img_w = pixels.width;
-        let img_h = pixels.height;
-        let bpr = pixels.bytes_per_row;
-        let bpp = pixels.bits_per_pixel;
-
-        if bpp != 32 {
-            warn!("Display {} has unexpected bits_per_pixel={}, skipping", display_ids[i], bpp);
-            continue;
-        }
-
-        let src = pixels.bytes();
+        let converted;
+        let (src, bpr, img_w, img_h) = if layout == grab::Layout::Bgra {
+            (pixels.bytes(), pixels.bytes_per_row, pixels.width, pixels.height)
+        } else {
+            converted = match grab::from_cg_image(&image, false) {
+                Ok(converted) => converted,
+                Err(e) => {
+                    warn!("Display {} image: {e}, skipping", display_ids[i]);
+                    continue;
+                }
+            };
+            (
+                &converted.bgra[..],
+                converted.stride(),
+                converted.width as usize,
+                converted.height as usize,
+            )
+        };
 
         let dest_x = (monitor.bounds.min_x() - vd.min_x()) as usize;
         let dest_y = (monitor.bounds.min_y() - vd.min_y()) as usize;

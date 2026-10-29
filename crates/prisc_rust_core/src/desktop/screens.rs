@@ -247,15 +247,11 @@ mod imp {
     }
 
     fn describe(m: &Monitor) -> Screen {
-        let scale = match m.dpi() {
-            Some(dpi) if dpi > 0 => f64::from(dpi) / 96.0,
-            _ => 1.0,
-        };
         Screen {
             id: m.handle.0 as usize as u64,
             bounds: m.bounds,
             work_area: Some(m.work_area),
-            scale,
+            scale: m.scale(),
             refresh_hz: refresh(&m.device_name),
             is_primary: m.is_primary,
             pixel_width: m.bounds.size.width.max(0) as u32,
