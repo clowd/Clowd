@@ -130,13 +130,20 @@ namespace Prisc.Interop.Tests
         }
 
         [Fact]
-        public void Stub_exports_answer_unsupported()
+        public void A_windows_only_export_answers_unsupported_elsewhere()
         {
             InteropTestGate.Require();
-            // (the desktop area's prisc_screens_list, which this used to call, is implemented)
-            PriscH264Quality quality;
-            Assert.Equal((int)InteropStatus.Unsupported, NativeMethods.prisc_encoding_h264_quality(23, 1920, 1080, 30, 1, &quality));
-            Assert.Contains("not implemented yet", Native.LastErrorMessage());
+            // Every stub is implemented now (the desktop area's prisc_screens_list and the pure
+            // area's prisc_encoding_h264_quality used to be called here), so this pins the
+            // platform arm instead: on Windows a pointer the crate never handed out is S_NONE.
+            int status = NativeMethods.prisc_gpu_nv12_texture_release_windows(null);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Equal((int)InteropStatus.None, status);
+                return;
+            }
+            Assert.Equal((int)InteropStatus.Unsupported, status);
+            Assert.Contains("prisc_gpu_nv12_texture_release_windows", Native.LastErrorMessage());
         }
 
         /// <summary>The public enums are generated from the Rust ones; these literals are the wire

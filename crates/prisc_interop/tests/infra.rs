@@ -18,13 +18,16 @@ fn last_message() -> String {
 }
 
 #[test]
-fn stub_exports_of_three_areas_answer_unsupported() {
-    // (the desktop area's prisc_screens_list and prisc_idle_seconds and the pure area's
-    // prisc_encoding_h264_quality are implemented)
-    // WP-GPU implemented this one: on Windows a pointer the crate never handed out is S_NONE.
+fn a_windows_only_export_answers_unsupported_elsewhere() {
+    // Every stub is implemented now (the desktop area's prisc_screens_list and prisc_idle_seconds
+    // and the pure area's prisc_encoding_h264_quality used to be called here), so this pins the
+    // platform arm instead: on Windows a pointer the crate never handed out is S_NONE.
     let release = unsafe { prisc_interop::ffi::gpu::prisc_gpu_nv12_texture_release_windows(std::ptr::null_mut()) };
     let expected = if cfg!(windows) { S::None } else { S::Unsupported };
     assert_eq!(release, expected as i32);
+    if !cfg!(windows) {
+        assert!(last_message().contains("prisc_gpu_nv12_texture_release_windows"));
+    }
 }
 
 #[test]
