@@ -52,13 +52,15 @@ namespace Prisc.Util
                 var policy = anyVisible ? ActivationPolicy.Regular : ActivationPolicy.Accessory;
                 if (policy == _currentPolicy)
                     return;
-                _currentPolicy = policy;
 
                 // Accessory to Regular alone leaves the app in the background and the new window
                 // can open behind the previous frontmost app, so the same call takes focus.
                 try
                 {
                     MacApp.SetActivationPolicy(policy, activateIfRegular: true);
+                    // cached only once AppKit took it, so a refused or failed flip is retried on
+                    // the next visibility change instead of being skipped as already applied.
+                    _currentPolicy = policy;
                 }
                 catch (Exception ex)
                 {

@@ -55,8 +55,9 @@ namespace Prisc.UI
         /// hook's own check says no and the nav still reads "System".</summary>
         public const string GrantLocation = "Settings → " + NavLabelMissing + " (the " + NavLabelGranted + " page)";
 
-        /// <summary>Raised after a <see cref="Request"/> that left the permission missing, and after
-        /// <see cref="OpenSettings"/>, so open UI can re-read the statuses.</summary>
+        /// <summary>Raised on macOS after every <see cref="Request"/> (whatever it answered), after
+        /// <see cref="OpenSettings"/> and on <see cref="Refresh"/>, so open UI can re-read the
+        /// statuses. Raised on the caller's thread; subscribers post their re-read.</summary>
         public static event EventHandler StateChanged;
 
         /// <summary>Screen Recording: needed by the capture overlay, the screenshot itself, video
@@ -86,19 +87,27 @@ namespace Prisc.UI
         /// </remarks>
         public static bool Request(MacPermission permission)
         {
+            var kind = ToKind(permission);
             bool usable;
             try
             {
-                usable = Permissions.Ensure(ToKind(permission)).IsUsable();
+                usable = Permissions.Ensure(kind).IsUsable();
             }
             catch (Exception ex)
             {
+                // fail open like the plain checks: a request that cannot answer falls back to the
+                // non-prompting read (which itself answers true when it cannot answer either), so
+                // a broken native call never sends a user who has the permission to the grant
+                // dialog.
                 Debug.WriteLine("[MacPermissions] requesting " + permission + " failed: " + ex);
                 SentryConfig.CaptureHandled(ex, "macperm.request");
-                return false;
+                usable = IsUsable(kind, "macperm.request-fallback");
             }
 
-            if (!usable)
+            // the request may find the permission granted since open UI last read it (granted in
+            // System Settings, then a capture started without re-activating a Prisc window), so
+            // every request nudges subscribers to re-read, not only the ones that left it missing.
+            if (IsRelevant)
                 StateChanged?.Invoke(null, EventArgs.Empty);
             return usable;
         }

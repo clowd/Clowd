@@ -31,7 +31,8 @@ pub(crate) fn set_activation_policy(policy: PriscActivationPolicy, activate_if_r
     }
     if activate_if_regular && policy == PriscActivationPolicy::Regular {
         // The replacement, -[NSApplication activate], is cooperative and does not take focus from
-        // the frontmost app, which is exactly what this flip needs, so the deprecated call stays.
+        // the frontmost app, but this flip must take focus (the new window would open behind that
+        // app), so the deprecated call stays.
         #[allow(deprecated)]
         app.activateIgnoringOtherApps(true);
     }
