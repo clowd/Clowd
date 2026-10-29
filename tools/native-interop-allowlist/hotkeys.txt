@@ -1,0 +1,5 @@
+# WP-HOTKEYS: hand-written natives of the hotkey hook area on b43359d6a. Format: tools/check-native-interop.sh.
+# WP-HOTKEYS deletes this file once every line below is gone (prisc_hotkeys_* in prisc_interop).
+ui/Prisc.Ui/Services/Hotkeys/HotkeysNative.cs  DllImport      The legacy prisc_hotkeys cdylib imports until the prisc_interop hotkey exports.
+ui/Prisc.Ui/Services/Hotkeys/HotkeysNative.cs  extern         The extern declarations of those imports.
+ui/Prisc.Ui/Services/Hotkeys/HotkeysNative.cs  NativeLibrary  The second loader and DllImport resolver for the legacy prisc_hotkeys cdylib.

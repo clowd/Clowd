@@ -1,0 +1,12 @@
+# WP-MACAPP: hand-written natives of the macOS app integration and permissions area on b43359d6a. Format: tools/check-native-interop.sh.
+# WP-MACAPP deletes this file once every line below is gone (prisc_app_*, prisc_services_*, prisc_permissions_*).
+ui/Prisc.Ui/Util/MacDockIcon.cs              DllImport      libobjc calls that switch the activation policy until prisc_app_*.
+ui/Prisc.Ui/Util/MacDockIcon.cs              extern         The extern declarations of those libobjc calls.
+ui/Prisc.Ui/Util/MacDockIcon.cs              objc           objc_msgSend and sel_registerName on NSApplication.
+ui/Prisc.Ui/Util/MacServicesProvider.cs      DllImport      libobjc class building and AppKit registration of the NSServices provider until prisc_services_*.
+ui/Prisc.Ui/Util/MacServicesProvider.cs      extern         The extern declarations of that class building.
+ui/Prisc.Ui/Util/MacServicesProvider.cs      objc           objc_allocateClassPair, class_addMethod and objc_msgSend for the provider object.
+ui/Prisc.Ui/Util/MacServicesProvider.cs      Marshal        GetFunctionPointerForDelegate for the provider method implementation.
+ui/Prisc.Ui/Services/MacPermissions.cs       DllImport      TCC queries and requests (CoreGraphics, ApplicationServices, CoreFoundation) until prisc_permissions_*.
+ui/Prisc.Ui/Services/MacPermissions.cs       extern         The extern declarations of those permission calls.
+ui/Prisc.Ui/Services/MacPermissions.cs       NativeLibrary  The hand-resolved CoreFoundation data symbols for the AX options dictionary.

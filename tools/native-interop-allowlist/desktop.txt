@@ -1,0 +1,10 @@
+# WP-DESKTOP: hand-written natives of the desktop area on b43359d6a. Format: tools/check-native-interop.sh.
+# WP-DESKTOP deletes this file once every line below is gone (prisc_screens_*, prisc_screen_grab, prisc_idle_*, prisc_system_*).
+ui/Prisc.Ui/Helpers/DesktopScreens.cs        DllImport  Monitor, work area and DPI queries (user32, shcore) and the CoreGraphics refresh rate until prisc_screens_*.
+ui/Prisc.Ui/Helpers/DesktopScreens.cs        extern     The extern declarations of those monitor queries.
+ui/Prisc.Ui/Util/ScreenPixels.cs             DllImport  GDI and CoreGraphics screen grab and pixel reads until prisc_screen_grab.
+ui/Prisc.Ui/Util/ScreenPixels.cs             extern     The extern declarations of those screen grab calls.
+ui/Prisc.Ui/Services/IdleMonitor.cs          DllImport  GetLastInputInfo and CGEventSourceSecondsSinceLastEventType until prisc_idle_*.
+ui/Prisc.Ui/Services/IdleMonitor.cs          extern     The extern declarations of those idle queries.
+ui/Prisc.Ui/Controls/Tray/FloatingTray.cs    DllImport  SystemParametersInfo for the Windows animation preference until prisc_system_*.
+ui/Prisc.Ui/Controls/Tray/FloatingTray.cs    extern     The extern declaration of SystemParametersInfo.

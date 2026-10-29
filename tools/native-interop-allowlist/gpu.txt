@@ -1,0 +1,11 @@
+# WP-GPU: hand-written natives of the GPU area on b43359d6a. Format: tools/check-native-interop.sh.
+# WP-GPU deletes this file once every line below is gone (prisc_gpu_*).
+ui/Prisc.VideoSDK/Composition/D3D12Backend.cs  DllImport           dxgi, d3d12 and kernel32 device creation until prisc_gpu_device_*.
+ui/Prisc.VideoSDK/Composition/D3D12Backend.cs  extern              The extern declarations of that device creation.
+ui/Prisc.VideoSDK/Composition/D3D12Backend.cs  delegate-unmanaged  Raw D3D12 and DXGI COM vtable calls until prisc_gpu_*.
+ui/Prisc.VideoSDK/Composition/D3D11Backend.cs  DllImport           D3D11CreateDevice for the encode bridge until prisc_gpu_d3d11_*.
+ui/Prisc.VideoSDK/Composition/D3D11Backend.cs  extern              The extern declaration of D3D11CreateDevice.
+ui/Prisc.VideoSDK/Composition/D3D11Backend.cs  delegate-unmanaged  Raw D3D11 and video processor COM vtable calls until prisc_gpu_*.
+ui/Prisc.VideoSDK/Composition/MetalBackend.cs  DllImport           MTLCreateSystemDefaultDevice and libobjc until prisc_gpu_device_*.
+ui/Prisc.VideoSDK/Composition/MetalBackend.cs  extern              The extern declarations of those Metal calls.
+ui/Prisc.VideoSDK/Composition/MetalBackend.cs  objc                objc_msgSend and sel_registerName on the Metal device and queue.

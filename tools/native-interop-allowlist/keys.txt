@@ -1,0 +1,6 @@
+# WP-KEYS: hand-written natives of the gestures and keyboard area on b43359d6a. Format: tools/check-native-interop.sh.
+# WP-KEYS deletes this file once every line below is gone (prisc_keyboard_*, prisc_gesture_*).
+ui/Prisc.Ui/DrawOnScreen/KeystrokeFeed.cs       DllImport  GetAsyncKeyState and CGEventSourceKeyState until prisc_keyboard_keys_down.
+ui/Prisc.Ui/DrawOnScreen/KeystrokeFeed.cs       extern     The extern declarations of those key state reads.
+ui/Prisc.Ui/Services/Hotkeys/SecureInput.cs     DllImport  IsSecureEventInputEnabled (Carbon) until prisc_keyboard_*.
+ui/Prisc.Ui/Services/Hotkeys/SecureInput.cs     extern     The extern declaration of IsSecureEventInputEnabled.
