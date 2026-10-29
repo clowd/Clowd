@@ -1,0 +1,6 @@
+# The filtered GPU tests' outcomes on WARP (CI's Windows test-video leg) with the
+# old C# D3D12 code on BASE; tools/check-warp-baseline.sh fails a later run on a
+# test listed Passed here that no longer passes. One test per line:
+#   <Passed|Failed|Skipped> <fully qualified test name>
+# No tests listed yet: the BASE run records them. Copy warp-baseline.txt from
+# that run's warp-results-windows-latest artifact over this file and commit it.

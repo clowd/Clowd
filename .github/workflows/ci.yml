@@ -18,8 +18,9 @@ name: CI
 #   rust            build-rust.yml             -> rust-<rid>, needs version (stamps it)
 #   ui              build-ui.yml               -> ui-<rid>
 #   test                                       Rust gate, native-interop check, Interop/Shared/Drawing/Ipc
-#                                              dotnet tests, GPU on WARP (Windows), interop probe (no needs)
-#   test-video      needs recorder             runs even if it fails; the FFmpeg tests then skip
+#                                              dotnet tests, interop probe (no needs)
+#   test-video      needs recorder             runs even if it fails; the FFmpeg tests then skip;
+#                                              GPU on WARP (Windows) against tools/warp-baseline.txt
 #   package         needs recorder, rust, ui   -> prisc-<rid>
 
 on:
@@ -94,8 +95,7 @@ jobs:
         # macos-15, not the recorder's macos-26: see build-rust.yml.
         os: [windows-latest, macos-15]
     runs-on: ${{ matrix.os }}
-    # Three more Rust crates, two dotnet builds (Prisc.Ui for the probe, Prisc.VideoSDK.Tests for
-    # the WARP set) and the probe run on top of the previous 60.
+    # Three more Rust crates, the Prisc.Ui Release build and the probe run on top of the previous 60.
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -162,11 +162,14 @@ jobs:
       - name: "Rust gate: crate boundaries"
         run: |
           gpl='prisc_recorder|prisc_share_region|prisc_obs[a-z0-9_]*|prisc_vid2gif|prisc_ffmpeg_sys|prisc_build_support|prisc_ai'
-          if cargo tree -p prisc_interop -e normal --target all --prefix none | grep -wE "sentry|$gpl"; then
+          # Captured first: inside an `if` condition a failing cargo tree would just read as "no match".
+          interop_tree=$(cargo tree -p prisc_interop -e normal --target all --prefix none)
+          codegen_tree=$(cargo tree -p prisc_codegen -e normal --target all --prefix none)
+          if grep -wE "sentry|$gpl" <<<"$interop_tree"; then
             echo "::error::prisc_interop depends on Sentry or on a GPL or recorder-stack crate (listed above)"
             exit 1
           fi
-          if cargo tree -p prisc_codegen -e normal --target all --prefix none | grep -wE "$gpl"; then
+          if grep -wE "$gpl" <<<"$codegen_tree"; then
             echo "::error::prisc_codegen depends on a GPL or recorder-stack crate (listed above)"
             exit 1
           fi
@@ -195,13 +198,14 @@ jobs:
         shell: bash
 
       # The library the dotnet tests load: the loader finds target/debug by walking up from the
-      # test binaries. Fails on cargo's "default-features is ignored" warning (a dependency line
-      # silently enabling more than it asks for) and on ld64's "duplicate symbol" warning (a
-      # dependency's #[no_mangle] colliding with an export; ld64 keeps one and only warns).
+      # test binaries. Fails on cargo's "`default-features` is ignored for X" warning (a dependency
+      # line silently enabling more than it asks for; cargo wraps the key in backticks) and on
+      # ld64's "duplicate symbol" warning (a dependency's #[no_mangle] colliding with an export;
+      # ld64 keeps one and only warns).
       - name: Build prisc_interop (debug)
         run: |
           cargo build -p prisc_interop 2>&1 | tee "$RUNNER_TEMP/interop-build.log"
-          if grep -E "default-features is ignored|duplicate symbol" "$RUNNER_TEMP/interop-build.log"; then
+          if grep -E ".?default-features.? is ignored|duplicate symbol" "$RUNNER_TEMP/interop-build.log"; then
             echo "::error::the prisc_interop build printed a default-features or duplicate symbol warning"
             exit 1
           fi
@@ -219,41 +223,15 @@ jobs:
           dotnet test ui/Prisc.Ipc.Tests/Prisc.Ipc.Tests.csproj -c Release --nologo
         shell: bash
 
-      # The runner has no GPU, so the D3D12 paths only run on WARP, the software adapter, which
-      # PRISC_GPU_ALLOW_WARP admits. Only these filtered tests run on it (never the whole suite):
-      # WARP is slow and lacks features, and NV12 answering E_CAPABILITY there is a skip with a
-      # printed reason, never a pass. The results are kept so the set that passes can be compared
-      # with the one the old C# D3D12 code passed.
-      - name: GPU on WARP (Windows)
-        if: runner.os == 'Windows'
-        env:
-          PRISC_GPU_ALLOW_WARP: "1"
-          PRISC_INTEROP_REQUIRED: "1"
-        run: |
-          if [ -f crates/prisc_interop/tests/ring_harness.rs ]; then
-            cargo test -p prisc_interop --test ring_harness
-          else
-            echo "::notice::crates/prisc_interop/tests/ring_harness.rs does not exist yet; skipping the Rust ring harness"
-          fi
-          dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj -c Release --nologo \
-            --filter "FullyQualifiedName~GpuInterop|FullyQualifiedName~ReadbackRing|FullyQualifiedName~D3D11EncodeBridge" \
-            --logger "trx;LogFileName=warp.trx" --results-directory warp-results
-        shell: bash
-
-      - name: Upload WARP results (Windows)
-        if: ${{ !cancelled() && runner.os == 'Windows' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: warp-results-${{ matrix.os }}
-          path: warp-results/
-          if-no-files-found: warn
-
       # Runs every kept C# facade and every wrapper once in the real app (a small real window on the
       # UI thread, then again from a thread-pool thread) and writes one JSON result per item. The
       # exit code counts `error` results only (a broken contract: a wrong status for a documented
       # case, a panic, a layout mismatch); `unavailable` and `denied` (the OS said no, as it does
       # for screen recording on a runner) never fail the step. Never requests a permission.
+      # Runs even when an earlier test step failed, so every run yields the probe JSON (on BASE it is
+      # the Windows baseline of the old C# paths).
       - name: Interop probe smoke
+        if: ${{ !cancelled() }}
         timeout-minutes: 15
         env:
           PRISC_INTEROP_REQUIRED: "1"
@@ -301,13 +279,12 @@ jobs:
           - os: windows-latest
             rid: win-x64
             exe: .exe
-            interop-lib: prisc_interop.dll
           - os: macos-15
             rid: osx-arm64
             exe: ""
-            interop-lib: libprisc_interop.dylib
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # The filtered WARP run and the Rust ring harness (Windows) on top of the previous 45.
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -331,11 +308,12 @@ jobs:
       # so this job does not wait for the release builds and their Sentry upload. PRISC_INTEROP_PATH
       # is authoritative and inherited by the Prisc.VideoRender children the render tests spawn;
       # PRISC_INTEROP_REQUIRED turns a missing or stale library into a failure instead of a skip.
-      # WARP stays off here: the GPU tests skip without hardware, and the test job runs the WARP set.
+      # WARP stays off in the main suite: its GPU tests skip without hardware; only the filtered
+      # WARP step below admits the software adapter.
       - name: Build prisc_interop (debug)
         run: |
           cargo build -p prisc_interop
-          lib="$PWD/target/debug/${{ matrix.interop-lib }}"
+          lib="$PWD/target/debug/$(. tools/staging/shipped.sh && rid_cdylib ${{ matrix.rid }} prisc_interop)"
           [ -f "$lib" ] || { echo "::error::$lib was not built"; exit 1; }
           if [ "$RUNNER_OS" = Windows ]; then lib=$(cygpath -w "$lib"); fi
           echo "PRISC_INTEROP_PATH=$lib" >> "$GITHUB_ENV"
@@ -376,6 +354,54 @@ jobs:
 
       - name: "UI gate: video editor tests"
         run: dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj -c Release --nologo
+        shell: bash
+
+      # The runner has no GPU, so the D3D12 paths only run on WARP, the software adapter, which
+      # PRISC_GPU_ALLOW_WARP admits for this step alone. Only these filtered tests run on it (never
+      # the whole suite): WARP is slow and lacks features, and NV12 answering E_CAPABILITY there is
+      # a skip with a printed reason, never a pass. Here rather than in the test job because the
+      # D3D11EncodeBridge rigs need the FFmpeg payload above, and they would all skip without it.
+      # Test failures do not fail the run itself: the old C# D3D12 code never ran on a software
+      # adapter, so the set that must pass is the set that passed on BASE, recorded in
+      # tools/warp-baseline.txt, and check-warp-baseline.sh fails on a test that passed there and
+      # no longer does (or a new test that fails). With no baseline recorded yet it only reports.
+      - name: GPU on WARP (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        env:
+          PRISC_GPU_ALLOW_WARP: "1"
+        run: |
+          if [ -z "${PRISC_HELPERS_DIR:-}" ]; then
+            echo "::warning::no recorder payload, so the D3D11EncodeBridge tests skip; this run cannot record or meet the WARP baseline for them"
+          fi
+          rm -rf warp-results
+          status=0
+          dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj -c Release --nologo \
+            --filter "FullyQualifiedName~GpuInterop|FullyQualifiedName~ReadbackRing|FullyQualifiedName~D3D11EncodeBridge" \
+            --logger "trx;LogFileName=warp.trx" --results-directory warp-results || status=$?
+          echo "dotnet test exited $status; the baseline check below decides"
+          tools/check-warp-baseline.sh warp-results/warp.trx tools/warp-baseline.txt warp-results/warp-baseline.txt
+        shell: bash
+
+      # warp-baseline.txt in this artifact is the file to commit as tools/warp-baseline.txt on BASE.
+      - name: Upload WARP results (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: warp-results-${{ matrix.os }}
+          path: warp-results/
+          if-no-files-found: warn
+
+      # New Rust code with no BASE counterpart, so it gates outright. Skips until the harness exists.
+      - name: Rust ring harness on WARP (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        env:
+          PRISC_GPU_ALLOW_WARP: "1"
+        run: |
+          if [ -f crates/prisc_interop/tests/ring_harness.rs ]; then
+            cargo test -p prisc_interop --test ring_harness
+          else
+            echo "::notice::crates/prisc_interop/tests/ring_harness.rs does not exist yet; skipping the Rust ring harness"
+          fi
         shell: bash
 
   # Merges the three builds for one rid: the UI publish is the package directory, the Rust
