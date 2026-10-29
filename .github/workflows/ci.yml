@@ -201,13 +201,22 @@ jobs:
       # test binaries. Fails on cargo's "`default-features` is ignored for X" warning (a dependency
       # line silently enabling more than it asks for; cargo wraps the key in backticks) and on
       # ld64's "duplicate symbol" warning (a dependency's #[no_mangle] colliding with an export;
-      # ld64 keeps one and only warns).
+      # ld64 keeps one and only warns). On macOS it also fails on any exported symbol other than
+      # _prisc_* (an #[export_name] static, such as objc2's define_class! emits), the same check
+      # stage-app.sh makes on the release artifact, so it shows up here first.
       - name: Build prisc_interop (debug)
         run: |
           cargo build -p prisc_interop 2>&1 | tee "$RUNNER_TEMP/interop-build.log"
           if grep -E ".?default-features.? is ignored|duplicate symbol" "$RUNNER_TEMP/interop-build.log"; then
             echo "::error::the prisc_interop build printed a default-features or duplicate symbol warning"
             exit 1
+          fi
+          if [ "$RUNNER_OS" = macOS ]; then
+            foreign=$(nm -gU target/debug/libprisc_interop.dylib | awk 'NF { print $NF }' | grep -v '^_prisc_' || true)
+            if [ -n "$foreign" ]; then
+              echo "::error::libprisc_interop.dylib exports symbols other than _prisc_*: $(echo "$foreign" | tr '\n' ' ')"
+              exit 1
+            fi
           fi
         shell: bash
 
@@ -237,6 +246,9 @@ jobs:
           PRISC_INTEROP_REQUIRED: "1"
           PRISC_DISABLE_TELEMETRY: "1"
         run: |
+          # Built here too (a no-op after the step above), so a failure in an earlier gate step
+          # still leaves the probe a library to load instead of a cascade of "not available".
+          cargo build -p prisc_interop
           dotnet build ui/Prisc.Ui/Prisc.Ui.csproj -c Release --nologo
           mkdir -p probe-out
           # The app takes a native path; the file checks below use the shell's.
@@ -361,10 +373,10 @@ jobs:
       # the whole suite): WARP is slow and lacks features, and NV12 answering E_CAPABILITY there is
       # a skip with a printed reason, never a pass. Here rather than in the test job because the
       # D3D11EncodeBridge rigs need the FFmpeg payload above, and they would all skip without it.
-      # Test failures do not fail the run itself: the old C# D3D12 code never ran on a software
-      # adapter, so the set that must pass is the set that passed on BASE, recorded in
-      # tools/warp-baseline.txt, and check-warp-baseline.sh fails on a test that passed there and
-      # no longer does (or a new test that fails). With no baseline recorded yet it only reports.
+      # Test failures do not fail the run itself: the GPU code was never written for a software
+      # adapter, so the set that must pass is the set recorded in tools/warp-baseline.txt, and
+      # check-warp-baseline.sh fails on a test that passed there and no longer does (or a new test
+      # that fails).
       - name: GPU on WARP (Windows)
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         env:
@@ -382,7 +394,8 @@ jobs:
           tools/check-warp-baseline.sh warp-results/warp.trx tools/warp-baseline.txt warp-results/warp-baseline.txt
         shell: bash
 
-      # warp-baseline.txt in this artifact is the file to commit as tools/warp-baseline.txt on BASE.
+      # warp-baseline.txt in this artifact is this run's outcomes in the baseline format, the file
+      # to copy over tools/warp-baseline.txt when the recorded set changes.
       - name: Upload WARP results (Windows)
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         uses: actions/upload-artifact@v7
@@ -391,17 +404,16 @@ jobs:
           path: warp-results/
           if-no-files-found: warn
 
-      # New Rust code with no BASE counterpart, so it gates outright. Skips until the harness exists.
+      # New Rust code with no BASE counterpart, so it gates outright: the export-level harness, then
+      # the in-crate ring, NV12 and device unit tests (the timeline lock, the self-check faults and
+      # slot recovery), which skip on a runner unless WARP is admitted.
       - name: Rust ring harness on WARP (Windows)
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         env:
           PRISC_GPU_ALLOW_WARP: "1"
         run: |
-          if [ -f crates/prisc_interop/tests/ring_harness.rs ]; then
-            cargo test -p prisc_interop --test ring_harness
-          else
-            echo "::notice::crates/prisc_interop/tests/ring_harness.rs does not exist yet; skipping the Rust ring harness"
-          fi
+          cargo test -p prisc_interop --test ring_harness
+          cargo test -p prisc_interop --lib platform::windows::gpu
         shell: bash
 
   # Merges the three builds for one rid: the UI publish is the package directory, the Rust

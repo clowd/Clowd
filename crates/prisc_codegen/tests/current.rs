@@ -249,27 +249,41 @@ fn lint_rejects_threads_export_calls_and_unguarded_trampolines() {
 }
 
 #[test]
-fn lint_rejects_foreign_no_mangle_except_the_legacy_hotkeys_exports() {
-    let legacy = (
-        PathBuf::from("crates/prisc_hotkeys/src/ffi.rs"),
-        "#[no_mangle]\npub extern \"C\" fn prisc_hotkeys_legacy_start() {}\n#[no_mangle]\npub extern \"C\" fn prisc_hotkeys_start() {}\n"
-            .to_string(),
+fn lint_rejects_foreign_exports() {
+    let hotkeys = (
+        PathBuf::from("crates/prisc_hotkeys/src/macos.rs"),
+        "#[no_mangle]\npub extern \"C\" fn prisc_hotkeys_start() {}\nfn f() {}\n#[export_name = \"x\"]\nstatic X: u8 = 0;\n".to_string(),
     );
-    let other = (
+    let platform = (
         PathBuf::from("crates/prisc_platform/src/input.rs"),
-        "\n#[unsafe(no_mangle)]\npub extern \"C\" fn prisc_screens_list() {}\n".to_string(),
+        "\n#[unsafe(no_mangle)]\npub extern \"C\" fn prisc_screens_list() {}\nobjc2::define_class!(struct Foo;);\n".to_string(),
     );
-    let found: Vec<(String, usize)> = lint::lint_foreign_exports(&[legacy, other])
+    let found: Vec<(String, usize)> = lint::lint_foreign_exports(&[hotkeys, platform])
         .into_iter()
         .map(|v| (v.file.display().to_string(), v.line))
         .collect();
     assert_eq!(
         found,
         [
-            ("crates/prisc_hotkeys/src/ffi.rs".to_string(), 4),
-            ("crates/prisc_platform/src/input.rs".to_string(), 3)
+            ("crates/prisc_hotkeys/src/macos.rs".to_string(), 2),
+            ("crates/prisc_hotkeys/src/macos.rs".to_string(), 5),
+            ("crates/prisc_platform/src/input.rs".to_string(), 3),
+            ("crates/prisc_platform/src/input.rs".to_string(), 4)
         ]
     );
+}
+
+#[test]
+fn lint_rejects_exported_statics_in_the_crate() {
+    let services = (
+        PathBuf::from("crates/prisc_interop/src/platform/macos/services.rs"),
+        "define_class!(\n    struct Foo;\n);\n#[unsafe(export_name = \"__x\")]\nstatic X: u8 = 0;\nfn f() { let _ = 1; }\n".to_string(),
+    );
+    let found: Vec<(&str, usize)> = lint::lint_crate(&[services], &HashSet::new())
+        .into_iter()
+        .map(|v| (v.rule, v.line))
+        .collect();
+    assert_eq!(found, [("14-exported-statics", 1), ("14-exported-statics", 4)]);
 }
 
 const KEYS: &str = "keys! {\n    None = 0, [], win[], mac[], nx[];\n    A = 44, [\"a\"], win[0x41], mac[0x00], nx[];\n}\n";

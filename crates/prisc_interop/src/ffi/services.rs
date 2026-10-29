@@ -3,7 +3,8 @@
 //! macOS delivers a service invocation to the process that declared it, through an Objective-C
 //! object registered under the port name the bundle's `Info.plist` advertises (`NSPortName`),
 //! whose method name matches the plist's `NSMessage` (`uploadFiles:userData:error:`). That class
-//! is defined once in Rust (`define_class!`); C# supplies only the callback.
+//! is defined once in Rust (built at run time with objc2's `ClassBuilder`); C# supplies only the
+//! callback.
 
 use std::ffi::c_void;
 

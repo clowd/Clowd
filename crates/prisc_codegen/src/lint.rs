@@ -22,14 +22,14 @@
 //! - no function body calls an export (A6);
 //! 10. no `thread::spawn`, `thread::Builder` or `thread::scope` (D4);
 //! 11. every `extern` fn under `src/platform` (an OS-called trampoline) starts with
-//!     `panic::callback_guard` (C5). `define_class!` methods sit inside a macro the lint cannot
-//!     see; review covers those.
+//!     `panic::callback_guard` (C5);
+//! 14. no `#[export_name]` item and no objc2 `define_class!` (which gives every class
+//!     `#[export_name]` statics): the cdylib would export those beside the `prisc_*` surface (A1).
 //!
 //! Elsewhere:
 //! 9. no U+2014 in prisc_interop, prisc_platform, prisc_codegen or ui/Prisc.Interop (D7);
-//! 12. no `#[no_mangle]` item in any path dependency of prisc_interop (`cargo metadata`), except
-//!     the legacy `prisc_hotkeys_legacy_*` exports in `crates/prisc_hotkeys/src/ffi.rs`, which go
-//!     when the hook moves behind prisc_interop.
+//! 12. no `#[no_mangle]` or `#[export_name]` item and no `define_class!` in any path dependency
+//!     of prisc_interop (`cargo metadata`).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
@@ -893,6 +893,30 @@ impl<'ast> Visit<'ast> for CrateVisitor<'_> {
         syn::visit::visit_path(self, path);
     }
 
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        if is_define_class(mac) {
+            self.push(
+                mac.path.span(),
+                "14-exported-statics",
+                "define_class! gives the class #[export_name] statics the dylib would export; build it at run time with \
+                 objc2's ClassBuilder (README A1)"
+                    .into(),
+            );
+        }
+        syn::visit::visit_macro(self, mac);
+    }
+
+    fn visit_attribute(&mut self, attr: &'ast syn::Attribute) {
+        if has_attr(std::slice::from_ref(attr), "export_name") {
+            self.push(
+                attr.span(),
+                "14-exported-statics",
+                "#[export_name] would add a symbol to the dylib's exports beside prisc_* (README A1)".into(),
+            );
+        }
+        syn::visit::visit_attribute(self, attr);
+    }
+
     fn visit_item_use(&mut self, u: &'ast syn::ItemUse) {
         let text = tokens(&u.tree).replace(' ', "");
         for bad in ["thread::spawn", "thread::Builder", "thread::scope", "thread::{"] {
@@ -1031,44 +1055,60 @@ pub fn dependency_sources(root: &Path) -> anyhow::Result<Vec<(PathBuf, String)>>
     Ok(files)
 }
 
-/// Rule 12: no `#[no_mangle]` item in a dependency (ld64 keeps one of two duplicate symbols
-/// silently), except the legacy hotkeys exports.
+/// Rule 12: no `#[no_mangle]` or `#[export_name]` item and no `define_class!` in a dependency
+/// (ld64 keeps one of two duplicate symbols silently, and the cdylib would export the rest).
 pub fn lint_foreign_exports(files: &[(PathBuf, String)]) -> Vec<Violation> {
     let mut out = Vec::new();
     for (path, text) in files {
         let Ok(file) = syn::parse_file(text) else {
             continue;
         };
-        let legacy_file = path
-            .to_string_lossy()
-            .replace('\\', "/")
-            .ends_with("crates/prisc_hotkeys/src/ffi.rs");
-        foreign(&file.items, path, legacy_file, &mut out);
+        foreign(&file.items, path, &mut out);
     }
     out
 }
 
-fn foreign(items: &[syn::Item], path: &Path, legacy_file: bool, out: &mut Vec<Violation>) {
+/// `define_class!` or `objc2::define_class!`.
+fn is_define_class(mac: &syn::Macro) -> bool {
+    mac.path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "define_class")
+}
+
+fn foreign(items: &[syn::Item], path: &Path, out: &mut Vec<Violation>) {
     for item in items {
         let (attrs, name, span) = match item {
             syn::Item::Fn(f) => (&f.attrs, f.sig.ident.to_string(), f.sig.ident.span()),
             syn::Item::Static(s) => (&s.attrs, s.ident.to_string(), s.ident.span()),
+            syn::Item::Macro(m) if is_define_class(&m.mac) => {
+                out.push(Violation {
+                    file: path.to_path_buf(),
+                    line: line_of(m.mac.path.span()),
+                    rule: "12-foreign-export",
+                    message: "define_class! in a dependency of prisc_interop would export its class statics".into(),
+                });
+                continue;
+            }
             syn::Item::Mod(m) => {
                 if !in_test_mod(&m.attrs) {
                     if let Some((_, items)) = &m.content {
-                        foreign(items, path, legacy_file, out);
+                        foreign(items, path, out);
                     }
                 }
                 continue;
             }
             _ => continue,
         };
-        if has_attr(attrs, "no_mangle") && !(legacy_file && name.starts_with("prisc_hotkeys_legacy_")) {
+        if has_attr(attrs, "no_mangle") || has_attr(attrs, "export_name") {
             out.push(Violation {
                 file: path.to_path_buf(),
                 line: line_of(span),
                 rule: "12-foreign-export",
-                message: format!("#[no_mangle] {name} in a dependency of prisc_interop would collide with or shadow its exports"),
+                message: format!(
+                    "#[no_mangle] or #[export_name] {name} in a dependency of prisc_interop would collide with or shadow its \
+                     exports"
+                ),
             });
         }
     }

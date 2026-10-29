@@ -12,7 +12,7 @@
 //! an export itself (prisc_codegen's lint).
 //!
 //! [`callback_guard`] wraps every OS-called trampoline under `src/platform` (CoreAudio render and
-//! input procs, HAL listeners, the WinEvent proc, `define_class!` methods): it catches a panic,
+//! input procs, HAL listeners, the WinEvent proc, the NSServices method): it catches a panic,
 //! records it on the owning handle's [`CallbackPanic`] slot, which that handle's next export
 //! drains, and returns a benign value. It logs nothing (audio threads must not), and an unwind
 //! never reaches the OS frame.
@@ -87,8 +87,9 @@ fn payload_text(payload: &(dyn Any + Send)) -> String {
 /// by that handle's next export and never by an unrelated one. The handle's state owns it and the
 /// trampoline reaches it through its user pointer (or the hook registry).
 ///
-/// [`CallbackPanic::process`] is the slot for a trampoline that has no handle to reach (an
-/// NSServices `define_class!` method, a registry lookup before the handle is known).
+/// [`CallbackPanic::process`] is the slot for a trampoline that has no handle to reach (a
+/// registry lookup before the handle is known). The NSServices method has no later export that
+/// would drain such a slot, so it owns a static slot and reports a caught panic to the log sink.
 pub(crate) struct CallbackPanic(Mutex<Option<String>>);
 
 #[allow(dead_code)] // the area handles own and drain these
