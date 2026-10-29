@@ -47,35 +47,12 @@ impl HotkeysHost {
 
     /// Registers `key` + `modifiers` under a stable id, held while the hook is down.
     pub(crate) fn register(&self, key: i32, modifiers: u32) -> std::result::Result<u32, Refused> {
-        let Some(key) = Key::from_i32(key) else {
-            return Err(Refused::Gesture(
-                PriscGestureRefusal::InvalidKey,
-                format!("{key} is not a key of the hotkey key table"),
-            ));
-        };
-        if key == Key::None {
-            return Err(Refused::Gesture(
-                PriscGestureRefusal::NoKey,
-                prisc_hotkeys::Error::NoKey.to_string(),
-            ));
-        }
-        let Some(modifiers) = Modifiers::from_bits(modifiers) else {
-            return Err(Refused::Gesture(
-                PriscGestureRefusal::InvalidModifiers,
-                format!("the modifiers 0x{modifiers:X} carry an unknown bit"),
-            ));
-        };
+        let gesture = gesture_from_raw(key, modifiers).map_err(|(refusal, text)| Refused::Gesture(refusal, text))?;
         self.supervised
-            .register(Gesture::new(key, modifiers))
-            .map_err(|error| {
-                let text = error.to_string();
-                match error {
-                    prisc_hotkeys::Error::NoKey => Refused::Gesture(PriscGestureRefusal::NoKey, text),
-                    prisc_hotkeys::Error::ModifierKey => Refused::Gesture(PriscGestureRefusal::ModifierOnly, text),
-                    prisc_hotkeys::Error::UnsupportedKey(_) => Refused::Gesture(PriscGestureRefusal::UnsupportedKey, text),
-                    prisc_hotkeys::Error::Duplicate => Refused::Gesture(PriscGestureRefusal::Duplicate, text),
-                    _ => Refused::Other(Error::state(text)),
-                }
+            .register(gesture)
+            .map_err(|error| match refusal_of(&error) {
+                Some(refusal) => Refused::Gesture(refusal, error.to_string()),
+                None => Refused::Other(Error::state(error.to_string())),
             })
     }
 
@@ -106,6 +83,43 @@ impl HotkeysHost {
 
     pub(crate) fn stop(&self) {
         self.supervised.stop();
+    }
+}
+
+/// The gesture raw C values name, or the refusal (and its text) for values that name none: a key
+/// outside the key table, `Key::None`, or an unknown modifier bit. Registration and
+/// `prisc_gesture_check` (WP-KEYS) both read raw gestures through it, so the two refuse alike.
+pub(crate) fn gesture_from_raw(key: i32, modifiers: u32) -> std::result::Result<Gesture, (PriscGestureRefusal, String)> {
+    let Some(key) = Key::from_i32(key) else {
+        return Err((
+            PriscGestureRefusal::InvalidKey,
+            format!("{key} is not a key of the hotkey key table"),
+        ));
+    };
+    if key == Key::None {
+        return Err((PriscGestureRefusal::NoKey, prisc_hotkeys::Error::NoKey.to_string()));
+    }
+    let Some(modifiers) = Modifiers::from_bits(modifiers) else {
+        return Err((
+            PriscGestureRefusal::InvalidModifiers,
+            format!("the modifiers 0x{modifiers:X} carry an unknown bit"),
+        ));
+    };
+    Ok(Gesture::new(key, modifiers))
+}
+
+/// The refusal a hotkey error is about a gesture, or None for one about the hook (it cannot start,
+/// it stopped): the one table from prisc_hotkeys' validation errors onto `PriscGestureRefusal`.
+pub(crate) fn refusal_of(error: &prisc_hotkeys::Error) -> Option<PriscGestureRefusal> {
+    match error {
+        prisc_hotkeys::Error::NoKey => Some(PriscGestureRefusal::NoKey),
+        prisc_hotkeys::Error::ModifierKey => Some(PriscGestureRefusal::ModifierOnly),
+        prisc_hotkeys::Error::UnsupportedKey(_) => Some(PriscGestureRefusal::UnsupportedKey),
+        prisc_hotkeys::Error::Duplicate => Some(PriscGestureRefusal::Duplicate),
+        prisc_hotkeys::Error::Unsupported
+        | prisc_hotkeys::Error::PermissionDenied
+        | prisc_hotkeys::Error::HookFailed(_)
+        | prisc_hotkeys::Error::Stopped => None,
     }
 }
 
@@ -281,5 +295,33 @@ mod tests {
         assert_eq!(hook_state(Some(&Down::Error(E::HookFailed("x".into())))), PriscHookState::Failed);
         assert_eq!(hook_state(Some(&Down::Error(E::Unsupported))), PriscHookState::Failed);
         assert_eq!(hook_state(Some(&Down::Error(E::Stopped))), PriscHookState::Stopped);
+    }
+
+    #[test]
+    fn raw_gestures_are_read_or_refused() {
+        let refusal = |key, modifiers| {
+            gesture_from_raw(key, modifiers)
+                .unwrap_err()
+                .0
+        };
+        assert_eq!(
+            gesture_from_raw(Key::F19 as i32, u32::from((Modifiers::CONTROL | Modifiers::ALT).bits())).unwrap(),
+            Gesture::new(Key::F19, Modifiers::CONTROL | Modifiers::ALT)
+        );
+        assert_eq!(refusal(-1, 0), PriscGestureRefusal::InvalidKey);
+        assert_eq!(refusal(Key::None as i32, 0), PriscGestureRefusal::NoKey);
+        assert_eq!(refusal(Key::A as i32, 0x100), PriscGestureRefusal::InvalidModifiers);
+    }
+
+    #[test]
+    fn only_gesture_errors_are_refusals() {
+        use prisc_hotkeys::Error as E;
+        assert_eq!(refusal_of(&E::NoKey), Some(PriscGestureRefusal::NoKey));
+        assert_eq!(refusal_of(&E::ModifierKey), Some(PriscGestureRefusal::ModifierOnly));
+        assert_eq!(refusal_of(&E::UnsupportedKey(Key::A)), Some(PriscGestureRefusal::UnsupportedKey));
+        assert_eq!(refusal_of(&E::Duplicate), Some(PriscGestureRefusal::Duplicate));
+        for hook in [E::Unsupported, E::PermissionDenied, E::HookFailed("x".into()), E::Stopped] {
+            assert_eq!(refusal_of(&hook), None, "{hook:?}");
+        }
     }
 }

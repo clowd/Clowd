@@ -303,8 +303,25 @@ namespace Prisc.VideoSDK.Tests
             });
 
             Assert.Equal(HotkeyStatusText.StaleGrantMessage, region.Shortcuts[0].Error);
-            Assert.Equal(HotkeyStatusText.StoppedError("the keyboard hook has stopped", restartsItself: OperatingSystem.IsMacOS()),
+            // on every OS: the capturer either retries its hook or exits and hands the hotkeys back
+            Assert.Equal(HotkeyStatusText.StoppedError("the keyboard hook has stopped", restartsItself: true),
                 region.Shortcuts[1].Error);
+            Assert.DoesNotContain("Restart", region.Shortcuts[1].Error);
+        }
+
+        [Fact]
+        public void A_capturer_invalid_gesture_shows_the_shells_text_with_the_parse_error()
+        {
+            var (manager, _, _) = Create(wireActions: false);
+            manager.SetAction(HotkeyId.CaptureRegion, null);
+            var region = manager.GetEntry(HotkeyId.CaptureRegion);
+
+            manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[]
+            {
+                new ExternalGestureStatus("PrintScreen", false, "unknown key 'Shift'", HotkeyErrorCodes.InvalidGesture),
+            });
+
+            Assert.Equal("This gesture could not be read: unknown key 'Shift'.", region.Shortcuts[0].Error);
         }
 
         [Fact]

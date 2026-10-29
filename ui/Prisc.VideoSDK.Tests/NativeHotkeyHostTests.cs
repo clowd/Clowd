@@ -474,10 +474,34 @@ namespace Prisc.VideoSDK.Tests
             // on macOS the hook comes back by itself
             Assert.DoesNotContain("Restart", failure);
             Assert.Equal(2, changes);
-            // an end that came from the hook does not try to stop it again
+            // the failure cancels the arm on the hook once (in case the hook is already back);
+            // disposing the ended session does nothing more
+            Assert.Equal(1, rig.Native.RecordingsStopped);
             session.Dispose();
             Assert.Equal(2, changes);
-            Assert.Equal(0, rig.Native.RecordingsStopped);
+            Assert.Equal(1, rig.Native.RecordingsStopped);
+        }
+
+        [Fact]
+        public void A_recording_armed_on_a_hook_that_already_came_back_is_cancelled_when_its_down_state_arrives()
+        {
+            // the hook died and its supervisor restarted it at once: both Statuses are still queued
+            // when the recording starts, so the C# state says Running and the arm lands on the new hook
+            using var rig = new Rig();
+            string failure = null;
+            var session = rig.Host.StartRecording(_ => { }, _ => { }, e => failure = e, out var error);
+            Assert.NotNull(session);
+            Assert.Null(error);
+            uint token = rig.Native.Sessions;
+
+            rig.Report(HookState.Stopped, reason: "the event tap was invalidated");
+            rig.Report(HookState.Running);
+            rig.RunUiUntil(() => failure != null);
+
+            Assert.Contains("the event tap was invalidated", failure);
+            Assert.Equal(new[] { token }, rig.Native.StoppedSessions.ToArray());
+            session.Dispose();
+            Assert.Equal(new[] { token }, rig.Native.StoppedSessions.ToArray());
         }
 
         [Fact]
@@ -628,6 +652,7 @@ namespace Prisc.VideoSDK.Tests
             public uint NextId = 1;
             public uint Sessions;
             public int RecordingsStopped;
+            public readonly ConcurrentQueue<uint> StoppedSessions = new();
             public int Disposed;
             public volatile bool Observing;
             public volatile bool Stopped;
@@ -713,6 +738,7 @@ namespace Prisc.VideoSDK.Tests
             {
                 Use("stop_recording");
                 Interlocked.Increment(ref RecordingsStopped);
+                StoppedSessions.Enqueue(session);
             }
 
             public InteropStatus NextEvent(uint timeoutMs, out HotkeyEvent hotkeyEvent)

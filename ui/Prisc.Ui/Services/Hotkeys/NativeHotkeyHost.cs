@@ -588,7 +588,11 @@ namespace Prisc.UI
         /// <summary>UI thread: the hook is down as of Status <paramref name="seq"/>. Every
         /// registration it held reports <paramref name="error"/>, and a recording started before that
         /// Status ends with it: no gesture will come, and the recording's owner (and through it the
-        /// standby capturer's paused hotkeys) must not wait for one.</summary>
+        /// standby capturer's paused hotkeys) must not wait for one. The ended session is also
+        /// cancelled on the hook: the hook may already be back (the down and Running Statuses both
+        /// still queued when the recording started), and an arm left on it would swallow the user's
+        /// next key press for a session nobody listens to. For a token the hook no longer knows, the
+        /// cancel does nothing.</summary>
         internal void ApplyHookFailure(string error, Registration[] failed, int seq)
         {
             foreach (var registration in failed)
@@ -599,6 +603,7 @@ namespace Prisc.UI
             {
                 _recording = null;
                 session.OnFailed(error);
+                StopRecording(session.Token);
             }
         }
 

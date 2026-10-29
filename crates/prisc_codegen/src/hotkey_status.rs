@@ -25,8 +25,9 @@ fn render_codes(_root: &Path) -> anyhow::Result<String> {
     out.push_str(
         r#"namespace Prisc
 {
-    /// <summary>The machine-readable hotkey status codes (prisc_hotkeys <c>Error::code()</c> plus the
-    /// supervisor's <c>stale_grant</c>), as the capturer's <c>settings_status</c> event carries them.</summary>
+    /// <summary>The machine-readable hotkey status codes (prisc_hotkeys <c>Error::code()</c>, the
+    /// supervisor's <c>stale_grant</c> and the capturer's <c>invalid_gesture</c>), as the capturer's
+    /// <c>settings_status</c> event carries them.</summary>
     public static class HotkeyErrorCodes
     {
 "#,
@@ -47,5 +48,6 @@ mod tests {
         let codes = render_codes(Path::new(".")).unwrap();
         assert!(codes.contains("        public const string Permission = \"permission\";\n"));
         assert!(codes.contains("        public const string StaleGrant = \"stale_grant\";\n"));
+        assert!(codes.contains("        public const string InvalidGesture = \"invalid_gesture\";\n"));
     }
 }

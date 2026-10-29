@@ -426,13 +426,13 @@ namespace Prisc.UI
                         continue;
                     used[i] = true;
                     // the capturer's hook runs under the same supervisor and shares the shell's
-                    // Accessibility grant: show the text the shell's own host would. The capturer
-                    // retries a stopped hook by itself only on macOS (elsewhere it exits, and the
-                    // shell takes the hotkeys back).
+                    // Accessibility grant: show the text the shell's own host would. A stopped
+                    // capturer hook never needs a restart of Prisc: the capturer either retries it
+                    // or exits, and the shell then takes the hotkeys back (the supervisor's recovery
+                    // policy decides which, so it is not repeated here).
                     var error = statuses[i].IsRegistered
                         ? ""
-                        : HotkeyStatusText.For(statuses[i].ErrorCode, statuses[i].Error, recoverable: OperatingSystem.IsMacOS(),
-                            shortcut.Gesture);
+                        : HotkeyStatusText.For(statuses[i].ErrorCode, statuses[i].Error, recoverable: true, shortcut.Gesture);
                     shortcut.SetStatus(statuses[i].IsRegistered, error);
                     break;
                 }

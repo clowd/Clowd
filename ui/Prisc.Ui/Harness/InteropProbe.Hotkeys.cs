@@ -32,9 +32,9 @@ namespace Prisc.UI.Harness
             {
                 using var hook = GlobalKeyboardHook.Create();
                 hook.NextEvent(2000, out _);
-                hook.TryRegister(0, 0, out _, out var noKey);
-                // F19 with Control+Alt+Shift, by the hotkey key table's values
-                bool registered = hook.TryRegister(108, 2 | 1 | 4, out var id, out _);
+                hook.TryRegister((int)HotkeyKey.None, 0, out _, out var noKey);
+                bool registered = hook.TryRegister((int)HotkeyKey.F19,
+                    (uint)(HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift), out var id, out _);
                 hook.SetObserve(true);
                 hook.Stop();
                 InteropStatus end;

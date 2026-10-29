@@ -26,7 +26,7 @@ use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use prisc_hotkeys::supervise::{Change, Down, Hook, HookEvent, PauseHandle, Recovery, Routed, Router, Supervisor};
-use prisc_hotkeys::{Error, Gesture, Hotkeys};
+use prisc_hotkeys::{Error, Gesture, Hotkeys, INVALID_GESTURE_CODE};
 use prisc_ipc::catalog::capture::{self, HotkeyStatus};
 use winit::event_loop::EventLoopProxy;
 
@@ -456,7 +456,7 @@ fn plan_hotkeys<'a>(requested: &[(&'a str, &[String], CaptureMode)], hook_error:
         let mut entries = Vec::with_capacity(gestures.len());
         for gesture in gestures {
             let error = match gesture.parse::<Gesture>() {
-                Err(err) => Some((err.to_string(), "invalid_gesture")),
+                Err(err) => Some((err.to_string(), INVALID_GESTURE_CODE)),
                 Ok(parsed) => match parsed.validate() {
                     Err(err) => Some((err.to_string(), err.code())),
                     // The shell already gives each gesture to at most one action, so

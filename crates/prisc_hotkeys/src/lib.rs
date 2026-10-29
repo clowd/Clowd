@@ -70,7 +70,7 @@ mod windows;
 
 pub use std::sync::mpsc::RecvTimeoutError;
 
-pub use error::{Error, ERROR_CODES, STALE_GRANT_CODE};
+pub use error::{Error, ERROR_CODES, INVALID_GESTURE_CODE, STALE_GRANT_CODE};
 pub use gesture::{Gesture, ParseGestureError};
 pub use hotkeys::{Event, Events, HotkeyId, Hotkeys, KeyEvent, REVOKED_REASON};
 pub use key::Key;

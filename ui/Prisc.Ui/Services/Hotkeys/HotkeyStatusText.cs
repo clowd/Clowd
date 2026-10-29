@@ -52,6 +52,7 @@ namespace Prisc.UI
                 : "This key cannot be used as a global hotkey.",
             HotkeyErrorCodes.ModifierKey => ModifierKeyMessage,
             HotkeyErrorCodes.NoKey => NoKeyMessage,
+            HotkeyErrorCodes.InvalidGesture => InvalidGestureError(detail),
             _ => detail ?? "",
         };
 
@@ -74,6 +75,10 @@ namespace Prisc.UI
             GestureRefusal.NoKey => For(HotkeyErrorCodes.NoKey, null, false, gesture),
             _ => $"Could not register the hotkey ({refusal}).",
         };
+
+        /// <summary>A gesture string the capturer could not parse, with its parse error.</summary>
+        internal static string InvalidGestureError(string detail) =>
+            "This gesture could not be read" + (String.IsNullOrEmpty(detail) ? "." : ": " + detail.TrimEnd('.') + ".");
 
         /// <summary>Why the hook could not start, in its own words.</summary>
         internal static string StartError(string detail) =>

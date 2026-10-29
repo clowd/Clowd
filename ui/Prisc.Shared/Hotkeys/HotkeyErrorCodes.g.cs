@@ -4,8 +4,9 @@
 // </auto-generated>
 namespace Prisc
 {
-    /// <summary>The machine-readable hotkey status codes (prisc_hotkeys <c>Error::code()</c> plus the
-    /// supervisor's <c>stale_grant</c>), as the capturer's <c>settings_status</c> event carries them.</summary>
+    /// <summary>The machine-readable hotkey status codes (prisc_hotkeys <c>Error::code()</c>, the
+    /// supervisor's <c>stale_grant</c> and the capturer's <c>invalid_gesture</c>), as the capturer's
+    /// <c>settings_status</c> event carries them.</summary>
     public static class HotkeyErrorCodes
     {
         public const string Unsupported = "unsupported";
@@ -17,5 +18,6 @@ namespace Prisc
         public const string Duplicate = "duplicate";
         public const string HookStopped = "hook_stopped";
         public const string StaleGrant = "stale_grant";
+        public const string InvalidGesture = "invalid_gesture";
     }
 }
