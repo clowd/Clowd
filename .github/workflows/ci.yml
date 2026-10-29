@@ -17,7 +17,8 @@ name: CI
 #   recorder-linux  build-recorder-linux.yml   check only, nothing consumes it
 #   rust            build-rust.yml             -> rust-<rid>, needs version (stamps it)
 #   ui              build-ui.yml               -> ui-<rid>
-#   test                                       Rust gate + Shared/Drawing/Ipc dotnet tests (no needs)
+#   test                                       Rust gate, native-interop check, Interop/Shared/Drawing/Ipc
+#                                              dotnet tests, GPU on WARP (Windows), interop probe (no needs)
 #   test-video      needs recorder             runs even if it fails; the FFmpeg tests then skip
 #   package         needs recorder, rust, ui   -> prisc-<rid>
 
@@ -93,13 +94,21 @@ jobs:
         # macos-15, not the recorder's macos-26: see build-rust.yml.
         os: [windows-latest, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # Three more Rust crates, two dotnet builds (Prisc.Ui for the probe, Prisc.VideoSDK.Tests for
+    # the WARP set) and the probe run on top of the previous 60.
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           # nbgv needs full history to compute the version height.
           fetch-depth: 0
+
+      # C# reaches natives only through ui/Prisc.Interop (generated from crates/prisc_interop);
+      # every other site is a line in tools/native-interop-allowlist. Cheap, so it runs first.
+      - name: Native interop check
+        run: tools/check-native-interop.sh
+        shell: bash
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -137,15 +146,44 @@ jobs:
           cargo test -p prisc_scroll_driver
           cargo clippy -p prisc_ai --all-targets -- -D warnings
           cargo test -p prisc_ai
+          cargo clippy -p prisc_platform --all-targets -- -D warnings
+          cargo test -p prisc_platform
+          cargo clippy -p prisc_interop --all-targets -- -D warnings
+          # Includes the harness = false main_thread_* targets, which run on the real main thread on macOS.
+          cargo test -p prisc_interop
+          cargo clippy -p prisc_codegen --all-targets -- -D warnings
+          # Fails on a stale, missing or orphaned generated file and on any prisc_interop crate rule.
+          cargo test -p prisc_codegen
         shell: bash
 
-      # prisc_hotkeys has no Linux backend yet, but Key/Gesture/the C ABI still build there, and
-      # this job has no Linux leg. The crate is plain Rust on Linux, so clippy needs no linker.
-      - name: "Rust gate: prisc_hotkeys Linux cross-check"
+      # The in-process library and the code generator must never link Sentry (prisc_interop only)
+      # or anything GPL or from the recorder stack. The cheap early signal; build-rust.yml checks
+      # the shipped artifact itself.
+      - name: "Rust gate: crate boundaries"
+        run: |
+          gpl='prisc_recorder|prisc_share_region|prisc_obs[a-z0-9_]*|prisc_vid2gif|prisc_ffmpeg_sys|prisc_build_support|prisc_ai'
+          if cargo tree -p prisc_interop -e normal --target all --prefix none | grep -wE "sentry|$gpl"; then
+            echo "::error::prisc_interop depends on Sentry or on a GPL or recorder-stack crate (listed above)"
+            exit 1
+          fi
+          if cargo tree -p prisc_codegen -e normal --target all --prefix none | grep -wE "$gpl"; then
+            echo "::error::prisc_codegen depends on a GPL or recorder-stack crate (listed above)"
+            exit 1
+          fi
+        shell: bash
+
+      # prisc_hotkeys has no Linux backend yet, but Key/Gesture still build there, and this job
+      # has no Linux leg. prisc_platform and prisc_interop prove every unsupported arm compiles;
+      # prisc_rust_core without features is what the Linux recorder now depends on
+      # unconditionally. Plain Rust on Linux, so clippy needs no linker. One call per crate.
+      - name: "Rust gate: Linux cross-check"
         if: runner.os == 'Windows'
         run: |
           rustup target add x86_64-unknown-linux-gnu
           cargo clippy -p prisc_hotkeys --target x86_64-unknown-linux-gnu -- -D warnings
+          cargo clippy -p prisc_platform --target x86_64-unknown-linux-gnu -- -D warnings
+          cargo clippy -p prisc_interop --target x86_64-unknown-linux-gnu -- -D warnings
+          cargo clippy -p prisc_rust_core --no-default-features --target x86_64-unknown-linux-gnu -- -D warnings
         shell: bash
 
       # The shell extension is a Windows COM dll and an empty crate elsewhere.
@@ -156,13 +194,95 @@ jobs:
           cargo test -p prisc_shell_ext
         shell: bash
 
-      # Prisc.VideoSDK.Tests runs in test-video, which waits for this run's recorder payload.
-      - name: "UI gate: dotnet tests"
+      # The library the dotnet tests load: the loader finds target/debug by walking up from the
+      # test binaries. Fails on cargo's "default-features is ignored" warning (a dependency line
+      # silently enabling more than it asks for) and on ld64's "duplicate symbol" warning (a
+      # dependency's #[no_mangle] colliding with an export; ld64 keeps one and only warns).
+      - name: Build prisc_interop (debug)
         run: |
+          cargo build -p prisc_interop 2>&1 | tee "$RUNNER_TEMP/interop-build.log"
+          if grep -E "default-features is ignored|duplicate symbol" "$RUNNER_TEMP/interop-build.log"; then
+            echo "::error::the prisc_interop build printed a default-features or duplicate symbol warning"
+            exit 1
+          fi
+        shell: bash
+
+      # Prisc.VideoSDK.Tests runs in test-video, which waits for this run's recorder payload.
+      # PRISC_INTEROP_REQUIRED turns a missing or stale library into a failure instead of a skip.
+      - name: "UI gate: dotnet tests"
+        env:
+          PRISC_INTEROP_REQUIRED: "1"
+        run: |
+          dotnet test ui/Prisc.Interop.Tests/Prisc.Interop.Tests.csproj -c Release --nologo
           dotnet test ui/Prisc.Shared.Tests/Prisc.Shared.Tests.csproj -c Release --nologo
           dotnet test ui/Prisc.Drawing.Tests/Prisc.Drawing.Tests.csproj -c Release --nologo
           dotnet test ui/Prisc.Ipc.Tests/Prisc.Ipc.Tests.csproj -c Release --nologo
         shell: bash
+
+      # The runner has no GPU, so the D3D12 paths only run on WARP, the software adapter, which
+      # PRISC_GPU_ALLOW_WARP admits. Only these filtered tests run on it (never the whole suite):
+      # WARP is slow and lacks features, and NV12 answering E_CAPABILITY there is a skip with a
+      # printed reason, never a pass. The results are kept so the set that passes can be compared
+      # with the one the old C# D3D12 code passed.
+      - name: GPU on WARP (Windows)
+        if: runner.os == 'Windows'
+        env:
+          PRISC_GPU_ALLOW_WARP: "1"
+          PRISC_INTEROP_REQUIRED: "1"
+        run: |
+          if [ -f crates/prisc_interop/tests/ring_harness.rs ]; then
+            cargo test -p prisc_interop --test ring_harness
+          else
+            echo "::notice::crates/prisc_interop/tests/ring_harness.rs does not exist yet; skipping the Rust ring harness"
+          fi
+          dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj -c Release --nologo \
+            --filter "FullyQualifiedName~GpuInterop|FullyQualifiedName~ReadbackRing|FullyQualifiedName~D3D11EncodeBridge" \
+            --logger "trx;LogFileName=warp.trx" --results-directory warp-results
+        shell: bash
+
+      - name: Upload WARP results (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: warp-results-${{ matrix.os }}
+          path: warp-results/
+          if-no-files-found: warn
+
+      # Runs every kept C# facade and every wrapper once in the real app (a small real window on the
+      # UI thread, then again from a thread-pool thread) and writes one JSON result per item. The
+      # exit code counts `error` results only (a broken contract: a wrong status for a documented
+      # case, a panic, a layout mismatch); `unavailable` and `denied` (the OS said no, as it does
+      # for screen recording on a runner) never fail the step. Never requests a permission.
+      - name: Interop probe smoke
+        timeout-minutes: 15
+        env:
+          PRISC_INTEROP_REQUIRED: "1"
+          PRISC_DISABLE_TELEMETRY: "1"
+        run: |
+          dotnet build ui/Prisc.Ui/Prisc.Ui.csproj -c Release --nologo
+          mkdir -p probe-out
+          # The app takes a native path; the file checks below use the shell's.
+          if [ "$RUNNER_OS" = Windows ]; then probe="$(pwd -W)/probe-out/probe.json"; else probe="$PWD/probe-out/probe.json"; fi
+          status=0
+          "ui/Prisc.Ui/bin/Release/net10.0/Prisc.Ui${{ runner.os == 'Windows' && '.exe' || '' }}" --interop-probe "$probe" || status=$?
+          if [ ! -s probe-out/probe.json ]; then
+            echo "::error::the interop probe wrote no results (exit code $status)"
+            exit 1
+          fi
+          cat probe-out/probe.json
+          if grep -qE '"status"[[:space:]]*:[[:space:]]*"error"' probe-out/probe.json || [ "$status" -ne 0 ]; then
+            echo "::error::the interop probe reported broken contracts (exit code $status); see the error results above"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Upload interop probe results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: interop-probe-${{ matrix.os }}
+          path: probe-out/probe.json
+          if-no-files-found: warn
 
   # Prisc.VideoSDK.Tests is the video editor's suite — the playback engine, the compositor,
   # the render/encode path, the audio clock and the editor model. Tests that need something the
@@ -181,9 +301,11 @@ jobs:
           - os: windows-latest
             rid: win-x64
             exe: .exe
+            interop-lib: prisc_interop.dll
           - os: macos-15
             rid: osx-arm64
             exe: ""
+            interop-lib: libprisc_interop.dylib
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -198,6 +320,27 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      # The interop library is built here (debug, seconds warm) rather than taken from the rust job,
+      # so this job does not wait for the release builds and their Sentry upload. PRISC_INTEROP_PATH
+      # is authoritative and inherited by the Prisc.VideoRender children the render tests spawn;
+      # PRISC_INTEROP_REQUIRED turns a missing or stale library into a failure instead of a skip.
+      # WARP stays off here: the GPU tests skip without hardware, and the test job runs the WARP set.
+      - name: Build prisc_interop (debug)
+        run: |
+          cargo build -p prisc_interop
+          lib="$PWD/target/debug/${{ matrix.interop-lib }}"
+          [ -f "$lib" ] || { echo "::error::$lib was not built"; exit 1; }
+          if [ "$RUNNER_OS" = Windows ]; then lib=$(cygpath -w "$lib"); fi
+          echo "PRISC_INTEROP_PATH=$lib" >> "$GITHUB_ENV"
+          echo "PRISC_INTEROP_REQUIRED=1" >> "$GITHUB_ENV"
+        shell: bash
 
       # The video editor's suite needs FFmpeg 8.1 natives to run its decode/encode/render tests;
       # without them ~100 of them skip. Take them from the recorder payload this run built, the
