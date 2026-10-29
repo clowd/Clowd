@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Avalonia.Threading;
+using Prisc.Interop;
 
 namespace Prisc.UI.DrawOnScreen
 {
@@ -76,7 +76,7 @@ namespace Prisc.UI.DrawOnScreen
             {
                 // a held key whose key-up never reached the hook: release it before this press is
                 // read against it
-                foreach (var code in _held.Down(key.RawCode, key.Modifiers, now, KeyInput.IsPhysicallyDown))
+                foreach (var code in _held.Down(key.RawCode, key.Modifiers, now, KeysDown))
                     edges.Add(new KeystrokeEdge(false, code, null, now));
 
                 edges.Add(new KeystrokeEdge(true, key.RawCode, key.Character, now));
@@ -94,39 +94,20 @@ namespace Prisc.UI.DrawOnScreen
             });
         }
 
-        /// <summary>The platform half: whether a key is held right now (not at the edge being
-        /// handled — see <see cref="KeystrokeHeldKeys"/>). Event thread.</summary>
-        private static class KeyInput
+        /// <summary>Which of the stale keys are still held right now (not at the edge being handled;
+        /// see <see cref="KeystrokeHeldKeys"/>), in one native call. Event thread, so a failure is
+        /// logged and read as "all held": the hook is then trusted, as when the OS cannot say.</summary>
+        private static ulong KeysDown(IReadOnlyList<int> codes)
         {
-            public static bool IsPhysicallyDown(int code)
+            try
             {
-                try
-                {
-                    if (OperatingSystem.IsWindows())
-                        return (GetAsyncKeyState(code) & 0x8000) != 0;
-                    if (OperatingSystem.IsMacOS())
-                        return CGEventSourceKeyState(CombinedSessionState, (ushort)code);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[KeystrokeFeed] key state query failed: " + ex.Message);
-                }
-
-                // unknown: trust the hook
-                return true;
+                return NativeKeyboard.KeysDown(codes);
             }
-
-            [DllImport("user32.dll")]
-            private static extern short GetAsyncKeyState(int vKey);
-
-            private const string CoreGraphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
-
-            // kCGEventSourceStateCombinedSessionState
-            private const int CombinedSessionState = 0;
-
-            [DllImport(CoreGraphics)]
-            [return: MarshalAs(UnmanagedType.U1)]
-            private static extern bool CGEventSourceKeyState(int stateId, ushort key);
+            catch (InteropException ex)
+            {
+                Debug.WriteLine("[KeystrokeFeed] key state query failed: " + ex.Message);
+                return ulong.MaxValue;
+            }
         }
     }
 }

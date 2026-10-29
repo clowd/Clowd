@@ -15,7 +15,7 @@ use windows::Win32::System::Threading::ExitProcess;
 use windows::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+use windows::Win32::UI::Input::KeyboardAndMouse::{VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
     LoadCursorW, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS,
     IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_PERSON, IDC_PIN, IDC_SIZEALL, IDC_SIZENESW,
@@ -267,9 +267,9 @@ pub const WEBCAM_DEVICE_KEY: &str = "video_device_id";
 /// Cursor position (physical px; the process is per-monitor-v2 DPI aware),
 /// button state, and the DPI zoom of the monitor under the cursor.
 ///
-/// `GetAsyncKeyState`'s high bit is the *current* physical down state, so a
-/// click is caught as long as the button is still held on some tick, the same
-/// sampling the C++ original does.
+/// `prisc_platform::input::is_key_down` reads `GetAsyncKeyState`'s high bit, the
+/// *current* physical down state, so a click is caught as long as the button
+/// is still held on some tick, the same sampling the C++ original does.
 pub fn get_mouse_info() -> MouseInfo {
     let Some(p) = desktop::cursor_position() else {
         return MouseInfo {
@@ -280,8 +280,8 @@ pub fn get_mouse_info() -> MouseInfo {
         };
     };
 
-    let down = |vk: i32| unsafe { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 };
-    let pressed = down(VK_LBUTTON.0 as i32) || down(VK_RBUTTON.0 as i32);
+    let down = |vk: u16| prisc_platform::input::is_key_down(u32::from(vk)) == Some(true);
+    let pressed = down(VK_LBUTTON.0) || down(VK_RBUTTON.0);
 
     MouseInfo {
         x: p.x as f64,

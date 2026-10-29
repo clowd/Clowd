@@ -298,11 +298,14 @@ namespace Prisc.Interop
         internal static extern long prisc_last_error_code();
 
         /// <summary>
-        ///  Parses UTF-8 gesture text (ASCII case-insensitive); a parse error is `PRISC_E_INVALID_ARG` with
-        ///  the reason as the last error.
+        ///  Parses UTF-8 gesture text with the one gesture grammar (`Gesture::from_str`): '+'-separated
+        ///  parts, trimmed, empty parts dropped; the last is a key name, alias or label ("PrintScreen",
+        ///  "Snapshot", "PrtScr"), every earlier one a modifier name or shorthand ("Control", "Ctrl",
+        ///  "Cmd"), all ASCII case-insensitive; a trailing '+' after "Num" is the keypad plus. Both the
+        ///  serialized and the display text parse back. "None" is a gesture with no key (`key` 0).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for text that is no gesture (the reason, such as
+        ///  "unknown key 'X'", is the last error), text that is not UTF-8, or a null pointer.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -310,10 +313,16 @@ namespace Prisc.Interop
         internal static extern int prisc_gesture_parse(byte* text, nuint len, PriscGesture* @out);
 
         /// <summary>
-        ///  Formats a gesture in a `PriscGestureStyle` for a `PriscGestureOs` (mode 1 string).
+        ///  Formats a gesture as UTF-8 text (mode 1 string, freed with `prisc_string_free`):
+        ///  - `Serialized`: the settings form, OS-independent ("Control+Shift+PrintScreen"; the modifiers
+        ///    in the order Control, Alt, Shift, Meta, then the key's canonical name; "None" for no key).
+        ///  - `Display`: what a person reads, with the key's short label and `os`'s word for Meta
+        ///    ("Ctrl+Shift+PrtScr", "Cmd+1"); empty for no key.
+        ///  - `ModifiersPrefix`: the modifiers alone as `Display` writes them, each followed by '+'
+        ///    ("Ctrl+Alt+"); empty for none. The key is not written.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null pointer, an unknown style or OS, a key
+        ///  outside the key table or an unknown modifier bit.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -321,11 +330,13 @@ namespace Prisc.Interop
         internal static extern int prisc_gesture_format(PriscGesture* gesture, int style, int os, PriscString* out_text);
 
         /// <summary>
-        ///  Checks a gesture the way registration does, then against `os`'s reserved table, writing a
-        ///  `PriscGestureRefusal`.
+        ///  Checks a gesture the way registration does on `os`, then against `os`'s reserved table, and
+        ///  writes the first `PriscGestureRefusal` (`None` when the gesture is acceptable): `InvalidKey`,
+        ///  `NoKey`, `InvalidModifiers`, `ModifierOnly`, `UnsupportedKey` (no key code on `os`), then
+        ///  `Reserved` (Alt+Tab on Windows, Cmd+Q on macOS, ...). Never `Duplicate`, which only
+        ///  registration knows. A gesture's own values are answered as refusals, never as a failure.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null pointer or an unknown OS.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -747,11 +758,15 @@ namespace Prisc.Interop
         internal static extern int prisc_ipc_claim_stdout(nint* out_handle, byte* out_redirected);
 
         /// <summary>
-        ///  Bit i of `out_mask` = whether `codes[i]` (a Windows VK, mouse-button VKs included, or a macOS
-        ///  CGKeyCode) is physically down; at most 64 codes.
+        ///  Bit i of `out_mask` = whether `codes[i]` is physically down right now: a Windows virtual-key
+        ///  code (mouse-button VKs included, `GetAsyncKeyState`) or a macOS CGKeyCode
+        ///  (`CGEventSourceKeyState`, combined session state), the numbering the hotkey hook reports as
+        ///  `raw_code`. At most 64 codes, so a caller asks once for every key it is unsure of. A code the
+        ///  OS cannot answer for (out of its range, or every code on an OS without a backend: Linux) reads
+        ///  as down, the reading that never releases a key without evidence. `count` 0 writes 0.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for more than 64 codes or a null pointer. A count
+        ///  above 64 is refused before `codes` is read, whatever the buffer's length.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -759,10 +774,11 @@ namespace Prisc.Interop
         internal static extern int prisc_keyboard_keys_down(uint* codes, nuint count, ulong* out_mask);
 
         /// <summary>
-        ///  Whether macOS Secure Event Input is on; 0 off macOS.
+        ///  Whether macOS Secure Event Input is on now (a focused password field, a terminal's "Secure
+        ///  Keyboard Entry", in any app): while it is, the OS hides every key from event taps, the hotkey
+        ///  hook's included. 0 off macOS, which is the truthful answer there.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null pointer.
         ///
         ///  Thread: any thread.
         /// </summary>

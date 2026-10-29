@@ -1,5 +1,7 @@
 using System;
 using Avalonia.Input;
+using Prisc.Interop;
+using Prisc.Interop.Testing;
 using Xunit;
 
 namespace Prisc.Shared.Tests
@@ -30,11 +32,14 @@ namespace Prisc.Shared.Tests
         [Fact]
         public void Every_avalonia_key_name_parses_to_the_hotkey_key_of_the_same_value()
         {
+            InteropTestGate.Require();
             foreach (var name in Enum.GetNames<Key>())
             {
                 var value = (int)Enum.Parse<Key>(name);
-                Assert.True(HotkeyKeys.TryParse(name, out var key), $"Avalonia's Key.{name} is not a HotkeyKey name");
-                Assert.True((int)key == value, $"Avalonia's Key.{name} is {value} but parses to HotkeyKey.{key} ({(int)key})");
+                Assert.True(NativeGestures.TryParse(name, out var key, out var modifiers, out var error),
+                    $"Avalonia's Key.{name} is not a HotkeyKey name: {error}");
+                Assert.True(key == value && modifiers == 0,
+                    $"Avalonia's Key.{name} is {value} but parses to HotkeyKey.{(HotkeyKey)key} ({key}) with modifiers {modifiers}");
             }
         }
 

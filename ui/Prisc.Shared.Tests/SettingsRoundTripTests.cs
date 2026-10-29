@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia.Media;
 using Prisc.Config;
+using Prisc.Interop.Testing;
 using Xunit;
 
 namespace Prisc.Shared.Tests
@@ -21,6 +22,10 @@ namespace Prisc.Shared.Tests
 #else
             false;
 #endif
+
+        // Every settings load and save formats or parses the hotkey gestures through prisc_interop,
+        // and even a default Settings graph holds them, so every test here needs the library.
+        public SettingsRoundTripTests() => InteropTestGate.Require();
 
         public void Dispose()
         {
