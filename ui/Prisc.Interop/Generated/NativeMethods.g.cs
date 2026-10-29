@@ -35,12 +35,16 @@ namespace Prisc.Interop
         internal static extern int prisc_app_set_activation_policy_macos(int policy, byte activate_if_regular);
 
         /// <summary>
-        ///  Opens the input device with the UTF-8 `device_uid` (falling back to the default input) for
-        ///  float32 capture; nothing is left open on failure.
+        ///  Opens the input device with the UTF-8 `device_uid` (empty, or a UID that no longer resolves,
+        ///  is the system default input) for interleaved float32 at `sample_rate_hz` in buffers of about
+        ///  `buffer_ms`, with three buffers queued; delivery starts with `prisc_audio_input_start`. Reads the
+        ///  stored microphone authorization first and never prompts: Denied or Restricted is
+        ///  `PRISC_E_PERMISSION` (NotDetermined proceeds). Nothing is left open on failure.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_PERMISSION`, `PRISC_E_CAPABILITY` (no default input),
-        ///  `PRISC_E_OS`, `PRISC_E_UNSUPPORTED`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null callback or out pointer, bad UTF-8, zero rate,
+        ///  a buffer too large); `PRISC_E_PERMISSION`; `PRISC_E_CAPABILITY` (no default input, or the device
+        ///  has no UID); `PRISC_E_OS` (an AudioToolbox call failed, OSStatus in the last-error code);
+        ///  `PRISC_E_UNSUPPORTED` on Windows and off macOS.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -48,10 +52,13 @@ namespace Prisc.Interop
         internal static extern int prisc_audio_input_open(byte* device_uid, nuint uid_len, uint sample_rate_hz, uint buffer_ms, delegate* unmanaged[Cdecl]<void*, PriscAudioInputEvent*, byte> callback, void* user, PriscAudioInput** out_input, PriscAudioInputInfo* out_info);
 
         /// <summary>
-        ///  Starts delivery and the device-alive listener (`out_watching` = whether the listener is on).
+        ///  Starts delivery (idempotent) and the device-alive listener; `out_watching` (optional) is 1 when
+        ///  the listener is on, 0 when the HAL refused it (an unplug then freezes delivery instead of
+        ///  raising Stopped).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null handle); `PRISC_E_STATE` (delivery already ended);
+        ///  `PRISC_E_OS`; `PRISC_E_PANIC` (an OS callback trampoline panicked since the last call);
+        ///  `PRISC_E_UNSUPPORTED` off macOS.
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -59,10 +66,12 @@ namespace Prisc.Interop
         internal static extern int prisc_audio_input_start(PriscAudioInput* input, byte* out_watching);
 
         /// <summary>
-        ///  Ends delivery once (`out_first` = 1 for the call that ended it); never invokes the callback.
+        ///  Ends delivery once and never invokes the callback; `out_first` (optional) is 1 for the call
+        ///  that ended it, 0 when delivery had already ended (an earlier request, a callee-requested end, or
+        ///  a Stopped event). A callback already running finishes; none starts after this returns.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null handle); `PRISC_E_PANIC`;
+        ///  `PRISC_E_UNSUPPORTED` off macOS.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -70,10 +79,13 @@ namespace Prisc.Interop
         internal static extern int prisc_audio_input_request_stop(PriscAudioInput* input, byte* out_first);
 
         /// <summary>
-        ///  Removes the listener, stops and disposes the queue and waits out an in-flight callback; never
-        ///  call it from inside the callback. Null is `PRISC_OK`.
+        ///  Ends delivery, removes the listener, waits out a callback in flight, stops and disposes the
+        ///  queue and frees the handle; null is `PRISC_OK`. When it returns the callback never runs again
+        ///  and the caller may free whatever `user` points at. Teardown always runs; a teardown OSStatus and
+        ///  a trampoline panic not yet reported are logged, not returned. Never call it from inside the
+        ///  callback (that is `PRISC_E_STATE` and destroys nothing).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`.
+        ///  Status: `PRISC_OK`; `PRISC_E_STATE`; `PRISC_E_UNSUPPORTED` off macOS (for a non-null handle).
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -81,10 +93,15 @@ namespace Prisc.Interop
         internal static extern int prisc_audio_input_destroy(PriscAudioInput* input);
 
         /// <summary>
-        ///  Opens the default output (float32 interleaved) pulling from `render`.
+        ///  Opens the default output (float32 interleaved at `sample_rate_hz`, `channels` in 1..=4096) and
+        ///  installs `render` (with `user`, opaque, handed back unchanged), initialised but not started:
+        ///  the unit is instantiated, formatted, callback-installed and initialised, and `out_info` carries
+        ///  its measured latency. Nothing is left open on failure. Binds a device (tens of milliseconds on a
+        ///  cold HAL), so it belongs on a play path, not a paint path.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (zero rate, channels out of range, null callback or
+        ///  out pointer); `PRISC_E_CAPABILITY` (no default output unit); `PRISC_E_OS` (an AudioToolbox call
+        ///  failed, OSStatus in the last-error code); `PRISC_E_UNSUPPORTED` on Windows and off macOS.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -92,10 +109,12 @@ namespace Prisc.Interop
         internal static extern int prisc_audio_output_create(uint sample_rate_hz, uint channels, delegate* unmanaged[Cdecl]<void*, float*, uint, uint, void> render, void* user, PriscAudioOutput** out_output, PriscAudioOutputInfo* out_info);
 
         /// <summary>
-        ///  Starts pulling (idempotent).
+        ///  Starts pulling (idempotent: `PRISC_OK` when already running). After it returns the callback may
+        ///  already have run on the audio thread. A failed start leaves the handle valid and stopped, so a
+        ///  later start retries.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null handle); `PRISC_E_OS`; `PRISC_E_PANIC` (a
+        ///  render callback trampoline panicked since the last call); `PRISC_E_UNSUPPORTED` off macOS.
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -103,10 +122,13 @@ namespace Prisc.Interop
         internal static extern int prisc_audio_output_start(PriscAudioOutput* output);
 
         /// <summary>
-        ///  Stops pulling (idempotent).
+        ///  Stops pulling (idempotent). After it returns no further callback begins, but one already
+        ///  running may still be in flight, so stopping never frees what the callback touches; only
+        ///  `prisc_audio_output_destroy` does. The unit stays initialised, so a later start resumes without
+        ///  binding a device again.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null handle); `PRISC_E_OS`; `PRISC_E_PANIC`;
+        ///  `PRISC_E_UNSUPPORTED` off macOS.
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -114,9 +136,13 @@ namespace Prisc.Interop
         internal static extern int prisc_audio_output_stop(PriscAudioOutput* output);
 
         /// <summary>
-        ///  Stops, uninitialises and frees the output; null is `PRISC_OK`.
+        ///  Stops, uninitialises and disposes the unit, then frees the handle; null is `PRISC_OK`. The order
+        ///  is the whole contract with an in-flight callback: uninitialising tears the IO proc down and waits
+        ///  out a callback already running, so when this returns the callback will never run again and the
+        ///  caller may free whatever `user` points at. Teardown always runs; a teardown OSStatus and a
+        ///  callback panic not yet reported are logged, not returned.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`.
+        ///  Status: `PRISC_OK`; `PRISC_E_UNSUPPORTED` off macOS (for a non-null handle).
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -206,10 +232,14 @@ namespace Prisc.Interop
 
         /// <summary>
         ///  Every device of `kind` (a `PriscDeviceKind`) as an owned array; free it with
-        ///  `prisc_devices_free`. Audio kinds answer `PRISC_E_UNSUPPORTED` on Windows (NAudio serves them).
+        ///  `prisc_devices_free`. Both out values are zeroed first, so a failure leaves null and 0, and so
+        ///  does a successful call that found nothing (an empty list is an answer, not a failure). Opens no
+        ///  device, so it neither needs nor triggers a camera or microphone prompt and instantiates no
+        ///  camera driver.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null out pointer, unknown kind); `PRISC_E_OS` (the
+        ///  OS could not be asked; the HRESULT or OSStatus is the last-error code); `PRISC_E_UNSUPPORTED`
+        ///  for the audio kinds on Windows (NAudio serves them) and for every kind off Windows and macOS.
         ///
         ///  Thread: any thread; the crate scopes its own COM apartment for the duration of the call.
         /// </summary>
@@ -217,9 +247,12 @@ namespace Prisc.Interop
         internal static extern int prisc_devices_enumerate(int kind, PriscDevice** out_devices, nuint* out_count);
 
         /// <summary>
-        ///  Frees an array from `prisc_devices_enumerate` with its strings; null is `PRISC_OK`.
+        ///  Frees an array from `prisc_devices_enumerate` with its strings; `count` must be the count it
+        ///  wrote. Null is `PRISC_OK` (the empty list). A pointer that is not a live array from
+        ///  `prisc_devices_enumerate` (already freed, or never handed out) or a wrong count is refused
+        ///  with `PRISC_E_INVALID_ARG` and frees nothing, so a double free is harmless.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -1190,7 +1223,7 @@ namespace Prisc.Interop
     }
 
     /// <summary>
-    ///  One input event (24 bytes), borrowed for the callback.
+    ///  One input event (24 bytes), borrowed for the duration of the callback.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe partial struct PriscAudioInputEvent
@@ -1201,7 +1234,7 @@ namespace Prisc.Interop
         public uint kind;
         public uint data_len;
         /// <summary>
-        ///  Float32 interleaved samples (Data only).
+        ///  Float32 interleaved samples (Data only), valid until the callback returns.
         /// </summary>
         public byte* data;
         /// <summary>
@@ -1218,10 +1251,22 @@ namespace Prisc.Interop
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe partial struct PriscAudioInputInfo
     {
+        /// <summary>
+        ///  The device's own input channel count (at least 1); every Data buffer is interleaved in it.
+        /// </summary>
         public uint channels;
+        /// <summary>
+        ///  The rate every Data buffer is in (the requested rate: the queue converts).
+        /// </summary>
         public uint sample_rate_hz;
+        /// <summary>
+        ///  1 when the system default input was opened because no UID was given or it did not resolve.
+        /// </summary>
         public byte used_default;
         public fixed byte _reserved[7];
+        /// <summary>
+        ///  The device's name (its UID when the name cannot be read).
+        /// </summary>
         public PriscString name;
     }
 
@@ -1239,7 +1284,15 @@ namespace Prisc.Interop
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe partial struct PriscAudioOutputInfo
     {
+        /// <summary>
+        ///  The device's IO buffer plus its own latency plus its safety offset, in frames at
+        ///  `sample_rate_hz`; 0 when the device publishes none of the three (keep the requested figure).
+        /// </summary>
         public uint latency_frames;
+        /// <summary>
+        ///  The rate `latency_frames` counts in: the device side of the output unit (the requested rate
+        ///  when the device format cannot be read).
+        /// </summary>
         public uint sample_rate_hz;
     }
 
@@ -1276,16 +1329,28 @@ namespace Prisc.Interop
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe partial struct PriscDevice
     {
+        /// <summary>
+        ///  The id obs-express consumes verbatim, UTF-8, never empty: `AVCaptureDevice.uniqueID` or
+        ///  the CoreAudio device UID (macOS), win-dshow's encoded id (Windows cameras).
+        /// </summary>
         public PriscString id;
+        /// <summary>
+        ///  The display name, UTF-8. Cameras fall back to `id` when the OS gives none; an audio device
+        ///  keeps an empty name when its name property reads back empty, and gets its UID when the read
+        ///  fails.
+        /// </summary>
         public PriscString name;
         /// <summary>
         ///  A `PriscDeviceKind`.
         /// </summary>
         public int kind;
+        /// <summary>
+        ///  1 for the system default input or output (audio kinds); 0 for cameras.
+        /// </summary>
         public byte is_default;
         public fixed byte _reserved[3];
         /// <summary>
-        ///  Audio inputs only; 0 otherwise.
+        ///  Audio inputs only: the channels across the device's input streams; 0 otherwise.
         /// </summary>
         public uint input_channels;
         public uint _reserved2;

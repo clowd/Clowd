@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
+using Prisc.Interop;
 using Prisc.Ipc;
 
 namespace Prisc.UI
@@ -12,10 +14,10 @@ namespace Prisc.UI
 
     /// <summary>
     /// Camera enumeration (same API shape as <see cref="AudioDeviceManager"/>). Asks the platform
-    /// directly — AVFoundation on macOS, DirectShow on Windows — reproducing what OBS's own
-    /// enumerators do so the ids are the ids prisc_recorder can open. See
-    /// <see cref="AvCaptureInterop"/> and <see cref="DirectShowInterop"/> for how each id is
-    /// derived, which is the part that has to stay faithful.
+    /// directly through <see cref="CaptureDevices"/> (prisc_interop: AVFoundation on macOS,
+    /// DirectShow on Windows), which reproduces what OBS's own enumerators do so the ids are the ids
+    /// prisc_recorder can open (crates/prisc_interop/src/ffi/devices.rs says how each id is derived,
+    /// which is the part that has to stay faithful).
     ///
     /// The fallback, and what this used to do exclusively, is spawning prisc_recorder with
     /// <c>--list-cameras</c>: authoritative, but measured at 5.2 s on macOS — not the process
@@ -97,16 +99,25 @@ namespace Prisc.UI
             return EnumerateWithRecorder();
         }
 
+        /// <summary>The cameras the platform reports, or null when it could not be asked at all (so
+        /// the caller can fall back), never "no cameras" for a failure.</summary>
         private static List<CameraDeviceInfo> EnumerateNative()
         {
-            if (OperatingSystem.IsMacOS())
-                return AvCaptureInterop.GetCameras();
-
-            if (OperatingSystem.IsWindows())
-                return DirectShowInterop.GetCameras();
-
             // no third platform ships a recorder either, so this ends at the same empty list.
-            return null;
+            if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsWindows())
+                return null;
+
+            var cameras = CaptureDevices.TryEnumerate(DeviceKind.Video, out var error);
+            if (cameras == null)
+            {
+                // a missing framework, a failed COM call: all of them mean "ask the recorder
+                // instead", never "this machine has no cameras".
+                Debug.WriteLine("Native camera enumeration failed: " + error);
+                SentryConfig.CaptureHandled(error, OperatingSystem.IsMacOS() ? "camera.avfoundation" : "camera.directshow");
+                return null;
+            }
+
+            return cameras.Select(camera => new CameraDeviceInfo(camera.Id, camera.Name)).ToList();
         }
 
         private static List<CameraDeviceInfo> EnumerateWithRecorder()

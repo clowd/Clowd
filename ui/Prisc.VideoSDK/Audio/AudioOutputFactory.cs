@@ -10,7 +10,9 @@ namespace Prisc.VideoSDK.Audio
         /// silent output, so playback still runs (silently) instead of throwing.
         /// <para>
         /// A macOS machine with no usable output device falls back to the silent output too, for
-        /// the same reason: a preview that runs without sound beats one that will not open.
+        /// the same reason: a preview that runs without sound beats one that will not open. A
+        /// missing prisc_interop is not such a case: the app requires the library and stops at
+        /// startup without it, so nothing here probes for it.
         /// </para>
         /// </summary>
         public static IAudioOutput Create()
@@ -26,8 +28,9 @@ namespace Prisc.VideoSDK.Audio
                 }
                 catch (Exception ex)
                 {
-                    // constructing one does not touch a device, so this is close to unreachable —
-                    // but a missing AudioToolbox is not worth failing playback over.
+                    // constructing one binds no device and calls nothing native, so this is close
+                    // to unreachable; a CoreAudio that will not open is not worth failing playback
+                    // over.
                     System.Diagnostics.Debug.WriteLine("CoreAudio unavailable, playing silently: " + ex.Message);
                 }
             }
