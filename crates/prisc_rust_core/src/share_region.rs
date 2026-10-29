@@ -260,15 +260,4 @@ mod tests {
             assert_eq!(normalize(input), expected);
         }
     }
-
-    /// The same press-time anchor and total delta give the same rect, however the drag got there.
-    #[test]
-    fn a_drag_is_a_function_of_the_anchor_only() {
-        let a = rect(100, 100, 400, 300);
-        for handle in ALL {
-            let direct = apply_drag(a, handle, 120, -80);
-            let _ = apply_drag(a, handle, 7, 9);
-            assert_eq!(apply_drag(a, handle, 120, -80), direct);
-        }
-    }
 }

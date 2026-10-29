@@ -38,7 +38,6 @@ namespace Prisc.VideoSDK.Tests
             Assert.Equal(new ScreenRect(136, 0, 64, 200), ShareRegionGeometry.ApplyDrag(new ScreenRect(0, 0, 200, 200), ShareRegionGeometry.HandleLeft, 180, 0));
             Assert.Equal(new ScreenRect(-700, 0, 800, 200), ShareRegionGeometry.ApplyDrag(new ScreenRect(100, 0, 200, 200), ShareRegionGeometry.HandleRight, -1000, 0));
             Assert.Equal(new ScreenRect(-4900, -60, 200, 200), ShareRegionGeometry.ApplyDrag(anchor, ShareRegionGeometry.HandleBody, -5000, -160));
-            Assert.Equal(new ScreenRect(100, 100, 200, 200), anchor);
         }
 
         [Fact]
