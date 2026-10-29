@@ -87,9 +87,18 @@ namespace Prisc.VideoSDK
                     // the bindings load it by absolute path, which does not make those resolvable:
                     // Windows searches the normal DLL order, and the macOS payload asks for them by
                     // @rpath with no LC_RPATH anywhere. prisc_interop makes the directory loadable,
-                    // the right way for each OS, in one call.
-                    _preparedImages = ProcessNative.PrepareFfmpegDirectory(dir);
-                    Console.Error.WriteLine($"FFmpegLoader: prepared '{dir}': {_preparedImages} libraries loaded ahead");
+                    // the right way for each OS, in one call. Best effort: when Windows refuses the
+                    // directory the siblings may still resolve (from the application directory, or
+                    // already loaded), so the load below stays the authoritative failure.
+                    try
+                    {
+                        _preparedImages = ProcessNative.PrepareFfmpegDirectory(dir);
+                        Console.Error.WriteLine($"FFmpegLoader: prepared '{dir}': {_preparedImages} libraries loaded ahead");
+                    }
+                    catch (InteropException ex) when (ex.Status == InteropStatus.Os)
+                    {
+                        Console.Error.WriteLine($"FFmpegLoader: could not prepare '{dir}' ({ex.Message}); loading it anyway");
+                    }
 
                     DynamicallyLoadedBindings.LibrariesPath = dir;
                     DynamicallyLoadedBindings.Initialize();
