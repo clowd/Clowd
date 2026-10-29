@@ -38,9 +38,11 @@ use windows::Win32::Graphics::Direct3D12::{
     D3D12_COMMAND_QUEUE_FLAG_NONE, D3D12_COMMAND_QUEUE_PRIORITY_NORMAL, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_DESCRIPTOR_HEAP_DESC,
     D3D12_DESCRIPTOR_HEAP_FLAG_NONE, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_FENCE_FLAGS, D3D12_FENCE_FLAG_NONE, D3D12_FENCE_FLAG_SHARED,
     D3D12_HEAP_FLAGS, D3D12_HEAP_FLAG_NONE, D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES, D3D12_HEAP_TYPE, D3D12_HEAP_TYPE_DEFAULT,
-    D3D12_HEAP_TYPE_READBACK, D3D12_MEMORY_POOL_UNKNOWN, D3D12_PLACED_SUBRESOURCE_FOOTPRINT, D3D12_RANGE, D3D12_RESOURCE_DESC,
-    D3D12_RESOURCE_DIMENSION_BUFFER, D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
-    D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_RESOURCE_STATES, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST,
+    D3D12_HEAP_TYPE_READBACK, D3D12_MEMORY_POOL_UNKNOWN, D3D12_PLACED_SUBRESOURCE_FOOTPRINT, D3D12_RANGE, D3D12_RESOURCE_BARRIER,
+    D3D12_RESOURCE_BARRIER_0, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAG_NONE,
+    D3D12_RESOURCE_BARRIER_TYPE_TRANSITION, D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_BUFFER, D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+    D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_RESOURCE_STATES,
+    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_TRANSITION_BARRIER,
     D3D12_TEXTURE_COPY_LOCATION, D3D12_TEXTURE_COPY_LOCATION_0, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
     D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX, D3D12_TEXTURE_LAYOUT_ROW_MAJOR, D3D12_TEXTURE_LAYOUT_UNKNOWN,
 };
@@ -100,6 +102,8 @@ struct Slot {
 
 /// The direct-queue clear of slot 0, the stand-in for Skia both self-checks draw with.
 struct ClearList {
+    /// Slot 0's texture, for the transition barrier the clear records.
+    target: FreeThreaded<ID3D12Resource>,
     heap: FreeThreaded<ID3D12DescriptorHeap>,
     allocator: FreeThreaded<ID3D12CommandAllocator>,
     list: FreeThreaded<ID3D12GraphicsCommandList>,
@@ -351,6 +355,27 @@ impl RingInner {
                 .list
                 .Reset(clear.allocator.get(), None)
                 .map_err(|e| os_error(&e, "ID3D12GraphicsCommandList::Reset"))?;
+            // The same barrier Skia records: the simultaneous-access texture has decayed to
+            // COMMON, and it decays back at the end of the execution, so nothing transitions it
+            // back afterwards.
+            let mut barrier = D3D12_RESOURCE_BARRIER {
+                Type: D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+                Flags: D3D12_RESOURCE_BARRIER_FLAG_NONE,
+                Anonymous: D3D12_RESOURCE_BARRIER_0 {
+                    Transition: ManuallyDrop::new(D3D12_RESOURCE_TRANSITION_BARRIER {
+                        pResource: ManuallyDrop::new(Some(clear.target.clone_interface())),
+                        Subresource: D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                        StateBefore: D3D12_RESOURCE_STATE_COMMON,
+                        StateAfter: D3D12_RESOURCE_STATE_RENDER_TARGET,
+                    }),
+                },
+            };
+            clear
+                .list
+                .ResourceBarrier(std::slice::from_ref(&barrier));
+            // The union members are ManuallyDrop: release the reference the barrier carried.
+            let mut transition = ManuallyDrop::take(&mut barrier.Anonymous.Transition);
+            ManuallyDrop::drop(&mut transition.pResource);
             let target = clear
                 .heap
                 .GetCPUDescriptorHandleForHeapStart();
@@ -677,6 +702,7 @@ fn create_clear_list(device: &ID3D12Device, slot0: &ID3D12Resource) -> Result<Cl
         .map_err(|e| os_error(&e, "CreateCommandList(DIRECT)"))?;
     unsafe { list.Close() }.map_err(|e| os_error(&e, "CommandList.Close"))?;
     Ok(ClearList {
+        target: FreeThreaded::new(slot0.clone()),
         heap: FreeThreaded::new(heap),
         allocator: FreeThreaded::new(allocator),
         list: FreeThreaded::new(list),
