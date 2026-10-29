@@ -41,10 +41,14 @@ pub enum PriscSelftestKind {
     /// A nested guard entry: records `PRISC_E_STATE` "outer", runs an inner guard that fails with
     /// `PRISC_E_INVALID_ARG`, and returns `PRISC_E_STATE`; the last error must still be "outer".
     Nested = 13,
+    /// A panic in an OS-callback trampoline that has no handle, caught onto the process slot, then
+    /// `PRISC_OK`: the next export of any kind reports it to the log sink as one error line.
+    CallbackPanic = 14,
 }
 
 convert::ffi_enum!(PriscSelftestKind: i32 {
-    Ok, None, Timeout, Closed, Unsupported, InvalidArg, Os, Panic, State, Permission, Capability, LongMessage, Log, Nested
+    Ok, None, Timeout, Closed, Unsupported, InvalidArg, Os, Panic, State, Permission, Capability, LongMessage, Log, Nested,
+    CallbackPanic
 });
 
 /// The message every failing selftest kind leaves; `LongMessage` repeats it.
@@ -92,6 +96,12 @@ unsafe fn run(kind: i32, out_value: *mut i64) -> Result {
             debug_assert_eq!(inner, PriscInteropStatus::InvalidArg as i32);
             Ok(state)
         }
+        PriscSelftestKind::CallbackPanic => {
+            panic::callback_guard(panic::CallbackPanic::process(), (), || {
+                panic!("the selftest callback was asked to panic")
+            });
+            Ok(PRISC_OK)
+        }
     }
 }
 
@@ -118,6 +128,7 @@ mod tests {
             (11, S::State),
             (12, S::Ok),
             (13, S::State),
+            // 14 (CallbackPanic) leaves a panic for the next export to log; tests/infra.rs has it
         ];
         for (kind, status) in expected {
             let mut value = 0i64;

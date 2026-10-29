@@ -74,7 +74,8 @@ namespace Prisc.Ipc
         /// the Rust helpers). Throws if called twice.
         /// <para>prisc_interop is a hard requirement (R12): without it this writes <c>hello</c> and one
         /// fatal <c>init_failed</c> error naming the reason, and exits with
-        /// <see cref="HelperExit.Failed"/>.</para>
+        /// <see cref="HelperExit.Failed"/>. With it, its log sink is installed to write to stderr
+        /// (every level but Debug).</para>
         /// </summary>
         public static IpcWriter<TEvent> Open<TEvent, TCommand>(string helper, HelperSpec<TEvent, TCommand> spec)
             where TEvent : class where TCommand : class
@@ -92,6 +93,13 @@ namespace Prisc.Ipc
                 ExitWithoutLibrary(hello);
 
             var writer = new IpcWriter<TEvent>(ClaimStdout(), spec.EncodeEvent);
+            // the library's callback panics and teardown failures reach a helper only through its
+            // log sink; stderr is what the parent keeps of a helper's diagnostics
+            InteropLog.SetQueuedSink(static (level, text) =>
+            {
+                if (level != InteropLogLevel.Debug)
+                    Console.Error.WriteLine($"prisc_interop {level}: {text}");
+            });
             writer.WriteLine(hello);
             RouteSignals();
             return writer;

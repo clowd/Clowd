@@ -207,6 +207,8 @@ namespace Prisc.Interop
         Log = 12,
         /// <summary>A nested guard entry: records <c>PRISC_E_STATE</c> "outer", runs an inner guard that fails with <c>PRISC_E_INVALID_ARG</c>, and returns <c>PRISC_E_STATE</c>; the last error must still be "outer".</summary>
         Nested = 13,
+        /// <summary>A panic in an OS-callback trampoline that has no handle, caught onto the process slot, then <c>PRISC_OK</c>: the next export of any kind reports it to the log sink as one error line.</summary>
+        CallbackPanic = 14,
     }
 
     /// <summary>Which part of the region a drag moves: the corners, the edge midpoints, or the body (a move).</summary>

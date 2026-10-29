@@ -164,3 +164,44 @@ fn the_library_hash_equals_the_generated_bindings() {
         "InteropAbi.g.cs does not carry the library's hash 0x{from_library:016X}: run cargo codegen"
     );
 }
+
+#[test]
+fn a_handleless_callback_panic_reaches_the_log_sink_through_the_next_export() {
+    use prisc_interop::ffi::log::prisc_log_set_callback;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    static LINES: Mutex<Vec<(i32, String)>> = Mutex::new(Vec::new());
+    unsafe extern "C" fn record(level: i32, msg: *const u8, len: usize, _: *mut std::ffi::c_void) {
+        let text = String::from_utf8_lossy(std::slice::from_raw_parts(msg, len)).into_owned();
+        LINES.lock().unwrap().push((level, text));
+    }
+    let seen = || {
+        LINES
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, text)| text.contains("the selftest callback was asked to panic"))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(unsafe { prisc_log_set_callback(Some(record), std::ptr::null_mut()) }, 0);
+    assert_eq!(
+        unsafe { prisc_interop_selftest(K::CallbackPanic as i32, std::ptr::null_mut()) },
+        S::Ok as i32
+    );
+    assert_eq!(last_message(), "", "the callback's panic is not the caller's failure");
+    // any export drains it, on whichever thread runs one first
+    unsafe { prisc_interop_selftest(K::Ok as i32, std::ptr::null_mut()) };
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while seen().is_empty() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(unsafe { prisc_log_set_callback(None, std::ptr::null_mut()) }, 0);
+
+    let seen = seen();
+    assert_eq!(seen.len(), 1, "{seen:?}");
+    assert_eq!(seen[0].0, prisc_interop::ffi::log::PriscInteropLogLevel::Error as i32);
+    assert!(seen[0].1.contains("an OS callback panicked"), "{}", seen[0].1);
+}

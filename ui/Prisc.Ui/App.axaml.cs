@@ -170,6 +170,9 @@ namespace Prisc
                 if (!await RequireInterop())
                     return;
 
+                // the library's callback panics and teardown failures reach the app only here
+                InteropLogReporter.Install();
+
                 // hidden spike harness (`--video-spike file.mp4`): a bare playback window used to
                 // measure the video engine. Must run BEFORE single-instance forwarding — a spike
                 // process must never forward its args to (or be swallowed by) a resident Prisc.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Runtime.InteropServices;
 using Prisc.Interop.Testing;
 using Xunit;
@@ -126,6 +127,40 @@ namespace Prisc.Interop.Tests
                 Assert.Contains((InteropLogLevel.Warn, "selftest: warn"), lines);
                 Assert.Contains((InteropLogLevel.Info, "selftest: info"), lines);
                 Assert.Contains((InteropLogLevel.Debug, "selftest: debug"), lines);
+            }
+        }
+
+        [Fact]
+        public void A_queued_sink_gets_a_callback_panic_the_next_export_drains()
+        {
+            // what a host installs (Prisc.Ui, IpcChild.Open): the panic of a callback with no
+            // export status to travel on arrives as one error line, on the queue's own thread
+            InteropTestGate.Require();
+            var lines = new List<(InteropLogLevel Level, string Text)>();
+            using var arrived = new ManualResetEventSlim();
+            InteropLog.SetQueuedSink((level, text) =>
+            {
+                lock (lines)
+                    lines.Add((level, text));
+                if (text.Contains("the selftest callback was asked to panic", StringComparison.Ordinal))
+                    arrived.Set();
+            });
+            try
+            {
+                Assert.Equal(InteropStatus.Ok, Selftest(SelftestKind.CallbackPanic, out _));
+                Assert.Equal(InteropStatus.Ok, Selftest(SelftestKind.Ok, out _));
+                Assert.True(arrived.Wait(TimeSpan.FromSeconds(10)), "the callback panic never reached the sink");
+            }
+            finally
+            {
+                InteropLog.SetQueuedSink(null);
+            }
+
+            lock (lines)
+            {
+                var line = Assert.Single(lines, l => l.Text.Contains("the selftest callback was asked to panic", StringComparison.Ordinal));
+                Assert.Equal(InteropLogLevel.Error, line.Level);
+                Assert.Contains("an OS callback panicked", line.Text, StringComparison.Ordinal);
             }
         }
 

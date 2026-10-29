@@ -45,6 +45,17 @@ namespace Prisc.Ipc.Tests
                     Environment.Exit(0);
                     break;
                 }
+                case "callback-panic":
+                {
+                    IpcChild.Open("prisc_ipc_test_child", HelperSpecs.Job);
+                    // a callback panic with no status to travel on, drained by the next export
+                    Prisc.Interop.InteropDiagnostics.SelfTest(Prisc.Interop.SelftestKind.CallbackPanic, out _, out _);
+                    Prisc.Interop.InteropDiagnostics.SelfTest(Prisc.Interop.SelftestKind.Ok, out _, out _);
+                    // the sink writes from its own queue; give it time before the process ends
+                    Thread.Sleep(2000);
+                    Environment.Exit(HelperExit.Ok);
+                    break;
+                }
                 case "late-signal":
                 case "late-trigger":
                 {
@@ -190,6 +201,17 @@ namespace Prisc.Ipc.Tests
             Assert.DoesNotContain(run.Stdout, l => l.Contains("STRAY", StringComparison.Ordinal));
             Assert.Contains("NATIVE-STRAY", run.Stderr, StringComparison.Ordinal);
             Assert.Contains("MANAGED-STRAY", run.Stderr, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void The_librarys_diagnostics_reach_the_helpers_stderr()
+        {
+            InteropTestGate.Require();
+            var run = RunChild("callback-panic");
+
+            Assert.Equal(HelperExit.Ok, run.ExitCode);
+            Assert.Contains("prisc_interop Error: an OS callback panicked: the selftest callback was asked to panic",
+                run.Stderr, StringComparison.Ordinal);
         }
 
         private static void AssertQuitLikeEnding(ChildRun run)
