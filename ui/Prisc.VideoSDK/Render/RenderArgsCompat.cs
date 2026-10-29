@@ -159,8 +159,8 @@ namespace Prisc.VideoSDK.Render
                     throw new InvalidOperationException($"webcam stream_index {cam.StreamIndex} is negative");
             }
 
-            if (raw.Crf is < 0 or > 51)
-                throw new InvalidOperationException($"crf {raw.Crf} out of range (0-51)");
+            if (raw.Crf is < 0 or > H264EncoderSettings.MaxCrf)
+                throw new InvalidOperationException($"crf {raw.Crf} out of range (0-{H264EncoderSettings.MaxCrf})");
 
             return raw;
         }

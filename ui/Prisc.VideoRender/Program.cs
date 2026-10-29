@@ -311,8 +311,8 @@ namespace Prisc.VideoRender
                 throw new InvalidOperationException(
                     "the project file has no \"output\" path and none was passed on the command line");
 
-            if (crf is < 0 or > 51)
-                throw new InvalidOperationException($"crf {crf} out of range (0-51)");
+            if (crf is < 0 or > H264EncoderSettings.MaxCrf)
+                throw new InvalidOperationException($"crf {crf} out of range (0-{H264EncoderSettings.MaxCrf})");
 
             if (maxHeight < 0)
                 throw new InvalidOperationException($"maxHeight {maxHeight} is negative");
