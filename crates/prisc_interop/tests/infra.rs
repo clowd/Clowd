@@ -19,20 +19,13 @@ fn last_message() -> String {
 
 #[test]
 fn stub_exports_of_three_areas_answer_unsupported() {
-    let mut count = 0u32;
-    let status = unsafe { prisc_interop::ffi::screens::prisc_screens_list(std::ptr::null_mut(), 0, &mut count) };
-    assert_eq!(status, S::Unsupported as i32);
-    assert!(last_message().contains("prisc_screens_list"));
-    let mut seconds = 0f64;
-    assert_eq!(
-        unsafe { prisc_interop::ffi::idle::prisc_idle_seconds(&mut seconds) },
-        S::Unsupported as i32
-    );
+    // (the desktop area's stubs, prisc_screens_list and prisc_idle_seconds, are implemented)
     let mut quality = prisc_interop::ffi::encoding::PriscH264Quality::default();
     assert_eq!(
         unsafe { prisc_interop::ffi::encoding::prisc_encoding_h264_quality(23, 1920, 1080, 30, 1, &mut quality) },
         S::Unsupported as i32
     );
+    assert!(last_message().contains("prisc_encoding_h264_quality"));
     assert_eq!(
         unsafe { prisc_interop::ffi::gpu::prisc_gpu_nv12_texture_release_windows(std::ptr::null_mut()) },
         S::Unsupported as i32

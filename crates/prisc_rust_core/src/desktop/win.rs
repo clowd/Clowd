@@ -432,22 +432,26 @@ pub fn monitors() -> windows::core::Result<Vec<Monitor>> {
 
     Ok(handles
         .into_iter()
-        .filter_map(|handle| {
-            let mut info = MONITORINFOEXW::default();
-            info.monitorInfo.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
-            if !unsafe { GetMonitorInfoW(handle, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO) }.as_bool() {
-                return None;
-            }
-            let (rc, work) = (info.monitorInfo.rcMonitor, info.monitorInfo.rcWork);
-            Some(Monitor {
-                handle,
-                device_name: wide_to_string(&info.szDevice),
-                bounds: ScreenRect::from_exact(rc.left, rc.top, rc.right, rc.bottom),
-                work_area: ScreenRect::from_exact(work.left, work.top, work.right, work.bottom),
-                is_primary: info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
-            })
-        })
+        .filter_map(monitor)
         .collect())
+}
+
+/// One monitor by handle (`GetMonitorInfoW`), or `None` when Windows will not describe it (a
+/// handle from a topology that has since changed).
+pub fn monitor(handle: HMONITOR) -> Option<Monitor> {
+    let mut info = MONITORINFOEXW::default();
+    info.monitorInfo.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
+    if !unsafe { GetMonitorInfoW(handle, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO) }.as_bool() {
+        return None;
+    }
+    let (rc, work) = (info.monitorInfo.rcMonitor, info.monitorInfo.rcWork);
+    Some(Monitor {
+        handle,
+        device_name: wide_to_string(&info.szDevice),
+        bounds: ScreenRect::from_exact(rc.left, rc.top, rc.right, rc.bottom),
+        work_area: ScreenRect::from_exact(work.left, work.top, work.right, work.bottom),
+        is_primary: info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
+    })
 }
 
 fn monitor_dpi(handle: HMONITOR) -> Option<u32> {
