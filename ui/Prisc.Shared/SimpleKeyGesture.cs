@@ -1,6 +1,6 @@
 using System;
-using System.Linq;
 using Avalonia.Input;
+using Prisc.Interop;
 
 namespace Prisc
 {
@@ -59,34 +59,23 @@ namespace Prisc
             return new SimpleKeyGesture(Key, (Modifiers & ~KeyModifiers.Control) | KeyModifiers.Meta);
         }
 
-        public override string ToString()
+        /// <summary>
+        /// The text a tooltip, menu or keycap shows ("Ctrl+Z", "Shift+1", "Del", "Cmd+K"): the
+        /// global hotkeys' display form (<c>prisc_gesture_format</c>), so both read alike, with the
+        /// modifiers in one order and the keys' short labels. Empty for no key. Meta reads as the
+        /// key it is on this OS (Win, Cmd or Super).
+        /// </summary>
+        public override string ToString() => NativeGestures.Format((int)Key, (int)ToHotkeyModifiers(Modifiers), GestureStyle.Display);
+
+        // HotkeyKey mirrors Avalonia's Key one to one (HotkeyAvaloniaDriftTests), the modifiers go by name
+        private static HotkeyModifiers ToHotkeyModifiers(KeyModifiers modifiers)
         {
-            if (Key == Key.None)
-                return string.Empty;
-
-            var strBinding = "";
-            var strKey = Key.ToString();
-            if (strKey != string.Empty)
-            {
-                if (Modifiers != KeyModifiers.None)
-                {
-                    strBinding += Modifiers.ToString();
-                    if (strBinding != string.Empty)
-                    {
-                        strBinding += '+';
-                    }
-                }
-
-                strBinding += strKey;
-            }
-
-            return string.Join("+", strBinding.Split('+', ',').Select(c => c.Trim()))
-                .Replace("Snapshot", "PrtScr")
-                .Replace("Control", "Ctrl")
-                // what ⌘ is called in text; only ForApp() ever puts it here.
-                .Replace("Meta", "Cmd")
-                .Replace("Delete", "Del")
-                .Replace("Escape", "Esc");
+            var result = HotkeyModifiers.None;
+            if (modifiers.HasFlag(KeyModifiers.Control)) result |= HotkeyModifiers.Control;
+            if (modifiers.HasFlag(KeyModifiers.Alt)) result |= HotkeyModifiers.Alt;
+            if (modifiers.HasFlag(KeyModifiers.Shift)) result |= HotkeyModifiers.Shift;
+            if (modifiers.HasFlag(KeyModifiers.Meta)) result |= HotkeyModifiers.Meta;
+            return result;
         }
     }
 }

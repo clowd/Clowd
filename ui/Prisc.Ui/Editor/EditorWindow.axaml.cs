@@ -890,14 +890,9 @@ namespace Prisc.UI
             return map;
         }
 
-        /// <summary>The keycap label for a registry shortcut: the enum name, which for the letter
-        /// keys is the letter itself (Key.R is "R"). Escape is shortened to "Esc"; anything fancier
-        /// (digits as "D1", OEM keys) would need entries here.</summary>
-        private static string ShortcutLabel(Key key) => key switch {
-            Key.None => null,
-            Key.Escape => "Esc",
-            _ => key.ToString(),
-        };
+        /// <summary>The keycap label for a registry shortcut, as every shortcut text reads
+        /// (<see cref="SimpleKeyGesture.ToString"/>): "R", "Esc", "Space". Null for none.</summary>
+        private static string ShortcutLabel(Key key) => key == Key.None ? null : new SimpleKeyGesture(key).ToString();
 
         private readonly List<Control> _generatedToolControls = new List<Control>();
 
