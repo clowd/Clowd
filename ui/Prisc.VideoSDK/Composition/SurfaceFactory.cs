@@ -5,7 +5,7 @@ namespace Prisc.VideoSDK.Composition
     /// <summary>
     /// Backend selection: tries the GPU once at startup and falls back to CPU automatically.
     /// The SDK carries no logging dependency, so selection is reported through the optional
-    /// <c>diagnosticLog</c> callback — hosts wire it to their logger, and the chosen
+    /// <c>diagnosticLog</c> callback: hosts wire it to their logger, and the chosen
     /// <see cref="ISurfaceFactory.BackendName"/> should be included in render diagnostics.
     /// </summary>
     public static class SurfaceFactory
@@ -24,7 +24,10 @@ namespace Prisc.VideoSDK.Composition
                 var gpu = GpuSurfaceFactory.TryCreate(out var reason);
                 if (gpu != null)
                 {
-                    diagnosticLog?.Invoke($"Composition surface backend: {gpu.BackendName}");
+                    // The adapter name says which GPU a field report about a GPU problem was on.
+                    diagnosticLog?.Invoke(String.IsNullOrEmpty(gpu.GpuName)
+                        ? $"Composition surface backend: {gpu.BackendName}"
+                        : $"Composition surface backend: {gpu.BackendName} ({gpu.GpuName})");
                     return gpu;
                 }
 
