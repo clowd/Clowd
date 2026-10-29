@@ -101,7 +101,8 @@ namespace Prisc.UI.DrawOnScreen
                 Children = { Canvas, Keystrokes },
             };
 
-            // the bitmap's DPI makes its DIP size the monitor's, so filling the window maps it 1:1
+            // the bitmap is a 96 DPI grab of the monitor's real pixels (ScreenPixels.Grab), so
+            // stretching it to fill the window maps it 1:1
             _backdrop = backdrop;
             if (backdrop != null)
             {
