@@ -21,8 +21,8 @@ namespace Prisc.UI.Controls.Tray
     /// The motion is code rather than theme transitions because each tile's delay is its own, and a
     /// transition in a template cannot be bound. Whatever an animation leaves behind is written back as
     /// the local value when it finishes, so cancelling one half-way (the strip disengaged mid-flight) never
-    /// snaps a hint to a state it was not heading for. Skipped, like the tray's other motion, with Windows'
-    /// animation effects off.
+    /// snaps a hint to a state it was not heading for. Skipped, like the tray's other motion, when the user
+    /// turned animations off (Windows' animation effects, macOS Reduce Motion).
     /// </para>
     /// </summary>
     public sealed class TrayKeyHint : TextBlock
