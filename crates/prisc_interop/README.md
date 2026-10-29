@@ -205,8 +205,9 @@ latter two in prisc_interop itself (rule 14, see A1).
 E1. `prisc_codegen/src/abi_fingerprint.rs` (std + syn only, so build.rs can `include!` it)
 parses every `crates/prisc_interop/src/ffi/*.rs` (sorted) and `crates/prisc_hotkeys/src/key.rs`,
 and hashes (64-bit FNV-1a) a canonical rendering of: every `#[no_mangle]` fn name and signature,
-every `#[repr(C)]` struct with field names and types, every `#[repr]` enum with its discriminants,
-the `Key` enum discriminants. Doc comments, bodies, formatting and key labels do not count.
+every `#[repr(C)]` struct with field names and types, every opaque handle struct, every `#[repr]`
+enum with its discriminants, every type alias, every `pub const` (the `PRISC_*` bounds the
+wrappers check against), the `Key` enum discriminants. Doc comments, bodies, formatting and key labels do not count.
 prisc_interop's build.rs writes it to `OUT_DIR/abi_hash.rs` (`PRISC_INTEROP_ABI_HASH`);
 prisc_codegen writes the same number to `ui/Prisc.Interop/Generated/InteropAbi.g.cs`. Nothing
 hash-related is checked into the Rust tree, so the hash causes no merge churn.

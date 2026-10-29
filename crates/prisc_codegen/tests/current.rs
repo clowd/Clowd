@@ -353,6 +353,15 @@ fn fingerprint_changes_with_the_abi() {
         "an export name"
     );
     assert_ne!(base, hash(GOOD, &KEYS.replace("A = 44", "A = 45")), "a key value");
+    let with_const = format!("{GOOD}\n/// The most things.\npub const PRISC_THING_MAX: u32 = 8;\n");
+    let const_base = hash(&with_const, KEYS);
+    assert_ne!(base, const_base, "a new const");
+    assert_ne!(const_base, hash(&with_const.replace("= 8;", "= 9;"), KEYS), "a const value");
+    assert_eq!(
+        const_base,
+        hash(&with_const.replace("/// The most things.", "/// Any other words."), KEYS),
+        "a const's doc comment"
+    );
 }
 
 #[test]

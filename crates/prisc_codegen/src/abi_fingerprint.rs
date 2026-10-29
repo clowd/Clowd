@@ -5,6 +5,7 @@
 // - every `#[repr(C)]` struct with its field names and types, and every opaque handle struct;
 // - every enum with its `#[repr]` and discriminants;
 // - every type alias (the callback types);
+// - every `pub const` (the `PRISC_*` bounds generated into NativeMethods.g.cs);
 // - the hotkey `Key` names and discriminants from crates/prisc_hotkeys/src/key.rs.
 // Doc comments, bodies, formatting, key labels and aliases do not count: the rendering goes
 // through syn and token streams, never through the source text.
@@ -160,6 +161,9 @@ fn render_items(items: &[syn::Item], out: &mut String) {
             }
             syn::Item::Type(t) if matches!(t.vis, syn::Visibility::Public(_)) => {
                 let _ = writeln!(out, "type {} = {}", t.ident, tokens(&t.ty));
+            }
+            syn::Item::Const(c) if matches!(c.vis, syn::Visibility::Public(_)) => {
+                let _ = writeln!(out, "const {}: {} = {}", c.ident, tokens(&c.ty), tokens(&c.expr));
             }
             syn::Item::Mod(m) if !is_cfg_test(&m.attrs) => {
                 if let Some((_, items)) = &m.content {
