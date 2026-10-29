@@ -1,6 +1,7 @@
 //! macOS: the device lists of `prisc_devices_enumerate` (AVFoundation cameras, the CoreAudio HAL
-//! for audio endpoints), the CoreAudio HAL reads the microphone input shares, and the
-//! AVFoundation authorization status.
+//! for audio endpoints), the CoreAudio HAL reads the microphone input shares, the CoreAudio error
+//! text and float32 stream format the audio output and input share, and the AVFoundation
+//! authorization status.
 //!
 //! Every CoreAudio and AVFoundation type here comes from the objc2 framework crates; nothing is
 //! redeclared by hand. That matters for `AudioBufferList`, whose inline `AudioBuffer` is
@@ -23,7 +24,9 @@ use objc2_core_audio::{
     kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject, AudioObjectGetPropertyData, AudioObjectGetPropertyDataSize, AudioObjectID,
     AudioObjectPropertyAddress, AudioObjectPropertyScope, AudioObjectPropertySelector,
 };
-use objc2_core_audio_types::{AudioBuffer, AudioBufferList};
+use objc2_core_audio_types::{
+    kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatLinearPCM, AudioBuffer, AudioBufferList, AudioStreamBasicDescription,
+};
 use objc2_core_foundation::{CFRetained, CFString};
 use objc2_foundation::{NSArray, NSString};
 
@@ -153,7 +156,32 @@ pub(crate) fn authorization(audio: bool) -> AVAuthorizationStatus {
 
 // ---------------------------------------------------------------------------- CoreAudio HAL
 
-fn address(selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope) -> AudioObjectPropertyAddress {
+/// `PRISC_E_OS` for a failed CoreAudio or AudioToolbox call, worded as the C# this replaces threw
+/// it: "CoreAudio error {status} while {what}." The logged teardown failures use the same text.
+pub(crate) fn coreaudio_error(status: i32, what: &str) -> Error {
+    Error::os(i64::from(status), format!("CoreAudio error {status} while {what}."))
+}
+
+/// Interleaved packed float32 linear PCM (no NonInterleaved flag, so one buffer carries every
+/// channel): the format the output unit is fed and the input queue delivers. `channels` is at
+/// least 1 and small enough that the byte sizes fit, which both callers bound.
+pub(crate) fn float32_interleaved(sample_rate_hz: u32, channels: u32) -> AudioStreamBasicDescription {
+    let bytes_per_frame = channels * mem::size_of::<f32>() as u32;
+    AudioStreamBasicDescription {
+        mSampleRate: f64::from(sample_rate_hz),
+        mFormatID: kAudioFormatLinearPCM,
+        mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+        mBytesPerPacket: bytes_per_frame,
+        mFramesPerPacket: 1,
+        mBytesPerFrame: bytes_per_frame,
+        mChannelsPerFrame: channels,
+        mBitsPerChannel: 32,
+        mReserved: 0,
+    }
+}
+
+/// The main element of `selector` in `scope`.
+pub(crate) fn address(selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope) -> AudioObjectPropertyAddress {
     AudioObjectPropertyAddress {
         mSelector: selector,
         mScope: scope,
@@ -300,10 +328,7 @@ fn device_ids() -> Result<Vec<AudioObjectID>> {
     // SAFETY: a size query writes one u32.
     let status = unsafe { AudioObjectGetPropertyDataSize(SYSTEM, NonNull::from(&mut address), 0, ptr::null(), NonNull::from(&mut size)) };
     if status != 0 {
-        return Err(Error::os(
-            i64::from(status),
-            format!("CoreAudio error {status} while sizing the device list."),
-        ));
+        return Err(coreaudio_error(status, "sizing the device list"));
     }
     let mut devices = vec![UNKNOWN; size as usize / mem::size_of::<AudioObjectID>()];
     if devices.is_empty() {
@@ -321,10 +346,7 @@ fn device_ids() -> Result<Vec<AudioObjectID>> {
         )
     };
     if status != 0 {
-        return Err(Error::os(
-            i64::from(status),
-            format!("CoreAudio error {status} while reading the device list."),
-        ));
+        return Err(coreaudio_error(status, "reading the device list"));
     }
     // What the read reported, not what the size query promised: a device unplugged in between
     // would otherwise leave stale ids in the tail.

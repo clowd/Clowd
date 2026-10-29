@@ -21,14 +21,13 @@ use objc2_audio_toolbox::{
     AudioUnitUninitialize,
 };
 use objc2_core_audio::{kAudioDevicePropertyBufferFrameSize, kAudioDevicePropertyLatency, kAudioDevicePropertySafetyOffset};
-use objc2_core_audio_types::{
-    kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatLinearPCM, AudioBufferList, AudioStreamBasicDescription, AudioTimeStamp,
-};
+use objc2_core_audio_types::{AudioBufferList, AudioStreamBasicDescription, AudioTimeStamp};
 
 use crate::error::{Error, Result};
 use crate::ffi::audio_output::{PriscAudioOutput, PriscAudioOutputInfo};
 use crate::ffi::log::{self, PriscInteropLogLevel};
 use crate::panic::{self, CallbackPanic};
+use crate::platform::macos::devices::{coreaudio_error, float32_interleaved};
 
 /// The host's pull, as the export receives it.
 pub(crate) type RenderFn = unsafe extern "C" fn(user: *mut c_void, samples: *mut f32, frames: u32, channels: u32);
@@ -47,6 +46,11 @@ pub(crate) struct Output {
     running: AtomicBool,
     /// Where the trampoline records a caught panic; the handle's next export reports it.
     panic: CallbackPanic,
+    /// Test seam: makes this output's next render panic after the buffer was silenced, so the
+    /// tests can show a panicking callback yields silence and no abort. Per output, so another
+    /// test's unit, pulled by its own IO thread, cannot consume it.
+    #[cfg(test)]
+    panic_next: AtomicBool,
 }
 
 // The unit and `user` are raw pointers. The IO-thread fields are immutable after create, `running`
@@ -54,11 +58,6 @@ pub(crate) struct Output {
 // waits out the IO proc) before anything is dropped.
 unsafe impl Send for Output {}
 unsafe impl Sync for Output {}
-
-/// `PRISC_E_OS` for a failed AudioToolbox call, worded as the C# this replaces threw it.
-fn coreaudio_error(status: i32, what: &str) -> Error {
-    Error::os(i64::from(status), format!("CoreAudio error {status} while {what}."))
-}
 
 /// CoreAudio's IO thread. `extern "C-unwind"` because that is the generated `AURenderCallback`
 /// type; never-unwind is restored by `callback_guard`. Always answers noErr.
@@ -79,11 +78,6 @@ unsafe extern "C-unwind" fn render_trampoline(
     })
 }
 
-/// Test seam: makes the next render panic after the buffer was silenced, so the tests can show a
-/// panicking callback path yields silence and no abort.
-#[cfg(test)]
-static PANIC_NEXT_RENDER: AtomicBool = AtomicBool::new(false);
-
 impl Output {
     /// The IO-thread body: silence the whole writable region first (so a panic anywhere after this
     /// leaves silence, never last cycle's audio), then hand the host `(samples, frames, channels)`.
@@ -101,7 +95,7 @@ impl Output {
         let floats = buffer.mDataByteSize as usize / mem::size_of::<f32>();
         ptr::write_bytes(samples, 0, floats);
         #[cfg(test)]
-        if PANIC_NEXT_RENDER.swap(false, Ordering::AcqRel) {
+        if self.panic_next.swap(false, Ordering::AcqRel) {
             panic!("render panic injected by a test");
         }
         let frames = floats / self.channels as usize;
@@ -144,6 +138,8 @@ impl Output {
             channels,
             running: AtomicBool::new(false),
             panic: CallbackPanic::new(),
+            #[cfg(test)]
+            panic_next: AtomicBool::new(false),
         });
         match output.configure(sample_rate_hz) {
             Ok(info) => Ok((output, info)),
@@ -156,22 +152,10 @@ impl Output {
         }
     }
 
-    /// Interleaved packed float32 (no NonInterleaved flag, so one buffer carries every channel) on
-    /// the input scope; the unit resamples to the device's rate itself. Then the callback, the
-    /// initialisation, and the latency the device now reports.
+    /// Interleaved packed float32 on the input scope; the unit resamples to the device's rate
+    /// itself. Then the callback, the initialisation, and the latency the device now reports.
     fn configure(&self, sample_rate_hz: u32) -> Result<PriscAudioOutputInfo> {
-        let bytes_per_frame = self.channels * mem::size_of::<f32>() as u32;
-        let format = AudioStreamBasicDescription {
-            mSampleRate: f64::from(sample_rate_hz),
-            mFormatID: kAudioFormatLinearPCM,
-            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
-            mBytesPerPacket: bytes_per_frame,
-            mFramesPerPacket: 1,
-            mBytesPerFrame: bytes_per_frame,
-            mChannelsPerFrame: self.channels,
-            mBitsPerChannel: 32,
-            mReserved: 0,
-        };
+        let format = float32_interleaved(sample_rate_hz, self.channels);
         // SAFETY: the property data is the struct on the stack, with its size.
         let status = unsafe {
             AudioUnitSetProperty(
@@ -321,7 +305,7 @@ impl Output {
         if let Some(status) = statuses.into_iter().find(|&s| s != 0) {
             log::emit(
                 PriscInteropLogLevel::Warn,
-                &format!("CoreAudio error {status} while destroying the output unit."),
+                &coreaudio_error(status, "destroying the output unit").message,
             );
         }
         if let Some(text) = output.panic.take() {
@@ -433,7 +417,9 @@ mod tests {
         let mut flags = AudioUnitRenderActionFlags(0);
         // SAFETY: an all-zero AudioTimeStamp is a valid value of the plain struct.
         let mut time: AudioTimeStamp = unsafe { mem::zeroed() };
-        PANIC_NEXT_RENDER.store(true, Ordering::Release);
+        output
+            .panic_next
+            .store(true, Ordering::Release);
         let status = unsafe { render_trampoline(refcon, NonNull::from(&mut flags), NonNull::from(&mut time), 0, 32, &mut list) };
         assert_eq!(status, 0);
         assert!(storage.iter().all(|&s| s == 0.0), "a caught panic must leave silence");

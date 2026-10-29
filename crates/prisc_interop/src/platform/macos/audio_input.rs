@@ -31,14 +31,10 @@ use objc2_audio_toolbox::{
 };
 use objc2_av_foundation::AVAuthorizationStatus;
 use objc2_core_audio::{
-    kAudioDevicePropertyDeviceIsAlive, kAudioDevicePropertyDeviceUID, kAudioObjectPropertyElementMain, kAudioObjectPropertyName,
-    kAudioObjectPropertyScopeGlobal, AudioObjectAddPropertyListener, AudioObjectID, AudioObjectPropertyAddress,
-    AudioObjectRemovePropertyListener,
+    kAudioDevicePropertyDeviceIsAlive, kAudioDevicePropertyDeviceUID, kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal,
+    AudioObjectAddPropertyListener, AudioObjectID, AudioObjectPropertyAddress, AudioObjectRemovePropertyListener,
 };
-use objc2_core_audio_types::{
-    kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatLinearPCM, AudioStreamBasicDescription, AudioStreamPacketDescription,
-    AudioTimeStamp,
-};
+use objc2_core_audio_types::{AudioStreamPacketDescription, AudioTimeStamp};
 use objc2_core_foundation::{CFRetained, CFString};
 
 use crate::error::{Error, Result};
@@ -46,7 +42,7 @@ use crate::ffi::audio_input::{PriscAudioInput, PriscAudioInputEvent, PriscAudioI
 use crate::ffi::log::{self, PriscInteropLogLevel};
 use crate::ffi::types::PriscString;
 use crate::panic::{self, CallbackPanic};
-use crate::platform::macos::devices;
+use crate::platform::macos::devices::{self, coreaudio_error, float32_interleaved};
 
 /// The host's callback, as the export receives it.
 pub(crate) type InputFn = unsafe extern "C" fn(user: *mut c_void, event: *const PriscAudioInputEvent) -> u8;
@@ -117,17 +113,9 @@ fn next_token() -> usize {
     NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
-/// `PRISC_E_OS` for a failed AudioToolbox call, worded as the C# this replaces threw it.
-fn coreaudio_error(status: i32, what: &str) -> Error {
-    Error::os(i64::from(status), format!("CoreAudio error {status} while {what}."))
-}
-
+/// The device's is-alive flag, the property the device-loss listener watches.
 fn alive_address() -> AudioObjectPropertyAddress {
-    AudioObjectPropertyAddress {
-        mSelector: kAudioDevicePropertyDeviceIsAlive,
-        mScope: kAudioObjectPropertyScopeGlobal,
-        mElement: kAudioObjectPropertyElementMain,
-    }
+    devices::address(kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeGlobal)
 }
 
 /// The queue's thread: one filled buffer.
@@ -218,18 +206,7 @@ impl Input {
     }
 
     fn create_queue(&self, buffer_bytes: u32) -> Result<()> {
-        let bytes_per_frame = self.channels * mem::size_of::<f32>() as u32;
-        let mut format = AudioStreamBasicDescription {
-            mSampleRate: f64::from(self.sample_rate_hz),
-            mFormatID: kAudioFormatLinearPCM,
-            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
-            mBytesPerPacket: bytes_per_frame,
-            mFramesPerPacket: 1,
-            mBytesPerFrame: bytes_per_frame,
-            mChannelsPerFrame: self.channels,
-            mBitsPerChannel: 32,
-            mReserved: 0,
-        };
+        let mut format = float32_interleaved(self.sample_rate_hz, self.channels);
         let mut queue: AudioQueueRef = ptr::null_mut();
         // SAFETY: the format and out pointer are locals; the user data is the token, never a
         // pointer; no run loop, so callbacks come on the queue's own thread.
@@ -344,7 +321,7 @@ impl Input {
         if !watching {
             log::emit(
                 PriscInteropLogLevel::Warn,
-                &format!("CoreAudio error {status} while watching the microphone for removal."),
+                &coreaudio_error(status, "watching the microphone for removal").message,
             );
         }
         self.listening
@@ -450,7 +427,7 @@ impl Input {
             if status != 0 {
                 log::emit(
                     PriscInteropLogLevel::Warn,
-                    &format!("CoreAudio error {status} while no longer watching the microphone."),
+                    &coreaudio_error(status, "no longer watching the microphone").message,
                 );
             }
         }
@@ -466,7 +443,7 @@ impl Input {
             if let Some(status) = statuses.into_iter().find(|&s| s != 0) {
                 log::emit(
                     PriscInteropLogLevel::Debug,
-                    &format!("CoreAudio error {status} while closing the microphone."),
+                    &coreaudio_error(status, "closing the microphone").message,
                 );
             }
         }
@@ -498,7 +475,8 @@ impl Input {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicU32;
+    use crate::ffi::status::PriscInteropStatus;
+    use std::sync::atomic::{AtomicI32, AtomicU32};
     use std::thread::sleep;
     use std::time::{Duration, Instant};
 
@@ -511,6 +489,11 @@ mod tests {
         stopped: AtomicU32,
         /// When non-zero, the callback answers 0 (end) on this Data event.
         end_at: AtomicU32,
+        /// When set, the callback takes it on its next Data event, calls the destroy export on it
+        /// from inside the callback and records the status in `destroy_status` (`tried` says it ran).
+        destroy_in_callback: AtomicPtr<PriscAudioInput>,
+        destroy_status: AtomicI32,
+        tried: AtomicBool,
     }
 
     fn seen() -> &'static Seen {
@@ -524,6 +507,15 @@ mod tests {
             let n = seen.data.fetch_add(1, Ordering::AcqRel) + 1;
             seen.bytes
                 .fetch_add(event.data_len, Ordering::AcqRel);
+            let handle = seen
+                .destroy_in_callback
+                .swap(ptr::null_mut(), Ordering::AcqRel);
+            if !handle.is_null() {
+                let status = crate::ffi::audio_input::prisc_audio_input_destroy(handle);
+                seen.destroy_status
+                    .store(status, Ordering::Release);
+                seen.tried.store(true, Ordering::Release);
+            }
             let end_at = seen.end_at.load(Ordering::Acquire);
             return u8::from(end_at == 0 || n < end_at);
         }
@@ -722,6 +714,33 @@ mod tests {
         assert_eq!(seen.data.load(Ordering::Acquire), latched, "data after Stopped");
         assert!(!input.request_stop(), "delivery had already ended");
         close(input);
+    }
+
+    /// The destroy export from inside the callback is refused with `PRISC_E_STATE` and destroys
+    /// nothing (it would otherwise wait on the `deliver` lock its own thread holds): data keeps
+    /// coming, and a destroy from the test thread afterwards succeeds.
+    #[test]
+    fn destroy_from_inside_the_callback_is_refused_and_destroys_nothing() {
+        let seen = seen();
+        let Some(input) = open_default(seen) else { return };
+        let handle = Input::into_handle(input);
+        // SAFETY: the handle is live until the destroy at the end of this test.
+        let input = unsafe { Input::live(handle) }.expect("live");
+        seen.destroy_in_callback
+            .store(handle, Ordering::Release);
+        input.start().expect("start");
+        assert!(wait(|| seen.tried.load(Ordering::Acquire)), "no data within 3 s");
+        assert_eq!(seen.destroy_status.load(Ordering::Acquire), PriscInteropStatus::State as i32);
+        let after = seen.data.load(Ordering::Acquire);
+        assert!(
+            wait(|| seen.data.load(Ordering::Acquire) > after),
+            "the refused destroy stopped delivery"
+        );
+        assert!(unsafe { Input::live(handle) }.is_ok(), "the handle survived the refused destroy");
+        assert_eq!(
+            unsafe { crate::ffi::audio_input::prisc_audio_input_destroy(handle) },
+            PriscInteropStatus::Ok as i32
+        );
     }
 
     #[test]
