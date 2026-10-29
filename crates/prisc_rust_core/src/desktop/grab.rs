@@ -187,8 +187,10 @@ pub fn pack_bgra(src: &[u8], width: usize, height: usize, src_stride: usize, lay
             continue;
         }
         for (dst, px) in dst_row
-            .chunks_exact_mut(4)
-            .zip(src_row.chunks_exact(4))
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(src_row.as_chunks::<4>().0)
         {
             dst[0] = px[b];
             dst[1] = px[g];
@@ -201,7 +203,7 @@ pub fn pack_bgra(src: &[u8], width: usize, height: usize, src_stride: usize, lay
 
 /// Sets every pixel's alpha byte (BGRA) to 255.
 pub fn force_opaque(bgra: &mut [u8]) {
-    for px in bgra.chunks_exact_mut(4) {
+    for px in bgra.as_chunks_mut::<4>().0 {
         px[3] = 0xFF;
     }
 }
@@ -651,7 +653,9 @@ mod tests {
         assert_eq!(image.bgra.len(), image.stride() * image.height as usize);
         assert!(image
             .bgra
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|px| px[3] == 0xFF));
     }
 

@@ -188,7 +188,9 @@ fn a_64_point_grab_is_opaque_bgra_of_the_right_shape() {
     let pixels = unsafe { std::slice::from_raw_parts(image.pixels, image.len) };
     assert!(
         pixels
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|px| px[3] == 0xFF),
         "alpha is forced to 255"
     );
