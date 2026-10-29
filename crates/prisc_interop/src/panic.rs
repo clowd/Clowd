@@ -13,8 +13,9 @@
 //!
 //! [`callback_guard`] wraps every OS-called trampoline under `src/platform` (CoreAudio render and
 //! input procs, HAL listeners, the WinEvent proc, `define_class!` methods): it catches a panic,
-//! remembers it for the next export that asks ([`take_callback_panic`]) and returns a benign
-//! value. It logs nothing (audio threads must not), and an unwind never reaches the OS frame.
+//! records it on the owning handle's [`CallbackPanic`] slot, which that handle's next export
+//! drains, and returns a benign value. It logs nothing (audio threads must not), and an unwind
+//! never reaches the OS frame.
 //!
 //! The workspace keeps `panic = "unwind"`; with `abort` there would be nothing to catch.
 
@@ -81,34 +82,74 @@ fn payload_text(payload: &(dyn Any + Send)) -> String {
     }
 }
 
-static CALLBACK_PANIC: Mutex<Option<String>> = Mutex::new(None);
+/// Where a [`callback_guard`] records a caught panic: one per callback-owning handle (an audio
+/// output, an audio input, a foreground watch), so a panic in one handle's trampoline is reported
+/// by that handle's next export and never by an unrelated one. The handle's state owns it and the
+/// trampoline reaches it through its user pointer (or the hook registry).
+///
+/// [`CallbackPanic::process`] is the slot for a trampoline that has no handle to reach (an
+/// NSServices `define_class!` method, a registry lookup before the handle is known).
+pub(crate) struct CallbackPanic(Mutex<Option<String>>);
 
-/// Runs an OS-called trampoline body; on a panic returns `benign` and remembers the panic text
-/// for [`take_callback_panic`]. Never logs, never unwinds.
+#[allow(dead_code)] // the area handles own and drain these
+impl CallbackPanic {
+    /// The slot of trampolines that have no handle.
+    pub(crate) fn process() -> &'static CallbackPanic {
+        &PROCESS_CALLBACK_PANIC
+    }
+
+    pub(crate) const fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+
+    /// The most recent panic recorded on this slot, cleared by reading it. A handle's export
+    /// drains it first and reports it (as `PRISC_E_PANIC`) instead of carrying on silently.
+    pub(crate) fn take(&self) -> Option<String> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+    }
+
+    /// [`take`](Self::take) as an export result: `Err(PRISC_E_PANIC)` naming the panic, `Ok(())`
+    /// when nothing was recorded.
+    pub(crate) fn check(&self) -> Result<()> {
+        match self.take() {
+            Some(text) => Err(error::Error::new(PriscInteropStatus::Panic, text)),
+            None => Ok(()),
+        }
+    }
+
+    fn record(&self, text: String) {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(text);
+    }
+}
+
+impl Default for CallbackPanic {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+static PROCESS_CALLBACK_PANIC: CallbackPanic = CallbackPanic::new();
+
+/// Runs an OS-called trampoline body; on a panic returns `benign` and records the panic text on
+/// `slot` (the owning handle's [`CallbackPanic`], or [`CallbackPanic::process`]). A later panic
+/// on the same slot replaces an unread earlier one. Never logs, never unwinds.
 #[allow(dead_code)] // the OS trampolines of the area work packages use it
-pub(crate) fn callback_guard<R>(benign: R, body: impl FnOnce() -> R) -> R {
+pub(crate) fn callback_guard<R>(slot: &CallbackPanic, benign: R, body: impl FnOnce() -> R) -> R {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(value) => value,
         Err(payload) => {
             let _ = catch_unwind(AssertUnwindSafe(|| {
-                let text = format!("an OS callback panicked: {}", payload_text(payload.as_ref()));
-                *CALLBACK_PANIC
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner) = Some(text);
+                slot.record(format!("an OS callback panicked: {}", payload_text(payload.as_ref())));
             }));
             benign
         }
     }
-}
-
-/// The most recent panic a [`callback_guard`] caught, cleared by reading it. An export on the
-/// affected handle reports it (as `PRISC_E_PANIC`) instead of carrying on silently.
-#[allow(dead_code)] // the area exports read it
-pub(crate) fn take_callback_panic() -> Option<String> {
-    CALLBACK_PANIC
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .take()
 }
 
 #[cfg(test)]
@@ -166,12 +207,26 @@ mod tests {
 
     #[test]
     fn callback_guard_returns_the_benign_value_and_remembers_the_panic() {
-        let _ = take_callback_panic();
-        assert_eq!(callback_guard(0u8, || 1u8), 1);
-        assert_eq!(take_callback_panic(), None);
-        assert_eq!(callback_guard(0u8, || panic!("render proc failed")), 0);
-        let text = take_callback_panic().expect("recorded");
+        let slot = CallbackPanic::new();
+        assert_eq!(callback_guard(&slot, 0u8, || 1u8), 1);
+        assert_eq!(slot.take(), None);
+        assert_eq!(callback_guard(&slot, 0u8, || panic!("render proc failed")), 0);
+        let text = slot.take().expect("recorded");
         assert!(text.contains("render proc failed"), "{text}");
-        assert_eq!(take_callback_panic(), None);
+        assert_eq!(slot.take(), None);
+    }
+
+    #[test]
+    fn a_panic_is_seen_only_through_its_own_slot() {
+        let a = CallbackPanic::new();
+        let b = CallbackPanic::new();
+        assert_eq!(callback_guard(&a, 0u8, || panic!("output A failed")), 0);
+        assert_eq!(b.take(), None);
+        assert!(b.check().is_ok());
+        let e = a.check().unwrap_err();
+        assert_eq!(e.status, PriscInteropStatus::Panic);
+        assert!(e.message.contains("output A failed"), "{}", e.message);
+        assert!(a.check().is_ok(), "reading clears the slot");
+        assert_eq!(CallbackPanic::process().take(), None);
     }
 }
