@@ -33,10 +33,10 @@ fn stub_exports_of_three_areas_answer_unsupported() {
         unsafe { prisc_interop::ffi::encoding::prisc_encoding_h264_quality(23, 1920, 1080, 30, 1, &mut quality) },
         S::Unsupported as i32
     );
-    assert_eq!(
-        unsafe { prisc_interop::ffi::gpu::prisc_gpu_nv12_texture_release_windows(std::ptr::null_mut()) },
-        S::Unsupported as i32
-    );
+    // WP-GPU implemented this one: on Windows a pointer the crate never handed out is S_NONE.
+    let release = unsafe { prisc_interop::ffi::gpu::prisc_gpu_nv12_texture_release_windows(std::ptr::null_mut()) };
+    let expected = if cfg!(windows) { S::None } else { S::Unsupported };
+    assert_eq!(release, expected as i32);
 }
 
 #[test]
