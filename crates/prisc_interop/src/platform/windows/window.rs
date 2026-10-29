@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use windows::Win32::Foundation::{GetLastError, SetLastError, COLORREF, HWND, LPARAM, WIN32_ERROR, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
-use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP};
+use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_MENU};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, GetForegroundWindow, GetWindowLongPtrW, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowDisplayAffinity,
     SetWindowLongPtrW, SetWindowPos, EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE, HWND_TOPMOST, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOACTIVATE,
@@ -105,10 +105,10 @@ pub(crate) fn is_foreground(handle: isize) -> Result<bool> {
     Ok(unsafe { GetForegroundWindow() } == hwnd(handle))
 }
 
-/// `VK_MENU` (Alt), the key the foreground lock reliably yields to.
-const VK_MENU: u8 = 0x12;
+/// Alt, the key the foreground lock reliably yields to.
+const ALT: u8 = VK_MENU.0 as u8;
 /// Unassigned: AutoHotkey's default `#MenuMaskKey`, pressed and released inside the Alt so no app
-/// sees a lone Alt tap and enters menu mode.
+/// sees a lone Alt tap and enters menu mode. The same key as prisc_hotkeys' `MASK_VK`.
 const VK_MENU_MASK: u8 = 0xE8;
 
 /// The foreground-lock dance of the export. Whether the window ended up in front.
@@ -127,16 +127,16 @@ pub(crate) fn take_foreground(handle: isize) -> bool {
 
     // an Alt the user is physically holding (part of the hotkey) is left alone: injecting its
     // release would tell Windows they let go
-    let alt_held = prisc_platform::input::is_key_down(u32::from(VK_MENU)).unwrap_or(false);
+    let alt_held = prisc_platform::input::is_key_down(u32::from(ALT)).unwrap_or(false);
     unsafe {
         if !alt_held {
-            keybd_event(VK_MENU, 0, KEYBD_EVENT_FLAGS(0), 0);
+            keybd_event(ALT, 0, KEYBD_EVENT_FLAGS(0), 0);
         }
         keybd_event(VK_MENU_MASK, 0, KEYBD_EVENT_FLAGS(0), 0);
         keybd_event(VK_MENU_MASK, 0, KEYEVENTF_KEYUP, 0);
         let _ = SetForegroundWindow(window);
         if !alt_held {
-            keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
+            keybd_event(ALT, 0, KEYEVENTF_KEYUP, 0);
         }
     }
     in_front()
@@ -272,4 +272,107 @@ unsafe extern "system" fn foreground_proc(
             panic::callback_guard(&target.panic, (), || unsafe { (target.callback)(target.user) });
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ptr::null_mut;
+    use std::sync::atomic::{AtomicI32, AtomicPtr, AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::ffi::status::PriscInteropStatus as S;
+    use crate::ffi::window::prisc_window_foreground_watch_destroy_windows;
+
+    /// What the test callbacks reach through `user`.
+    #[derive(Default)]
+    struct Seen {
+        calls: AtomicUsize,
+        /// The `user` each call received, to check it is the pointer the create was given.
+        user: AtomicPtr<c_void>,
+        /// Set for the case that destroys its own watch from inside the callback.
+        watch: AtomicPtr<ForegroundWatch>,
+        destroy_status: AtomicI32,
+    }
+
+    unsafe extern "C" fn count(user: *mut c_void) {
+        let seen = &*(user as *const Seen);
+        seen.calls.fetch_add(1, Ordering::SeqCst);
+        seen.user.store(user, Ordering::SeqCst);
+    }
+
+    unsafe extern "C" fn count_then_destroy(user: *mut c_void) {
+        count(user);
+        let seen = &*(user as *const Seen);
+        let watch = seen.watch.swap(null_mut(), Ordering::SeqCst);
+        if !watch.is_null() {
+            let status = prisc_window_foreground_watch_destroy_windows(watch.cast());
+            seen.destroy_status
+                .store(status, Ordering::SeqCst);
+        }
+    }
+
+    /// What the OS does on a foreground change, without waiting for one: the proc with this hook.
+    fn fire(hook: HWINEVENTHOOK) {
+        unsafe { foreground_proc(hook, EVENT_SYSTEM_FOREGROUND, HWND::default(), 0, 0, 0, 0) }
+    }
+
+    fn registered(hook: HWINEVENTHOOK) -> bool {
+        registry()
+            .as_ref()
+            .is_some_and(|map| map.contains_key(&(hook.0 as isize)))
+    }
+
+    #[test]
+    fn the_proc_hands_the_callback_its_user_pointer_and_stops_after_destroy() {
+        let seen = Seen::default();
+        let user = &seen as *const Seen as *mut c_void;
+        let watch = foreground_watch_create(count, user).expect("SetWinEventHook");
+        let hook = unsafe { (*watch).hook };
+        assert!(registered(hook), "the registry is keyed by the hook the proc receives");
+
+        fire(hook);
+        fire(hook);
+        assert_eq!(seen.calls.load(Ordering::SeqCst), 2);
+        assert_eq!(seen.user.load(Ordering::SeqCst), user);
+
+        assert_eq!(unsafe { prisc_window_foreground_watch_destroy_windows(watch.cast()) }, S::Ok as i32);
+        assert!(!registered(hook), "destroy leaves no stale registry entry");
+        fire(hook);
+        assert_eq!(seen.calls.load(Ordering::SeqCst), 2, "no callback after destroy");
+    }
+
+    #[test]
+    fn a_callback_may_destroy_its_own_watch() {
+        let seen = Seen::default();
+        let user = &seen as *const Seen as *mut c_void;
+        let watch = foreground_watch_create(count_then_destroy, user).expect("SetWinEventHook");
+        let hook = unsafe { (*watch).hook };
+        seen.watch.store(watch, Ordering::SeqCst);
+        seen.destroy_status
+            .store(i32::MIN, Ordering::SeqCst);
+
+        // the registry lock is released before the callback, so this returns instead of deadlocking
+        fire(hook);
+        assert_eq!(seen.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(seen.destroy_status.load(Ordering::SeqCst), S::Ok as i32);
+        assert!(!registered(hook));
+
+        fire(hook);
+        assert_eq!(seen.calls.load(Ordering::SeqCst), 1, "no callback after the in-callback destroy");
+    }
+
+    #[test]
+    fn an_unknown_hook_calls_nothing() {
+        let seen = Seen::default();
+        let user = &seen as *const Seen as *mut c_void;
+        let watch = foreground_watch_create(count, user).expect("SetWinEventHook");
+        // a hook value no watch registered: another hook's event never reaches this callback
+        fire(HWINEVENTHOOK(
+            unsafe { (*watch).hook }
+                .0
+                .wrapping_byte_add(1),
+        ));
+        assert_eq!(seen.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(unsafe { prisc_window_foreground_watch_destroy_windows(watch.cast()) }, S::Ok as i32);
+    }
 }

@@ -91,12 +91,17 @@ fn the_cursor_position_is_plausible() {
 #[cfg(windows)]
 mod windows_chrome {
     use super::*;
+    use std::sync::atomic::{AtomicI32, AtomicPtr, AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
     use windows::core::w;
     use windows::Win32::Foundation::{HWND, RECT};
+
+    use windows::Win32::UI::Accessibility::NotifyWinEvent;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DestroyWindow, GetLayeredWindowAttributes, GetWindowDisplayAffinity, GetWindowLongPtrW, GetWindowRect,
-        GWL_EXSTYLE, LAYERED_WINDOW_ATTRIBUTES_FLAGS, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_EX_STYLE, WM_NULL, WS_EX_LAYERED,
-        WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP,
+        CreateWindowExW, DestroyWindow, DispatchMessageW, GetLayeredWindowAttributes, GetWindowDisplayAffinity, GetWindowLongPtrW,
+        GetWindowRect, PeekMessageW, CHILDID_SELF, EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE, LAYERED_WINDOW_ATTRIBUTES_FLAGS, MSG,
+        OBJID_WINDOW, PM_REMOVE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_EX_STYLE, WM_NULL, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
+        WS_EX_TRANSPARENT, WS_POPUP,
     };
 
     /// A real top-level popup of the predefined STATIC class (no class to register), never shown.
@@ -263,5 +268,115 @@ mod windows_chrome {
             "{}",
             last_message()
         );
+    }
+
+    /// What the delivery tests' callback reaches through `user`.
+    struct Delivery {
+        calls: AtomicUsize,
+        user: AtomicPtr<c_void>,
+        /// When set, the callback destroys this watch (its own) and records the status.
+        destroy: AtomicPtr<PriscForegroundWatch>,
+        destroy_status: AtomicI32,
+    }
+
+    impl Delivery {
+        fn new() -> Self {
+            Self {
+                calls: AtomicUsize::new(0),
+                user: AtomicPtr::new(std::ptr::null_mut()),
+                destroy: AtomicPtr::new(std::ptr::null_mut()),
+                destroy_status: AtomicI32::new(i32::MIN),
+            }
+        }
+
+        fn user(&self) -> *mut c_void {
+            self as *const Self as *mut c_void
+        }
+    }
+
+    unsafe extern "C" fn delivered(user: *mut c_void) {
+        let delivery = &*(user as *const Delivery);
+        delivery.calls.fetch_add(1, Ordering::SeqCst);
+        delivery.user.store(user, Ordering::SeqCst);
+        let own = delivery
+            .destroy
+            .swap(std::ptr::null_mut(), Ordering::SeqCst);
+        if !own.is_null() {
+            let status = prisc_window_foreground_watch_destroy_windows(own);
+            delivery
+                .destroy_status
+                .store(status, Ordering::SeqCst);
+        }
+    }
+
+    /// Raises EVENT_SYSTEM_FOREGROUND for `window` the way the OS does on a foreground change, then
+    /// pumps this thread's queue (an out-of-context hook delivers through it) until `done` or 5 s.
+    fn announce_and_pump(window: &TestWindow, done: impl Fn() -> bool) {
+        unsafe { NotifyWinEvent(EVENT_SYSTEM_FOREGROUND, window.0, OBJID_WINDOW.0, CHILDID_SELF as i32) };
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !done() && Instant::now() < deadline {
+            let mut msg = MSG::default();
+            while unsafe { PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE) }.as_bool() {
+                unsafe { DispatchMessageW(&msg) };
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn a_foreground_event_reaches_the_callback_with_its_user_pointer() {
+        let window = TestWindow::new(WINDOW_EX_STYLE(0));
+        let delivery = Delivery::new();
+        let mut watch: *mut PriscForegroundWatch = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { prisc_window_foreground_watch_create_windows(Some(delivered), delivery.user(), &mut watch) },
+            0,
+            "{}",
+            last_message()
+        );
+        // a real foreground change elsewhere on the machine may add calls; at least ours arrives
+        announce_and_pump(&window, || delivery.calls.load(Ordering::SeqCst) > 0);
+        assert!(delivery.calls.load(Ordering::SeqCst) > 0, "no callback within 5 s");
+        assert_eq!(delivery.user.load(Ordering::SeqCst), delivery.user());
+        assert_eq!(
+            unsafe { prisc_window_foreground_watch_destroy_windows(watch) },
+            0,
+            "{}",
+            last_message()
+        );
+    }
+
+    #[test]
+    fn a_callback_may_destroy_its_own_watch_and_none_follows() {
+        let window = TestWindow::new(WINDOW_EX_STYLE(0));
+        let delivery = Delivery::new();
+        let mut watch: *mut PriscForegroundWatch = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { prisc_window_foreground_watch_create_windows(Some(delivered), delivery.user(), &mut watch) },
+            0,
+            "{}",
+            last_message()
+        );
+        delivery
+            .destroy
+            .store(watch, Ordering::SeqCst);
+        // the registry lock is released before the callback, so the destroy inside it returns
+        announce_and_pump(&window, || {
+            delivery
+                .destroy_status
+                .load(Ordering::SeqCst)
+                != i32::MIN
+        });
+        assert_eq!(
+            delivery
+                .destroy_status
+                .load(Ordering::SeqCst),
+            0,
+            "the in-callback destroy"
+        );
+        let calls = delivery.calls.load(Ordering::SeqCst);
+
+        announce_and_pump(&window, || false);
+        assert_eq!(delivery.calls.load(Ordering::SeqCst), calls, "a callback after the destroy");
     }
 }
