@@ -8,8 +8,6 @@ pub(crate) mod dylib;
 pub(crate) mod gpu;
 pub(crate) mod idle;
 pub(crate) mod permissions;
-pub(crate) mod pixels;
-pub(crate) mod screens;
 pub(crate) mod services;
 pub(crate) mod system;
 pub(crate) mod window;

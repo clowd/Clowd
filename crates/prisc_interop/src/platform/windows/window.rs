@@ -106,7 +106,6 @@ pub(crate) fn is_foreground(handle: isize) -> Result<bool> {
     Ok(unsafe { GetForegroundWindow() } == hwnd(handle))
 }
 
-
 /// The foreground-lock dance of the export. Whether the window ended up in front.
 pub(crate) fn take_foreground(handle: isize) -> bool {
     let window = hwnd(handle);

@@ -80,15 +80,18 @@ mod imp {
         CGPreflightPostEventAccess, CGPreflightScreenCaptureAccess, CGRequestPostEventAccess, CGRequestScreenCaptureAccess,
     };
 
+    // `Boolean` is an unsigned char: read as u8 and normalised, since a Rust bool holding any
+    // value other than 0 or 1 is undefined behaviour. The key is an Option because a missing
+    // weak-linked constant reads as null.
     #[link(name = "ApplicationServices", kind = "framework")]
     extern "C" {
-        fn AXIsProcessTrusted() -> bool;
-        fn AXIsProcessTrustedWithOptions(options: *const std::ffi::c_void) -> bool;
-        static kAXTrustedCheckOptionPrompt: &'static CFString;
+        fn AXIsProcessTrusted() -> u8;
+        fn AXIsProcessTrustedWithOptions(options: *const std::ffi::c_void) -> u8;
+        static kAXTrustedCheckOptionPrompt: Option<&'static CFString>;
     }
 
     fn ax_trusted() -> bool {
-        unsafe { AXIsProcessTrusted() }
+        unsafe { AXIsProcessTrusted() != 0 }
     }
 
     pub(super) fn state(permission: Permission) -> State {
@@ -125,10 +128,12 @@ mod imp {
         let Some(yes) = (unsafe { kCFBooleanTrue }) else {
             return ax_trusted();
         };
-        let key: &CFString = unsafe { kAXTrustedCheckOptionPrompt };
+        let Some(key) = (unsafe { kAXTrustedCheckOptionPrompt }) else {
+            return ax_trusted();
+        };
         let options = prompt_options(key, yes);
         let ptr: *const CFDictionary<CFString, objc2_core_foundation::CFBoolean> = &*options;
-        unsafe { AXIsProcessTrustedWithOptions(ptr.cast()) }
+        unsafe { AXIsProcessTrustedWithOptions(ptr.cast()) != 0 }
     }
 
     pub(super) fn prompt_options(

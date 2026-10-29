@@ -4,9 +4,7 @@ pub(crate) mod com;
 pub(crate) mod devices;
 pub(crate) mod gpu;
 pub(crate) mod idle;
-pub(crate) mod pixels;
 pub(crate) mod process;
-pub(crate) mod screens;
 pub(crate) mod system;
 pub(crate) mod window;
 

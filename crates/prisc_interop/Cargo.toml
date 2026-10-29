@@ -90,9 +90,6 @@ libc.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true
-block2.workspace = true
-# The private serial queue of the microphone's device-alive listener.
-dispatch2.workspace = true
 # The crates below are declared DIRECTLY, with an explicit version and default-features = false,
 # rather than `workspace = true`: their root entries are bare versions whose defaults prisc_capture
 # and prisc_scroll_driver rely on, and Cargo ignores `default-features = false` on an inherited
@@ -106,6 +103,9 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSApplication",
     "NSButton",
     "NSControl",
+    # -[NSWindow initWithContentRect:styleMask:backing:defer:] (NSBackingStoreType), in the
+    # main-thread window tests
+    "NSGraphics",
     "NSPasteboard",
     "NSResponder",
     "NSRunningApplication",

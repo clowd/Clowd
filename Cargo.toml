@@ -32,8 +32,8 @@ rust-version = "1.89"
 # codes, the desktop queries and Sentry setup. Default features are off here so each
 # consumer names the `desktop` and `telemetry` modules it actually uses.
 prisc_rust_core = { path = "crates/prisc_rust_core", default-features = false }
-# The global hotkey hook: linked into prisc_capture and prisc_interop, and (until it folds into
-# prisc_interop) still built as prisc_hotkeys.dll / .dylib for Prisc.Ui.
+# The global hotkey hook: an rlib linked into prisc_capture and prisc_interop (Prisc.Ui reaches it
+# through prisc_interop's prisc_hotkeys_* exports).
 prisc_hotkeys = { path = "crates/prisc_hotkeys" }
 # Leaf OS primitives (permissions, physical key state, the foreground grant) shared by every crate
 # that asks those questions. prisc_interop and prisc_codegen are never dependencies, so they have
