@@ -17,8 +17,6 @@
 
 use std::sync::OnceLock;
 
-use windows::Win32::UI::WindowsAndMessaging::{AllowSetForegroundWindow, ASFW_ANY};
-
 /// The shell's pid, from `--shell-pid`. Set once during startup, before any
 /// window exists; `None` in a standalone run, where there is no shell.
 static SHELL_PID: OnceLock<Option<u32>> = OnceLock::new();
@@ -49,7 +47,7 @@ pub fn hand_to_shell() {
     };
     // The grant is consumed by a single SetForegroundWindow, so re-granting
     // per cycle is the intended usage rather than a leak.
-    if let Err(e) = unsafe { AllowSetForegroundWindow(pid) } {
+    if let Err(e) = prisc_platform::foreground::grant(Some(pid)) {
         debug!("AllowSetForegroundWindow({pid}) refused ({e}); the shell may not be able to raise its next window");
     }
 }
@@ -69,7 +67,7 @@ pub fn hand_to_shell() {
 /// Windows-only by design — macOS has no foreground lock, so there is
 /// nothing to grant; the mac side of `SystemInterop` is a no-op.
 pub fn allow_any_foreground() {
-    if let Err(e) = unsafe { AllowSetForegroundWindow(ASFW_ANY) } {
+    if let Err(e) = prisc_platform::foreground::grant(None) {
         debug!("AllowSetForegroundWindow(ASFW_ANY) refused ({e}); the browser may only flash in the taskbar");
     }
 }
