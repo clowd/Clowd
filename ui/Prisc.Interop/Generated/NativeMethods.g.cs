@@ -190,11 +190,14 @@ namespace Prisc.Interop
         internal static extern int prisc_oklch_paint_track(int channel, PriscOkLch* value, uint* pixels, nuint len);
 
         /// <summary>
-        ///  The cursor position in the screen coordinate space (`GetCursorPos` / the CGEvent location,
-        ///  top-left origin, floored). Needs no window and no primary screen.
+        ///  The cursor position right now, in the space `prisc_screens_*` reports screens in: physical
+        ///  virtual-desktop pixels on Windows (`GetCursorPos`), CoreGraphics global points with a top-left
+        ///  origin on macOS (the location of a fresh `CGEvent`, floored). Needs no window and no primary
+        ///  screen. `out_point` is written only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_NONE` (the OS will not say), `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE` when the OS will not say (`GetCursorPos` failed, as on a
+        ///  secure desktop, or the window server made no event); `PRISC_E_INVALID_ARG` for a null
+        ///  `out_point`; `PRISC_E_UNSUPPORTED` on a platform without a cursor backend.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -998,12 +1001,21 @@ namespace Prisc.Interop
         internal static extern int prisc_interop_version(PriscString* out_version);
 
         /// <summary>
-        ///  The open-time setup of an overlay window, as `PriscOverlayFlags` bits: `CoverMenuBar` (macOS
-        ///  overlay level and collection behaviour), `OpaqueLayered` (Windows), `ClickThrough` (both). A bit
-        ///  that does not apply on an OS is a truthful no-op.
+        ///  The open-time setup of an overlay window, as `PriscOverlayFlags` bits, applied in one call:
+        ///  - `CoverMenuBar` (macOS): the overlay level (25) and collection behaviour (Stationary,
+        ///    CanJoinAllSpaces, FullScreenAuxiliary, IgnoresCycle) of `prisc_rust_core::desktop::overlay`,
+        ///    so the window may cover the menu bar, fullscreen apps and every Space. Apply it before
+        ///    positioning the window: below the menu bar level AppKit constrains the frame away from the bar.
+        ///  - `OpaqueLayered` (Windows): `SetLayeredWindowAttributes(255, LWA_ALPHA)`, the mandatory
+        ///    follow-up to `WS_EX_LAYERED` (a layered window without it is never repainted).
+        ///  - `ClickThrough` (both): mouse events pass through (`WS_EX_TRANSPARENT` set live /
+        ///    `setIgnoresMouseEvents:YES`). Without the bit the window's mouse state is left alone.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE` (macOS off the main thread), `PRISC_E_OS`.
+        ///  A bit that does not apply on an OS is a truthful no-op there, so `None` is a valid no-op too.
+        ///
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle or an unknown bit; `PRISC_E_STATE`
+        ///  off the macOS main thread; `PRISC_E_OS` when a Windows call failed (the code is the Win32 error
+        ///  as an HRESULT); `PRISC_E_UNSUPPORTED` on a platform with neither window system.
         ///
         ///  Thread: must be the macOS main thread; any thread elsewhere.
         /// </summary>
@@ -1011,11 +1023,16 @@ namespace Prisc.Interop
         internal static extern int prisc_window_prepare_overlay(nint handle, uint flags);
 
         /// <summary>
-        ///  Turns mouse pass-through on or off live (`WS_EX_TRANSPARENT` with `SWP_FRAMECHANGED` /
-        ///  `setIgnoresMouseEvents:`).
+        ///  Turns mouse pass-through on or off live: `WS_EX_TRANSPARENT` set or cleared with
+        ///  `SWP_FRAMECHANGED` (a no-op when the bit already has that value) / `setIgnoresMouseEvents:`.
+        ///  Turning it off sends an explicit `NO` on macOS, which also takes the mouse over transparent
+        ///  pixels (AppKit's never-set default lets those through, a third state a window does not return
+        ///  to once `YES` was sent). On Windows the change lasts until Avalonia next re-applies the window
+        ///  styles, so a window that toggles it keeps a styles callback that re-asserts the current state.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle; `PRISC_E_STATE` off the macOS main
+        ///  thread; `PRISC_E_OS` when a Windows call failed; `PRISC_E_UNSUPPORTED` on a platform with neither
+        ///  window system.
         ///
         ///  Thread: must be the macOS main thread; any thread elsewhere.
         /// </summary>
@@ -1023,11 +1040,15 @@ namespace Prisc.Interop
         internal static extern int prisc_window_set_click_through(nint handle, byte on);
 
         /// <summary>
-        ///  Raises the window above every overlay without activating it (`HWND_TOPMOST` + `SWP_NOACTIVATE` /
-        ///  the above-overlay level + `orderFrontRegardless`).
+        ///  Raises the window above every overlay without activating it, moving it or resizing it:
+        ///  `SetWindowPos(HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)` (among topmost peers the
+        ///  later one wins) / the above-overlay level (26) + `orderFrontRegardless` (a window that can become
+        ///  key orders itself to the front of its own level, so a same-level sibling would sink again on the
+        ///  first click into it). The raise stands for the life of the window.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle; `PRISC_E_STATE` off the macOS main
+        ///  thread; `PRISC_E_OS` when `SetWindowPos` failed; `PRISC_E_UNSUPPORTED` on a platform with neither
+        ///  window system.
         ///
         ///  Thread: must be the macOS main thread; any thread elsewhere.
         /// </summary>
@@ -1035,11 +1056,15 @@ namespace Prisc.Interop
         internal static extern int prisc_window_raise_topmost_no_activate(nint handle);
 
         /// <summary>
-        ///  Excludes the window from screen capture or includes it again (`WDA_EXCLUDEFROMCAPTURE` /
-        ///  `setSharingType:`).
+        ///  Hides the window from screen capture or shows it again: `SetWindowDisplayAffinity` with
+        ///  `WDA_EXCLUDEFROMCAPTURE` / `WDA_NONE` (honoured by every capture API from Windows 10 2004; older
+        ///  builds refuse the exclude value, which is `PRISC_E_OS`, and `WDA_MONITOR` is deliberately not a
+        ///  fallback because it blacks the window out instead of removing it) / `setSharingType:` with
+        ///  `NSWindowSharingNone` / AppKit's default `NSWindowSharingReadOnly`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle; `PRISC_E_STATE` off the macOS main
+        ///  thread; `PRISC_E_OS` when `SetWindowDisplayAffinity` failed; `PRISC_E_UNSUPPORTED` on a platform
+        ///  with neither window system.
         ///
         ///  Thread: must be the macOS main thread; any thread elsewhere.
         /// </summary>
@@ -1047,10 +1072,13 @@ namespace Prisc.Interop
         internal static extern int prisc_window_set_excluded_from_capture(nint handle, byte excluded);
 
         /// <summary>
-        ///  Whether the window has the keyboard: `GetForegroundWindow() == hwnd` / app active and window key.
+        ///  Whether the window has the keyboard right now: `GetForegroundWindow() == hwnd` on Windows (not
+        ///  the window's active state, which a `SetForegroundWindow` refused by the foreground lock still
+        ///  sets) / `NSApp.isActive &amp;&amp; window.isKeyWindow` on macOS. `out_foreground` is 1 or 0.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle or a null `out_foreground`;
+        ///  `PRISC_E_STATE` off the macOS main thread; `PRISC_E_UNSUPPORTED` on a platform with neither
+        ///  window system.
         ///
         ///  Thread: must be the macOS main thread; any thread elsewhere.
         /// </summary>
@@ -1058,11 +1086,16 @@ namespace Prisc.Interop
         internal static extern int prisc_window_is_foreground(nint handle, byte* out_foreground);
 
         /// <summary>
-        ///  Brings the window to the front with the keyboard, in one call (the Alt-key foreground unlock on
-        ///  Windows). macOS answers `PRISC_E_UNSUPPORTED` this phase; callers keep their Avalonia path.
+        ///  Brings the window to the front with the keyboard, in one call, and says whether it ended up
+        ///  there (`out_in_front`, 1 or 0). Windows: nothing when it already is; then a plain
+        ///  `SetForegroundWindow` (allowed after a click on one of our windows); failing that, the
+        ///  foreground lock is lifted by making this process the last to send input: Alt down (unless the
+        ///  user is physically holding it, part of the hotkey), the unassigned key 0xE8 down and up so the
+        ///  Alt reads as part of a chord and no app enters menu mode, `SetForegroundWindow`, Alt up. macOS
+        ///  answers `PRISC_E_UNSUPPORTED` this phase; callers keep their Avalonia activation there.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_UNSUPPORTED` (macOS).
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle or a null `out_in_front`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -1070,11 +1103,13 @@ namespace Prisc.Interop
         internal static extern int prisc_window_take_foreground(nint handle, byte* out_in_front);
 
         /// <summary>
-        ///  Moves and resizes the window in one step (`SetWindowPos` with `SWP_NOZORDER | SWP_NOACTIVATE`).
-        ///  macOS answers `PRISC_E_UNSUPPORTED` this phase.
+        ///  Moves and resizes the window in one step: `SetWindowPos(x, y, width, height, SWP_NOZORDER |
+        ///  SWP_NOACTIVATE | SWP_NOOWNERZORDER)`, `rect` in physical virtual-desktop pixels. Atomic where
+        ///  a position set and a size set a layout pass apart would make the window slide and then snap.
+        ///  macOS answers `PRISC_E_UNSUPPORTED` this phase (the caller keeps its toolkit path there).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` (macOS).
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle, a null `rect` or a negative size;
+        ///  `PRISC_E_OS` when `SetWindowPos` failed; `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: must be the macOS main thread; any thread elsewhere.
         /// </summary>
@@ -1082,10 +1117,11 @@ namespace Prisc.Interop
         internal static extern int prisc_window_set_bounds(nint handle, PriscRect* rect);
 
         /// <summary>
-        ///  Windows: `DefWindowProcW` for a message a window procedure hook passes on.
+        ///  Windows: `DefWindowProcW` for a message a window procedure hook hands on (the Alt+Space system
+        ///  menu that Avalonia's own procedure would swallow); its `LRESULT` goes to `out_result`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero `hwnd` or a null `out_result`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: the thread that owns the window (inside its window procedure).
         /// </summary>
@@ -1093,11 +1129,16 @@ namespace Prisc.Interop
         internal static extern int prisc_window_default_proc_windows(nint hwnd, uint msg, nuint wparam, nint lparam, nint* out_result);
 
         /// <summary>
-        ///  Windows: watches foreground changes (`SetWinEventHook(EVENT_SYSTEM_FOREGROUND)`, out of
-        ///  context). The registry lock is released before `callback` runs (README C3).
+        ///  Windows: calls `callback(user)` whenever the system's foreground window changes, to any window
+        ///  of any process, until destroyed (`SetWinEventHook(EVENT_SYSTEM_FOREGROUND)`, out of context, so
+        ///  the events arrive through the creating thread's message loop and the callback runs there,
+        ///  synchronously, outside any export: it may call exports, README R20). WINEVENTPROC has no user
+        ///  parameter, so the crate keeps a hook-to-(callback, user) registry; its lock is released before
+        ///  `callback` runs, so destroying the watch from inside the callback cannot deadlock (README C3).
+        ///  `*out_watch` is written on `PRISC_OK` and set to null otherwise.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `callback` or `out_watch`; `PRISC_E_OS` when
+        ///  `SetWinEventHook` refused; `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: a thread that pumps window messages; the callback runs on that thread.
         /// </summary>
@@ -1105,10 +1146,14 @@ namespace Prisc.Interop
         internal static extern int prisc_window_foreground_watch_create_windows(delegate* unmanaged[Cdecl]<void*, void> callback, void* user, PriscForegroundWatch** out_watch);
 
         /// <summary>
-        ///  Windows: ends a foreground watch (`UnhookWinEvent`) on its creating thread; null is `PRISC_OK`.
+        ///  Windows: ends a foreground watch (`UnhookWinEvent`) and frees it; no callback runs once this
+        ///  returns. Must run on the thread that created the watch, since the hook belongs to that thread's
+        ///  message loop. A null `watch` is `PRISC_OK` on every OS. A panic caught in the watch's callback
+        ///  path is reported here, after the watch is gone, as `PRISC_E_PANIC`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_STATE` (wrong thread), `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_STATE` on another thread (the watch is left intact);
+        ///  `PRISC_E_PANIC` for a panic recorded by the callback path; `PRISC_E_UNSUPPORTED` off Windows for
+        ///  a non-null `watch`.
         ///
         ///  Thread: a thread that pumps window messages; the callback runs on that thread.
         /// </summary>
@@ -1116,10 +1161,17 @@ namespace Prisc.Interop
         internal static extern int prisc_window_foreground_watch_destroy_windows(PriscForegroundWatch* watch);
 
         /// <summary>
-        ///  macOS: moves the close / minimise / zoom buttons to the given insets from the top-left corner.
+        ///  macOS: places the close, minimise and zoom buttons at `left_inset` (left edge of the close
+        ///  button) and `top_inset` (top edge of all three), in points from the window's top-left, instead
+        ///  of the (9, 9) AppKit gives a bare window. The three are translated as a unit, so AppKit's own
+        ///  spacing and button size (the small variant under a title bar shorter than 32 pt) are kept, and a
+        ///  repeated call computes a zero shift. AppKit resets the frames on every title bar relayout (a
+        ///  resize, zoom, minimise and restore, either fullscreen transition), so callers re-apply after
+        ///  those. objc2 handles the 32-byte `frame` struct return on both arm64 and x86_64.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_UNSUPPORTED` off macOS.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE` when the window has no standard buttons or no title bar
+        ///  height, so nothing moved; `PRISC_E_INVALID_ARG` for a zero handle or a non-finite inset;
+        ///  `PRISC_E_STATE` off the main thread; `PRISC_E_UNSUPPORTED` off macOS.
         ///
         ///  Thread: must be the macOS main thread.
         /// </summary>
