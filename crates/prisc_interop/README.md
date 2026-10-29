@@ -229,7 +229,7 @@ C#) gives "stale bindings: run cargo codegen" at load instead of undefined behav
 
 ## Exports by area
 
-89 exports. Each area's C# wrapper is `ui/Prisc.Interop/<Area>.cs`.
+90 exports. Each area's C# wrapper is `ui/Prisc.Interop/<Area>.cs`.
 
 Every export has a production caller except two that exist for tests, kept on purpose:
 `prisc_interop_selftest` (the boundary self-test the C# and probe suites drive) and
@@ -241,7 +241,7 @@ the crate's own tests.
 | Area (`src/ffi/`) | Exports | |
 |---|---|---|
 | infra: `version`, `error`, `string`, `log`, `selftest` | 7 | version and ABI hash, last error, string free, log sink, the boundary self-test |
-| `screens`, `pixels`, `idle`, `system`, `cursor` | 10 | the monitor list, screen grab and pixel read, idle time, animation preference, cursor position (screens and grab: prisc_rust_core::desktop) |
+| `screens`, `pixels`, `idle`, `system`, `cursor` | 11 | the monitor list, screen grab and pixel read, idle time, animation preference, cursor position (screens and grab: prisc_rust_core::desktop) |
 | `window` | 11 | overlay setup, click-through, capture exclusion, foreground, bounds, the foreground watch |
 | `ipc`, `process` | 5 | the stdout guard, the kill-on-close job, the foreground grant, FFmpeg preparation, package identity |
 | `app`, `services`, `permissions` | 4 | activation policy, the NSServices provider, permission state and request (prisc_platform) |

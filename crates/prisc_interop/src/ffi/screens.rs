@@ -9,7 +9,7 @@ use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 use crate::error::{Error, Result};
 use crate::ffi::status::{PRISC_OK, PRISC_S_NONE};
-use crate::ffi::types::PriscRect;
+use crate::ffi::types::{PriscPoint, PriscRect};
 use crate::{panic, util};
 
 /// One screen (64 bytes).
@@ -125,6 +125,35 @@ pub unsafe extern "C" fn prisc_screens_primary(out: *mut PriscScreen) -> i32 {
 unsafe fn primary(out: *mut PriscScreen) -> Result {
     let out = util::out(out, "out")?;
     write_found(out, screens::primary())
+}
+
+/// The refresh rate of the screen containing each of `count` points, read from ONE screen list:
+/// `out_hz[i]` is that screen's rate for `points[i]` (the `prisc_screens_at_point` rule, fallback
+/// None), 0 when no screen contains the point or the screen reports none. The macOS caller passes
+/// the centres of Avalonia's screens, whose bounds and work areas it keeps, to fill in the rates.
+///
+/// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `points` or `out_hz` with a non-zero
+/// `count`; `PRISC_E_OS` when the OS enumeration failed.
+///
+/// Thread: any thread.
+#[no_mangle]
+pub unsafe extern "C" fn prisc_screens_refresh_at(points: *const PriscPoint, count: u32, out_hz: *mut f64) -> i32 {
+    panic::guard("prisc_screens_refresh_at", || refresh_at(points, count, out_hz))
+}
+
+unsafe fn refresh_at(points: *const PriscPoint, count: u32, out_hz: *mut f64) -> Result {
+    let points = util::slice(points, count as usize, "points")?;
+    let out_hz = util::slice_mut(out_hz, count as usize, "out_hz")?;
+    if points.is_empty() {
+        return Ok(PRISC_OK);
+    }
+    let screens = screens::list().map_err(os_error)?;
+    for (hz, point) in out_hz.iter_mut().zip(points) {
+        *hz = screens::select_at_point(&screens, ScreenPoint::new(point.x, point.y), Fallback::None)
+            .and_then(|screen| screen.refresh_hz)
+            .unwrap_or(0.0);
+    }
+    Ok(PRISC_OK)
 }
 
 impl From<PriscScreenFallback> for Fallback {
@@ -244,7 +273,38 @@ mod tests {
         assert_eq!(unsafe { prisc_screens_at_rect(&rect, 0, ptr::null_mut()) }, invalid);
         assert_eq!(unsafe { prisc_screens_at_rect(&rect, 7, &mut screen) }, invalid);
         assert_eq!(unsafe { prisc_screens_primary(ptr::null_mut()) }, invalid);
+        let mut hz = [0.0f64; 1];
+        let point = PriscPoint::default();
+        assert_eq!(unsafe { prisc_screens_refresh_at(ptr::null(), 1, hz.as_mut_ptr()) }, invalid);
+        assert_eq!(unsafe { prisc_screens_refresh_at(&point, 1, ptr::null_mut()) }, invalid);
+        assert_eq!(unsafe { prisc_screens_refresh_at(ptr::null(), 0, ptr::null_mut()) }, PRISC_OK);
         // nothing was written on any of those paths
         assert_eq!(screen, PriscScreen::default());
+    }
+
+    #[test]
+    fn refresh_at_agrees_with_at_point_for_each_point() {
+        let mut list = [PriscScreen::default(); 16];
+        let mut count = 0u32;
+        assert_eq!(unsafe { prisc_screens_list(list.as_mut_ptr(), 16, &mut count) }, PRISC_OK);
+        let mut points: Vec<PriscPoint> = list[..(count as usize).min(16)]
+            .iter()
+            .map(|s| PriscPoint {
+                x: s.bounds.x + s.bounds.width / 2,
+                y: s.bounds.y + s.bounds.height / 2,
+            })
+            .collect();
+        points.push(PriscPoint { x: i32::MIN / 2, y: i32::MIN / 2 }); // on no screen
+        let mut hz = vec![-1.0f64; points.len()];
+        let status = unsafe { prisc_screens_refresh_at(points.as_ptr(), points.len() as u32, hz.as_mut_ptr()) };
+        assert_eq!(status, PRISC_OK);
+        for (point, hz) in points.iter().zip(&hz) {
+            let mut screen = PriscScreen::default();
+            let expected = match unsafe { prisc_screens_at_point(point.x, point.y, 0, &mut screen) } {
+                PRISC_OK => screen.refresh_hz,
+                _ => 0.0,
+            };
+            assert_eq!(*hz, expected, "{point:?}");
+        }
     }
 }

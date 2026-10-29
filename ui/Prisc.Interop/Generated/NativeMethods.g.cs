@@ -1003,6 +1003,20 @@ namespace Prisc.Interop
         internal static extern int prisc_screens_primary(PriscScreen* @out);
 
         /// <summary>
+        ///  The refresh rate of the screen containing each of `count` points, read from ONE screen list:
+        ///  `out_hz[i]` is that screen's rate for `points[i]` (the `prisc_screens_at_point` rule, fallback
+        ///  None), 0 when no screen contains the point or the screen reports none. The macOS caller passes
+        ///  the centres of Avalonia's screens, whose bounds and work areas it keeps, to fill in the rates.
+        ///
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `points` or `out_hz` with a non-zero
+        ///  `count`; `PRISC_E_OS` when the OS enumeration failed.
+        ///
+        ///  Thread: any thread.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "prisc_screens_refresh_at", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int prisc_screens_refresh_at(PriscPoint* points, uint count, double* out_hz);
+
+        /// <summary>
         ///  Produces the outcome `kind` (a `PriscSelftestKind`) names; see that enum. `out_value` may be
         ///  null. Tests and diagnostics only.
         ///

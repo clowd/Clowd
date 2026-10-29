@@ -89,6 +89,23 @@ namespace Prisc.Interop.Tests
         }
 
         [Fact]
+        public void The_batch_refresh_rates_match_the_lookup_of_each_point()
+        {
+            InteropTestGate.Require();
+            var screens = NativeScreens.List();
+            var points = new (int X, int Y)[screens.Length + 1];
+            for (int i = 0; i < screens.Length; i++)
+                points[i] = (screens[i].BoundsX + screens[i].BoundsWidth / 2, screens[i].BoundsY + screens[i].BoundsHeight / 2);
+            points[^1] = (-1_000_000, -1_000_000); // on no screen
+
+            var rates = NativeScreens.RefreshRatesAt(points);
+            Assert.Equal(points.Length, rates.Length);
+            for (int i = 0; i < points.Length; i++)
+                Assert.Equal(NativeScreens.AtPoint(points[i].X, points[i].Y)?.RefreshHz ?? 0, rates[i]);
+            Assert.Empty(NativeScreens.RefreshRatesAt(ReadOnlySpan<(int, int)>.Empty));
+        }
+
+        [Fact]
         public void An_unknown_fallback_throws_invalid_arg_with_the_export_name()
         {
             InteropTestGate.Require();

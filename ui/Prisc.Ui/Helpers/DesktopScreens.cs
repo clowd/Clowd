@@ -84,10 +84,11 @@ namespace Prisc.UI.Helpers
                 var screens = window?.Screens?.All;
                 if (screens == null)
                     return Array.Empty<DesktopScreen>();
+                var rates = RefreshRatesAt(screens);
                 var mapped = new List<DesktopScreen>(screens.Count);
-                foreach (var s in screens)
+                for (int i = 0; i < screens.Count; i++)
                 {
-                    var m = FromAvalonia(s);
+                    var m = FromAvalonia(screens[i], rates[i]);
                     if (m != null)
                         mapped.Add(m);
                 }
@@ -132,7 +133,10 @@ namespace Prisc.UI.Helpers
             SentryConfig.CaptureHandled(ex, "screens." + what);
         }
 
-        private static DesktopScreen FromAvalonia(Avalonia.Platform.Screen screen)
+        private static DesktopScreen FromAvalonia(Avalonia.Platform.Screen screen) =>
+            screen == null ? null : FromAvalonia(screen, RefreshRateAt(screen.Bounds));
+
+        private static DesktopScreen FromAvalonia(Avalonia.Platform.Screen screen, double refreshRate)
         {
             if (screen == null)
                 return null;
@@ -142,8 +146,31 @@ namespace Prisc.UI.Helpers
                 WorkingArea = screen.WorkingArea,
                 Scaling = screen.Scaling,
                 IsPrimary = screen.IsPrimary,
-                RefreshRate = RefreshRateAt(screen.Bounds),
+                RefreshRate = refreshRate,
             };
+        }
+
+        /// <summary>
+        /// <see cref="RefreshRateAt"/> for every screen at once: one native call, one screen list.
+        /// All zeros when the lookup failed (reported).
+        /// </summary>
+        private static double[] RefreshRatesAt(IReadOnlyList<Avalonia.Platform.Screen> screens)
+        {
+            var centres = new (int X, int Y)[screens.Count];
+            for (int i = 0; i < centres.Length; i++)
+            {
+                var b = screens[i]?.Bounds ?? default;
+                centres[i] = (b.X + b.Width / 2, b.Y + b.Height / 2);
+            }
+            try
+            {
+                return NativeScreens.RefreshRatesAt(centres);
+            }
+            catch (InteropException ex)
+            {
+                Report(ex, nameof(RefreshRatesAt));
+                return new double[centres.Length];
+            }
         }
 
         /// <summary>

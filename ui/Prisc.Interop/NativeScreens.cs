@@ -89,6 +89,25 @@ namespace Prisc.Interop
             return status == InteropStatus.Ok ? Map(screen) : null;
         }
 
+        /// <summary>The refresh rate of the screen containing each point, all read from one screen
+        /// list (the <see cref="AtPoint"/> rule, no fallback): 0 for a point on no screen or a
+        /// screen that reports none. Throws <see cref="InteropException"/> when the OS enumeration
+        /// fails.</summary>
+        public static double[] RefreshRatesAt(ReadOnlySpan<(int X, int Y)> points)
+        {
+            InteropLibrary.Require();
+            var result = new double[points.Length];
+            if (points.Length == 0)
+                return result;
+            var native = new PriscPoint[points.Length];
+            for (int i = 0; i < points.Length; i++)
+                native[i] = new PriscPoint { x = points[i].X, y = points[i].Y };
+            fixed (PriscPoint* p = native)
+            fixed (double* hz = result)
+                Native.Check(NativeMethods.prisc_screens_refresh_at(p, (uint)native.Length, hz), "prisc_screens_refresh_at");
+            return result;
+        }
+
         /// <summary>The primary screen; null on a desktop without one.</summary>
         public static ScreenInfo? Primary()
         {
