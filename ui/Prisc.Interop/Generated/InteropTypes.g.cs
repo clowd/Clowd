@@ -17,14 +17,18 @@ namespace Prisc.Interop
     /// <summary>What a <c>PriscAudioInputEvent</c> carries.</summary>
     public enum AudioInputEventKind : uint
     {
+        /// <summary>A captured buffer: <c>data_len</c> bytes of interleaved float32 at <c>data</c>.</summary>
         Data = 0,
+        /// <summary>Delivery ended by itself; <c>stop</c> says why.</summary>
         Stopped = 1,
     }
 
     /// <summary>Why the input stopped by itself.</summary>
     public enum AudioInputStop : int
     {
+        /// <summary>The device was unplugged or disabled (its is-alive flag cleared, or it stopped answering).</summary>
         DeviceLost = 1,
+        /// <summary>The queue refused a buffer back; <c>os_status</c> is the OSStatus.</summary>
         RequeueFailed = 2,
     }
 
