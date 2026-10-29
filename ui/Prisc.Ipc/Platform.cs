@@ -7,13 +7,10 @@ namespace Prisc.Ipc
     {
         /// <summary>The executable for <paramref name="stem"/>: <c>stem.exe</c> on Windows, the bare
         /// stem elsewhere.</summary>
-        public static string ExeName(string stem) => OperatingSystem.IsWindows() ? stem + ".exe" : stem;
+        public static string ExeName(string stem) => Prisc.Interop.NativeProbe.ExeName(stem);
 
         /// <summary>The native library for <paramref name="stem"/>: <c>stem.dll</c>,
         /// <c>libstem.dylib</c> or <c>libstem.so</c>.</summary>
-        public static string LibName(string stem) =>
-            OperatingSystem.IsWindows() ? stem + ".dll"
-            : OperatingSystem.IsMacOS() ? "lib" + stem + ".dylib"
-            : "lib" + stem + ".so";
+        public static string LibName(string stem) => Prisc.Interop.NativeProbe.LibName(stem);
     }
 }

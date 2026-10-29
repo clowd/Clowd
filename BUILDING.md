@@ -125,11 +125,11 @@ Prisc.Ui and the standby `prisc_capture` process, build, then relaunch.
 
 The C# key enum and the ABI constants (`ui/Prisc.Shared/Hotkeys/HotkeyKey.g.cs` and
 `ui/Prisc.Ui/Services/Hotkeys/HotkeysAbi.g.cs`) are generated from the crate's key table and
-checked by `cargo test -p prisc_hotkeys`. After changing a key, an ABI code or the event struct,
-rewrite both with:
+checked by `cargo test -p prisc_codegen`, like every other generated C# file. After changing a
+key, an ABI code or the event struct, rewrite them with:
 
 ```sh
-PRISC_HOTKEYS_REGEN=1 cargo test -p prisc_hotkeys csharp_mirror
+cargo codegen
 ```
 
 ## Recording stack (libobs)

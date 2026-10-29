@@ -8,8 +8,10 @@ namespace Prisc.UI
     /// P/Invoke surface of the native <c>prisc_hotkeys</c> library (the crate's C ABI, see
     /// <c>crates/prisc_hotkeys/src/ffi.rs</c>). The return codes, event kinds and the event struct are
     /// generated from the crate (<see cref="HotkeysAbi"/>, <see cref="HotkeyEventNative"/>); only
-    /// these signatures are written by hand, and the crate's ABI revision — folded into
-    /// <see cref="HotkeyKeys.AbiVersion"/> — guards them. Call <see cref="EnsureLoaded"/> before
+    /// these signatures are written by hand, and the crate's ABI revision, folded into
+    /// <see cref="HotkeysAbi.AbiVersion"/>, guards them. The exports carry a
+    /// <c>prisc_hotkeys_legacy_</c> prefix (so prisc_interop can link the crate without a clash); the
+    /// C# names keep the old spelling through <c>EntryPoint</c>. Call <see cref="EnsureLoaded"/> before
     /// anything else. Used only by <see cref="NativeHotkeyHost"/>, through <see cref="Binding"/>.
     /// </summary>
     internal static class HotkeysNative
@@ -66,7 +68,7 @@ namespace Prisc.UI
             // only our own library name: user32, CoreGraphics and the rest resolve as usual
             NativeLibrary.SetDllImportResolver(typeof(HotkeysNative).Assembly, Resolve);
 
-            if (prisc_hotkeys_abi_version() != HotkeyKeys.AbiVersion)
+            if (prisc_hotkeys_abi_version() != HotkeysAbi.AbiVersion)
                 return "the prisc_hotkeys library is out of date (rebuild it: cargo build -p prisc_hotkeys)";
 
             return null;
@@ -75,37 +77,37 @@ namespace Prisc.UI
         private static IntPtr Resolve(string libraryName, Assembly assembly, DllImportSearchPath? searchPath) =>
             libraryName == Library ? s_handle : IntPtr.Zero;
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_abi_version", CallingConvention = CallingConvention.Cdecl)]
         public static extern uint prisc_hotkeys_abi_version();
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_start", CallingConvention = CallingConvention.Cdecl)]
         public static extern int prisc_hotkeys_start(out IntPtr handle, [Out] byte[] errBuf, uint errCap);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_register", CallingConvention = CallingConvention.Cdecl)]
         public static extern int prisc_hotkeys_register(IntPtr handle, int key, uint modifiers, out uint id);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_unregister", CallingConvention = CallingConvention.Cdecl)]
         public static extern void prisc_hotkeys_unregister(IntPtr handle, uint id);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_set_observe", CallingConvention = CallingConvention.Cdecl)]
         public static extern void prisc_hotkeys_set_observe(IntPtr handle, uint observe);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_start_recording", CallingConvention = CallingConvention.Cdecl)]
         public static extern int prisc_hotkeys_start_recording(IntPtr handle, out uint session);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_stop_recording", CallingConvention = CallingConvention.Cdecl)]
         public static extern void prisc_hotkeys_stop_recording(IntPtr handle, uint session);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_next_event", CallingConvention = CallingConvention.Cdecl)]
         public static extern int prisc_hotkeys_next_event(IntPtr handle, out HotkeyEventNative ev, uint timeoutMs);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_stop_reason", CallingConvention = CallingConvention.Cdecl)]
         public static extern uint prisc_hotkeys_stop_reason(IntPtr handle, [Out] byte[] buf, uint cap);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_stop", CallingConvention = CallingConvention.Cdecl)]
         public static extern void prisc_hotkeys_stop(IntPtr handle);
 
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "prisc_hotkeys_legacy_free", CallingConvention = CallingConvention.Cdecl)]
         public static extern void prisc_hotkeys_free(IntPtr handle);
 
         private sealed class LibraryBinding : INativeHotkeys
