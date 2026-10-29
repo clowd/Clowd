@@ -52,12 +52,16 @@ stage_windows() {
   # DirectML companion), which share the profile dir when build.sh builds
   # both halves together. That leaves the recorder executables, the
   # obs-*-test.exe probes, obs.dll, its graphics modules and the FFmpeg/x264
-  # runtime DLLs. *.pdb and cargo's build junk stay behind.
+  # runtime DLLs. *.pdb and cargo's build junk stay behind. No prisc_*.dll is
+  # the recorder's (its own binaries are all .exe), so every one is skipped,
+  # like libprisc_* on macOS: a dll a reused target dir still holds from an
+  # older build (prisc_hotkeys.dll, now linked into prisc_interop) stays out.
   local skip
   skip=$(app_symbolicated_binaries "$rid"; echo DirectML.dll)
   for f in "$src"/*.exe "$src"/*.dll; do
     [ -f "$f" ] || continue
     name=$(basename "$f")
+    case "$name" in prisc_*.dll) continue ;; esac
     if grep -qxF "$name" <<< "$skip"; then continue; fi
     cp "$f" "$dist/"
   done

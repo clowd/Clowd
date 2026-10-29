@@ -1,7 +1,7 @@
 name: Build rust
 
 # Reusable build of the Rust binaries that sit beside Prisc.Ui in every package:
-# the capture overlay, the scrolling capture driver, the global hotkey library,
+# the capture overlay, the scrolling capture driver,
 # the in-process interop library (prisc_interop) Prisc.Ui and Prisc.VideoRender
 # load, the prisc_ai inference binary (with its execution-provider dylibs and
 # the VC++ CRT it needs on Windows), and on Windows the shell extension dll and
@@ -126,7 +126,7 @@ jobs:
           done
 
       # stage/ unpacks into the package directory beside Prisc.Ui: the overlay, the scrolling
-      # capture driver, the global hotkey library, the interop library and prisc_ai with its
+      # capture driver, the interop library and prisc_ai with its
       # license, DirectML.dll and (Windows) the VC++ runtime it alone imports. release.yml signs them with the rest: vpk's
       # Trusted Signing pass covers every dll in the pack dir, and the macOS app signing and
       # notarization cover every Mach-O in the bundle.
