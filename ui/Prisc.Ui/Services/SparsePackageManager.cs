@@ -65,11 +65,6 @@ namespace Prisc.UI
         /// <summary>The error from the most recent failed apply, or null if the last one worked.</summary>
         public static string LastError { get; private set; }
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, ExactSpelling = true)]
-        private static extern int GetCurrentPackageFullName(ref uint length, char[] fullName);
-
-        private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
-
         /// <summary>
         /// Records this process's package identity (Sentry tag <c>package_identity</c> plus a
         /// debug line): "none" for a normal launch, the sparse package's full name when the
@@ -86,17 +81,13 @@ namespace Prisc.UI
             string identity;
             try
             {
-                // package full names are capped well below this; 122 (insufficient buffer) would
-                // surface as an error value rather than being mistaken for "none"
-                uint length = 512;
-                var buffer = new char[length];
-                var result = GetCurrentPackageFullName(ref length, buffer);
-                identity = result switch
-                {
-                    0 => new string(buffer, 0, Math.Max(0, (int)length - 1)),
-                    APPMODEL_ERROR_NO_PACKAGE => "none",
-                    _ => "error " + result,
-                };
+                // sized natively in two passes, so no name is too long for a buffer
+                identity = Prisc.Interop.ProcessNative.PackageFullName() ?? "none";
+            }
+            catch (Prisc.Interop.InteropException ex) when (ex.NativeCode != 0)
+            {
+                // the Win32 code GetCurrentPackageFullName returned, as this tag always carried it
+                identity = "error " + ex.NativeCode;
             }
             catch (Exception ex)
             {

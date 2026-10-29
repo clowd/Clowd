@@ -692,7 +692,8 @@ namespace Prisc.VideoSDK.Tests
             public JobEvent Terminal => Events.Count == 0 ? null : Events[^1];
         }
 
-        private static ToolRun RunTool(string argsPath, string ffmpegDirectory)
+        private static ToolRun RunTool(string argsPath, string ffmpegDirectory,
+            IReadOnlyDictionary<string, string> environment = null)
         {
             string dll = FindRenderDll();
             Assert.SkipWhen(dll == null, "Prisc.VideoRender.dll not found — build the exe project.");
@@ -712,6 +713,8 @@ namespace Prisc.VideoSDK.Tests
                 psi.ArgumentList.Add(argsPath);
             if (ffmpegDirectory != null)
                 psi.Environment[FFmpegLoader.EnvVarName] = ffmpegDirectory;
+            foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+                psi.Environment[name] = value;
 
             using var process = Process.Start(psi);
             // stderr on its own thread: FFmpeg chatter filling that pipe while we drain stdout
@@ -879,6 +882,28 @@ namespace Prisc.VideoSDK.Tests
                 Assert.Equal(HelperExit.Ok, outcome.ExitCode);
                 Assert.False(File.Exists(output));
             }
+        }
+
+        /// <summary>prisc_interop is a hard requirement of the render tool (R12): without it the tool
+        /// still says <c>hello</c>, then writes one fatal <c>init_failed</c> error naming the library,
+        /// and exits 1, before it reads the job or touches FFmpeg (so this needs neither).</summary>
+        [Fact]
+        public void A_missing_interop_library_fails_the_render_tool_cleanly()
+        {
+            string argsPath = TempPath(".json");
+            File.WriteAllText(argsPath, "{\"version\":1}");
+
+            var run = RunTool(argsPath, ffmpegDirectory: null, new Dictionary<string, string>
+            {
+                [Prisc.Interop.EnvVars.InteropPath] = Path.Combine(Path.GetTempPath(), "nonexistent", "prisc_interop"),
+            });
+
+            Assert.Equal(HelperExit.Failed, run.ExitCode);
+            var error = Assert.IsType<JobEvent.Error>(Assert.Single(run.Events));
+            Assert.True(error.Fatal);
+            Assert.Equal(IpcErrorCodes.InitFailed, error.Code);
+            Assert.Contains(Prisc.Interop.InteropLibrary.LibraryFileName + " is not available", error.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain('\n', error.Message);
         }
 
         [Fact]

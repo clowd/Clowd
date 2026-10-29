@@ -1,5 +1,7 @@
 //! The helper protocol's C# mirror (`ui/Prisc.Ipc/Generated/HelperMessages.g.cs`,
-//! HELPER_PROTOCOL.md section 6), moved here from prisc_ipc's `src/csharp.rs`.
+//! HELPER_PROTOCOL.md section 6), moved here from prisc_ipc's `src/csharp.rs`, plus the stdin
+//! framing vectors both command loops run (`ui/Prisc.Ipc.Tests/Generated/FramingVectors.g.cs`,
+//! from `prisc_ipc::framing`).
 //!
 //! The codecs are straight-line `Utf8JsonReader`/`Utf8JsonWriter` code over the hand-written
 //! helpers in `ui/Prisc.Ipc/IpcJson.cs`: no reflection, so trim-safe.
@@ -7,18 +9,29 @@
 use std::fmt::Write as _;
 
 use prisc_ipc::catalog::{self, CatalogSpec, ErrorCode, FieldSpec, MessageSpec, TypeSpec, ERROR, HELLO, QUIT};
+use prisc_ipc::framing::{self, Expected, Segment};
+use prisc_ipc::lifetime::QuitReason;
 
 use crate::{cs, Output};
 
 const SOURCE: &str = "the catalogs in crates/prisc_ipc/src/catalog.rs";
+const FRAMING_SOURCE: &str = "the golden vectors in crates/prisc_ipc/src/framing.rs";
 
-/// The helper protocol mirror.
-pub static OUTPUTS: &[Output] = &[Output {
-    name: "ipc",
-    path: "ui/Prisc.Ipc/Generated/HelperMessages.g.cs",
-    source: SOURCE,
-    render,
-}];
+/// The helper protocol mirror and the framing vectors.
+pub static OUTPUTS: &[Output] = &[
+    Output {
+        name: "ipc",
+        path: "ui/Prisc.Ipc/Generated/HelperMessages.g.cs",
+        source: SOURCE,
+        render,
+    },
+    Output {
+        name: "ipc-framing",
+        path: "ui/Prisc.Ipc.Tests/Generated/FramingVectors.g.cs",
+        source: FRAMING_SOURCE,
+        render: render_framing,
+    },
+];
 
 /// The C# property for a field of the record or message `owner`. A property may not share its
 /// enclosing type's name (`cameras { cameras }`), so such a field is renamed.
@@ -248,6 +261,7 @@ namespace Prisc.Ipc
 "#,
     );
     render_common(&mut out);
+    render_helper_names(&mut out);
     for spec in catalog::ALL {
         render_catalog(&mut out, spec);
     }
@@ -259,15 +273,32 @@ namespace Prisc.Ipc
 
 fn render_common(out: &mut String) {
     let scope = Scope::new(None);
-    let _ = writeln!(
-        out,
-        "    /// <summary>The envelope version every <c>hello</c> carries (HELPER_PROTOCOL.md §2.5).</summary>"
+    out.push_str(
+        "    /// <summary>The protocol constants prisc_ipc defines (HELPER_PROTOCOL.md §2.1, §2.5, §3.3).</summary>\n    \
+         public static class IpcProtocol\n    {\n",
     );
     let _ = writeln!(
         out,
-        "    public static class IpcProtocol {{ public const int Version = {}; }}\n",
+        "        /// <summary>The envelope version every <c>hello</c> carries (§2.5).</summary>\n        public const int Version = {};",
         prisc_ipc::PROTOCOL
     );
+    let _ = writeln!(
+        out,
+        "        /// <summary>The longest line accepted in either direction, in UTF-8 bytes without the newline (§2.1).</summary>\n        \
+         public const int MaxLineBytes = {};",
+        prisc_ipc::MAX_LINE
+    );
+    let _ = writeln!(
+        out,
+        "        /// <summary>Added to a catalog's quit grace for a helper's own hard-exit timer, so a living parent's kill fires \
+         first (§3.3).</summary>\n        public const int SelfExitMarginMs = {};",
+        prisc_ipc::SELF_EXIT_MARGIN.as_millis()
+    );
+    for (name, text, doc) in framing::REASONS {
+        out.push_str(&cs::summary(&format!("Command-line refusal (§2.4). {doc}"), "        "));
+        let _ = writeln!(out, "        public const string {name} = {};", cs::string_literal(text));
+    }
+    out.push_str("    }\n\n");
 
     out.push_str("    /// <summary>Helper exit codes (HELPER_PROTOCOL.md §5).</summary>\n    public static class HelperExit\n    {\n");
     for (name, code) in prisc_ipc::exit::ALL {
@@ -320,6 +351,17 @@ fn render_common(out: &mut String) {
         "hello",
     );
     out.push_str("        });\n    }\n\n");
+}
+
+fn render_helper_names(out: &mut String) {
+    out.push_str(
+        "    /// <summary>The executable stem of every helper the apps locate and spawn (<c>prisc_ipc::locate::helper_names</c>).</summary>\n    \
+         public static class HelperNames\n    {\n",
+    );
+    for (name, stem) in prisc_ipc::locate::helper_names() {
+        let _ = writeln!(out, "        public const string {name} = {};", cs::string_literal(stem));
+    }
+    out.push_str("    }\n\n");
 }
 
 fn render_catalog(out: &mut String, spec: &CatalogSpec) {
@@ -545,6 +587,130 @@ fn render_samples(out: &mut String) {
     out.push_str("        ];\n    }\n");
 }
 
+/// A C# string literal of `bytes` read as Latin-1 (one char per byte), every byte outside
+/// printable ASCII escaped, so the bytes survive any editor and line-ending conversion.
+fn latin1_literal(bytes: &[u8]) -> String {
+    ascii_literal(
+        &bytes
+            .iter()
+            .map(|&b| char::from(b))
+            .collect::<String>(),
+    )
+}
+
+/// A C# string literal with every character outside printable ASCII escaped.
+fn ascii_literal(text: &str) -> String {
+    let mut out = String::from("\"");
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ' '..='~' => out.push(c),
+            c => {
+                let _ = write!(out, "\\u{:04X}", c as u32);
+            }
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn render_framing(_root: &std::path::Path) -> anyhow::Result<String> {
+    let mut out = cs::header("ipc", FRAMING_SOURCE);
+    out.push_str(
+        r#"#nullable disable
+using System.IO;
+
+namespace Prisc.Ipc.Tests
+{
+    /// <summary>What a stdin loop must do, in order (prisc_ipc::framing::Expected).</summary>
+    internal enum FramingExpectKind
+    {
+        /// <summary>A command reached the helper; <c>Text</c> is the JSON it equals.</summary>
+        Command,
+        /// <summary>A line was refused with exactly <c>Text</c>.</summary>
+        Malformed,
+        /// <summary>A line was refused with a reason starting with <c>Text</c>.</summary>
+        MalformedPrefix,
+        /// <summary>The quit path fired (once) for a quit command.</summary>
+        QuitCommand,
+        /// <summary>The quit path fired (once) at stdin EOF.</summary>
+        QuitStdinClosed,
+    }
+
+    internal sealed record FramingExpect(FramingExpectKind Kind, string Text = null);
+
+    /// <summary>Stdin bytes: a Latin-1 string (one char per byte), or one byte repeated.</summary>
+    internal sealed record FramingSegment(string Latin1, byte Repeat = 0, int Count = 0);
+
+    /// <summary>One golden vector: bytes on stdin, and what the loop must do with them.</summary>
+    internal sealed record FramingVector(string Name, FramingSegment[] Input, FramingExpect[] Expected)
+    {
+        public byte[] Bytes()
+        {
+            var bytes = new MemoryStream();
+            foreach (var segment in Input)
+            {
+                if (segment.Latin1 != null)
+                    foreach (var c in segment.Latin1)
+                        bytes.WriteByte((byte)c);
+                else
+                    for (int i = 0; i < segment.Count; i++)
+                        bytes.WriteByte(segment.Repeat);
+            }
+            return bytes.ToArray();
+        }
+
+        public override string ToString() => Name;
+    }
+
+    /// <summary>Every golden vector; the test vocabulary is <c>ping{n}</c> and <c>echo{text}</c>.</summary>
+    internal static class FramingVectors
+    {
+        public static readonly FramingVector[] All =
+        [
+"#,
+    );
+    for vector in framing::golden_vectors() {
+        let _ = writeln!(out, "            new({}, [", cs::string_literal(vector.name));
+        for segment in &vector.input {
+            match *segment {
+                Segment::Bytes(bytes) => {
+                    let _ = writeln!(out, "                new({}),", latin1_literal(bytes));
+                }
+                Segment::Repeat(byte, count) => {
+                    let _ = writeln!(out, "                new(null, 0x{byte:02X}, {count}),");
+                }
+            }
+        }
+        out.push_str("            ], [\n");
+        for expected in &vector.expected {
+            let (kind, text) = match *expected {
+                Expected::Command(json) => ("Command", Some(json)),
+                Expected::Malformed(reason) => ("Malformed", Some(reason)),
+                Expected::MalformedPrefix(prefix) => ("MalformedPrefix", Some(prefix)),
+                Expected::Quit(QuitReason::Command) => ("QuitCommand", None),
+                Expected::Quit(QuitReason::StdinClosed) => ("QuitStdinClosed", None),
+                Expected::Quit(other) => anyhow::bail!("vector {} expects quit {other:?}, which no stdin loop fires", vector.name),
+            };
+            match text {
+                Some(text) => {
+                    let _ = writeln!(out, "                new(FramingExpectKind.{kind}, {}),", ascii_literal(text));
+                }
+                None => {
+                    let _ = writeln!(out, "                new(FramingExpectKind.{kind}),");
+                }
+            }
+        }
+        out.push_str("            ]),\n");
+    }
+    out.push_str("        ];\n    }\n}\n");
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -552,7 +718,13 @@ mod tests {
     #[test]
     fn rendered_shapes() {
         let cs = render(std::path::Path::new(".")).unwrap();
-        assert!(cs.contains("    public static class IpcProtocol { public const int Version = 1; }\n"));
+        assert!(cs.contains("        public const int Version = 1;\n"));
+        assert!(cs.contains("        public const int MaxLineBytes = 1048576;\n"));
+        assert!(cs.contains("        public const int SelfExitMarginMs = 5000;\n"));
+        assert!(cs.contains("        public const string OversizeReason = \"command line longer than 1048576 bytes\";\n"));
+        assert!(cs.contains("        public const string UnknownCommandReason = \"unknown command '{0}'\";\n"));
+        assert!(cs.contains("        public const string VideoRender = \"Prisc.VideoRender\";\n"));
+        assert!(cs.contains("        public const string Ai = \"prisc_ai\";\n"));
         assert!(cs.contains("        public const int NoScreenPermission = 3;\n"));
         assert!(cs.contains("        public const int RustPanic = 101;\n"));
         assert!(cs.contains("        public const string BadCommand = \"bad_command\";\n"));
@@ -571,5 +743,17 @@ mod tests {
         ));
         assert!(cs.contains(&format!("catalogHash: \"{}\"", catalog::job::SPEC.catalog_hash())));
         assert!(cs.ends_with("    }\n}\n") && !cs.contains('\r'));
+    }
+
+    #[test]
+    fn framing_vectors_render_bytes_exactly() {
+        let cs = render_framing(std::path::Path::new(".")).unwrap();
+        assert!(cs.contains("            new(\"quit_then_read\", [\n"));
+        assert!(cs.contains("                new(\"\\u00EF\\u00BB\\u00BF{\\\"type\\\":\\\"quit\\\",\\\"why\\\":\\\"done\\\"}\\r\\n\"),\n"));
+        assert!(cs.contains("                new(null, 0x78, 1048577),\n"));
+        assert!(cs
+            .contains("                new(FramingExpectKind.Command, \"{\\\"type\\\":\\\"echo\\\",\\\"text\\\":\\\"a\\uFFFDb\\\"}\"),\n"));
+        assert!(cs.contains("                new(FramingExpectKind.QuitStdinClosed),\n"));
+        assert!(!cs.contains('\r') && cs.is_ascii());
     }
 }
