@@ -75,3 +75,6 @@ pub use gesture::{Gesture, ParseGestureError};
 pub use hotkeys::{Event, Events, HotkeyId, Hotkeys, KeyEvent, REVOKED_REASON};
 pub use key::Key;
 pub use modifiers::Modifiers;
+pub use reserved::Os;
+#[cfg(windows)]
+pub use windows::{inject_mask_chord, release_injected_alt};

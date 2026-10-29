@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use windows::Win32::Foundation::{GetLastError, SetLastError, COLORREF, HWND, LPARAM, WIN32_ERROR, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
-use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_MENU};
+use windows::Win32::UI::Input::KeyboardAndMouse::VK_MENU;
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, GetForegroundWindow, GetWindowLongPtrW, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowDisplayAffinity,
     SetWindowLongPtrW, SetWindowPos, EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE, HWND_TOPMOST, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOACTIVATE,
@@ -106,11 +106,6 @@ pub(crate) fn is_foreground(handle: isize) -> Result<bool> {
     Ok(unsafe { GetForegroundWindow() } == hwnd(handle))
 }
 
-/// Alt, the key the foreground lock reliably yields to.
-const ALT: u8 = VK_MENU.0 as u8;
-/// Unassigned: AutoHotkey's default `#MenuMaskKey`, pressed and released inside the Alt so no app
-/// sees a lone Alt tap and enters menu mode. The same key as prisc_hotkeys' `MASK_VK`.
-const VK_MENU_MASK: u8 = 0xE8;
 
 /// The foreground-lock dance of the export. Whether the window ended up in front.
 pub(crate) fn take_foreground(handle: isize) -> bool {
@@ -126,19 +121,14 @@ pub(crate) fn take_foreground(handle: isize) -> bool {
         return true;
     }
 
-    // an Alt the user is physically holding (part of the hotkey) is left alone: injecting its
-    // release would tell Windows they let go
-    let alt_held = prisc_platform::input::is_key_down(u32::from(ALT)).unwrap_or(false);
-    unsafe {
-        if !alt_held {
-            keybd_event(ALT, 0, KEYBD_EVENT_FLAGS(0), 0);
-        }
-        keybd_event(VK_MENU_MASK, 0, KEYBD_EVENT_FLAGS(0), 0);
-        keybd_event(VK_MENU_MASK, 0, KEYEVENTF_KEYUP, 0);
-        let _ = SetForegroundWindow(window);
-        if !alt_held {
-            keybd_event(ALT, 0, KEYEVENTF_KEYUP, 0);
-        }
+    // Alt is the key the foreground lock reliably yields to, with prisc_hotkeys' menu mask chord
+    // inside it so no app sees a lone Alt tap. An Alt the user is physically holding (part of the
+    // hotkey) is left alone: injecting its release would tell Windows they let go.
+    let alt_held = prisc_platform::input::is_key_down(u32::from(VK_MENU.0)).unwrap_or(false);
+    prisc_hotkeys::inject_mask_chord(!alt_held);
+    let _ = unsafe { SetForegroundWindow(window) };
+    if !alt_held {
+        prisc_hotkeys::release_injected_alt();
     }
     in_front()
 }
