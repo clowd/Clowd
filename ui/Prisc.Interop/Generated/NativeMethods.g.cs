@@ -1119,13 +1119,17 @@ namespace Prisc.Interop
         ///  - `OpaqueLayered` (Windows): `SetLayeredWindowAttributes(255, LWA_ALPHA)`, the mandatory
         ///    follow-up to `WS_EX_LAYERED` (a layered window without it is never repainted).
         ///  - `ClickThrough` (both): mouse events pass through (`WS_EX_TRANSPARENT` set live /
-        ///    `setIgnoresMouseEvents:YES`). Without the bit the window's mouse state is left alone.
+        ///    `setIgnoresMouseEvents:YES`).
+        ///  - `TakesMouse` (both): the window takes the mouse (`WS_EX_TRANSPARENT` cleared live /
+        ///    `setIgnoresMouseEvents:NO`), over its transparent pixels too, which AppKit's never-set default
+        ///    lets through. With neither mouse bit the window's mouse state is left alone.
         ///
         ///  A bit that does not apply on an OS is a truthful no-op there, so `None` is a valid no-op too.
         ///
-        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle or an unknown bit; `PRISC_E_STATE`
-        ///  off the macOS main thread; `PRISC_E_OS` when a Windows call failed (the code is the Win32 error
-        ///  as an HRESULT); `PRISC_E_UNSUPPORTED` on a platform with neither window system.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle, an unknown bit or `ClickThrough`
+        ///  with `TakesMouse`; `PRISC_E_STATE` off the macOS main thread; `PRISC_E_OS` when a Windows call
+        ///  failed (the code is the Win32 error as an HRESULT); `PRISC_E_UNSUPPORTED` on a platform with
+        ///  neither window system.
         ///
         ///  Thread: must be the macOS main thread; any thread elsewhere.
         /// </summary>

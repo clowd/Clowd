@@ -291,13 +291,13 @@ namespace Prisc.UI.DrawOnScreen
         private void OnOpened(object sender, EventArgs e)
         {
             // order matters: the overlay setup before positioning (AppKit constrains a window below
-            // the overlay level away from the menu bar, so a frame set earlier would not stick) with
-            // the layered attributes (a layered window without them is never repainted), then the
-            // current input state as an explicit choice either way (on macOS a window drawing in its
-            // transparent pixels must say NO: AppKit's never-set default lets those clicks through),
-            // then the real geometry.
-            WindowNativeExtensions.PrepareOverlay(this, OverlayFlags.CoverMenuBar | OverlayFlags.OpaqueLayered);
-            WindowNativeExtensions.SetClickThrough(this, ClickThrough);
+            // the overlay level away from the menu bar, so a frame set earlier would not stick), in
+            // one call with the layered attributes (a layered window without them is never repainted)
+            // and the current input state as an explicit choice either way (on macOS a window drawing
+            // in its transparent pixels must say NO: AppKit's never-set default lets those clicks
+            // through), then the real geometry.
+            WindowNativeExtensions.PrepareOverlay(this, OverlayFlags.CoverMenuBar | OverlayFlags.OpaqueLayered
+                | (ClickThrough ? OverlayFlags.ClickThrough : OverlayFlags.TakesMouse));
             ApplyGeometry();
         }
 

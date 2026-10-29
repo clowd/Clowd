@@ -16,13 +16,13 @@ use crate::ffi::status::{PRISC_OK, PRISC_S_NONE};
 
 /// `CoverMenuBar`: the shared overlay level and collection behaviour. `ClickThrough`:
 /// `setIgnoresMouseEvents:YES`. `OpaqueLayered` is a Windows concept and a no-op here.
-pub(crate) fn prepare_overlay(handle: isize, cover_menu_bar: bool, _opaque_layered: bool, click_through: bool) -> Result<()> {
+pub(crate) fn prepare_overlay(handle: isize, cover_menu_bar: bool, _opaque_layered: bool, click_through: Option<bool>) -> Result<()> {
     with_window(handle, "prisc_window_prepare_overlay", |window, _| {
         if cover_menu_bar {
             overlay::apply(window, OverlayFlags::OVERLAY);
         }
-        if click_through {
-            window.setIgnoresMouseEvents(true);
+        if let Some(on) = click_through {
+            window.setIgnoresMouseEvents(on);
         }
     })
 }

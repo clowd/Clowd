@@ -77,7 +77,8 @@ namespace Prisc.UI.Helpers
         /// WS_EX_LAYERED style (a layered window without it is never repainted, and Avalonia's
         /// swapchain does not make the call). <see cref="OverlayFlags.ClickThrough"/> lets the mouse
         /// through (on Windows the window keeps WS_EX_TRANSPARENT in its styles callback as well, or
-        /// Avalonia's next style re-application drops it).
+        /// Avalonia's next style re-application drops it); <see cref="OverlayFlags.TakesMouse"/> is the
+        /// explicit opposite, for a window that draws over its transparent pixels.
         /// </summary>
         public static void PrepareOverlay(Window window, OverlayFlags flags)
         {

@@ -29,8 +29,10 @@ namespace Prisc.Interop
         /// (macOS overlay level and collection behaviour; apply before positioning, or AppKit keeps the
         /// frame off the menu bar), <see cref="OverlayFlags.OpaqueLayered"/> (Windows: the mandatory
         /// follow-up to WS_EX_LAYERED, without which the window is never repainted) and
-        /// <see cref="OverlayFlags.ClickThrough"/> (mouse events pass through). A flag that does not
-        /// apply on this OS is a no-op; without ClickThrough the mouse state is left alone.
+        /// <see cref="OverlayFlags.ClickThrough"/> (mouse events pass through) or
+        /// <see cref="OverlayFlags.TakesMouse"/> (the window takes the mouse, over transparent pixels
+        /// too; both together are refused). A flag that does not apply on this OS is a no-op; with
+        /// neither mouse flag the mouse state is left alone.
         /// </summary>
         public static bool PrepareOverlay(nint handle, OverlayFlags flags)
         {

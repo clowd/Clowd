@@ -40,6 +40,7 @@ namespace Prisc.Interop.Tests
             Assert.Equal(1u, (uint)OverlayFlags.CoverMenuBar);
             Assert.Equal(2u, (uint)OverlayFlags.OpaqueLayered);
             Assert.Equal(4u, (uint)OverlayFlags.ClickThrough);
+            Assert.Equal(8u, (uint)OverlayFlags.TakesMouse);
         }
 
         [Fact]
@@ -67,7 +68,7 @@ namespace Prisc.Interop.Tests
         {
             InteropTestGate.Require();
             Assert.Equal(InteropStatus.InvalidArg,
-                Assert.Throws<InteropException>(() => WindowChrome.PrepareOverlay(Bogus, (OverlayFlags)8)).Status);
+                Assert.Throws<InteropException>(() => WindowChrome.PrepareOverlay(Bogus, (OverlayFlags)16)).Status);
             Assert.Equal(InteropStatus.InvalidArg,
                 Assert.Throws<InteropException>(() => WindowChrome.SetBounds(Bogus, 0, 0, -1, 10)).Status);
         }

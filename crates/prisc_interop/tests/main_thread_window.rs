@@ -127,6 +127,13 @@ mod mac {
         assert!(!w.0.ignoresMouseEvents());
         assert_eq!(unsafe { prisc_window_set_click_through(w.handle(), 2) }, OK, "any non-zero is true");
         assert!(w.0.ignoresMouseEvents());
+        // TakesMouse is the explicit NO, at open time
+        let takes = PriscOverlayFlags::CoverMenuBar as u32 | PriscOverlayFlags::TakesMouse as u32;
+        assert_eq!(unsafe { prisc_window_prepare_overlay(w.handle(), takes) }, OK);
+        assert!(!w.0.ignoresMouseEvents());
+        let both = PriscOverlayFlags::ClickThrough as u32 | PriscOverlayFlags::TakesMouse as u32;
+        assert_eq!(unsafe { prisc_window_prepare_overlay(w.handle(), both) }, S::InvalidArg as i32);
+        assert!(!w.0.ignoresMouseEvents(), "a refused call changes nothing");
     }
 
     fn unknown_flags(mtm: MainThreadMarker) {

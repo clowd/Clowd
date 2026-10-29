@@ -27,16 +27,17 @@ fn hwnd(handle: isize) -> HWND {
     HWND(handle as *mut c_void)
 }
 
-/// `OpaqueLayered` then `ClickThrough`; `CoverMenuBar` is a macOS concept and a no-op here.
-pub(crate) fn prepare_overlay(handle: isize, _cover_menu_bar: bool, opaque_layered: bool, click_through: bool) -> Result<()> {
+/// `OpaqueLayered` then the mouse state (`Some(true)` = `ClickThrough`, `Some(false)` =
+/// `TakesMouse`); `CoverMenuBar` is a macOS concept and a no-op here.
+pub(crate) fn prepare_overlay(handle: isize, _cover_menu_bar: bool, opaque_layered: bool, click_through: Option<bool>) -> Result<()> {
     if opaque_layered {
         unsafe { SetLayeredWindowAttributes(hwnd(handle), COLORREF(0), 255, LWA_ALPHA) }
             .map_err(|e| os_error(&e, "SetLayeredWindowAttributes(255, LWA_ALPHA)"))?;
     }
-    if click_through {
-        set_click_through(handle, true)?;
+    match click_through {
+        Some(on) => set_click_through(handle, on),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 /// Sets or clears `WS_EX_TRANSPARENT` on the live window and makes it take effect now.

@@ -72,6 +72,10 @@ pub enum PriscOverlayFlags {
     OpaqueLayered = 2,
     /// Mouse events pass through the window (`WS_EX_TRANSPARENT` / `setIgnoresMouseEvents:`).
     ClickThrough = 4,
+    /// The window takes the mouse, over its transparent pixels too (`WS_EX_TRANSPARENT` cleared /
+    /// `setIgnoresMouseEvents:NO`). With neither this nor `ClickThrough` the mouse state is left
+    /// alone; both together are invalid.
+    TakesMouse = 8,
 }
 
 #[cfg(test)]

@@ -24,7 +24,7 @@ namespace Prisc.UI.Harness
             // overlay setup: the open-time call every overlay window makes, and a refused flag
             run.Item("window.prepare_overlay", () => WindowChrome.PrepareOverlay(Handle(), OverlayFlags.CoverMenuBar));
             run.Item("window.prepare_overlay_unknown_flag", () =>
-                WindowExpectFailure(() => WindowChrome.PrepareOverlay(Handle(), (OverlayFlags)8), InteropStatus.InvalidArg));
+                WindowExpectFailure(() => WindowChrome.PrepareOverlay(Handle(), (OverlayFlags)16), InteropStatus.InvalidArg));
             run.Item("window.zero_handle", () =>
                 WindowExpectFailure(() => WindowChrome.RaiseTopmostNoActivate(0), InteropStatus.InvalidArg));
 

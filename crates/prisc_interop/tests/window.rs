@@ -160,6 +160,23 @@ mod windows_chrome {
         unsafe { GetLayeredWindowAttributes(window.0, None, Some(&mut alpha), Some(&mut how)) }.expect("GetLayeredWindowAttributes");
         assert_eq!(alpha, 255);
         assert_ne!(window.ex_style() & WS_EX_TRANSPARENT.0 as isize, 0);
+
+        // TakesMouse clears it again at open time; with ClickThrough it is refused
+        let takes = PriscOverlayFlags::OpaqueLayered as u32 | PriscOverlayFlags::TakesMouse as u32;
+        assert_eq!(
+            unsafe { prisc_window_prepare_overlay(window.handle(), takes) },
+            0,
+            "{}",
+            last_message()
+        );
+        assert_eq!(window.ex_style() & WS_EX_TRANSPARENT.0 as isize, 0);
+        let both = PriscOverlayFlags::ClickThrough as u32 | PriscOverlayFlags::TakesMouse as u32;
+        assert_eq!(unsafe { prisc_window_prepare_overlay(window.handle(), both) }, S::InvalidArg as i32);
+        assert_eq!(
+            window.ex_style() & WS_EX_TRANSPARENT.0 as isize,
+            0,
+            "a refused call changes nothing"
+        );
     }
 
     #[test]

@@ -31,8 +31,10 @@ pub struct PriscForegroundWatch {
 pub type PriscForegroundCallback = Option<unsafe extern "C" fn(user: *mut c_void)>;
 
 /// Every bit `PriscOverlayFlags` defines.
-pub(crate) const OVERLAY_FLAGS_KNOWN: u32 =
-    PriscOverlayFlags::CoverMenuBar as u32 | PriscOverlayFlags::OpaqueLayered as u32 | PriscOverlayFlags::ClickThrough as u32;
+pub(crate) const OVERLAY_FLAGS_KNOWN: u32 = PriscOverlayFlags::CoverMenuBar as u32
+    | PriscOverlayFlags::OpaqueLayered as u32
+    | PriscOverlayFlags::ClickThrough as u32
+    | PriscOverlayFlags::TakesMouse as u32;
 
 /// The open-time setup of an overlay window, as `PriscOverlayFlags` bits, applied in one call:
 /// - `CoverMenuBar` (macOS): the overlay level (25) and collection behaviour (Stationary,
@@ -42,13 +44,17 @@ pub(crate) const OVERLAY_FLAGS_KNOWN: u32 =
 /// - `OpaqueLayered` (Windows): `SetLayeredWindowAttributes(255, LWA_ALPHA)`, the mandatory
 ///   follow-up to `WS_EX_LAYERED` (a layered window without it is never repainted).
 /// - `ClickThrough` (both): mouse events pass through (`WS_EX_TRANSPARENT` set live /
-///   `setIgnoresMouseEvents:YES`). Without the bit the window's mouse state is left alone.
+///   `setIgnoresMouseEvents:YES`).
+/// - `TakesMouse` (both): the window takes the mouse (`WS_EX_TRANSPARENT` cleared live /
+///   `setIgnoresMouseEvents:NO`), over its transparent pixels too, which AppKit's never-set default
+///   lets through. With neither mouse bit the window's mouse state is left alone.
 ///
 /// A bit that does not apply on an OS is a truthful no-op there, so `None` is a valid no-op too.
 ///
-/// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle or an unknown bit; `PRISC_E_STATE`
-/// off the macOS main thread; `PRISC_E_OS` when a Windows call failed (the code is the Win32 error
-/// as an HRESULT); `PRISC_E_UNSUPPORTED` on a platform with neither window system.
+/// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a zero handle, an unknown bit or `ClickThrough`
+/// with `TakesMouse`; `PRISC_E_STATE` off the macOS main thread; `PRISC_E_OS` when a Windows call
+/// failed (the code is the Win32 error as an HRESULT); `PRISC_E_UNSUPPORTED` on a platform with
+/// neither window system.
 ///
 /// Thread: must be the macOS main thread; any thread elsewhere.
 #[no_mangle]
@@ -57,19 +63,25 @@ pub unsafe extern "C" fn prisc_window_prepare_overlay(handle: isize, flags: u32)
         window_handle(handle)?;
         let flags = convert::flags(flags, OVERLAY_FLAGS_KNOWN, "flags")?;
         let has = |bit: PriscOverlayFlags| flags & bit as u32 != 0;
+        let click_through = match (has(PriscOverlayFlags::ClickThrough), has(PriscOverlayFlags::TakesMouse)) {
+            (true, true) => return Err(Error::invalid_arg("flags: ClickThrough and TakesMouse are exclusive")),
+            (true, false) => Some(true),
+            (false, true) => Some(false),
+            (false, false) => None,
+        };
         #[cfg(any(windows, target_os = "macos"))]
         {
             imp::prepare_overlay(
                 handle,
                 has(PriscOverlayFlags::CoverMenuBar),
                 has(PriscOverlayFlags::OpaqueLayered),
-                has(PriscOverlayFlags::ClickThrough),
+                click_through,
             )?;
             Ok(PRISC_OK)
         }
         #[cfg(not(any(windows, target_os = "macos")))]
         {
-            let _ = has;
+            let _ = click_through;
             Err(no_window_system("prisc_window_prepare_overlay"))
         }
     })
@@ -408,7 +420,7 @@ mod tests {
 
     #[test]
     fn the_known_overlay_bits_are_the_enum_s() {
-        assert_eq!(OVERLAY_FLAGS_KNOWN, 0b111);
+        assert_eq!(OVERLAY_FLAGS_KNOWN, 0b1111);
     }
 
     #[test]
@@ -429,7 +441,10 @@ mod tests {
     #[test]
     fn unknown_overlay_bits_are_refused_before_the_window_is_touched() {
         // 1 is no window at all: the flag check must answer before any OS call sees it
-        assert_eq!(unsafe { prisc_window_prepare_overlay(1, 8) }, S::InvalidArg as i32);
+        assert_eq!(unsafe { prisc_window_prepare_overlay(1, 16) }, S::InvalidArg as i32);
+        // and so must the exclusive pair
+        let both = PriscOverlayFlags::ClickThrough as u32 | PriscOverlayFlags::TakesMouse as u32;
+        assert_eq!(unsafe { prisc_window_prepare_overlay(1, both) }, S::InvalidArg as i32);
     }
 
     #[test]

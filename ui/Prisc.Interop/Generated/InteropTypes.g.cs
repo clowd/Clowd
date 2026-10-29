@@ -282,5 +282,7 @@ namespace Prisc.Interop
         OpaqueLayered = 2,
         /// <summary>Mouse events pass through the window (<c>WS_EX_TRANSPARENT</c> / <c>setIgnoresMouseEvents:</c>).</summary>
         ClickThrough = 4,
+        /// <summary>The window takes the mouse, over its transparent pixels too (<c>WS_EX_TRANSPARENT</c> cleared / <c>setIgnoresMouseEvents:NO</c>). With neither this nor <c>ClickThrough</c> the mouse state is left alone; both together are invalid.</summary>
+        TakesMouse = 8,
     }
 }
