@@ -202,7 +202,7 @@ namespace Prisc.UI.DrawOnScreen
 
                 // the strip goes to the monitor the user is looking at, which the mouse is the best
                 // guess of before any pointer event has reached us
-                var hasCursor = CursorPosition.TryGet(_toolbar, out var cursor);
+                var hasCursor = CursorPosition.TryGet(out var cursor);
                 var anchor = (hasCursor ? DesktopScreens.FromPoint(_toolbar, cursor) : null)
                     ?? DesktopScreens.Primary(_toolbar)
                     ?? screens.FirstOrDefault();
@@ -633,7 +633,7 @@ namespace Prisc.UI.DrawOnScreen
         /// the first canvas when that cannot be told.</summary>
         private Overlay OverlayUnderCursor()
         {
-            if (_toolbar != null && CursorPosition.TryGet(_toolbar, out var cursor)
+            if (_toolbar != null && CursorPosition.TryGet(out var cursor)
                 && DesktopScreens.FromPoint(_toolbar, cursor) is { } screen)
             {
                 var match = _overlays.FirstOrDefault(o => o.Window.Screen.Bounds == screen.Bounds);
@@ -719,7 +719,7 @@ namespace Prisc.UI.DrawOnScreen
             var shots = new Bitmap[screens.Count];
             for (var i = 0; i < screens.Count; i++)
             {
-                shots[i] = ScreenPixels.Grab(screens[i].Bounds, screens[i].Scaling);
+                shots[i] = ScreenPixels.Grab(screens[i].Bounds);
                 if (shots[i] == null)
                 {
                     Debug.WriteLine($"Draw on Instant Screenshot: could not grab the screen at {screens[i].Bounds}");

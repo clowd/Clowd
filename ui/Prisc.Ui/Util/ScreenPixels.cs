@@ -80,16 +80,14 @@ namespace Prisc.Util
         /// pixels on Windows, CG points on macOS) as an opaque 96 DPI bitmap of the grab's real
         /// pixels (a Retina grab is twice the rectangle in points), meant to be stretched over the
         /// monitor (Draw on Instant Screenshot's backdrop uses <c>Stretch.Fill</c>).
-        /// <paramref name="scaling"/> is no longer read. Null when unsupported, unpermitted, or the
-        /// grab fails.
+        /// Null when unsupported, unpermitted, or the grab fails.
         /// </summary>
         /// <remarks>Not a bitmap whose DPI makes its DIP size the monitor's, as this used to be: an
         /// Avalonia <c>Image</c> drew such a bitmap (192 DPI on a Retina display, 144 at 150% on
         /// Windows) cropped to its top-left part and magnified, so the frozen backdrop showed the
         /// top-left quarter of the screen at 2x on a Retina Mac. At 96 DPI the stretch maps it 1:1.</remarks>
-        public static WriteableBitmap Grab(PixelRect bounds, double scaling)
+        public static WriteableBitmap Grab(PixelRect bounds)
         {
-            _ = scaling;
             if (!IsSupported || bounds.Width <= 0 || bounds.Height <= 0)
                 return null;
 

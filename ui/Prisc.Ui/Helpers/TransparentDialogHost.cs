@@ -40,7 +40,7 @@ namespace Prisc.UI.Helpers
                 WindowNativeExtensions.WS_EX_TRANSPARENT | WindowNativeExtensions.WS_EX_LAYERED | WindowNativeExtensions.WS_EX_TOOLWINDOW);
             WindowNativeExtensions.AddHitTestTransparentHook(this);
 
-            var screen = (CursorPosition.TryGet(this, out var cursor) ? DesktopScreens.FromPoint(this, cursor) : null)
+            var screen = (CursorPosition.TryGet(out var cursor) ? DesktopScreens.FromPoint(this, cursor) : null)
                 ?? DesktopScreens.Primary(this);
             if (screen != null)
                 Position = screen.WorkingArea.Center;

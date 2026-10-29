@@ -55,7 +55,7 @@ namespace Prisc.UI.Harness
                     return ProbeOutcome.Unsupported("no screen grab on this OS");
                 if (!ScreenPixels.IsPermitted)
                     return ProbeOutcome.Denied("Screen Recording is not granted");
-                using var bitmap = ScreenPixels.Grab(new PixelRect(0, 0, 16, 16), 1.0);
+                using var bitmap = ScreenPixels.Grab(new PixelRect(0, 0, 16, 16));
                 return bitmap == null ? ProbeOutcome.Unavailable("grab returned nothing") : $"{bitmap.PixelSize.Width}x{bitmap.PixelSize.Height}";
             });
             run.Item("facade.idle.seconds", () =>
@@ -64,7 +64,7 @@ namespace Prisc.UI.Harness
                 return idle is { } t ? Math.Round(t.TotalSeconds, 3) : ProbeOutcome.Unavailable("the OS gave no idle time");
             }, anyThread: true);
             run.Item("facade.cursor.position", () =>
-                CursorPosition.TryGet(window, out var pt) ? $"{pt.X},{pt.Y}" : ProbeOutcome.Unavailable("no cursor position"));
+                CursorPosition.TryGet(out var pt) ? $"{pt.X},{pt.Y}" : ProbeOutcome.Unavailable("no cursor position"));
 
             // window chrome, on the probe window (the members every caller keeps)
             run.Item("facade.window.is_foreground", () => WindowNativeExtensions.IsForeground(window));

@@ -245,7 +245,7 @@ namespace Prisc.UI
         /// <summary>Whether some app holds macOS Secure Event Input (a focused password field),
         /// which hides every key from the hook, so a recording started now hears nothing until it
         /// ends. Read-only, never prompts; false off macOS. Replaced by tests.</summary>
-        internal Func<bool> SecureInputProbe { get; set; } = SecureInput.IsEnabled;
+        internal Func<bool> SecureInputProbe { get; set; } = Prisc.Interop.NativeKeyboard.SecureInputEnabled;
 
         private readonly IGlobalTriggerHost _host;
         private readonly SettingsHotkey _settings;

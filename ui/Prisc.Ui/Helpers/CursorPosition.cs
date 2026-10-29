@@ -1,5 +1,4 @@
 using Avalonia;
-using Avalonia.Controls;
 using Prisc.Interop;
 
 namespace Prisc.UI.Helpers
@@ -12,9 +11,7 @@ namespace Prisc.UI.Helpers
     /// </summary>
     internal static class CursorPosition
     {
-        /// <param name="anyWindow">Unused: the position needs no window any more (the native side
-        /// reads it in top-left space directly). Kept so the callers stay as they are.</param>
-        public static bool TryGet(Window anyWindow, out PixelPoint pt)
+        public static bool TryGet(out PixelPoint pt)
         {
             if (NativeCursor.TryGetPosition(out var x, out var y))
             {
