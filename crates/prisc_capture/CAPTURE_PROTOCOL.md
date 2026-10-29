@@ -116,20 +116,25 @@ this process: it ends with a fatal `error` (`init_failed` at startup,
 until that capture has finished), so the shell's crash accounting
 restarts it or falls back. Everywhere else the process stays up for tray
 captures and reports the error on every gesture. On macOS the ways the tap
-fails — `PermissionDenied`, a NULL tap (`HookFailed`), a running tap ended by
-a revoked grant, repeated timeouts or invalidation (`Stopped`) — come down to
+fails (`PermissionDenied`; a running tap ended by a revoked grant, which is
+reported as a missing grant too; a NULL tap, `HookFailed`; repeated timeouts
+or invalidation, `Stopped`) come down to
 the Accessibility grant, which the shell's own hook shares, or are transient,
 so the capturer retries the hook every 2 s while the last snapshot holds a
-gesture it would register — not before the first snapshot, nor with no
-gestures or only refused ones (a settings snapshot also retries it, once 2 s
-have passed since the last try) — logs a start failure once per change of
+gesture it would register (not before the first snapshot, nor with no
+gestures or only refused ones; a settings snapshot also retries it, once 2 s
+have passed since the last try). A stale grant (listed and trusted, but the
+tap gets no key events) backs off instead: it tries again 2, 4 and 8 ticks
+apart, then every 16 ticks (32 s), only probing the permission on the ticks
+in between, and a probe that reads the grant as missing ends the back-off at
+once. The capturer logs a start failure once per change of
 reason rather than per try and a death as an error only the first time per
 run (a revoked grant never), and announces each change (the
 hook coming up, going down, failing differently, or dying and coming straight
 back with its gestures registered again) with an unsolicited
 `settings_status`; granting
 Accessibility later makes the hotkeys work without restarting anything. The
-capturer never prompts for the permission — the shell does, keyed off
+capturer never prompts for the permission; the shell does, keyed off
 `error_code` (below). `Unsupported` (Linux) is reported and never retried.
 Standby is not the only capture path: the
 shell only runs it while its "keep capturer warm" setting is in effect, and
@@ -160,17 +165,21 @@ the received string verbatim, which is what the shell matches back to
 
 `error` is display text (prisc_hotkeys' error text, echoed verbatim) and may
 change; `error_code` is its stable, machine-readable twin, and the one to
-branch on. Both are absent exactly when `active` is true. Codes: `permission`
-(macOS Accessibility not granted, or a stale grant: listed and trusted, but
-the tap gets no key events — the shell tells the two apart with
-`AXIsProcessTrusted`, prompting and showing its grant instructions in place
-of `error` only for a missing grant, and its re-add instructions for a stale
-one),
-`unsupported` (no hook on this OS), `hook_failed` (the OS refused the hook),
-`hook_stopped` (the hook died and is not back yet), `invalid_gesture` (does
-not parse), `no_key`, `modifier_key` (a bare modifier), `unsupported_key` (no
-code on this OS), `duplicate`. A code the shell does not know means nothing
-special: it shows the text.
+branch on. Both are absent exactly when `active` is true. The codes are
+prisc_hotkeys' one table (`ERROR_CODES`, generated into the shell's
+`HotkeyErrorCodes`): `permission` (macOS Accessibility not granted, including
+a grant revoked under a running tap), `stale_grant` (listed and trusted, but
+the tap gets no key events), `unsupported` (no hook on this OS),
+`hook_failed` (the OS refused the hook), `hook_stopped` (the hook died and is
+not back yet), `invalid_gesture` (does not parse), `no_key`, `modifier_key`
+(a bare modifier), `unsupported_key` (no code on this OS), `duplicate`.
+
+The shell shows its own text for every code it knows (`HotkeyStatusText`, the
+same table its in-process hook uses) and falls back to `error` only for an
+unknown or missing code. It never probes the permission itself: it prompts for
+Accessibility once per run, and only for a `permission` that arrives before
+the hook ever ran, and it never prompts for `stale_grant`, whose text asks the
+user to remove and re-add Prisc in the Accessibility list.
 
 Hook-based hotkeys cannot conflict with other applications, so a gesture is
 active exactly when it parses, names a key usable on this OS (not `None`, not

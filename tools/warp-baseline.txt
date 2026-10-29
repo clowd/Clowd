@@ -1,0 +1,41 @@
+# The filtered GPU tests' outcomes on WARP (CI's Windows test-video leg), recorded from CI run
+# 40885191105, the first Windows run of the GPU code after it moved to prisc_interop (the BASE run
+# of the old C# D3D12 code was never pushed, so this is the first recording). 20 passed, 11 skipped.
+# One of those passes, the D3D12 abandon test, went with its export; the crate's ring tests
+# (cargo test --lib platform::windows::gpu, also on WARP) cover abandon and the ordered drain.
+# tools/check-warp-baseline.sh fails a later run on a test listed Passed here that no longer
+# passes, and on a failing test not listed. One test per line:
+#   <Passed|Failed|Skipped> <fully qualified test name>
+# The D3D11EncodeBridge tests and the NV12 cases skip because WARP has no ID3D11VideoDevice; they
+# need a real Windows GPU. Refresh this file from a run's warp-results-windows-latest artifact
+# when a test is added, renamed or starts passing.
+Skipped Prisc.VideoSDK.Tests.D3D11EncodeBridgeTests.Conversion_matches_swscale_within_a_level_or_two
+Skipped Prisc.VideoSDK.Tests.D3D11EncodeBridgeTests.Converts_a_composed_frame_to_bt601_limited_nv12_in_place
+Skipped Prisc.VideoSDK.Tests.D3D11EncodeBridgeTests.Failed_creation_leaves_the_ring_idle_for_readback
+Skipped Prisc.VideoSDK.Tests.D3D11EncodeBridgeTests.Frames_reference_pool_textures_that_return_when_the_last_reference_goes
+Skipped Prisc.VideoSDK.Tests.D3D11EncodeBridgeTests.Nvenc_encodes_bridge_frames_and_hands_the_textures_back
+Skipped Prisc.VideoSDK.Tests.D3D11EncodeBridgeTests.Shared_and_readback_submits_release_through_their_own_calls_only
+Skipped Prisc.VideoSDK.Tests.D3D11EncodeBridgeTests.Slots_are_reused_correctly_across_threads_while_frames_are_held
+Skipped Prisc.VideoSDK.Tests.D3D11EncodeBridgeTests.Writer_declines_hardware_frames_for_the_software_encoder
+Passed Prisc.VideoSDK.Tests.GpuInteropTests.A_disposed_device_refuses_its_pointers
+Passed Prisc.VideoSDK.Tests.GpuInteropTests.A_failed_gpu_factory_always_explains_itself
+Skipped Prisc.VideoSDK.Tests.GpuInteropTests.Acquired_d3d11_device_is_released_exactly_once_by_ffmpeg
+Passed Prisc.VideoSDK.Tests.GpuInteropTests.Acquired_d3d11_device_is_the_same_object_every_time
+Passed Prisc.VideoSDK.Tests.GpuInteropTests.Device_create_reports_the_backend_borrowed_pointers_and_the_adapter_name
+Passed Prisc.VideoSDK.Tests.GpuInteropTests.Gpu_backend_diagnostic_line_names_the_adapter
+Skipped Prisc.VideoSDK.Tests.GpuInteropTests.Nv12_texture_release_after_the_converter_is_disposed_is_safe
+Passed Prisc.VideoSDK.Tests.GpuInteropTests.Ring_outlives_a_disposed_device_wrapper
+Passed Prisc.VideoSDK.Tests.GpuInteropTests.Struct_layouts_match_the_rust_pins
+Skipped Prisc.VideoSDK.Tests.GpuInteropTests.Windows_only_families_answer_unsupported_elsewhere
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Composer_thread_creates_and_disposes_a_ring_on_thread
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Cpu_factory_ring_is_synchronous_and_round_trips_every_slot
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_ring_and_factory_surface_agree_on_sampled_images
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_ring_is_asynchronous_and_matches_the_cpu_raster_bit_exactly
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_ring_matches_the_factory_surface_readback
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_ring_matches_the_factory_surface_readback_for_antialiased_content
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_ring_survives_many_frames_and_dispose_before_factory
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Interface_default_ring_is_the_synchronous_one
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Ring_rejects_out_of_order_use
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Ring_slots_are_independent
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Sync_ring_depth_is_capped_by_the_factory_but_exact_from_the_constructor
+Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Sync_ring_pixels_match_try_read_pixels

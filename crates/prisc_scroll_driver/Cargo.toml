@@ -10,6 +10,8 @@ edition = "2021"
 # image, euclid and sentry all reach this crate through prisc_rust_core and are not named directly.
 [dependencies]
 prisc_ipc.workspace = true
+# The permission preflight and the Esc poll (physical key state), shared with the other helpers.
+prisc_platform.workspace = true
 prisc_rust_core = { workspace = true, features = ["desktop", "telemetry"] }
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
@@ -19,20 +21,21 @@ serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
-    # SendInput / GetAsyncKeyState for the wheel injection and the Esc poll (input/win.rs).
+    # SendInput for the wheel injection (input/win.rs); the Esc poll reads prisc_platform::input.
     "Win32_UI_Input_KeyboardAndMouse",
     # Window resolution, cursor parking, WM_MOUSEWHEEL (input/win.rs).
     "Win32_UI_WindowsAndMessaging",
     # The per-monitor-DPI-awareness assertion (input/win.rs::preflight).
     "Win32_UI_HiDpi",
-    # BitBlt of the capture region (frame/win.rs) and ScreenToClient (input/win.rs).
+    # ScreenToClient (input/win.rs).
     "Win32_Graphics_Gdi",
 ] }
 
-# The macOS half of the same two modules: objc2-core-graphics carries the scroll events, the
-# Esc poll and CGWindowListCreateImage (the window list and cursor warp come through
-# prisc_rust_core::desktop), and objc2-app-kit provides NSRunningApplication for activation.
+# The macOS half of input: objc2-core-graphics carries the scroll events and the window ids (the
+# window list, cursor warp and frame grab come through prisc_rust_core::desktop, the Esc poll and
+# the Accessibility preflight through prisc_platform), and objc2-app-kit provides
+# NSRunningApplication for activation.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-core-foundation.workspace = true
-objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventSource", "CGEventTypes", "CGImage", "CGWindow", "libc"] }
+objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "libc"] }
 objc2-app-kit = { workspace = true, features = ["libc"] }

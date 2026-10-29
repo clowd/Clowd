@@ -1,10 +1,11 @@
 name: Build rust
 
 # Reusable build of the Rust binaries that sit beside Prisc.Ui in every package:
-# the capture overlay, the scrolling capture driver, the global hotkey library,
-# the prisc_ai inference binary (with its execution-provider dylibs and the VC++
-# CRT it needs on Windows), and on Windows the shell extension dll and its sparse
-# MSIX. ci.yml calls it once; it runs alongside build-recorder.yml and
+# the capture overlay, the scrolling capture driver,
+# the in-process interop library (prisc_interop) Prisc.Ui and Prisc.VideoRender
+# load, the prisc_ai inference binary (with its execution-provider dylibs and
+# the VC++ CRT it needs on Windows), and on Windows the shell extension dll and
+# its sparse MSIX. ci.yml calls it once; it runs alongside build-recorder.yml and
 # build-ui.yml, and ci.yml's package job merges the three.
 #
 # Each artifact `rust-<rid>` holds one archive, `rust-<rid>.zip`, whose members
@@ -87,6 +88,32 @@ jobs:
           # shellcheck disable=SC2046 # word-split `-p <crate>` pairs
           cargo build --release --target ${{ matrix.target }} $(tools/staging/stage-app.sh packages ${{ matrix.rid }})
 
+      # The in-process library gets a cargo invocation of its own: built beside the packages above,
+      # cargo would unify features across them and hand it prisc_rust_core's `telemetry` (Sentry)
+      # from prisc_capture. Fails on cargo's "`default-features` is ignored for X" warning (cargo wraps
+      # the key in backticks), which means a dependency line silently enables more than it asks for,
+      # and on ld64's "duplicate symbol" warning.
+      - name: Build isolated rust libraries
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/isolated-build.log"
+          : > "$log"
+          while read -r args; do
+            echo "==> cargo build --release --target ${{ matrix.target }} $args"
+            # shellcheck disable=SC2086 # word-split `-p <crate>`
+            cargo build --release --target ${{ matrix.target }} $args 2>&1 | tee -a "$log"
+          done < <(tools/staging/stage-app.sh packages-isolated ${{ matrix.rid }})
+          if grep -E ".?default-features.? is ignored|duplicate symbol" "$log"; then
+            echo "::error::the isolated build printed a default-features or duplicate symbol warning"
+            exit 1
+          fi
+
+      # The artifact check behind the isolated build: exports only prisc_*, no Sentry symbol, only OS
+      # libraries as dependencies (and the @rpath install name on macOS).
+      - name: Verify isolated rust libraries
+        shell: bash
+        run: tools/staging/stage-app.sh verify-isolated ${{ matrix.rid }} "$OUT"
+
       # Without these an LTO'd release build reports mangled frames with no file or line; skipped rather than failed when the token is absent (forks).
       # The recorder has no Sentry integration, so it uploads no debug files.
       - name: Upload debug files to Sentry
@@ -99,8 +126,8 @@ jobs:
           done
 
       # stage/ unpacks into the package directory beside Prisc.Ui: the overlay, the scrolling
-      # capture driver, the global hotkey library and prisc_ai with its license, DirectML.dll and
-      # (Windows) the VC++ runtime it alone imports. release.yml signs them with the rest: vpk's
+      # capture driver, the interop library and prisc_ai with its
+      # license, DirectML.dll and (Windows) the VC++ runtime it alone imports. release.yml signs them with the rest: vpk's
       # Trusted Signing pass covers every dll in the pack dir, and the macOS app signing and
       # notarization cover every Mach-O in the bundle.
       - name: Stage rust binaries

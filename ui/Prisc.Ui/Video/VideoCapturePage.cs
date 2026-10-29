@@ -127,12 +127,12 @@ namespace Prisc.UI
                 if (outputDir != null)
                     _settings.OutputDirectory = outputDir;
 
-                var binary = Prisc.Ipc.HelperLocator.Find("prisc_recorder");
+                var binary = Prisc.Ipc.HelperLocator.Find(HelperNames.Recorder);
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The recording binary ({Prisc.Ipc.Platform.ExeName("prisc_recorder")}) could not be found. " +
-                        $"Run 'cargo rec' in the Prisc repository, or set the {Prisc.Ipc.HelperLocator.EnvVarName} " +
+                        $"The recording binary ({Prisc.Interop.NativeProbe.ExeName(HelperNames.Recorder)}) could not be found. " +
+                        $"Run 'cargo rec' in the Prisc repository, or set the {Prisc.Interop.EnvVars.HelpersDir} " +
                         "environment variable to the folder holding it.",
                         "Screen recording unavailable");
                     DeleteDirectory(_sessionDir);

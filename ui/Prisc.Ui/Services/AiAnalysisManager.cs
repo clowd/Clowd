@@ -224,7 +224,7 @@ namespace Prisc.UI.Services
                     changed = true;
                 }
 
-                var available = _cacheDir != null && HelperLocator.Find("prisc_ai") != null;
+                var available = _cacheDir != null && HelperLocator.Find(HelperNames.Ai) != null;
                 foreach (var key in required)
                 {
                     var source = project.Sources?.FirstOrDefault(s => s.Id == key.SourceId);

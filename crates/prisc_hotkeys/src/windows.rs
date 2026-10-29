@@ -13,8 +13,8 @@ use windows::core::w;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::Threading::{GetCurrentThread, GetCurrentThreadId, SetThreadPriority, THREAD_PRIORITY_HIGHEST};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, GetKeyState, GetKeyboardLayout, SendInput, ToUnicodeEx, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-    KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_MENU, VK_SHIFT,
+    GetKeyState, GetKeyboardLayout, SendInput, ToUnicodeEx, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+    KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_MENU, VK_SHIFT,
 };
 use windows::Win32::UI::Input::{GetRegisteredRawInputDevices, RegisterRawInputDevices, RAWINPUTDEVICE, RIDEV_INPUTSINK, RIDEV_REMOVE};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::core::{HookCore, Verdict};
-use crate::hotkeys::Shared;
+use crate::hotkeys::{Shared, StartFailure};
 use crate::watchdog::Watchdog;
 use crate::winstate::{WinEvent, WinState, MASK_MARKER, MASK_VK, SIDE_KEYS};
 use crate::{Error, Event};
@@ -58,7 +58,7 @@ impl Drop for Backend {
     }
 }
 
-pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, Error> {
+pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, StartFailure> {
     let (ready_tx, ready_rx) = mpsc::channel();
     let thread = thread::Builder::new()
         .name("prisc-hotkeys-hook".into())
@@ -71,11 +71,11 @@ pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, E
         }),
         Ok(Err(error)) => {
             let _ = thread.join();
-            Err(error)
+            Err(error.into())
         }
         Err(_) => {
             let _ = thread.join();
-            Err(Error::HookFailed("the hook thread exited during startup".into()))
+            Err(Error::HookFailed("the hook thread exited during startup".into()).into())
         }
     }
 }
@@ -282,9 +282,9 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
     }
 }
 
+/// The physical (async) state of `vk`, read the way every crate reads it (prisc_platform).
 fn key_down(vk: u16) -> bool {
-    // SAFETY: trivially safe.
-    unsafe { GetAsyncKeyState(vk as i32) as u16 & 0x8000 != 0 }
+    prisc_platform::input::is_key_down(u32::from(vk)).unwrap_or(false)
 }
 
 /// The eight side bits in the async key state: the logical state (injected edges count) of every
@@ -349,22 +349,50 @@ fn focus_layout() -> HKL {
     }
 }
 
-/// Injects a down+up of the unassigned mask VK, marked so our own hook passes it.
-fn send_mask() {
-    let input = |flags| INPUT {
+/// One injected key event, marked so our own hook passes it untouched.
+fn marked(vk: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+    INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
             ki: KEYBDINPUT {
-                wVk: VIRTUAL_KEY(MASK_VK),
+                wVk: VIRTUAL_KEY(vk),
                 wScan: 0,
                 dwFlags: flags,
                 time: 0,
                 dwExtraInfo: MASK_MARKER,
             },
         },
-    };
-    // SAFETY: two fully initialized INPUTs and their exact size.
-    let _ = unsafe { SendInput(&[input(KEYBD_EVENT_FLAGS(0)), input(KEYEVENTF_KEYUP)], size_of::<INPUT>() as i32) };
+    }
+}
+
+fn send(inputs: &[INPUT]) {
+    // SAFETY: fully initialized INPUTs and their exact size.
+    let _ = unsafe { SendInput(inputs, size_of::<INPUT>() as i32) };
+}
+
+/// Injects a down+up of the unassigned mask VK, marked so our own hook passes it.
+fn send_mask() {
+    inject_mask_chord(false);
+}
+
+/// The menu mask chord, in one `SendInput`: an Alt down when `press_alt`, then a down+up of the
+/// unassigned mask VK (so no app sees a lone Alt tap and enters menu mode), every event marked so
+/// this crate's hook passes it untouched. The hook injects it after a swallowed Win or Alt combo;
+/// prisc_interop's `take_foreground` presses it, with Alt, to satisfy the foreground lock, and
+/// lifts that Alt with [`release_injected_alt`] once the window is in front.
+pub fn inject_mask_chord(press_alt: bool) {
+    let alt = marked(VK_MENU.0, KEYBD_EVENT_FLAGS(0));
+    let mask = [marked(MASK_VK, KEYBD_EVENT_FLAGS(0)), marked(MASK_VK, KEYEVENTF_KEYUP)];
+    if press_alt {
+        send(&[alt, mask[0], mask[1]]);
+    } else {
+        send(&mask);
+    }
+}
+
+/// Lifts the Alt an [`inject_mask_chord`]`(true)` pressed, marked like it.
+pub fn release_injected_alt() {
+    send(&[marked(VK_MENU.0, KEYEVENTF_KEYUP)]);
 }
 
 #[cfg(test)]

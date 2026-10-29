@@ -93,16 +93,7 @@ namespace Prisc.UI.DrawOnScreen
         }
 
         /// <summary>A gesture as a tooltip names it: "Ctrl+Z" (⌘ as "Cmd" on macOS), "Shift+1".</summary>
-        public static string Label(SimpleKeyGesture gesture)
-        {
-            var app = gesture.ForApp();
-            var text = app.ToString();
-
-            // SimpleKeyGesture names the top-row digits by their enum ("D1")
-            if (app.Key is >= Key.D0 and <= Key.D9)
-                text = text[..^2] + (char)('0' + (app.Key - Key.D0));
-            return text;
-        }
+        public static string Label(SimpleKeyGesture gesture) => gesture.ForApp().ToString();
 
         /// <summary>A gesture's key alone, as a tile's hint shows it: "B", "Esc".</summary>
         public static string Hint(SimpleKeyGesture gesture) => Label(new SimpleKeyGesture(gesture.Key));

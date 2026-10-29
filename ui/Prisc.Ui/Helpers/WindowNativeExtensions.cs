@@ -1,16 +1,20 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
+using Prisc.Interop;
 
 namespace Prisc.UI.Helpers
 {
     /// <summary>
-    /// Native window-style helpers for the recording UI windows (BorderWindow,
-    /// ShareResizeWindow and FloatingTrayWindow, design §4.2), and the capture exclusion every
-    /// Prisc top level is subject to (CaptureExclusion). Every member is safe to call on any OS —
-    /// each one is a no-op off its own platform, so callers need no cfg guards.
+    /// Native window-style helpers for the recording UI windows (BorderWindow, ShareResizeWindow,
+    /// FloatingTrayWindow, Draw on Screen, TransparentDialogHost), and the capture exclusion every
+    /// Prisc top level is subject to (CaptureExclusion). The native work is
+    /// <see cref="WindowChrome"/>'s (prisc_interop); this class maps an Avalonia window to the raw
+    /// platform window it takes, and keeps the parts that are Avalonia's own (the Win32 style and
+    /// window procedure callbacks). Every member is safe to call on any OS: what does not apply on
+    /// one is a no-op there, so callers need no OS checks. Every member is also a no-op when
+    /// prisc_interop is not loaded, so the dialog that reports that can still open.
     /// </summary>
     internal static class WindowNativeExtensions
     {
@@ -23,27 +27,27 @@ namespace Prisc.UI.Helpers
         private const uint WM_SYSCOMMAND = 0x0112;
         private const long SC_KEYMENU = 0xF100;
         private const int HTTRANSPARENT = -1;
-        private const uint LWA_ALPHA = 0x00000002;
 
-        // SetWindowDisplayAffinity values. WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+) removes the
-        // window from every capture path; the older WDA_MONITOR only paints it black, which is
-        // worse than nothing for a frame, so it is deliberately not used as a fallback.
-        private const uint WDA_NONE = 0x00000000;
-        private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
+        /// <summary>
+        /// The raw platform window the native calls take: the NSWindow on macOS (Avalonia's plain
+        /// <see cref="IPlatformHandle.Handle"/> is the view there), the HWND on Windows. 0 before the
+        /// native window exists.
+        /// </summary>
+        internal static nint NativeWindow(TopLevel topLevel) => topLevel?.TryGetPlatformHandle() switch
+        {
+            IMacOSTopLevelPlatformHandle mac => mac.NSWindow,
+            { } handle => handle.Handle,
+            null => 0,
+        };
 
-        // NSWindowSharingType: None hides the window from capture, ReadOnly is AppKit's default
-        private const nuint NSWindowSharingNone = 0;
-        private const nuint NSWindowSharingReadOnly = 1;
-
-        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-        private const uint SWP_NOSIZE = 0x0001;
-        private const uint SWP_NOMOVE = 0x0002;
-        private const uint SWP_NOACTIVATE = 0x0010;
-        private const uint SWP_NOZORDER = 0x0004;
-        private const uint SWP_NOOWNERZORDER = 0x0200;
-        private const uint SWP_FRAMECHANGED = 0x0020;
-
-        private const int GWL_EXSTYLE = -20;
+        /// <summary>
+        /// <see cref="NativeWindow"/> for the <see cref="WindowChrome"/> calls below, or 0 when
+        /// prisc_interop is not loaded. Every one of them is best-effort chrome, and the dialog that
+        /// reports a missing or stale library is itself a window that goes through them (its Opened
+        /// handler takes the foreground), so they must stay no-ops then instead of throwing
+        /// <see cref="InteropUnavailableException"/> out of that handler.
+        /// </summary>
+        private static nint ChromeWindow(TopLevel topLevel) => InteropLibrary.IsAvailable ? NativeWindow(topLevel) : 0;
 
         /// <summary>
         /// Injects extra Win32 extended styles into the window at style-application time via
@@ -55,15 +59,15 @@ namespace Prisc.UI.Helpers
         /// is an anonymous lambda that nothing retains, so no equal delegate instance can ever be
         /// handed back to <see cref="Win32Properties.RemoveWindowStylesCallback"/>; and even if one
         /// could, removing a styles callback does not un-apply the bits it already OR'd onto the
-        /// HWND. Clearing such a bit by hand with SetWindowLongPtr is equally futile: the next time
-        /// Avalonia re-applies window styles (a resize, a state change, a DPI change) it runs the
-        /// surviving callbacks again and silently re-ORs the old mask back on.
+        /// HWND. Clearing such a bit by hand is equally futile: the next time Avalonia re-applies
+        /// window styles (a resize, a state change, a DPI change) it runs the surviving callbacks
+        /// again and silently re-ORs the old mask back on.
         /// <para>
         /// So a style added through this method is permanent for the life of the window. Any window
-        /// that needs a <em>togglable</em> extended style must not use this overload at all — it
+        /// that needs a <em>togglable</em> extended style must not use this overload at all: it
         /// must register a retained instance-method callback that reads a mutable field, so every
         /// style re-application re-asserts the window's current desire rather than a mask captured
-        /// once at construction.
+        /// once at construction (<see cref="ToggleableExStyles"/>).
         /// </para>
         /// </remarks>
         public static void AddExStyles(Window window, uint exStyles)
@@ -75,18 +79,36 @@ namespace Prisc.UI.Helpers
         }
 
         /// <summary>
-        /// Mandatory follow-up to WS_EX_LAYERED: a window that gains the layered style without a
-        /// subsequent SetLayeredWindowAttributes/UpdateLayeredWindow call is never repainted, and
-        /// Avalonia's swapchain does not make one. Call from the window's Opened handler.
+        /// The open-time setup of an overlay window, in one native call. Call from the window's
+        /// Opened handler (the native window must exist), before (re)positioning it:
+        /// <see cref="OverlayFlags.CoverMenuBar"/> lifts it to the macOS overlay level, below which
+        /// AppKit keeps the frame off the menu bar (issue #56), so a position set earlier would not
+        /// stick. <see cref="OverlayFlags.OpaqueLayered"/> is the mandatory follow-up to a
+        /// WS_EX_LAYERED style (a layered window without it is never repainted, and Avalonia's
+        /// swapchain does not make the call). <see cref="OverlayFlags.ClickThrough"/> lets the mouse
+        /// through (on Windows the window keeps WS_EX_TRANSPARENT in its styles callback as well, or
+        /// Avalonia's next style re-application drops it); <see cref="OverlayFlags.TakesMouse"/> is the
+        /// explicit opposite, for a window that draws over its transparent pixels.
         /// </summary>
-        public static void SetLayeredFullyOpaque(Window window)
+        public static void PrepareOverlay(Window window, OverlayFlags flags)
         {
-            if (!OperatingSystem.IsWindows())
-                return;
+            var handle = ChromeWindow(window);
+            if (handle != 0)
+                WindowChrome.PrepareOverlay(handle, flags);
+        }
 
-            var handle = window.TryGetPlatformHandle();
-            if (handle != null && handle.Handle != IntPtr.Zero)
-                SetLayeredWindowAttributes(handle.Handle, 0, 255, LWA_ALPHA);
+        /// <summary>
+        /// Switches click-through on or off, live: WS_EX_TRANSPARENT on Windows (the window's
+        /// <see cref="ToggleableExStyles"/> must be told too, so a style re-application keeps it),
+        /// setIgnoresMouseEvents: on macOS. Leaving click-through sends NO explicitly there: AppKit's
+        /// default (ignore only transparent pixels) is a third state the window would otherwise never
+        /// return to once YES was sent. Call once the native window exists.
+        /// </summary>
+        public static void SetClickThrough(Window window, bool on)
+        {
+            var handle = ChromeWindow(window);
+            if (handle != 0)
+                WindowChrome.SetClickThrough(handle, on);
         }
 
         /// <summary>
@@ -116,10 +138,11 @@ namespace Prisc.UI.Helpers
         /// <summary>
         /// Restores Alt+Space (the window's system menu) on Windows, issue #108. Avalonia's WndProc
         /// swallows every <c>SC_KEYMENU</c> whose lParam has no high word, to stop a bare Alt or
-        /// F10 from entering the native menu loop — but Alt+Space arrives as <c>SC_KEYMENU</c> with
+        /// F10 from entering the native menu loop, but Alt+Space arrives as <c>SC_KEYMENU</c> with
         /// lParam = ' ', so it is swallowed too (AvaloniaUI/Avalonia#14545). Hooks run before
-        /// Avalonia's own handler, so this one hands just that case to DefWindowProc and leaves the
-        /// bare-Alt suppression alone. Idempotent; App installs it on every window as it opens.
+        /// Avalonia's own handler, so this one hands just that case to the default window procedure
+        /// and leaves the bare-Alt suppression alone. Idempotent; App installs it on every window as
+        /// it opens.
         /// </summary>
         public static void AddSystemMenuKeyHook(Window window)
         {
@@ -133,10 +156,11 @@ namespace Prisc.UI.Helpers
 
         private static IntPtr SystemMenuKeyHook(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            if (msg == WM_SYSCOMMAND && ((long)wParam & 0xFFF0) == SC_KEYMENU && (long)lParam == ' ')
+            // without prisc_interop (the missing-library dialog) Avalonia keeps the message
+            if (msg == WM_SYSCOMMAND && ((long)wParam & 0xFFF0) == SC_KEYMENU && (long)lParam == ' ' && InteropLibrary.IsAvailable)
             {
                 handled = true;
-                return DefWindowProcW(hWnd, msg, wParam, lParam);
+                return WindowChrome.DefaultWindowProc(hWnd, msg, (nuint)(nint)wParam, lParam);
             }
 
             return IntPtr.Zero;
@@ -146,42 +170,27 @@ namespace Prisc.UI.Helpers
         /// Re-asserts a topmost window above its topmost peers WITHOUT activating it or moving it.
         /// Used when a second topmost window is shown over an existing one (the share-region resize
         /// overlay over the floating toolbar): the tile that ends resize mode must not end up
-        /// underneath it — there is no keyboard escape from that mode. No-op off Windows and macOS.
+        /// underneath it, because there is no keyboard escape from that mode.
         /// </summary>
         /// <remarks>
         /// On Windows, among topmost peers the later Show() wins. A SetWindowPos is deterministic
         /// where a Topmost=false/true bounce goes through Avalonia's window-style path and can
         /// re-apply styles as a side effect.
         /// <para>
-        /// On macOS the sibling is activatable and already sits at NSStatusWindowLevel (it calls
-        /// <see cref="SetCanCoverMenuBar"/>), so front-ordering within one level would not hold: a
-        /// window that becomes key orders itself to the front of its own level, so a same-level
-        /// toolbar would sink again on the first click into the overlay. This window is therefore
-        /// lifted one level above it and front-ordered with orderFrontRegardless, which raises
-        /// without making the app active or this window key. As with HWND_TOPMOST on Windows, the
-        /// raise then stands for the life of the window.
+        /// On macOS the sibling is activatable and already sits at the overlay level (it was
+        /// prepared with <see cref="OverlayFlags.CoverMenuBar"/>), so front-ordering within one level
+        /// would not hold: a window that becomes key orders itself to the front of its own level, so
+        /// a same-level toolbar would sink again on the first click into the overlay. This window is
+        /// therefore lifted one level above it and front-ordered with orderFrontRegardless, which
+        /// raises without making the app active or this window key. As with HWND_TOPMOST on Windows,
+        /// the raise then stands for the life of the window.
         /// </para>
         /// </remarks>
         public static void RaiseTopmostNoActivate(Window window)
         {
-            var handle = window?.TryGetPlatformHandle();
-            if (handle == null)
-                return;
-
-            if (OperatingSystem.IsWindows())
-            {
-                if (handle.Handle != IntPtr.Zero)
-                    SetWindowPos(handle.Handle, HWND_TOPMOST, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                if (handle is IMacOSTopLevelPlatformHandle mac && mac.NSWindow != IntPtr.Zero)
-                {
-                    objc_msgSend(mac.NSWindow, sel_registerName("setLevel:"), AboveOverlayWindowLevel);
-                    objc_msgSend(mac.NSWindow, sel_registerName("orderFrontRegardless"));
-                }
-            }
+            var handle = ChromeWindow(window);
+            if (handle != 0)
+                WindowChrome.RaiseTopmostNoActivate(handle);
         }
 
         /// <summary>
@@ -189,7 +198,7 @@ namespace Prisc.UI.Helpers
         /// <c>Position</c> setter is one SetWindowPos and its <c>Width</c>/<c>Height</c> setters
         /// become a second one only after the next layout pass, so a window whose left edge is
         /// dragged first slides whole (right edge overshooting by the delta) and then snaps back to
-        /// size a frame later — the jitter the share-region resize overlay showed. Here the native
+        /// size a frame later: the jitter the share-region resize overlay showed. Here the native
         /// rect goes down atomically first, and the Avalonia properties are then set to the SAME
         /// values so its own pass finds nothing to do.
         /// </summary>
@@ -207,31 +216,26 @@ namespace Prisc.UI.Helpers
         /// leave the window one physical pixel short of the requested size at fractional scalings;
         /// it is the same pixel it was short by before this helper existed, which is why both
         /// callers carry a pixel of slack.
-        /// <para>Off Windows this is exactly the old two-step: Position, then Width and Height, so
-        /// the drag there is no worse than it was. NSWindow has an atomic setFrame:display:, but it
-        /// takes a flipped-origin NSRect that Avalonia's macOS backend translates internally and
-        /// this code cannot be tested here (design §4.2), so it is left to Avalonia.</para>
+        /// <para>On macOS the native step answers "not this phase" and this is exactly the old
+        /// two-step: Position, then Width and Height. NSWindow has an atomic setFrame:display:, but it
+        /// takes a flipped-origin NSRect that Avalonia's macOS backend translates internally, so it
+        /// is left to Avalonia until the native side takes it over (no change at this call site).</para>
         /// </remarks>
         public static void SetPhysicalBounds(Window window, PixelPoint position, int physicalWidth, int physicalHeight, double scaling)
         {
             var logicalWidth = physicalWidth / scaling;
             var logicalHeight = physicalHeight / scaling;
 
-            if (OperatingSystem.IsWindows())
+            var handle = ChromeWindow(window);
+            if (handle != 0)
             {
-                var handle = window?.TryGetPlatformHandle();
-                if (handle != null && handle.Handle != IntPtr.Zero)
-                {
-                    // Avalonia.Win32 WindowImpl.Resize: (int)(value.Width * RenderScaling). Match it.
-                    var cx = (int)(logicalWidth * scaling);
-                    var cy = (int)(logicalHeight * scaling);
-                    SetWindowPos(handle.Handle, IntPtr.Zero, position.X, position.Y, cx, cy,
-                                 SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER);
-                }
+                // Avalonia.Win32 WindowImpl.Resize: (int)(value.Width * RenderScaling). Match it.
+                WindowChrome.SetBounds(handle, position.X, position.Y, (int)(logicalWidth * scaling), (int)(logicalHeight * scaling));
             }
 
-            // Same values into Avalonia so its state agrees with the HWND. On Windows both are
-            // no-ops against the rect just applied; elsewhere they are the whole operation.
+            // Same values into Avalonia so its state agrees with the native window. Where the native
+            // step ran both are no-ops against the rect just applied; elsewhere they are the whole
+            // operation.
             window.Position = position;
             window.Width = logicalWidth;
             window.Height = logicalHeight;
@@ -240,67 +244,32 @@ namespace Prisc.UI.Helpers
         /// <summary>
         /// Hides the top level from screen capture, or shows it again: while hidden, DXGI desktop
         /// duplication, Windows Graphics Capture (monitor and window), GDI BitBlt of the screen,
-        /// PrintScreen and the Snipping Tool all render whatever is behind it instead. Which windows
-        /// are hidden is the user's choice (<see cref="CaptureExclusion"/> decides and is the only
-        /// caller). The native handle must exist, so this runs from Opened or later.
+        /// PrintScreen and the Snipping Tool all render whatever is behind it instead, and on macOS
+        /// the CGWindowList capture path and ScreenCaptureKit skip it. Which windows are hidden is the
+        /// user's choice (<see cref="CaptureExclusion"/> decides and is the only caller). The native
+        /// handle must exist, so this runs from Opened or later.
         /// </summary>
         /// <remarks>
         /// Windows: <c>SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)</c>, honoured from Windows 10
         /// 2004 (build 19041) by DWM for every capture API, layered windows included, and
-        /// <c>WDA_NONE</c> to undo it. Older builds reject the exclude value and the call returns
-        /// false; that is swallowed, because the alternative (WDA_MONITOR) would black the window out
-        /// rather than remove it. The affinity is a property of the HWND and survives Avalonia's style
-        /// re-applications, unlike an extended style.
+        /// <c>WDA_NONE</c> to undo it. Older builds reject the exclude value; that is swallowed,
+        /// because the alternative (WDA_MONITOR) would black the window out rather than remove it.
+        /// The affinity is a property of the HWND and survives Avalonia's style re-applications,
+        /// unlike an extended style.
         /// <para>macOS: <c>NSWindow.sharingType</c>, <c>NSWindowSharingNone</c> to hide and AppKit's
-        /// default <c>NSWindowSharingReadOnly</c> to show; the per-window opt-out that the
-        /// CGWindowList capture path and ScreenCaptureKit honour. Untested here — compile-guarded per
-        /// design §4.2.</para>
+        /// default <c>NSWindowSharingReadOnly</c> to show.</para>
         /// </remarks>
         public static void SetExcludedFromScreenCapture(TopLevel topLevel, bool excluded)
         {
-            var handle = topLevel?.TryGetPlatformHandle();
-            if (handle == null)
-                return;
-
-            if (OperatingSystem.IsWindows())
-            {
-                if (handle.Handle != IntPtr.Zero)
-                    SetWindowDisplayAffinity(handle.Handle, excluded ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                if (handle is IMacOSTopLevelPlatformHandle mac && mac.NSWindow != IntPtr.Zero)
-                    objc_msgSend(mac.NSWindow, sel_registerName("setSharingType:"),
-                                 excluded ? NSWindowSharingNone : NSWindowSharingReadOnly);
-            }
-        }
-
-        /// <summary>
-        /// macOS click-through: NSWindow setIgnoresMouseEvents:YES via objc_msgSend on the
-        /// window's <see cref="IMacOSTopLevelPlatformHandle"/>. Call from the window's Opened
-        /// handler (the NSWindow must exist). Untested here — compile-guarded per design §4.2.
-        /// </summary>
-        public static void SetIgnoresMouseEvents(Window window) => SetIgnoresMouseEvents(window, true);
-
-        /// <summary>
-        /// macOS: switches click-through on or off (NSWindow setIgnoresMouseEvents:). Leaving
-        /// click-through must send NO explicitly — AppKit's default (ignore only transparent
-        /// pixels) is a third state the window would otherwise never return to once YES was sent.
-        /// No-op elsewhere. Untested here — compile-guarded per design §4.2.
-        /// </summary>
-        public static void SetIgnoresMouseEvents(Window window, bool ignore)
-        {
-            if (!OperatingSystem.IsMacOS())
-                return;
-
-            if (window.TryGetPlatformHandle() is IMacOSTopLevelPlatformHandle mac && mac.NSWindow != IntPtr.Zero)
-                objc_msgSend(mac.NSWindow, sel_registerName("setIgnoresMouseEvents:"), ignore);
+            var handle = ChromeWindow(topLevel);
+            if (handle != 0)
+                WindowChrome.SetExcludedFromCapture(handle, excluded);
         }
 
         /// <summary>
         /// macOS: places the traffic lights at an explicit inset from the window's top-left,
         /// instead of the (9, 9) AppKit gives a bare window. Call once the NSWindow exists, and
-        /// again after anything that relays the title bar out (see the remarks).
+        /// again after anything that relays the title bar out (see the remarks). No-op elsewhere.
         /// </summary>
         /// <param name="leftInset">Left edge of the close button, in points from the window's left.</param>
         /// <param name="topInset">Top edge of all three buttons, in points from the window's top.
@@ -315,361 +284,56 @@ namespace Prisc.UI.Helpers
         /// </remarks>
         public static void SetTrafficLightPosition(Window window, double leftInset, double topInset)
         {
-            if (!OperatingSystem.IsMacOS())
-                return;
-
-            if (window?.TryGetPlatformHandle() is not IMacOSTopLevelPlatformHandle mac || mac.NSWindow == IntPtr.Zero)
-                return;
-
-            var standardWindowButton = sel_registerName("standardWindowButton:");
-            var setFrameOrigin = sel_registerName("setFrameOrigin:");
-
-            // Read all three frames before moving any of them. AppKit's own spacing and button
-            // size are then preserved exactly: the cluster is translated as a unit rather than
-            // laid out again from constants, which matters because neither is fixed. Under a
-            // title bar shorter than 32pt AppKit draws the small variant, where the circles are
-            // 12pt on 20pt centres in 14x16 frames instead of 14pt on 23pt centres.
-            var buttons = new IntPtr[3];
-            var frames = new NSRect[3];
-            var titleBar = IntPtr.Zero;
-
-            for (var i = 0; i < 3; i++)
-            {
-                buttons[i] = objc_msgSend_IntPtr(mac.NSWindow, standardWindowButton, (nuint)i);
-                if (buttons[i] == IntPtr.Zero)
-                    return;
-
-                frames[i] = ViewFrame(buttons[i]);
-
-                if (titleBar == IntPtr.Zero)
-                    titleBar = objc_msgSend_IntPtr(buttons[i], sel_registerName("superview"));
-            }
-
-            if (titleBar == IntPtr.Zero)
-                return;
-
-            // The three share one superview (NSTitlebarView), whose height converts a top inset
-            // into the bottom-up y AppKit wants: the view is not flipped, so y counts up from the
-            // bar's bottom edge and a negative value simply puts a button below the bar.
-            var titleBarHeight = ViewFrame(titleBar).Height;
-            if (titleBarHeight <= 0)
-                return;
-
-            // One shift for all three, taken from the close button. Idempotent: re-running against
-            // frames this method already placed computes a zero shift and the same y.
-            var shift = leftInset - frames[0].X;
-
-            for (var i = 0; i < 3; i++)
-            {
-                var origin = new NSPoint
-                {
-                    X = frames[i].X + shift,
-                    Y = titleBarHeight - frames[i].Height - topInset,
-                };
-
-                objc_msgSend(buttons[i], setFrameOrigin, origin);
-            }
+            var handle = ChromeWindow(window);
+            if (handle != 0)
+                WindowChrome.SetTrafficLightPosition(handle, leftInset, topInset);
         }
 
-        /// <summary>A view's frame. The struct is 32 bytes, which the two ABIs return differently:
-        /// arm64 hands back a hidden pointer through plain objc_msgSend, where x86_64 needs the
-        /// _stret entry point (the same split the NSPoint helper above sits on the other side of,
-        /// two doubles being small enough for registers everywhere).</summary>
-        private static NSRect ViewFrame(IntPtr view)
-        {
-            var frame = sel_registerName("frame");
-
-            if (RuntimeInformation.ProcessArchitecture == Architecture.X64)
-            {
-                objc_msgSend_stret(out var rect, view, frame);
-                return rect;
-            }
-
-            return objc_msgSend_NSRect(view, frame);
-        }
-
-        /// <summary>
-        /// Windows: sets or clears <paramref name="mask"/> in the live window's extended style and
-        /// makes the change take effect now (SWP_FRAMECHANGED). On its own this lasts only until
-        /// Avalonia next re-applies window styles; a togglable style must also be re-asserted by a
-        /// retained styles callback, which is what <see cref="ToggleableExStyles"/> pairs it with.
-        /// No-op off Windows or before the window has a handle.
-        /// </summary>
-        public static void SetExStyleBits(Window window, uint mask, bool on)
-        {
-            if (!OperatingSystem.IsWindows())
-                return;
-
-            var handle = window?.TryGetPlatformHandle();
-            if (handle == null || handle.Handle == IntPtr.Zero)
-                return;
-
-            var ex = (ulong)GetWindowLongPtrW(handle.Handle, GWL_EXSTYLE).ToInt64();
-            var next = on ? ex | mask : ex & ~(ulong)mask;
-            if (next == ex)
-                return;
-
-            SetWindowLongPtrW(handle.Handle, GWL_EXSTYLE, new IntPtr((long)next));
-            SetWindowPos(handle.Handle, IntPtr.Zero, 0, 0, 0, 0,
-                         SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-
-        /// <summary>The current foreground window (Windows), or <see cref="IntPtr.Zero"/> elsewhere.
-        /// Remembered before a NOACTIVATE window takes focus so it can be handed back.</summary>
-        public static IntPtr GetForegroundWindowHandle() =>
-            OperatingSystem.IsWindows() ? GetForegroundWindow() : IntPtr.Zero;
-
-        /// <summary>Hands the foreground back to <paramref name="hwnd"/> if that window still
-        /// exists. No-op off Windows or for a null handle.</summary>
-        public static void TryRestoreForeground(IntPtr hwnd)
-        {
-            if (!OperatingSystem.IsWindows() || hwnd == IntPtr.Zero)
-                return;
-
-            if (IsWindow(hwnd))
-                SetForegroundWindow(hwnd);
-        }
-
-        /// <summary>Whether <paramref name="window"/> is the system's foreground window (Windows). Not
-        /// the same as <see cref="WindowBase.IsActive"/>: a SetForegroundWindow refused by the
+        /// <summary>Whether <paramref name="window"/> has the keyboard: the system's foreground window on
+        /// Windows, the key window of the active app on macOS. Not the same as
+        /// <see cref="WindowBase.IsActive"/> on Windows: a SetForegroundWindow refused by the
         /// foreground lock still makes the window its thread's active one, so Avalonia reports it
-        /// active while every key goes to the app in front. False off Windows.</summary>
-        public static bool IsForeground(Window window) =>
-            OperatingSystem.IsWindows() && window?.TryGetPlatformHandle() is { Handle: var hwnd }
-            && hwnd != IntPtr.Zero && GetForegroundWindow() == hwnd;
+        /// active while every key goes to the app in front. False before the window has a handle.</summary>
+        public static bool IsForeground(Window window)
+        {
+            var handle = ChromeWindow(window);
+            return handle != 0 && WindowChrome.IsForeground(handle);
+        }
 
         /// <summary>
         /// Windows: brings <paramref name="window"/> to the foreground past the foreground lock, which
-        /// refuses SetForegroundWindow to a process that did not receive the last input — and a
-        /// global hotkey swallowed by the low-level keyboard hook was never delivered to us as input.
-        /// A plain SetForegroundWindow is tried first (it is allowed after a click on one of our
-        /// windows). Failing that, injecting a key makes this process the last to have sent input,
-        /// which lifts the lock for the call. The key is Alt, the one the lock reliably yields to,
-        /// masked AutoHotkey-style by an unassigned key (0xE8) between its press and release: Alt then
-        /// reads as part of a chord, so no app — the one losing the foreground or this one — sees a
-        /// lone Alt tap and enters menu mode. An Alt the user is physically holding (part of the hotkey) is left alone:
-        /// injecting its release would tell Windows they let go. Returns whether the window ended
-        /// up in front. False off Windows or before the window has a handle.
+        /// refuses SetForegroundWindow to a process that did not receive the last input, and a
+        /// global hotkey swallowed by the low-level keyboard hook was never delivered to us as input
+        /// (<see cref="WindowChrome.TakeForeground"/> has the Alt-key unlock). Returns whether the
+        /// window ended up in front. False on macOS, where callers activate through Avalonia, and
+        /// before the window has a handle.
         /// </summary>
         public static bool ForceForeground(Window window)
         {
-            if (!OperatingSystem.IsWindows())
-                return false;
-
-            var handle = window?.TryGetPlatformHandle();
-            if (handle == null || handle.Handle == IntPtr.Zero)
-                return false;
-
-            var hwnd = handle.Handle;
-            if (GetForegroundWindow() == hwnd)
-                return true;
-
-            // a click on one of our windows is input we did receive: no keys needed then, and none
-            // injected into the gesture it starts
-            if (SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd)
-                return true;
-
-            var altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-            if (!altHeld)
-                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_MENU_MASK, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_MENU_MASK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-            SetForegroundWindow(hwnd);
-
-            if (!altHeld)
-                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-            return GetForegroundWindow() == hwnd;
+            var handle = ChromeWindow(window);
+            return handle != 0 && WindowChrome.TakeForeground(handle);
         }
-
-        private const byte VK_MENU = 0x12;
-        private const byte VK_MENU_MASK = 0xE8; // unassigned: AutoHotkey's default #MenuMaskKey
-        private const uint KEYEVENTF_KEYUP = 0x0002;
-
-        [DllImport("user32.dll")]
-        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-
-        [DllImport("user32.dll")]
-        private static extern short GetAsyncKeyState(int vKey);
 
         /// <summary>
         /// Windows: calls <paramref name="changed"/> whenever the system's foreground window changes,
-        /// to any window of any process, until disposed. Call on the UI thread: the hook is out of
-        /// context, so it is delivered through the calling thread's message loop. This is the event
-        /// for <see cref="IsForeground"/>; <see cref="WindowBase.IsActive"/> is not, as the two drift
+        /// to any window of any process, until disposed. Call on the UI thread, and dispose there: the
+        /// hook is out of context, so it is delivered through the calling thread's message loop, and
+        /// <paramref name="changed"/> runs synchronously from it. This is the event for
+        /// <see cref="IsForeground"/>; <see cref="WindowBase.IsActive"/> is not, as the two drift
         /// apart (a refused SetForegroundWindow sets one and not the other), and a foreground lost
-        /// while they disagree raises no IsActive change at all. Null off Windows.
+        /// while they disagree raises no IsActive change at all. Null off Windows, or when Windows
+        /// refuses the hook.
         /// </summary>
         public static IDisposable WatchForeground(Action changed)
         {
-            if (!OperatingSystem.IsWindows())
+            try
+            {
+                return ForegroundWatch.Start(changed);
+            }
+            catch (InteropException)
+            {
                 return null;
-
-            var watch = new ForegroundWatch(changed);
-            return watch.IsHooked ? watch : null;
-        }
-
-        private sealed class ForegroundWatch : IDisposable
-        {
-            // held for the hook's lifetime: the native side keeps only a function pointer
-            private readonly WinEventProc _proc;
-            private IntPtr _hook;
-
-            public ForegroundWatch(Action changed)
-            {
-                _proc = (hook, evt, hwnd, idObject, idChild, thread, time) => changed();
-                _hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _proc,
-                                        0, 0, WINEVENT_OUTOFCONTEXT);
             }
-
-            public bool IsHooked => _hook != IntPtr.Zero;
-
-            public void Dispose()
-            {
-                if (_hook == IntPtr.Zero)
-                    return;
-
-                UnhookWinEvent(_hook);
-                _hook = IntPtr.Zero;
-            }
-        }
-
-        private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
-        private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
-
-        private delegate void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject,
-                                           int idChild, uint idEventThread, uint dwmsEventTime);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc,
-                                                     WinEventProc lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
-
-        // NSStatusWindowLevel — one above NSMainMenuWindowLevel (24), same level the Rust
-        // capturer overlay uses.
-        private const nint NSStatusWindowLevel = 25;
-
-        // One above that, for a window that must stay clickable over an overlay window which can
-        // itself become key (RaiseTopmostNoActivate).
-        private const nint AboveOverlayWindowLevel = NSStatusWindowLevel + 1;
-
-        // CanJoinAllSpaces | Stationary | IgnoresCycle | FullScreenAuxiliary
-        private const nuint OverlayCollectionBehavior = (1 << 0) | (1 << 4) | (1 << 6) | (1 << 8);
-
-        /// <summary>
-        /// macOS: lets an overlay window cover the menu bar and fullscreen apps, matching the
-        /// capturer overlay. AppKit constrains the frame of any window below
-        /// NSMainMenuWindowLevel so it can never overlap the menu bar (issue #56) — raising to
-        /// NSStatusWindowLevel lifts that constraint. Call from Opened, before (re)positioning.
-        /// </summary>
-        public static void SetCanCoverMenuBar(Window window)
-        {
-            if (!OperatingSystem.IsMacOS())
-                return;
-
-            if (window.TryGetPlatformHandle() is IMacOSTopLevelPlatformHandle mac && mac.NSWindow != IntPtr.Zero)
-            {
-                objc_msgSend(mac.NSWindow, sel_registerName("setLevel:"), NSStatusWindowLevel);
-                objc_msgSend(mac.NSWindow, sel_registerName("setCollectionBehavior:"), OverlayCollectionBehavior);
-            }
-        }
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-                                                int X, int Y, int cx, int cy, uint uFlags);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr GetWindowLongPtrW(IntPtr hWnd, int nIndex);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SetWindowLongPtrW(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr DefWindowProcW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsWindow(IntPtr hWnd);
-
-        private const string LibObjC = "/usr/lib/libobjc.A.dylib";
-
-        [DllImport(LibObjC)]
-        internal static extern IntPtr sel_registerName([MarshalAs(UnmanagedType.LPStr)] string name);
-
-        [DllImport(LibObjC)]
-        internal static extern IntPtr objc_getClass([MarshalAs(UnmanagedType.LPStr)] string name);
-
-        // NSPoint-returning message (NSEvent +mouseLocation). Two doubles come back in registers on
-        // arm64 and x86_64 alike, so plain objc_msgSend is correct; objc_msgSend_stret is for
-        // larger structs only.
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        internal static extern NSPoint objc_msgSend_NSPoint(IntPtr receiver, IntPtr selector);
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct NSPoint
-        {
-            public double X;
-            public double Y;
-        }
-
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector);
-
-        // Object-returning message (+alloc, -init). nint being IntPtr, the argument overloads
-        // below already carry an object parameter; only the return type needs its own entry.
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        private static extern IntPtr objc_msgSend_IntPtr(IntPtr receiver, IntPtr selector);
-
-        // ObjC BOOL is a signed char — marshal as I1, not the 4-byte Win32 BOOL default.
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, [MarshalAs(UnmanagedType.I1)] bool arg1);
-
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, nint arg1);
-
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, nuint arg1);
-
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, NSPoint arg1);
-
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        private static extern IntPtr objc_msgSend_IntPtr(IntPtr receiver, IntPtr selector, nuint arg1);
-
-        // NSRect-returning message (-[NSView frame]); see ViewFrame for the ABI split.
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
-        private static extern NSRect objc_msgSend_NSRect(IntPtr receiver, IntPtr selector);
-
-        [DllImport(LibObjC, EntryPoint = "objc_msgSend_stret")]
-        private static extern void objc_msgSend_stret(out NSRect result, IntPtr receiver, IntPtr selector);
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct NSRect
-        {
-            public double X;
-            public double Y;
-            public double Width;
-            public double Height;
         }
     }
 
@@ -686,11 +350,11 @@ namespace Prisc.UI.Helpers
     /// hand. Here ONE instance method is registered and kept alive by this object, and it reads
     /// <see cref="IsOn"/> each time, so a re-application re-asserts the current desire instead of
     /// the construction-time one: the toggled bits are forced on or masked out, never left to
-    /// whatever was there before.
+    /// whatever was there before. This object only keeps that desire; the live switch of the
+    /// window's current style is <see cref="WindowNativeExtensions.SetClickThrough"/>.
     /// </remarks>
     public sealed class ToggleableExStyles
     {
-        private readonly Window _window;
         private readonly uint _alwaysOn;
         private readonly uint _toggled;
 
@@ -699,7 +363,6 @@ namespace Prisc.UI.Helpers
 
         public ToggleableExStyles(Window window, uint alwaysOn, uint toggled, bool initiallyOn)
         {
-            _window = window;
             _alwaysOn = alwaysOn;
             _toggled = toggled;
             IsOn = initiallyOn;
@@ -709,15 +372,8 @@ namespace Prisc.UI.Helpers
                 Win32Properties.AddWindowStylesCallback(window, _callback);
         }
 
-        /// <summary>Whether the toggled bits are currently wanted on.</summary>
-        public bool IsOn { get; private set; }
-
-        /// <summary>Switches the toggled bits on or off, live.</summary>
-        public void Set(bool on)
-        {
-            IsOn = on;
-            WindowNativeExtensions.SetExStyleBits(_window, _toggled, on);
-        }
+        /// <summary>Whether the toggled bits are wanted on at the next style re-application.</summary>
+        public bool IsOn { get; set; }
 
         private (uint style, uint exStyle) Apply(uint style, uint exStyle) =>
             (style, ((exStyle | _alwaysOn) & ~_toggled) | (IsOn ? _toggled : 0));

@@ -1,10 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using System.Threading;
 using Prisc.Config;
+using Prisc.Interop;
 using Prisc.UI.VideoEditor;
 
 namespace Prisc.UI
@@ -52,16 +51,21 @@ namespace Prisc.UI
         public static TimeSpan TimeSinceCapture => Elapsed(ref _lastCaptureTicks);
 
         /// <summary>Time since the last keyboard or mouse input anywhere on the machine, or null on
-        /// platforms that cannot report it.</summary>
+        /// platforms that cannot report it (<see cref="IdleTime"/>: GetLastInputInfo on Windows,
+        /// CGEventSourceSecondsSinceLastEventType on macOS).</summary>
         public static TimeSpan? GetSystemIdleTime()
         {
             try
             {
-                if (OperatingSystem.IsWindows())
-                    return GetSystemIdleTimeWindows();
-
-                if (OperatingSystem.IsMacOS())
-                    return GetSystemIdleTimeMacOS();
+                return IdleTime.SinceLastInput();
+            }
+            catch (InteropException ex) when (ex.Status == InteropStatus.Os)
+            {
+                // GetLastInputInfo refused (a disconnected RDP session, for one). That can repeat on
+                // every poll while an update waits and was never reported, so it stays quiet: no
+                // idle time, and IsGoodTimeToRestart falls back to the last Prisc interaction.
+                Debug.WriteLine("IdleMonitor: the OS gave no idle time: " + ex.Message);
+                return null;
             }
             catch (Exception ex)
             {
@@ -140,51 +144,10 @@ namespace Prisc.UI
             return true;
         }
 
-        [SupportedOSPlatform("windows")]
-        private static TimeSpan? GetSystemIdleTimeWindows()
-        {
-            var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
-            if (!GetLastInputInfo(ref info))
-                return null;
-
-            // both are 32-bit millisecond tick counts that wrap roughly every 49 days; unsigned
-            // subtraction gives the right answer across the wrap.
-            var elapsed = unchecked((uint)Environment.TickCount - info.dwTime);
-            return TimeSpan.FromMilliseconds(elapsed);
-        }
-
-        [SupportedOSPlatform("macos")]
-        private static TimeSpan? GetSystemIdleTimeMacOS()
-        {
-            var seconds = CGEventSourceSecondsSinceLastEventType(CombinedSessionState, AnyInputEventType);
-            return seconds < 0 ? null : TimeSpan.FromSeconds(seconds);
-        }
-
         private static TimeSpan Elapsed(ref long ticksField)
         {
             var elapsed = DateTime.UtcNow - new DateTime(Interlocked.Read(ref ticksField), DateTimeKind.Utc);
             return elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
         }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct LASTINPUTINFO
-        {
-            public uint cbSize;
-            public uint dwTime;
-        }
-
-        [DllImport("user32.dll")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
-
-        // kCGEventSourceStateCombinedSessionState — input across the whole login session.
-        private const int CombinedSessionState = 0;
-
-        // kCGAnyInputEventType
-        private const uint AnyInputEventType = 0xFFFFFFFF;
-
-        [DllImport("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")]
-        private static extern double CGEventSourceSecondsSinceLastEventType(int sourceStateId, uint eventType);
     }
 }

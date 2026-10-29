@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using Prisc.Config;
+using Prisc.Interop.Testing;
 using Prisc.Upload;
 using Xunit;
 
@@ -52,6 +53,8 @@ namespace Prisc.Shared.Tests
         [Fact]
         public void S3Provider_SettingsRoundTrip_IncludingBoolCompatibilityToggles()
         {
+            // a settings round trip serialises the hotkeys, which parse through prisc_interop
+            InteropTestGate.Require();
             _ = typeof(MimeProvider).Assembly;
 
             var original = new SettingsRoot();
@@ -108,6 +111,8 @@ namespace Prisc.Shared.Tests
         [Fact]
         public void ProviderChanges_MirrorIntoConfig_AndRoundTrip()
         {
+            // a settings round trip serialises the hotkeys, which parse through prisc_interop
+            InteropTestGate.Require();
             _ = typeof(MimeProvider).Assembly;
 
             var original = new SettingsRoot();
@@ -144,6 +149,8 @@ namespace Prisc.Shared.Tests
         [Fact]
         public void Save_SucceedsWhileFileHeldOpenWithoutDeleteSharing()
         {
+            // a settings round trip serialises the hotkeys, which parse through prisc_interop
+            InteropTestGate.Require();
             // regression: an editor (Zed) holding the settings file open denies the atomic
             // replace-move with UnauthorizedAccessException; Save must fall back to an
             // in-place write rather than throwing and stranding the .~tmp file.

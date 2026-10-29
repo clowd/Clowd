@@ -33,6 +33,21 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Fact]
+        public void A_stale_grant_needs_no_prompt()
+        {
+            // the capturer's supervisor tells a stale grant from a missing one itself: asking for a
+            // grant the System page already shows would only spend this run's prompt
+            var status = Status("""
+                {"type":"settings_status","hotkeys":{
+                  "main":[{"gesture":"F12","active":false,"error":"reworded","error_code":"stale_grant"}],
+                  "window":[],"monitor":[]}}
+                """);
+
+            Assert.False(status.NeedsAccessibility);
+            Assert.Equal(HotkeyErrorCodes.StaleGrant, status.Actions[0].Gestures.Single().ErrorCode);
+        }
+
+        [Fact]
         public void Other_failures_and_codeless_statuses_need_no_permission()
         {
             var status = Status("""

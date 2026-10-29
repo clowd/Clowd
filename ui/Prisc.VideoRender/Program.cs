@@ -43,14 +43,8 @@ namespace Prisc.VideoRender
     internal static class Program
     {
         /// <summary>Beyond the catalog's quit grace: the parent kills us first if it is alive, so this
-        /// only ends an orphan.</summary>
-        private static readonly TimeSpan SelfExitMargin = TimeSpan.FromSeconds(5);
-
-        /// <summary>Tests only: with this set to <c>1</c> the render waits after its first encoded
-        /// frame until it is told to quit (bounded by <see cref="HoldForQuitBound"/>), so a cancel
-        /// test always lands its quit mid-render. A short fixture renders in a second or two, which
-        /// a loaded test host can take just to turn <c>hello</c> around into the quit.</summary>
-        internal const string HoldForQuitVariable = "PRISC_RENDER_TEST_HOLD_FOR_QUIT";
+        /// only ends an orphan. prisc_ipc's <c>SELF_EXIT_MARGIN</c>, the Rust helpers' margin.</summary>
+        private static readonly TimeSpan SelfExitMargin = TimeSpan.FromMilliseconds(IpcProtocol.SelfExitMarginMs);
 
         /// <summary>Long past the catalog's quit grace: a quit that never arrives shows up as a
         /// parent-side kill, not as a hold that quietly gave up first.</summary>
@@ -59,7 +53,7 @@ namespace Prisc.VideoRender
         private static int Main(string[] argv)
         {
             // first, before FFmpeg, Skia or a GPU driver can print to fd 1
-            var events = IpcChild.Open("Prisc.VideoRender", HelperSpecs.Job);
+            var events = IpcChild.Open(HelperNames.VideoRender, HelperSpecs.Job);
 
             using var cancel = new CancellationTokenSource();
             IpcChild.OnQuit += () =>
@@ -73,7 +67,11 @@ namespace Prisc.VideoRender
                 reason => events.Emit(new JobEvent.Error(IpcErrorCodes.BadCommand, reason, false)));
 
             var emitter = new ProgressEmitter(events);
-            bool holdForQuit = Environment.GetEnvironmentVariable(HoldForQuitVariable) == "1";
+            // Tests only (EnvVars.RenderTestHoldForQuit): the render waits after its first encoded
+            // frame until it is told to quit (bounded by HoldForQuitBound), so a cancel test always
+            // lands its quit mid-render. A short fixture renders in a second or two, which a loaded
+            // test host can take just to turn hello around into the quit.
+            bool holdForQuit = Environment.GetEnvironmentVariable(Prisc.Interop.EnvVars.RenderTestHoldForQuit) == "1";
 
             // remembered as soon as the args parse, so the error path can remove a partial output
             // that RenderJob did not get to clean up itself.
@@ -108,14 +106,14 @@ namespace Prisc.VideoRender
                         // when no usable GPU context exists, so this is a test/diagnostic knob,
                         // not something the app needs to set.
                         PreferGpu = !String.Equals(
-                            Environment.GetEnvironmentVariable("PRISC_RENDER_BACKEND"), "cpu",
+                            Environment.GetEnvironmentVariable(Prisc.Interop.EnvVars.RenderBackend), "cpu",
                             StringComparison.OrdinalIgnoreCase),
                         // PRISC_RENDER_ZEROCOPY=0 forces the readback path for NVENC/AMF renders
                         // (the zero-copy Direct3D 11 hand-off falls back to it on its own when
                         // anything is missing): the A/B knob for benchmarking the two, in the
                         // same spirit as PRISC_RENDER_BACKEND.
                         ZeroCopyEncode = !String.Equals(
-                            Environment.GetEnvironmentVariable("PRISC_RENDER_ZEROCOPY"), "0",
+                            Environment.GetEnvironmentVariable(Prisc.Interop.EnvVars.RenderZeroCopy), "0",
                             StringComparison.Ordinal),
                         // the job file sits beside the project's videoedit.json, which is where
                         // the AI sidecars live (AiSidecars): matte/denoise consumption and any
@@ -313,8 +311,8 @@ namespace Prisc.VideoRender
                 throw new InvalidOperationException(
                     "the project file has no \"output\" path and none was passed on the command line");
 
-            if (crf is < 0 or > 51)
-                throw new InvalidOperationException($"crf {crf} out of range (0-51)");
+            if (crf is < 0 or > H264EncoderSettings.MaxCrf)
+                throw new InvalidOperationException($"crf {crf} out of range (0-{H264EncoderSettings.MaxCrf})");
 
             if (maxHeight < 0)
                 throw new InvalidOperationException($"maxHeight {maxHeight} is negative");

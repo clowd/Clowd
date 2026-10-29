@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using Prisc.Interop;
 
 namespace Prisc.Ipc
 {
@@ -194,17 +194,13 @@ namespace Prisc.Ipc
 
             try
             {
-                AllowSetForegroundWindow(processId);
+                Foreground.Allow(processId);
             }
             catch (Exception ex)
             {
-                // user32 may be unavailable in an exotic session; not worth reporting.
+                // the library may be missing in a host that never required it; not worth reporting.
                 Debug.WriteLine("AllowSetForegroundWindow failed: " + ex.Message);
             }
         }
-
-        [DllImport("user32.dll")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern bool AllowSetForegroundWindow(int dwProcessId);
     }
 }

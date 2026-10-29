@@ -21,7 +21,7 @@ rust-version.workspace = true
 [features]
 default = ["desktop", "telemetry"]
 # The window list, monitors, DXGI outputs and the cursor.
-desktop = ["dep:windows", "dep:objc2-core-foundation", "dep:objc2-core-graphics"]
+desktop = ["dep:windows", "dep:objc2-core-foundation", "dep:objc2-core-graphics", "dep:objc2-app-kit"]
 # The shared Sentry setup.
 telemetry = ["dep:sentry"]
 
@@ -56,6 +56,8 @@ objc2-core-foundation = { workspace = true, optional = true, features = ["CFArra
 objc2-core-graphics = { workspace = true, optional = true, features = [
     "CGDataProvider",
     "CGDirectDisplay",
+    # CGDisplayIsMain and the display mode queries the shared screen list reads.
+    "CGDisplayConfiguration",
     "CGError",
     "CGEvent",
     "CGEventSource",
@@ -67,6 +69,11 @@ objc2-core-graphics = { workspace = true, optional = true, features = [
     "CGWindow",
     "libc",
 ] }
+# desktop::overlay sets the overlay level and collection behaviour on an NSWindow. Declared
+# directly (not `workspace = true`) so default-features = false takes effect: the root entry is a
+# bare version whose defaults prisc_capture relies on, and an inherited entry would silently keep
+# them, compiling all of AppKit into every `cargo build -p prisc_interop`.
+objc2-app-kit = { version = "0.3", optional = true, default-features = false, features = ["std", "NSResponder", "NSWindow"] }
 
 [dev-dependencies]
 serde_json.workspace = true

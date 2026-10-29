@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Prisc.Interop;
+using Prisc.Interop.Testing;
 using Prisc.VideoSDK.Media;
 using FFmpeg.AutoGen.Abstractions;
 using Xunit;
@@ -8,9 +10,13 @@ using Xunit;
 namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// The crf → per-encoder mapping (<see cref="H264EncoderSettings"/>) is a pure function, so
-    /// every row of the quality table is pinned here without FFmpeg: the option names and values
-    /// each encoder is handed, the generic rate-control fields, and the description line.
+    /// The crf → per-encoder settings (<see cref="H264EncoderSettings"/>) pinned without FFmpeg:
+    /// the option names and values each encoder is handed, the generic rate-control fields, and
+    /// the description line. The crf mapping itself (NVENC cq, the VideoToolbox slider and bitrate)
+    /// is <c>prisc_rust_core::encoding</c>, shared with the recorder, and its tables are pinned
+    /// there (crates/prisc_rust_core/src/encoding.rs), its marshalling smoke in Prisc.Interop.Tests;
+    /// the rows here check that the settings carry what that one call returns, with no number of
+    /// the mapping repeated.
     /// </summary>
     public class H264EncoderSettingsTests
     {
@@ -21,8 +27,12 @@ namespace Prisc.VideoSDK.Tests
             return matches[0].Value;
         }
 
+        // every settings build makes the one native mapping call
         private static H264EncoderSettings At(VideoEncoder encoder, int crf, int w = 1920, int h = 1080, int fpsNum = 60, int fpsDen = 1)
-            => H264EncoderSettings.For(encoder, crf, w, h, fpsNum, fpsDen);
+        {
+            InteropTestGate.Require();
+            return H264EncoderSettings.For(encoder, crf, w, h, fpsNum, fpsDen);
+        }
 
         [Fact]
         public void X264_passes_crf_through_with_preset_fast_and_profile_high()
@@ -58,13 +68,12 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Theory]
-        [InlineData(21, 25)]
-        [InlineData(0, 4)]
-        [InlineData(47, 51)]
-        [InlineData(51, 51)] // clamped: 55 is off NVENC's scale
-        public void Nvenc_is_constant_quality_vbr_at_crf_plus_four(int crf, int cq)
+        [InlineData(21)]
+        [InlineData(51)] // where the Rust table clamps
+        public void Nvenc_is_constant_quality_vbr_at_the_mapped_cq(int crf)
         {
-            Assert.Equal(cq, H264EncoderSettings.NvencCq(crf));
+            InteropTestGate.Require();
+            var cq = H264Quality.For(crf, 1920, 1080, 60, 1).NvencCq;
             var s = At(VideoEncoder.Nvenc, crf);
             Assert.Equal("h264_nvenc", s.CodecName);
             Assert.Equal("vbr", Opt(s, "rc"));
@@ -102,25 +111,14 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Theory]
-        [InlineData(0, 70)]   // 100 clamped to the slider's useful top
-        [InlineData(15, 70)]  // 71 -> 70
-        [InlineData(16, 69)]
-        [InlineData(23, 55)]
-        [InlineData(24, 53)]
-        [InlineData(29, 43)]
-        [InlineData(44, 15)]  // 14 -> 15
-        [InlineData(51, 15)]
-        public void VideoToolbox_quality_inverts_crf_onto_the_clamped_slider(int crf, int q)
+        [InlineData(0)]
+        [InlineData(23)]
+        [InlineData(51)]
+        public void VideoToolbox_quality_is_the_mapped_slider_in_lambda_units(int crf)
         {
-            Assert.Equal(q, H264EncoderSettings.VideoToolboxQuality(crf));
-        }
-
-        [Fact]
-        public void VideoToolbox_quality_keeps_the_presets_distinguishable()
-        {
-            // High(16) > Medium(23) > Low(29) must map to distinct slider values
-            Assert.True(H264EncoderSettings.VideoToolboxQuality(16) > H264EncoderSettings.VideoToolboxQuality(23));
-            Assert.True(H264EncoderSettings.VideoToolboxQuality(23) > H264EncoderSettings.VideoToolboxQuality(29));
+            InteropTestGate.Require();
+            var q = H264Quality.For(crf, 1920, 1080, 30, 1).VideoToolboxQuality;
+            Assert.Equal(q * ffmpeg.FF_QP2LAMBDA, At(VideoEncoder.VideoToolbox, crf).GlobalQuality);
         }
 
         [Fact]
@@ -153,15 +151,13 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Theory]
-        [InlineData(3440, 1440, 30, 1, 4000)]
-        [InlineData(1920, 1080, 30, 1, 1674)]
-        [InlineData(1920, 1080, 60, 1, 3349)]       // 0.4186 * 2 * 4000 = 3348.8
-        [InlineData(640, 480, 30, 1, 1500)]    // floor
-        [InlineData(3840, 2160, 60, 1, 6000)]  // ceiling
-        [InlineData(1920, 1080, 30000, 1001, 1673)] // 0.4186 * (29.97/30) * 4000 = 1672.7
-        public void VideoToolbox_bitrate_scales_by_pixel_rate_within_bounds(int w, int h, int fpsNum, int fpsDen, int kbps)
+        [InlineData(3440, 1440, 30, 1)]
+        [InlineData(1920, 1080, 30000, 1001)]
+        public void VideoToolbox_fallback_bitrate_is_the_mapped_rate(int w, int h, int fpsNum, int fpsDen)
         {
-            Assert.Equal(kbps, H264EncoderSettings.VideoToolboxBitrateKbps(w, h, fpsNum, fpsDen));
+            InteropTestGate.Require();
+            var kbps = H264Quality.For(23, w, h, fpsNum, fpsDen).VideoToolboxBitrateKbps;
+            Assert.Equal(kbps * 1000L, At(VideoEncoder.VideoToolbox, 23, w, h, fpsNum, fpsDen).BitrateFallback.BitRate);
         }
 
         [Theory]
@@ -189,10 +185,10 @@ namespace Prisc.VideoSDK.Tests
         {
             Assert.Throws<ArgumentException>(() => At(VideoEncoder.Auto, 21));
             Assert.Throws<ArgumentException>(() => H264EncoderSettings.CodecNameOf(VideoEncoder.Auto));
-            Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 52));
-            Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, -1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 21, w: 0));
-            Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 21, fpsNum: 0));
+            Assert.Equal("crf", Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 52)).ParamName);
+            Assert.Equal("crf", Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, -1)).ParamName);
+            Assert.Equal("width", Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 21, w: 0)).ParamName);
+            Assert.Equal("fpsNum", Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 21, fpsNum: 0)).ParamName);
             Assert.Throws<ArgumentOutOfRangeException>(() => H264EncoderSettings.GopFrames(30, 0));
         }
 

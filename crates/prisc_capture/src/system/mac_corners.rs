@@ -15,7 +15,7 @@
 #[allow(deprecated)]
 use objc2_core_graphics::{CGWindowImageOption, CGWindowListCreateImage, CGWindowListOption};
 use objc2_foundation::NSProcessInfo;
-use prisc_rust_core::desktop::{CGPoint, CGRect, CGSize, ImageBytes};
+use prisc_rust_core::desktop::{grab, CGPoint, CGRect, CGSize};
 
 use super::corners::{estimate_radius_from_alpha, macos_fallback_radius_points, Corner};
 use super::MonitorInfo;
@@ -85,17 +85,13 @@ pub fn probe_corner_radius(window_id: u32, bounds: CgBounds, monitors: &[Monitor
         window_id,
         CGWindowImageOption::BestResolution | CGWindowImageOption::BoundsIgnoreFraming,
     )?;
-    let pixels = ImageBytes::of(&image)?;
-    let (w, h, bpr) = (pixels.width, pixels.height, pixels.bytes_per_row);
-    if pixels.bits_per_pixel != 32 || w == 0 || h == 0 {
-        return None;
-    }
-    let bytes = pixels.bytes();
-    if bytes.len() < (h - 1) * bpr + w * 4 {
-        return None;
-    }
-    // Same pixel layout `capture_window_image` relies on: BGRA, alpha last.
-    let alpha = |px: usize, py: usize| -> u8 { bytes[py * bpr + px * 4 + 3] };
+    // Converted to BGRA by the layout rule every CoreGraphics reader shares, as
+    // `capture_window_image` does, with the window's alpha kept: it is what
+    // is measured. The probe is at most PROBE_POINTS square, so the copy is
+    // nothing.
+    let pixels = grab::from_cg_image(&image, false).ok()?;
+    let (w, h) = (pixels.width as usize, pixels.height as usize);
+    let alpha = |px: usize, py: usize| -> u8 { pixels.bgra[(py * w + px) * 4 + 3] };
     Some(estimate_radius_from_alpha(w, h, corner, alpha))
 }
 

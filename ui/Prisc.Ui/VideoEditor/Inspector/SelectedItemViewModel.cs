@@ -190,7 +190,7 @@ namespace Prisc.UI.VideoEditor.Inspector
         /// it. Recordings made before the rename name the helper by its old name, so that is
         /// matched too.</summary>
         private static readonly string[] OwnWindowApps =
-            new[] { "prisc_share_region", "prisc_share_region.exe" }
+            new[] { Prisc.Ipc.HelperNames.ShareRegion, Prisc.Ipc.HelperNames.ShareRegion + ".exe" }
                 .Concat(LegacyClowd.ShareRegionProcessNames)
                 .ToArray();
 

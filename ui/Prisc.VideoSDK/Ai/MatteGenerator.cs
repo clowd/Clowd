@@ -35,10 +35,11 @@ namespace Prisc.VideoSDK.Ai
     /// and the companion json is written only after, so a valid companion always implies a
     /// complete sidecar.</para>
     /// </summary>
-    public static class MatteGenerator
+    public static partial class MatteGenerator
     {
-        /// <summary>The analysis resolution's cap on the shorter side (see class remarks).</summary>
-        public const int MaxAnalysisSide = 540;
+        // MaxAnalysisSide, the analysis resolution's cap on the shorter side (see the class
+        // remarks), is generated (MatteGenerator.g.cs) from prisc_rust_core::contract::matte, the
+        // table prisc_ai's downsample ratio reads too.
 
         /// <summary>
         /// Generates the sidecar for (<paramref name="source"/>, <paramref name="streamIndex"/>),
@@ -55,7 +56,7 @@ namespace Prisc.VideoSDK.Ai
             if (String.IsNullOrEmpty(cacheDir))
                 return false;
 
-            var exe = HelperLocator.Find("prisc_ai");
+            var exe = HelperLocator.Find(HelperNames.Ai);
             if (exe == null)
                 return false;
 

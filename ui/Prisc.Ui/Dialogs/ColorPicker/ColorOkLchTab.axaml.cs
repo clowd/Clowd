@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia;
@@ -7,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Prisc.Interop;
 using Prisc.UI.Converters;
 
 namespace Prisc.UI.Dialogs.ColorPicker
@@ -119,16 +119,16 @@ namespace Prisc.UI.Dialogs.ColorPicker
         private void Update()
         {
             var (l, c, h) = (_color.L, _color.C, _color.H);
-            var mapped = _color.ToColor();
+            var mapped = _color.ToColor(out var inGamut);
             var opaque = Color.FromRgb(mapped.R, mapped.G, mapped.B);
 
             chartL.SetValues(l, c, h);
             chartC.SetValues(l, c, h);
             chartH.SetValues(l, c, h);
 
-            sliderL.SliderBrush = Track(_trackL, t => (t, c, h));
-            sliderC.SliderBrush = Track(_trackC, t => (l, t * OkLchColor.ChromaMax, h));
-            sliderH.SliderBrush = Track(_trackH, t => (l, c, t * 360));
+            sliderL.SliderBrush = Track(_trackL, OkLchChannel.Lightness, l, c, h);
+            sliderC.SliderBrush = Track(_trackC, OkLchChannel.Chroma, l, c, h);
+            sliderH.SliderBrush = Track(_trackH, OkLchChannel.Hue, l, c, h);
             sliderA.SliderBrush = new LinearGradientBrush
             {
                 StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
@@ -142,7 +142,7 @@ namespace Prisc.UI.Dialogs.ColorPicker
             sliderA.Value = _color.Alpha;
 
             swatch.Background = new SolidColorBrush(mapped);
-            gamutNote.IsVisible = !_color.IsInSrgb;
+            gamutNote.IsVisible = !inGamut;
             // a translucent fill shows the light checkerboard through it, so judge the ink on that
             var a = mapped.A / 255d;
             byte Over(byte v) => (byte)Math.Round(v * a + 230 * (1 - a));
@@ -155,16 +155,14 @@ namespace Prisc.UI.Dialogs.ColorPicker
         private static WriteableBitmap NewTrack() =>
             new(new PixelSize(TrackSamples, 1), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
 
-        /// <summary>Paints a slider's track across its channel's range (<c>t</c> 0 to 1, left to
-        /// right) at the other two channels' values, transparent wherever sRGB has no such color.</summary>
-        private static IBrush Track(WriteableBitmap bitmap, Func<double, (double L, double C, double H)> at)
+        /// <summary>Paints a slider's track across its channel's range (left to right: lightness 0
+        /// to 1, chroma 0 to <see cref="OkLchColor.ChromaMax"/>, hue 0 to 360) at the other two
+        /// channels' values, transparent wherever sRGB has no such color: one native call
+        /// (<see cref="OkLch.PaintTrack"/>).</summary>
+        private static IBrush Track(WriteableBitmap bitmap, OkLchChannel channel, double l, double c, double h)
         {
             var row = new int[TrackSamples];
-            for (var i = 0; i < TrackSamples; i++)
-            {
-                var (l, c, h) = at((i + 0.5) / TrackSamples);
-                row[i] = OkLchColor.ToLinearSrgb(l, c, h, out var r, out var g, out var b) ? OkLchChart.Opaque(r, g, b) : 0;
-            }
+            OkLch.PaintTrack(channel, l, c, h, MemoryMarshal.Cast<int, uint>(row.AsSpan()));
 
             using (var buffer = bitmap.Lock())
                 Marshal.Copy(row, 0, buffer.Address, TrackSamples);
@@ -198,10 +196,10 @@ namespace Prisc.UI.Dialogs.ColorPicker
         private static OkLchColor ParseOkLch(string text) =>
             OkLchColor.TryParse(text, out var color) ? color : throw new FormatException("Invalid oklch color");
 
-        // the fields show CSS numbers ("0.1574") in any locale, so read them back the same way, and
-        // take a decimal comma as well for anyone who types one
+        // the fields show CSS numbers ("0.1574") in any locale, so read them back the same way; a
+        // non-finite entry ("NaN", "1e999") is refused like any other bad text and snaps back
         private static double ParseNumber(string text) =>
-            double.Parse((text ?? "").Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture);
+            OkLchColor.TryParseNumber(text, out var value) ? value : throw new FormatException("Invalid number");
 
         private static double ParsePercent(string text) => ParseNumber((text ?? "").Trim().TrimEnd('%'));
 

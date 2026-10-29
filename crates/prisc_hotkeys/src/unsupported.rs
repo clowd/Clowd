@@ -4,12 +4,12 @@
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-use crate::hotkeys::Shared;
+use crate::hotkeys::{Shared, StartFailure};
 use crate::{Error, Event};
 
 /// Never constructed.
 pub(crate) enum Backend {}
 
-pub(crate) fn spawn(_shared: Arc<Shared>, _tx: Sender<Event>) -> Result<Backend, Error> {
-    Err(Error::Unsupported)
+pub(crate) fn spawn(_shared: Arc<Shared>, _tx: Sender<Event>) -> Result<Backend, StartFailure> {
+    Err(Error::Unsupported.into())
 }

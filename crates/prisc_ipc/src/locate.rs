@@ -6,7 +6,45 @@ use std::path::{Path, PathBuf};
 
 /// A path list (`;` on Windows, `:` elsewhere) of directories probed before the executable's
 /// own. The only helper-lookup variable there is.
-pub const HELPERS_DIR_VAR: &str = "PRISC_HELPERS_DIR";
+pub const HELPERS_DIR_VAR: &str = crate::env::HELPERS_DIR;
+
+/// The AI inference helper (OCR, mattes, denoise). It speaks no line catalog
+/// (HELPER_PROTOCOL.md section 4.6), so no catalog names it.
+pub const AI_HELPER: &str = "prisc_ai";
+
+/// Every helper executable stem the apps locate and spawn, as its C# constant name and stem:
+/// each catalog's helpers in catalog order, then [`AI_HELPER`]. Generated into the C#
+/// `HelperNames` class, so a stem is spelled once.
+pub fn helper_names() -> Vec<(String, &'static str)> {
+    let stems = crate::catalog::ALL
+        .iter()
+        .flat_map(|spec| spec.helpers.iter().copied())
+        .chain([AI_HELPER]);
+    let mut names: Vec<(String, &'static str)> = Vec::new();
+    for stem in stems {
+        if names.iter().all(|(_, known)| *known != stem) {
+            names.push((const_name(stem), stem));
+        }
+    }
+    names
+}
+
+/// `prisc_scroll_driver` -> `ScrollDriver`, `Prisc.VideoRender` -> `VideoRender`.
+fn const_name(stem: &str) -> String {
+    let bare = stem
+        .strip_prefix("prisc_")
+        .or_else(|| stem.strip_prefix("Prisc."))
+        .unwrap_or(stem);
+    bare.split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            chars
+                .next()
+                .map(|first| first.to_ascii_uppercase().to_string() + chars.as_str())
+                .unwrap_or_default()
+        })
+        .collect()
+}
 
 /// The executable `stem` (plus `.exe` on Windows): each directory of `$PRISC_HELPERS_DIR` in
 /// order, then the directory of the running executable. `None` when none of them has it.
@@ -30,6 +68,32 @@ fn probe(file: &str, helpers_dir: Option<&OsStr>, exe_dir: Option<&Path>) -> Opt
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn helper_names_cover_every_catalog_helper_and_the_ai_helper_once() {
+        let names = helper_names();
+        let stems: Vec<&str> = names.iter().map(|(_, stem)| *stem).collect();
+        assert_eq!(
+            stems,
+            [
+                "prisc_recorder",
+                "prisc_share_region",
+                "prisc_vid2gif",
+                "Prisc.VideoRender",
+                "prisc_scroll_driver",
+                "prisc_capture",
+                "prisc_ai"
+            ]
+        );
+        let consts: Vec<&str> = names
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert_eq!(
+            consts,
+            ["Recorder", "ShareRegion", "Vid2gif", "VideoRender", "ScrollDriver", "Capture", "Ai"]
+        );
+    }
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("prisc_ipc_locate_{}_{name}", std::process::id()));

@@ -1,7 +1,10 @@
 //! Prisc's global keyboard hook: registered hotkeys, one-shot gesture recording and the keystroke
-//! observe stream, all from one hook per process. Linked into `prisc_capture` (Rust API) and built
-//! as `prisc_hotkeys.dll` / `libprisc_hotkeys.dylib` for Prisc.Ui (C ABI, `ffi.rs`).
+//! observe stream, all from one hook per process. An rlib only: linked into `prisc_capture`,
+//! `prisc_recorder` and `prisc_interop`, whose `prisc_hotkeys_*` exports serve it to Prisc.Ui.
 //!
+//! - [`supervise`] keeps a hook coming back by itself (retry, stale-grant back-off, the recovery
+//!   policy per OS, registrations with stable ids): `Supervisor` for a host with an event loop
+//!   (the standby capturer), `Supervised` with its own thread for the rest (prisc_interop).
 //! - [`Key`] is the only key type for global hotkeys anywhere in Prisc; the C# `HotkeyKey` is
 //!   generated from the same table. The only other key maps live inside this crate: `Key` to
 //!   Windows VK and `Key` to macOS CGKeyCode / NX media keytype.
@@ -44,11 +47,14 @@
 #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 mod core;
 mod error;
-mod ffi;
 mod gesture;
 mod hotkeys;
 mod key;
 mod modifiers;
+/// The system-reserved gesture table per OS (filled when the C# IsSystemReserved table moves here).
+pub mod reserved;
+/// The supervised hook: retry, stale-grant back-off and the recovery policy in one place.
+pub mod supervise;
 // Used only by windows.rs outside tests; compiled and tested on every OS.
 #[cfg_attr(not(windows), allow(dead_code))]
 mod watchdog;
@@ -62,13 +68,13 @@ mod unsupported;
 #[cfg(windows)]
 mod windows;
 
-#[cfg(test)]
-mod csharp;
-
 pub use std::sync::mpsc::RecvTimeoutError;
 
-pub use error::Error;
+pub use error::{Error, ERROR_CODES, INVALID_GESTURE_CODE, STALE_GRANT_CODE};
 pub use gesture::{Gesture, ParseGestureError};
 pub use hotkeys::{Event, Events, HotkeyId, Hotkeys, KeyEvent, REVOKED_REASON};
 pub use key::Key;
 pub use modifiers::Modifiers;
+pub use reserved::Os;
+#[cfg(windows)]
+pub use windows::{inject_mask_chord, release_injected_alt};

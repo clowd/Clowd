@@ -20,12 +20,18 @@ namespace Prisc.UI.Controls.Tray
     /// live here is the user's accent colour: it is a runtime setting, so the tray window writes it
     /// into its own resources under <see cref="AccentBrushKey"/> and the themes use a DynamicResource.
     /// </para>
+    /// <para>
+    /// The tokens the capture overlay's egui panel shares (the fills, the ring, radius, padding, the
+    /// button and icon sizes, the veils, the tooltip, the fade and the shadow) are generated from
+    /// <c>prisc_rust_core::contract::tray</c> into the other part of this class (TrayTokens.g.cs);
+    /// this part turns them into Avalonia colours, brushes and shadows.
+    /// </para>
     /// </summary>
-    public static class TrayTokens
+    public static partial class TrayTokens
     {
         // colours (spec §0) — fixed, theme-invariant, never derived from the accent
-        public static readonly Color Tray = Color.Parse("#25272B"),
-                                     Seg = Color.Parse("#3A3E44"),
+        public static readonly Color Tray = Opaque(TrayFill),
+                                     Seg = Opaque(SegFill),
                                      Fg = Colors.White,
                                      Rec = Color.Parse("#E2504A"),
                                      Ok = Color.Parse("#2FA85A"),
@@ -41,7 +47,7 @@ namespace Prisc.UI.Controls.Tray
         // veils = alpha overlays over whatever is beneath (spec §0 "implement as layered overlays")
         /// <summary>White .12 — hover veil on Normal/Quiet buttons. Was .08 over the original #2F3237
         /// segment; the lighter segment needed a bigger step to keep the hover readable.</summary>
-        public static readonly IBrush HoverVeil = new ImmutableSolidColorBrush(Fg, 0.12);
+        public static readonly IBrush HoverVeil = new ImmutableSolidColorBrush(Fg, HoverVeilAlpha);
 
         /// <summary>White .12 — the underline-bar track behind the level pill.</summary>
         public static readonly IBrush Track = new ImmutableSolidColorBrush(Fg, 0.12);
@@ -52,17 +58,17 @@ namespace Prisc.UI.Controls.Tray
         /// <summary>#3B3D40 — the 1 px highlight ring drawn inside the tray edge: <see cref="Tray"/> plus 10 %
         /// white, baked opaque so the ring never shows the desktop through it. (Was white .06, then .10; both
         /// were veils and read faint.)</summary>
-        public static readonly IBrush Ring = new ImmutableSolidColorBrush(Color.Parse("#3B3D40"));
+        public static readonly IBrush Ring = new ImmutableSolidColorBrush(Opaque(RingAvalonia));
 
         // Active primary rest / Idle hover / rotate hover / Active hover
         public static readonly IBrush WhiteVeil10 = new ImmutableSolidColorBrush(Fg, 0.10),
-                                      WhiteVeil12 = new ImmutableSolidColorBrush(Fg, 0.12),
+                                      WhiteVeil12 = new ImmutableSolidColorBrush(Fg, HoverVeilAlpha),
                                       WhiteVeil14 = new ImmutableSolidColorBrush(Fg, 0.14),
                                       WhiteVeil16 = new ImmutableSolidColorBrush(Fg, 0.16);
 
         /// <summary>White .18 — the hover veil on a bare (fill-less) mini button. A step heavier than
         /// <see cref="HoverVeil"/> because it lands on the darker tray rather than on a segment.</summary>
-        public static readonly IBrush WhiteVeil18 = new ImmutableSolidColorBrush(Fg, 0.18);
+        public static readonly IBrush WhiteVeil18 = new ImmutableSolidColorBrush(Fg, HoverVeilBareAlpha);
 
         /// <summary>White .35 — the 1 px inset edge of a selected dot button, over its
         /// <see cref="WhiteVeil16"/> fill.</summary>
@@ -86,7 +92,7 @@ namespace Prisc.UI.Controls.Tray
                                       WarnVeil34 = new ImmutableSolidColorBrush(Warn, 0.34);
 
         /// <summary>#F2141619 — tooltip and status-blip fill.</summary>
-        public static readonly IBrush TipFill = new ImmutableSolidColorBrush(Color.Parse("#F2141619"));
+        public static readonly IBrush TipFill = new ImmutableSolidColorBrush(WithAlpha(TipFillRgb, (byte)TipFillAlpha));
 
         /// <summary>#F7202226 — device-menu fill. Deliberately opaque enough to need no blur.</summary>
         public static readonly IBrush MenuFill = new ImmutableSolidColorBrush(Color.Parse("#F7202226"));
@@ -100,18 +106,15 @@ namespace Prisc.UI.Controls.Tray
         /// </summary>
         public const string AccentBrushKey = "TrayAccentBrush";
 
-        // geometry, logical px (spec §0–§9)
-        public const double ButtonHeight = 40, ButtonMinWidth = 40;
+        // geometry, logical px (spec §0–§9); ButtonHeight and ButtonMinWidth are generated
 
         /// <summary>
         /// The one corner radius for the buttons AND the tray around them (the user asked for the two to
         /// match rather than for the outer one to be inner + padding). A <see cref="CornerRadius"/> has no
         /// double conversion in XAML, so the shapes themselves are tokens: the full one, and the four
         /// "rounded on one side only" variants a split toggle's halves use — named for the side that KEEPS
-        /// its rounding.
+        /// its rounding. The radius itself (Radius) is generated.
         /// </summary>
-        public const double Radius = 8;
-
         public static readonly CornerRadius Corner = new CornerRadius(Radius),
                                             CornerLeft = new CornerRadius(Radius, 0, 0, Radius),
                                             CornerRight = new CornerRadius(0, Radius, Radius, 0),
@@ -123,13 +126,9 @@ namespace Prisc.UI.Controls.Tray
         public static readonly CornerRadius GripCorner = new CornerRadius(5);
 
         /// <summary>
-        /// The spec's 4 px tray padding, spent as a 1 px ring plus 3 px of inner padding so the outer
-        /// box is exactly <see cref="ButtonHeight"/> + 8 (48 px) tall.
-        /// </summary>
-        public const double TrayPad = 4, Gap = 4;
-
-        /// <summary>
-        /// <see cref="TrayPad"/> as the tray's presenter margin, the 1 px ring included. The one
+        /// <see cref="TrayPad"/> as the tray's presenter margin, the 1 px ring included: the spec's 4 px
+        /// tray padding (TrayPad, generated, as is Gap) is spent as a 1 px ring plus 3 px of inner
+        /// padding, so the outer box is exactly <see cref="ButtonHeight"/> + 8 (48 px) tall. The one
         /// <see cref="Thickness"/>-shaped token here, because it has both a XAML consumer (the tray
         /// template's <c>ItemsPresenter</c>) and a C# one that derives a fixed tray size from
         /// <see cref="TrayPad"/> arithmetically — so the declared size and the real margin cannot drift
@@ -137,7 +136,7 @@ namespace Prisc.UI.Controls.Tray
         /// </summary>
         public static readonly Thickness TrayPadding = new Thickness(TrayPad);
 
-        public const double IconSize = 20, ChevronWidth = 16, ChevronHeight = 14, PrimaryWidth = 66;
+        public const double ChevronWidth = 16, ChevronHeight = 14, PrimaryWidth = 66;
 
         /// <summary>
         /// The grip's extent along the strip axis: its width in a row, its height in a column. The other
@@ -147,10 +146,6 @@ namespace Prisc.UI.Controls.Tray
         /// </summary>
         public const double GripLength = 26, RotateGlyphSize = 14;
 
-        /// <summary>The app mark's extent along the strip axis (<see cref="TrayEmblem"/>): a 32 px mark
-        /// with 4 px either side — a button's footprint, drawn on the tray with no fill so it reads as
-        /// part of the chassis like the grip, not as a button.</summary>
-        public const double EmblemLength = 40;
 
         /// <summary>
         /// The compact tile: a 26 px square with a 15 px shape-fitted icon, for a second, lighter lane of
@@ -184,7 +179,7 @@ namespace Prisc.UI.Controls.Tray
         /// column while the other dimension stays the button size.
         /// </summary>
         public const double ToggleLength = 42, ToggleInset = 8;
-        public const double MenuGap = 8, ToolTipGapBottom = 7, ToolTipGapRight = 8, DragThreshold = 5;
+        public const double MenuGap = 8, DragThreshold = 5;
 
         /// <summary>
         /// The tooltip's clearance from the strip, carried as a transparent margin INSIDE the popup rather
@@ -194,10 +189,9 @@ namespace Prisc.UI.Controls.Tray
         /// above when it does not, and 8 px beside a column either way.
         /// </summary>
         public static readonly Thickness TipMargin = new Thickness(ToolTipGapRight, ToolTipGapBottom);
-        public const int ToolTipShowDelayMs = 350;
 
         // motion
-        public static readonly TimeSpan FillTransition = TimeSpan.FromMilliseconds(180),
+        public static readonly TimeSpan FillTransition = TimeSpan.FromMilliseconds(FillTransitionMs),
                                         PressTransition = TimeSpan.FromMilliseconds(120),
                                         LevelTransition = TimeSpan.FromMilliseconds(80),
                                         Pulse = TimeSpan.FromMilliseconds(1400),
@@ -208,8 +202,6 @@ namespace Prisc.UI.Controls.Tray
         // mockup's size (tried up to 14 on screen: 10 and up crowd the tile); a hinted tile draws its
         // glyph a size down (KeyHintGlyphSize) to make room, and the hint's dark halo separates the two
         // where they meet.
-
-        public const double KeyHintFontSize = 9;
 
         /// <summary>The glyph size of a tile that carries a key hint, down from <see cref="IconSize"/>.</summary>
         public const double KeyHintGlyphSize = 17;
@@ -250,7 +242,12 @@ namespace Prisc.UI.Controls.Tray
         /// app: a ~13 px band, bottom only. Spec shadow is unshippable as-is; compact ships.
         /// </para>
         /// </summary>
-        public static readonly BoxShadows ShadowCompact = BoxShadows.Parse("0 3 10 0 #59000000");
+        public static readonly BoxShadows ShadowCompact = new(new BoxShadow
+        {
+            OffsetY = ShadowOffsetY,
+            Blur = ShadowBlur,
+            Color = new Color((byte)ShadowAlpha, 0, 0, 0),
+        });
 
         // the engaged frame (FloatingTray.IsEngaged): an accent spine over the grip edge, an accent ring,
         // and an accent glow in place of the drop shadow
@@ -299,5 +296,10 @@ namespace Prisc.UI.Controls.Tray
             new[] { new BoxShadow { Spread = hairline, Color = WithAlpha(accent, hairlineAlpha) } });
 
         private static Color WithAlpha(Color c, double alpha) => new Color((byte)Math.Round(255 * alpha), c.R, c.G, c.B);
+
+        /// <summary>A generated <c>0x00RRGGBB</c> token at <paramref name="alpha"/>.</summary>
+        private static Color WithAlpha(uint rgb, byte alpha) => new Color(alpha, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+
+        private static Color Opaque(uint rgb) => WithAlpha(rgb, 0xFF);
     }
 }

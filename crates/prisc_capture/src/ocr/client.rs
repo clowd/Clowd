@@ -25,7 +25,7 @@ use prisc_rust_core::ocr::{OcrError, OcrOutcome, OcrRequest, OcrResponse, Reques
 /// matting and denoising), and it does not exist on Intel macOS, where ONNX
 /// Runtime has no binaries: there the lookup fails and OCR reports as
 /// unavailable.
-const AI_BINARY: &str = "prisc_ai";
+const AI_BINARY: &str = prisc_ipc::locate::AI_HELPER;
 
 /// How often the wait loop wakes to poll the cancel flag. Small enough that
 /// BACK feels immediate and that the result is picked up the moment the child
@@ -118,7 +118,7 @@ fn spawn(paths: &ResponsePaths) -> std::io::Result<Child> {
     let binary = prisc_ipc::locate::sibling(AI_BINARY).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "not found beside prisc_capture or in PRISC_HELPERS_DIR",
+            format!("not found beside prisc_capture or in {}", prisc_ipc::locate::HELPERS_DIR_VAR),
         )
     })?;
 

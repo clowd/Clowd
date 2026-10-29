@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Prisc;
 using Prisc.UI.DrawOnScreen;
 using Xunit;
@@ -16,8 +18,8 @@ namespace Prisc.VideoSDK.Tests
         private const int VkLCtrl = 0xA2, VkLShift = 0xA0, VkA = 0x41, VkB = 0x42, VkC = 0x43, VkL = 0x4C;
 
         // the event thread is behind: by the time it handles an edge, every key is already up
-        private static readonly Func<int, bool> AllUp = _ => false;
-        private static readonly Func<int, bool> AllDown = _ => true;
+        private static readonly Func<IReadOnlyList<int>, ulong> AllUp = _ => 0;
+        private static readonly Func<IReadOnlyList<int>, ulong> AllDown = _ => ulong.MaxValue;
 
         private static KeystrokeHeldKeys Started()
         {
@@ -94,6 +96,65 @@ namespace Prisc.VideoSDK.Tests
             var keys = new KeystrokeHeldKeys();
             Assert.Empty(keys.Down(VkA, HotkeyModifiers.Control, 0, AllUp));
             Assert.Empty(keys.Down(VkB, HotkeyModifiers.None, 50, AllUp));
+        }
+
+        [Fact]
+        public void StaleKeysAreAskedAboutTogetherOnceAndOnlyTheUpOnesAreReleased()
+        {
+            var keys = Started();
+            Assert.Empty(keys.Down(VkL, HotkeyModifiers.None, 0, AllUp));
+            Assert.Empty(keys.Down(VkB, HotkeyModifiers.None, 10, AllUp));
+            Assert.Empty(keys.Down(VkLCtrl, HotkeyModifiers.Control, 20, AllUp));
+
+            var asked = new List<int[]>();
+            // L is still held, B's key-up was lost; Ctrl is a modifier and is never asked about
+            ulong Query(IReadOnlyList<int> codes)
+            {
+                asked.Add(codes.ToArray());
+                ulong mask = 0;
+                for (int i = 0; i < codes.Count; i++)
+                {
+                    if (codes[i] == VkL)
+                        mask |= 1UL << i;
+                }
+                return mask;
+            }
+
+            Assert.Equal(new[] { VkB }, keys.Down(VkC, HotkeyModifiers.Control, 5000, Query));
+            var only = Assert.Single(asked);
+            Assert.Equal(new[] { VkB, VkL }, only.OrderBy(c => c));
+
+            // L stays held and is asked about again on the next press
+            asked.Clear();
+            Assert.Empty(keys.Down(VkA, HotkeyModifiers.Control, 5100, Query));
+            Assert.Equal(new[] { VkL }, Assert.Single(asked));
+
+            // nothing quiet for long enough: the OS is not asked at all
+            var fresh = Started();
+            asked.Clear();
+            Assert.Empty(fresh.Down(VkA, HotkeyModifiers.None, 0, Query));
+            Assert.Empty(fresh.Down(VkB, HotkeyModifiers.None, KeystrokeHeldKeys.StaleMs - 1, Query));
+            Assert.Empty(asked);
+        }
+
+        [Fact]
+        public void At_most_the_query_limit_is_asked_per_press()
+        {
+            var keys = Started();
+            for (int code = 1; code <= KeystrokeHeldKeys.MaxQueried + 10; code++)
+                Assert.Empty(keys.Down(1000 + code, HotkeyModifiers.None, 0, AllUp));
+
+            int largest = 0;
+            var released = keys.Down(VkA, HotkeyModifiers.None, 5000, codes =>
+            {
+                largest = Math.Max(largest, codes.Count);
+                return 0;
+            });
+
+            Assert.Equal(KeystrokeHeldKeys.MaxQueried, largest);
+            Assert.Equal(KeystrokeHeldKeys.MaxQueried, released.Count);
+            // the rest go on the next press
+            Assert.Equal(10, keys.Down(VkB, HotkeyModifiers.None, 5001, AllUp).Count);
         }
     }
 }

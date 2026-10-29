@@ -30,6 +30,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Prisc.Drawing\Prisc.Drawing.csproj" />
+    <ProjectReference Include="..\Prisc.Interop\Prisc.Interop.csproj" />
     <ProjectReference Include="..\Prisc.Ipc\Prisc.Ipc.csproj" />
     <ProjectReference Include="..\Prisc.Shared\Prisc.Shared.csproj" />
     <ProjectReference Include="..\Prisc.Upload\Prisc.Upload.csproj" />

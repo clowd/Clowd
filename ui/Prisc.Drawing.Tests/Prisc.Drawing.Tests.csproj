@@ -18,4 +18,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Prisc.Drawing\Prisc.Drawing.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- skips (locally) or fails (PRISC_INTEROP_REQUIRED=1) a test that needs prisc_interop -->
+    <Compile Include="..\Prisc.Interop\Testing\InteropTestGate.cs" Link="InteropTestGate.cs" />
+  </ItemGroup>
 </Project>

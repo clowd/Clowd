@@ -1,16 +1,18 @@
 using System;
 using System.Runtime.Versioning;
 using System.Threading;
+using Prisc.Interop.Testing;
 using Prisc.VideoSDK.Audio;
 using Xunit;
 
 namespace Prisc.VideoSDK.Tests
 {
     /// <summary>
-    /// The macOS output against a real device — there is no seam to fake here, since what these
-    /// assert is exactly that CoreAudio drives the callback (the WASAPI output has no unit tests
-    /// for the same reason). Every one of them skips off macOS, and on a machine with no usable
-    /// output device: a build agent without audio hardware must not fail the suite.
+    /// The macOS output against a real device (through prisc_interop): there is no seam to fake
+    /// here, since what these assert is exactly that CoreAudio drives the callback (the WASAPI
+    /// output has no unit tests for the same reason). Every one of them skips off macOS, and on a
+    /// machine with no usable output device: a build agent without audio hardware must not fail the
+    /// suite.
     /// </summary>
     /// <remarks><see cref="SupportedOSPlatform"/> is what stops CA1416 firing on every call into
     /// the macOS-annotated output; xUnit reaches these by reflection, so the attribute constrains
@@ -36,14 +38,15 @@ namespace Prisc.VideoSDK.Tests
 
         /// <summary>An initialized, playing output, or null when this machine cannot give us one.
         /// Opening the unit is what actually touches the device, so that is what is guarded.</summary>
-        private static CoreAudioOutput TryPlay(out SampleCounter counter)
+        private static CoreAudioOutput TryPlay(out SampleCounter counter, int latencyMs = 50)
         {
             counter = new SampleCounter();
             if (!OperatingSystem.IsMacOS())
                 return null;
+            InteropTestGate.Require();
 
             var output = new CoreAudioOutput();
-            output.Initialize(SampleRate, Channels, 50, counter.Render);
+            output.Initialize(SampleRate, Channels, latencyMs, counter.Render);
             try
             {
                 output.Play();
@@ -147,6 +150,53 @@ namespace Prisc.VideoSDK.Tests
 
             using var output = new CoreAudioOutput();
             Assert.Throws<InvalidOperationException>(() => output.Play());
+        }
+
+        [Fact]
+        public void Initialize_rejects_bad_arguments()
+        {
+            Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS only");
+
+            // Argument validation lives in C#, with the exception types this class has always
+            // thrown; none of these touches a device or the library.
+            using var output = new CoreAudioOutput();
+            Assert.Throws<ArgumentOutOfRangeException>(() => output.Initialize(0, Channels, 50, _ => { }));
+            Assert.Throws<ArgumentOutOfRangeException>(() => output.Initialize(SampleRate, 0, 50, _ => { }));
+            Assert.Throws<ArgumentOutOfRangeException>(() => output.Initialize(SampleRate, Prisc.Interop.CoreAudioOutputDevice.MaxChannels + 1, 50, _ => { }));
+            Assert.Throws<ArgumentNullException>(() => output.Initialize(SampleRate, Channels, 50, null));
+        }
+
+        [Fact]
+        public void Actual_latency_is_the_devices_own_not_the_request()
+        {
+            // a request no device answers with, so the two sources cannot be confused
+            const int Requested = 777;
+            using var output = TryPlay(out _, Requested);
+            RequireDevice(output);
+
+            var device = output.Device;
+            if (device.LatencyFrames is int frames && device.DeviceSampleRateHz > 0)
+            {
+                // the frames count at the device's own rate, not the stream's
+                Assert.Equal((int)Math.Round(frames * 1000.0 / device.DeviceSampleRateHz), output.ActualLatencyMs);
+                Assert.NotEqual(Requested, output.ActualLatencyMs);
+            }
+            else
+            {
+                // a device that publishes no latency property keeps the request
+                Assert.Equal(Requested, output.ActualLatencyMs);
+            }
+        }
+
+        [Fact]
+        public void Construction_and_dispose_without_initialize_touch_no_device()
+        {
+            Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS only");
+
+            // The constructor is total and binds nothing, which is what AudioOutputFactory's silent
+            // fallback rests on.
+            var output = new CoreAudioOutput();
+            output.Dispose();
         }
     }
 }

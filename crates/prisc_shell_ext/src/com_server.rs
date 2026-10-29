@@ -26,7 +26,6 @@ use windows::Win32::System::WindowsProgramming::PROCESS_CREATION_DESKTOP_APP_BRE
 use windows::Win32::UI::Shell::{
     IEnumExplorerCommand, IExplorerCommand, IExplorerCommand_Impl, IShellItemArray, ECF_DEFAULT, ECS_ENABLED, SIGDN_FILESYSPATH,
 };
-use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
 
 use crate::invoke;
 
@@ -160,7 +159,7 @@ fn spawn_direct(exe: &Path, cwd: &Path, paths: &[String]) -> windows::core::Resu
         // hand the child our foreground rights so its window (or the one the running
         // instance raises for these paths) can come to the front; best-effort, it only
         // works while Explorer still counts us as the foreground interaction
-        let _ = AllowSetForegroundWindow(process.dwProcessId);
+        let _ = prisc_platform::foreground::grant(Some(process.dwProcessId));
         let _ = CloseHandle(process.hProcess);
         let _ = CloseHandle(process.hThread);
     }

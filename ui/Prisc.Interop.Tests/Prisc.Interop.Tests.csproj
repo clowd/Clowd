@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The C# side of the prisc_interop boundary: loader and probe, ABI check, status and last-error
+       mapping, strings, the log sink, handle leases, and one smoke test per export family. No
+       Avalonia, no FFmpeg, so it runs in CI's fast test job right after `cargo build -p prisc_interop`.
+       Run with PRISC_INTEROP_REQUIRED=1 to fail instead of skip when the library is missing. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA2007;xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Prisc.Interop\Prisc.Interop.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Prisc.Interop\Testing\InteropTestGate.cs" Link="InteropTestGate.cs" />
+  </ItemGroup>
+</Project>

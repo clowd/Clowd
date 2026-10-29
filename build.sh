@@ -102,6 +102,15 @@ echo "==> Building the Rust binaries (release)"
 # shellcheck disable=SC2046 # word-split `-p <crate>` pairs
 PRISC_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml" ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} \
     $("$STAGING/stage-app.sh" packages "$RID")
+# The in-process interop library, each in a cargo invocation of its own: built
+# beside the packages above, cargo would unify features across them and link
+# Sentry into it (tools/staging/shipped.sh, app_packages_isolated). Then the
+# same artifact checks build-rust.yml runs (exports, Sentry, dependencies).
+while read -r args; do
+    # shellcheck disable=SC2086 # word-split `-p <crate>`
+    PRISC_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml" ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} $args
+done < <("$STAGING/stage-app.sh" packages-isolated "$RID")
+"$STAGING/stage-app.sh" verify-isolated "$RID" "$PROFILE"
 
 echo "==> Staging the Rust binaries beside Prisc.Ui"
 # Best effort on the VC++ runtime here: a dev machine runs fine on its

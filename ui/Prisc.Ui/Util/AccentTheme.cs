@@ -23,12 +23,11 @@ namespace Prisc.Util
     /// The overrides go into <see cref="Application.Resources"/>, which is searched ahead of the
     /// theme's dictionaries.
     ///
-    /// Light and dark are built separately: Semi's ramp is not the same in both. The base is the
-    /// same accent in each — it arrives darkened until white text on it reads, and that is what
-    /// the solid buttons and checked boxes need in the dark theme too — lifted only if it would
-    /// otherwise sink into the dark ground. Dark carries a second, lighter ramp for the tokens
-    /// that paint accent text, since no one color can be both a fill under white text and text on
-    /// a dark ground (see <see cref="BuildDarkTextRamp"/>).
+    /// The ramps themselves are <c>prisc_rust_core::color::palette</c>'s
+    /// (<see cref="AccentColors.Palette"/>): light and dark are built separately, since Semi's
+    /// ramp is not the same in both, and dark carries a second, lighter ramp for the tokens that
+    /// paint accent text, since no one color can be both a fill under white text and text on a
+    /// dark ground.
     /// </summary>
     public static class AccentTheme
     {
@@ -86,7 +85,10 @@ namespace Prisc.Util
             if (app == null)
                 return;
 
-            var accent = SettingsRoot.Current?.General?.GetEffectiveAccentColor() ?? AccentColors.Default;
+            // the ramps are prisc_rust_core::color::palette's, one native call per accent
+            var palette = SettingsRoot.Current?.General?.GetAccentPalette()
+                ?? AccentColors.Palette(AccentColors.PriscBlue, maintainContrast: true);
+            var accent = palette.Effective;
 
             // the settings color picker streams a color per drag step, and most of them land on the
             // same contrast-corrected accent
@@ -95,9 +97,9 @@ namespace Prisc.Util
 
             _plan ??= BuildPlan(app);
 
-            var lightRamp = BuildRamp(accent, dark: false);
-            var darkRamp = BuildRamp(accent, dark: true);
-            var darkText = BuildDarkTextRamp(darkRamp);
+            var lightRamp = palette.Light;
+            var darkRamp = palette.Dark;
+            var darkText = palette.DarkText;
 
             // Filled off to the side and published in one assignment each. Writing the ~700 entries
             // into the live dictionaries instead raises a resource change per key, and the app
@@ -289,113 +291,6 @@ namespace Prisc.Util
                     color = default;
                     return false;
             }
-        }
-
-        /// <summary>
-        /// The ten-step ramp Semi expects, with the accent at step 5. The stock ramp is (to within
-        /// a rounding step) the base color blended toward white below 5 and toward black above it,
-        /// so the accent's ramp is built the same way and lands in the same places.
-        /// </summary>
-        private static Color[] BuildRamp(Color accent, bool dark)
-        {
-            // The accent as set (darkened until white text on it reads) is the base in both
-            // themes: lightening it for dark made the solid buttons pale under their white labels.
-            // It is only lifted when it would sink into the dark ground itself.
-            var baseColor = dark ? LiftToContrast(accent, DarkGround, MinimumFillContrastWithDark) : accent;
-
-            var ramp = new Color[10];
-            ramp[5] = baseColor;
-
-            // Steps 6 and 7 are the pointer-over and pressed fills, still under white text, so
-            // they go toward black in both themes: the stock dark ramp runs them lighter, but a
-            // fill that sits at 4.5:1 against white has no room to lighten (a 25% lift is 3.3:1,
-            // a 50% one 2.1:1). Steps 8 and 9 are not fills anywhere that matters.
-            var below = dark
-                ? new[] { 0.72, 0.58, 0.42, 0.26, 0.12 } // toward black — dark tints are darker
-                : new[] { 0.92, 0.80, 0.60, 0.40, 0.20 }; // toward white
-            var above = new[] { 0.12, 0.28, 0.44, 0.60 }; // toward black
-
-            var belowTarget = dark ? Colors.Black : Colors.White;
-
-            for (int i = 0; i < 5; i++)
-                ramp[i] = Mix(baseColor, belowTarget, below[i]);
-            for (int i = 6; i < 10; i++)
-                ramp[i] = Mix(baseColor, Colors.Black, above[i - 6]);
-
-            return ramp;
-        }
-
-        /// <summary>
-        /// The ramp the dark theme paints accent *text* from: the fill base lifted toward white
-        /// until it reads at text contrast on the raised surfaces text actually sits on (a
-        /// button's gray fill, not just the window), with the pointer-over and pressed steps
-        /// lifted a little further (text brightens on hover where a fill darkens). Steps below
-        /// the base are the fill ramp's — they are tints, not text.
-        /// </summary>
-        private static Color[] BuildDarkTextRamp(Color[] fills)
-        {
-            var text = LiftToContrast(fills[5], DarkRaisedGround, MinimumTextContrastWithDark);
-            var ramp = new Color[10];
-            for (int i = 0; i < 5; i++)
-                ramp[i] = fills[i];
-            ramp[5] = text;
-            ramp[6] = Mix(text, Colors.White, 0.15);
-            ramp[7] = Mix(text, Colors.White, 0.30);
-            ramp[8] = Mix(text, Colors.White, 0.50);
-            ramp[9] = Mix(text, Colors.White, 0.70);
-            return ramp;
-        }
-
-        /// <summary>The dark theme's window ground (ApplicationBackgroundColor in AppResources).</summary>
-        private static readonly Color DarkGround = Color.FromRgb(0x20, 0x20, 0x20);
-
-        /// <summary>The lightest common surface accent text lands on in the dark theme: Semi's
-        /// SemiColorFill0 (white at 0.12) over the ground — the default button's fill. Text that
-        /// only clears the window ground reads as dim there.</summary>
-        private static readonly Color DarkRaisedGround = Color.FromRgb(0x3B, 0x3B, 0x3B);
-
-        /// <summary>The least contrast an accent *fill* may have against <see cref="DarkGround"/>:
-        /// WCAG's floor for UI components. The setting's 4.5:1-against-white guard does not imply
-        /// this (black passes it and fails here), though any accent with some brightness left —
-        /// most of them — clears it as is; the lift mostly bites on near-black picks with the
-        /// guard off.</summary>
-        private const double MinimumFillContrastWithDark = 3.0;
-
-        /// <summary>The least contrast accent *text* may have against <see cref="DarkRaisedGround"/>:
-        /// WCAG's floor for body text. A fill that sits at 4.5:1 against white always needs a
-        /// lift to get here — the two targets cannot be met by one color.</summary>
-        private const double MinimumTextContrastWithDark = 4.5;
-
-        /// <summary>
-        /// <paramref name="color"/> mixed toward white just far enough to reach
-        /// <paramref name="minimumContrast"/> against <paramref name="ground"/>, or unchanged when
-        /// it already does.
-        /// </summary>
-        private static Color LiftToContrast(Color color, Color ground, double minimumContrast)
-        {
-            var groundLuminance = AccentColors.RelativeLuminance(ground);
-            var targetLuminance = minimumContrast * (groundLuminance + 0.05) - 0.05;
-            if (AccentColors.RelativeLuminance(color) >= targetLuminance)
-                return color;
-
-            // Luminance climbs monotonically with the mix amount, so bisect it.
-            double lo = 0, hi = 1;
-            for (int i = 0; i < 16; i++)
-            {
-                var mid = (lo + hi) / 2;
-                if (AccentColors.RelativeLuminance(Mix(color, Colors.White, mid)) >= targetLuminance)
-                    hi = mid;
-                else
-                    lo = mid;
-            }
-
-            return Mix(color, Colors.White, hi);
-        }
-
-        private static Color Mix(Color from, Color to, double amount)
-        {
-            byte Channel(byte a, byte b) => (byte) Math.Round(a + (b - a) * amount);
-            return Color.FromRgb(Channel(from.R, to.R), Channel(from.G, to.G), Channel(from.B, to.B));
         }
     }
 }

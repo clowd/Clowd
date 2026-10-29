@@ -182,10 +182,35 @@ pub struct Events {
     rx: mpsc::Receiver<Event>,
 }
 
+/// Why a backend could not start, with the one detail [`Error`] does not carry: whether a
+/// permission failure was a stale grant (macOS: the permission check passed, yet the tap it
+/// made was stripped of key events). Crate-private on purpose: [`Hotkeys::start`] reports only the
+/// [`Error`], and the supervisor ([`crate::supervise`]) turns the detail into its own status, so
+/// `Error` needs no variant for it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StartFailure {
+    pub error: Error,
+    pub stale_grant: bool,
+}
+
+impl From<Error> for StartFailure {
+    fn from(error: Error) -> Self {
+        Self {
+            error,
+            stale_grant: false,
+        }
+    }
+}
+
 impl Hotkeys {
     /// Installs the hook on a new thread and blocks until it is installed (or failed).
     /// Linux/other: `Err(Error::Unsupported)`. macOS without Accessibility: `Err(PermissionDenied)`.
     pub fn start() -> Result<(Hotkeys, Events), Error> {
+        Self::start_detailed().map_err(|failure| failure.error)
+    }
+
+    /// [`start`](Self::start), keeping the stale-grant detail of a failure.
+    pub(crate) fn start_detailed() -> Result<(Hotkeys, Events), StartFailure> {
         let shared = Arc::new(Shared::new());
         let (tx, rx) = mpsc::channel();
         let backend = backend::spawn(shared.clone(), tx)?;

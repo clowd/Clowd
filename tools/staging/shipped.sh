@@ -38,11 +38,33 @@ rid_has_ai() {
 # app_files.
 app_packages() {
   local rid=$1
-  echo prisc_capture prisc_hotkeys
+  echo prisc_capture
   # prisc_scroll_driver is a compile_error! on Linux (no backend there).
   case "$rid" in linux-*) ;; *) echo prisc_scroll_driver ;; esac
   if rid_has_ai "$rid"; then echo prisc_ai; fi
   case "$rid" in win-*) echo prisc_shell_ext ;; esac
+}
+
+# Cargo packages of the app that must each be built in a cargo invocation of
+# their own, never beside app_packages. One `cargo build -p a -p b` unifies
+# dependency features across a and b, so the in-process library would pick up
+# prisc_rust_core's `telemetry` (Sentry) from prisc_capture; built alone it
+# links exactly what its own manifest asks for (build-rust.yml then checks
+# the artifact). prisc_interop is the one native library Prisc.Ui and
+# Prisc.VideoRender load in-process; no C# ships on Linux, so it is not built
+# there. One per line.
+app_packages_isolated() {
+  case "$1" in win-*|osx-*) echo prisc_interop ;; esac
+}
+
+# The file name a cdylib package builds to for a RID.
+rid_cdylib() {
+  case "$1" in
+    win-*) echo "$2.dll" ;;
+    osx-*) echo "lib$2.dylib" ;;
+    linux-*) echo "lib$2.so" ;;
+    *) echo "unsupported RID: $1" >&2; return 1 ;;
+  esac
 }
 
 # The app's Rust binaries, as named in the cargo profile dir. They ship beside
@@ -53,13 +75,11 @@ app_binaries() {
   exe=$(rid_exe "$rid")
   echo "prisc_capture$exe"
   case "$rid" in linux-*) ;; *) echo "prisc_scroll_driver$exe" ;; esac
-  # The global hotkey library Prisc.Ui P/Invokes (HelperLocator.FindLibrary).
-  # Linux has no hotkey backend yet and Prisc.Ui never loads it there.
-  case "$rid" in
-    win-*) echo prisc_hotkeys.dll ;;
-    osx-*) echo libprisc_hotkeys.dylib ;;
-  esac
   if rid_has_ai "$rid"; then echo "prisc_ai$exe"; fi
+  # The in-process interop library (app_packages_isolated) that Prisc.Ui and
+  # Prisc.VideoRender load from beside themselves.
+  local pkg
+  for pkg in $(app_packages_isolated "$rid"); do rid_cdylib "$rid" "$pkg"; done
 }
 
 # Binaries built from the app packages that have Sentry debug files: the

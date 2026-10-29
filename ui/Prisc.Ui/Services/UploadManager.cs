@@ -591,7 +591,7 @@ namespace Prisc
         private static string GetPatternFileName(string extension)
         {
             var filePattern = SettingsRoot.Current.Capture.FilenamePattern;
-            filePattern ??= "yyyy-MM-dd HH-mm-ss";
+            filePattern ??= SharedDefaults.DefaultFilenamePattern;
             filePattern = Path.GetFileNameWithoutExtension(filePattern);
             return DateTime.Now.ToString(filePattern, CultureInfo.InvariantCulture) + extension;
         }

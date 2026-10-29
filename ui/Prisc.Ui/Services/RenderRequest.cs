@@ -155,7 +155,7 @@ namespace Prisc.UI.Services
         /// <summary>Lowest CRF the dialog offers — lossless, enormous.</summary>
         public const int MinCrf = 0;
 
-        /// <summary>Highest CRF the dialog offers.</summary>
-        public const int MaxCrf = 51;
+        /// <summary>Highest CRF the dialog offers: the encoder's own bound.</summary>
+        public const int MaxCrf = Prisc.VideoSDK.Media.H264EncoderSettings.MaxCrf;
     }
 }

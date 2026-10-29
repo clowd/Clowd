@@ -262,48 +262,66 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Fact]
-        public void A_capturer_permission_failure_shows_the_same_text_as_the_shells_own()
+        public void A_capturer_failure_shows_the_same_text_as_the_shells_own()
         {
             var (manager, _, _) = Create(wireActions: false);
-            manager.AccessibilityTrustedProbe = () => false;
             manager.SetAction(HotkeyId.CaptureRegion, null);
             var region = manager.GetEntry(HotkeyId.CaptureRegion);
             region.AddGesture(CtrlShift1);
             region.AddGesture(CtrlShift2);
 
-            // keyed off the stable code, not the crate's wording (CAPTURE_PROTOCOL.md)
+            // keyed off the stable code, not the crate's wording (CAPTURE_PROTOCOL.md): one text table
+            // renders both the shell's own hook and the capturer's
             manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[]
             {
-                new ExternalGestureStatus("PrintScreen", false, "reworded crate text", CaptureStandbySupervisor.PermissionErrorCode),
-                new ExternalGestureStatus("Control+Shift+D1", false, "duplicate gesture", "duplicate"),
+                new ExternalGestureStatus("PrintScreen", false, "reworded crate text", HotkeyErrorCodes.Permission),
+                new ExternalGestureStatus("Control+Shift+D1", false, "duplicate gesture", HotkeyErrorCodes.Duplicate),
                 // a capturer that predates error_code, or a code the shell does not know: shown as sent
                 new ExternalGestureStatus("Control+Shift+D2", false, "some new failure"),
             });
 
-            Assert.Equal(NativeHotkeyHost.PermissionMessage, region.Shortcuts[0].Error);
-            Assert.Equal("duplicate gesture", region.Shortcuts[1].Error);
+            Assert.Equal(HotkeyStatusText.PermissionMessage, region.Shortcuts[0].Error);
+            Assert.Equal(HotkeyStatusText.DuplicateMessage, region.Shortcuts[1].Error);
             Assert.Equal("some new failure", region.Shortcuts[2].Error);
         }
 
         [Fact]
-        public void A_capturer_permission_failure_under_a_trusted_grant_shows_the_shells_stale_grant_text()
+        public void A_capturer_stale_grant_shows_the_shells_stale_grant_text()
         {
-            // the capturer's tap shares the shell's TCC answer: macOS lists Prisc as allowed, yet the
-            // tap lost its key events, so asking for the grant (which the System page shows) is wrong
+            // the capturer's supervisor tells the stale grant apart itself: macOS lists Prisc as
+            // allowed, yet the tap lost its key events, so asking for the grant (which the System page
+            // shows) is wrong
             var (manager, _, _) = Create(wireActions: false);
-            manager.AccessibilityTrustedProbe = () => true;
             manager.SetAction(HotkeyId.CaptureRegion, null);
             var region = manager.GetEntry(HotkeyId.CaptureRegion);
             region.AddGesture(CtrlShift1);
 
             manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[]
             {
-                new ExternalGestureStatus("PrintScreen", false, "reworded crate text", CaptureStandbySupervisor.PermissionErrorCode),
-                new ExternalGestureStatus("Control+Shift+D1", false, "duplicate gesture", "duplicate"),
+                new ExternalGestureStatus("PrintScreen", false, "reworded crate text", HotkeyErrorCodes.StaleGrant),
+                new ExternalGestureStatus("Control+Shift+D1", false, "the keyboard hook has stopped", HotkeyErrorCodes.HookStopped),
             });
 
-            Assert.Equal(NativeHotkeyHost.StaleGrantMessage, region.Shortcuts[0].Error);
-            Assert.Equal("duplicate gesture", region.Shortcuts[1].Error);
+            Assert.Equal(HotkeyStatusText.StaleGrantMessage, region.Shortcuts[0].Error);
+            // on every OS: the capturer either retries its hook or exits and hands the hotkeys back
+            Assert.Equal(HotkeyStatusText.StoppedError("the keyboard hook has stopped", restartsItself: true),
+                region.Shortcuts[1].Error);
+            Assert.DoesNotContain("Restart", region.Shortcuts[1].Error);
+        }
+
+        [Fact]
+        public void A_capturer_invalid_gesture_shows_the_shells_text_with_the_parse_error()
+        {
+            var (manager, _, _) = Create(wireActions: false);
+            manager.SetAction(HotkeyId.CaptureRegion, null);
+            var region = manager.GetEntry(HotkeyId.CaptureRegion);
+
+            manager.ApplyExternalStatus(HotkeyId.CaptureRegion, new[]
+            {
+                new ExternalGestureStatus("PrintScreen", false, "unknown key 'Shift'", HotkeyErrorCodes.InvalidGesture),
+            });
+
+            Assert.Equal("This gesture could not be read: unknown key 'Shift'.", region.Shortcuts[0].Error);
         }
 
         [Fact]

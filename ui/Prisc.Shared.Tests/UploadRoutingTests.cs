@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Prisc.Config;
+using Prisc.Interop.Testing;
 using Prisc.Upload;
 using Xunit;
 
@@ -116,6 +117,8 @@ namespace Prisc.Shared.Tests
         [Fact]
         public void WrapDangerousUploadsInZip_DefaultsOn_AndRoundTrips()
         {
+            // a settings round trip serialises the hotkeys, which parse through prisc_interop
+            InteropTestGate.Require();
             var loaded = SettingsService.Load(_path);
             Assert.True(loaded.Uploads.WrapDangerousUploadsInZip);
 

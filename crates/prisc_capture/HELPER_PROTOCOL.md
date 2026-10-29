@@ -51,8 +51,8 @@ Scope:
    `Vid2GifRunner` matches `canceled` (`Vid2GifRunner.cs` ~369), so GIF cancel has never been
    recognised as a cancel. Do not assume the old cancel path was ever exercised.
 7. **Single source of truth: Rust codegen** (§6). Message types are declared once in
-   `prisc_ipc`, and the C# records are generated from them by a cargo test, the same pattern as
-   `prisc_hotkeys/src/csharp.rs` → `HotkeyKey.g.cs`.
+   `prisc_ipc`, and the C# records are generated from them by `cargo codegen`
+   (`crates/prisc_codegen`), the one generator of every Rust-to-C# mirror.
 8. **Dependency direction: `prisc_ipc` is a leaf; `prisc_rust_core` depends on it** and
    re-exports `exit`. Neither crate depends on libobs, so `prisc_capture` stays libobs-free.
    `prisc_recorder`, `prisc_share_region` and `prisc_vid2gif` gain a `prisc_rust_core`
@@ -570,15 +570,18 @@ field whose C# property would share its record's name is renamed `Items` (a list
 samples. The samples only exercise the fields they contain, so a field added to the serde type
 but not the table would slip through. The macro makes the equality structural.)
 
-**Generator**: `crates/prisc_ipc/src/csharp.rs`, modelled on `prisc_hotkeys/src/csharp.rs`.
-It renders every `SPEC` into **`ui/Prisc.Ipc/Generated/HelperMessages.g.cs`**, including each
-catalog's `catalog_hash`, and test `csharp_mirror` fails when the checked-in file differs.
-Regenerate with `PRISC_IPC_REGEN=1 cargo test -p prisc_ipc csharp_mirror`. The Rust CI gate
-runs an explicit per-crate list, so Phase 0 adds to it (`ci.yml`, "Rust gate"):
+**Generator**: `crates/prisc_codegen/src/ipc.rs`. It renders every `SPEC` into
+**`ui/Prisc.Ipc/Generated/HelperMessages.g.cs`**, including each catalog's `catalog_hash`, the
+protocol constants (`IpcProtocol`: version, line limit, self-exit margin, the framing refusal
+texts) and the helper names (`HelperNames`), plus the framing golden vectors into
+`ui/Prisc.Ipc.Tests/Generated/FramingVectors.g.cs`. `cargo test -p prisc_codegen` fails when a
+checked-in file differs; regenerate with `cargo codegen`. The Rust CI gate runs an explicit
+per-crate list (`ci.yml`, "Rust gate"):
 
 ```
 cargo clippy -p prisc_ipc --all-targets -- -D warnings
 cargo test -p prisc_ipc
+cargo test -p prisc_codegen
 ```
 
 and to the "UI gate: dotnet tests" step:
@@ -646,8 +649,10 @@ halves agree on what "valid" means.
 ## 7. C# side (`ui/Prisc.Ipc`)
 
 `Prisc.Ipc.csproj`: net10.0, `RootNamespace Prisc.Ipc`, `Nullable disable`, no package
-references, `AllowUnsafeBlocks` off (the P/Invokes in `JobObject` and `IpcChild` use plain
-`DllImport`), `InternalsVisibleTo Prisc.Ipc.Tests`. Referenced by Prisc.VideoSDK, Prisc.Ui and
+references, `AllowUnsafeBlocks` off, `InternalsVisibleTo Prisc.Ipc.Tests`. It has no native
+interop of its own: the stdout guard, the kill-on-close job and the foreground grant are
+prisc_interop exports reached through `ui/Prisc.Interop` (`StdoutGuard`, `KillOnCloseJob`,
+`Foreground`), and executable names and the probe come from `NativeProbe`. Referenced by Prisc.VideoSDK, Prisc.Ui and
 Prisc.VideoRender. New `ui/Prisc.Ipc.Tests` (xunit, like Prisc.Shared.Tests), added to
 `Prisc.slnx` and to the `ci.yml` UI gate (§6).
 
@@ -656,11 +661,10 @@ Files:
 | File | Content |
 |---|---|
 | `Generated/HelperMessages.g.cs` | §6, never hand-edited |
-| `Platform.cs` | `ExeName(stem)` (`.exe` on Windows), `LibName(stem)` (`stem.dll`, `libstem.dylib`, `libstem.so`) |
 | `HelperLocator.cs` | §7.1 |
 | `HelperProcess.cs` | moved from Prisc.Ui (namespace `Prisc.Ipc`), gains `HelperStartOptions` |
 | `HelperLog.cs` | `HelperProcessLog` moved and renamed |
-| `JobObject.cs` | Windows kill-on-close job (§7.4) |
+| `JobObject.cs` | Windows kill-on-close job (§7.4), over prisc_interop's `KillOnCloseJob` |
 | `HelperClient.cs` | §7.2 |
 | `HelperFailure.cs` | failure kinds + exception |
 | `IpcChild.cs` | child side for Prisc.VideoRender (§7.6) |
@@ -670,9 +674,7 @@ Files:
 ```csharp
 public static class HelperLocator
 {
-    public const string EnvVarName = "PRISC_HELPERS_DIR";
     public static string Find(string stem);         // executable; null when not found; EnsureExecutable applied
-    public static string FindLibrary(string stem);  // native library (prisc_hotkeys)
     internal static string Find(string fileName, string envDirs, string baseDirectory); // testable
     internal static Func<string, string> Override;  // test seam (Denoise/MatteGeneratorTests); null in production
 }
@@ -682,23 +684,28 @@ public static class HelperLocator
 otherwise "not found" (a seam that throws counts as "not found" too). A null answer falls
 through to the normal probe, so a seam for one helper leaves the others resolvable.
 
+The stems are the generated `HelperNames` constants and the variable is `EnvVars.HelpersDir`;
+the probe itself is `NativeProbe.Find` (`ui/Prisc.Interop`), which the prisc_interop loader uses
+too.
+
 `PRISC_HELPERS_DIR` is a **path list** separated by `Path.PathSeparator` (`;` on Windows, `:`
 elsewhere), probed in order. That covers an out-of-tree Prisc.Ui `OutDir`, where the dev
 walk-up finds no `Cargo.toml` and one directory cannot hold both the Rust helpers and
 VideoRender. Documented dev value:
 `<repo>/target/debug;<repo>/ui/Prisc.VideoRender/bin/Debug/net10.0` (`:` on Unix).
 
-Probe order for file name `f` = `Platform.ExeName(stem)` (or `LibName`), first existing wins:
+Probe order for file name `f` = `NativeProbe.ExeName(stem)`, first existing wins:
 
 1. For each directory `d` in `$PRISC_HELPERS_DIR`: `d/f`, then `d/recorder/f`.
 2. `AppContext.BaseDirectory/f`, then `AppContext.BaseDirectory/recorder/f` (release layout:
-   capture, scroll driver, ai, VideoRender and the hotkeys library beside Prisc.Ui; recorder,
+   capture, scroll driver, ai, VideoRender and prisc_interop beside Prisc.Ui; recorder,
    share_region and vid2gif in `recorder/`).
 3. Dev walk-up from `AppContext.BaseDirectory`: at each ancestor holding `Cargo.toml`, probe
    `target/debug/f` and `target/release/f` and take the newer by last-write time (debug wins a
-   tie; `CaptureBinaryLocator`'s rule). `FindLibrary` also probes `target/{debug,release}/deps/f`,
-   newer wins: building a crate that depends on prisc_hotkeys compiles the library there without
-   copying it up, so `target/<profile>/f` alone can be a stale copy that fails the ABI check. Stem `Prisc.VideoRender` instead probes
+   tie; `CaptureBinaryLocator`'s rule). The prisc_interop loader also probes
+   `target/{debug,release}/deps/f`, newer wins: building a crate that depends on prisc_interop
+   leaves the library there without copying it up, so `target/<profile>/f` alone can be a stale
+   copy that fails the ABI check. Stem `Prisc.VideoRender` instead probes
    `ui/Prisc.VideoRender/bin/{Debug,Release}/net10.0/f` at each ancestor, newer wins. Keep
    walking past a `Cargo.toml` with nothing built.
 
@@ -816,8 +823,9 @@ timeouts.
 ### 7.4 Kill-with-parent
 
 Windows: one process-wide job created lazily with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
-JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK`; every child started with `KillWithParent` is assigned
-right after `Process.Start`.
+JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK` (prisc_interop's `prisc_process_assign_kill_on_close_job_windows`,
+which keeps the job, and a failure to create it, for the process); every child started with
+`KillWithParent` is assigned right after `Process.Start`.
 
 - **Only direct children are in the job.** `SILENT_BREAKAWAY_OK` keeps every process a helper
   spawns out of it. Without it, the user's browser that prisc_capture opens with
@@ -864,19 +872,29 @@ public static class IpcChild
 
 `Open` applies the **same fd-level guard as §3.2**, because VideoRender runs GPU backends and
 hardware encoders (NVENC, AMF, VideoToolbox through FFmpeg, Skia GPU) whose drivers can write
-to fd 1, the same class of problem as the prisc_ai CoreML incident:
+to fd 1, the same class of problem as the prisc_ai CoreML incident. It is the same code too:
+prisc_interop's `prisc_ipc_claim_stdout` (C# `StdoutGuard.Claim`) runs prisc_ipc's
+`guard::claim`, which hands back the private, non-inheritable handle onto the real stdout and
+points fd 1 (and on Windows `STD_OUTPUT_HANDLE` and the UCRT's fd 1) at stderr. The claim is
+latched once per process; a second claim answers `PRISC_E_STATE` and changes nothing. A failed
+redirect is logged and not fatal (stdout then still reaches the pipe). The private handle goes
+into a `FileStream`, not `Console.OpenStandardOutput`, which swallows EPIPE, so a dead parent
+surfaces as a failed write. Then `Console.SetOut(Console.Error)` so managed
+`Console.WriteLine` follows.
 
-- Unix: open `/dev/fd/1` with `File.OpenHandle` (a new descriptor onto the same pipe, and .NET
-  opens every file `O_CLOEXEC`) into a `FileStream` for protocol lines, then `dup2(2, 1)` (libc
-  via `DllImport`). This replaces `fcntl(1, F_DUPFD_CLOEXEC, 3)`: `fcntl` is variadic, which
-  arm64 macOS cannot P/Invoke correctly. Not `Console.OpenStandardOutput`, which swallows EPIPE,
-  so a dead parent would never surface as a failed write.
-- Windows: `DuplicateHandle` of `GetStdHandle(STD_OUTPUT_HANDLE)` with `bInheritHandle =
-  FALSE` into the private stream, `SetStdHandle(STD_OUTPUT_HANDLE, stderr)`, and `_dup2(2, 1)`
-  in `ucrtbase.dll`, with the shared-UCRT assumption of §3.2. As in §3.2, the original
-  handle is first made non-inheritable with `SetHandleInformation`, because it stays open if
-  `_dup2` fails; a failure of either call is logged to stderr, not thrown.
-- Then `Console.SetOut(Console.Error)` so managed `Console.WriteLine` follows.
+Without the library, `Open` writes `hello` and one fatal `init_failed` error on the unguarded
+stdout (nothing native has run yet) and exits 1.
+
+**Signals**: SIGTERM, SIGINT and SIGHUP, plus SIGQUIT on Windows (how .NET reports
+CTRL_BREAK), go to the quit path, the same termination set as the Rust helpers' `ctrlc`. A quit
+from any source (a `quit` line, a signal, a dead stdout) raises `OnQuit` once; a handler added
+after the quit fired runs at once, on the adding thread.
+
+**Quit, then read**: after `quit` the child keeps reading stdin and delivers later lines in
+order, as the Rust loop does (§2.3: `quit` is idempotent and ordered after every earlier line);
+a second `quit`, or the EOF that follows, changes nothing. Stopping the read would drop lines
+silently and could leave a parent that writes after `quit` blocked on a full pipe. The golden
+vector `quit_then_read` (`FramingVectors.g.cs`) pins it on both sides.
 
 `IpcWriter.Emit` writes one line under a lock and flushes; it never throws (an `IOException`
 marks the writer closed and raises `OnQuit` after the lock is released). The generated
@@ -895,7 +913,7 @@ marks the writer closed and raises `OnQuit` after the lock is released). The gen
 | `ScreenCaptureService` one-shot spawn | same class, `HelperClient` awaiting `done` | `Capture` | `GrantForeground` |
 | `AiClient` (VideoSDK) | same class on `HelperProcess.Start` + `HelperLog` + `JobObject`, binary streams; no `HelperClient` | none | `KillWithParent` |
 | `AiLoader` resolver seam | `HelperLocator.Find("prisc_ai")`; `Configure` removed, test seam is `HelperLocator.Override` | | |
-| `HotkeysLibraryLocator` | `HelperLocator.FindLibrary("prisc_hotkeys")` | | |
+| `HotkeysLibraryLocator` | removed: the hook is linked into prisc_interop | | |
 | VideoRender `Program.cs` protocol + `FindAiBinary` + `FindFFmpegDirectory` | `IpcChild` + `HelperLocator` + `FFmpegLoader.FindBesideRecorder` | `Job` (child side) | |
 | `TestFFmpeg` (VideoSDK.Tests) | `FFmpegLoader.FindBesideRecorder` | | |
 

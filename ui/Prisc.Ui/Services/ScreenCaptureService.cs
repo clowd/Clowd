@@ -80,12 +80,12 @@ namespace Prisc.UI
 
             try
             {
-                var binary = Prisc.Ipc.HelperLocator.Find("prisc_capture");
+                var binary = Prisc.Ipc.HelperLocator.Find(HelperNames.Capture);
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The screen capture binary ({Prisc.Ipc.Platform.ExeName("prisc_capture")}) could not be found. " +
-                        $"Run 'cargo build' in the Prisc repository, or set the {Prisc.Ipc.HelperLocator.EnvVarName} " +
+                        $"The screen capture binary ({Prisc.Interop.NativeProbe.ExeName(HelperNames.Capture)}) could not be found. " +
+                        $"Run 'cargo build' in the Prisc repository, or set the {Prisc.Interop.EnvVars.HelpersDir} " +
                         "environment variable to the folder holding it.",
                         "Screen capture unavailable");
                     return;
@@ -281,7 +281,7 @@ namespace Prisc.UI
         /// </summary>
         internal static async Task<bool> EnsureScreenRecordingPermissionAsync()
         {
-            if (MacPermissions.HasScreenRecording || MacPermissions.Request(MacPermission.ScreenRecording))
+            if (MacPermissions.Request(MacPermission.ScreenRecording))
                 return true;
 
             await PromptForScreenRecordingPermissionAsync();

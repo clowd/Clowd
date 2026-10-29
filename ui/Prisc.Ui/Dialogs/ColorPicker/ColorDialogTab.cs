@@ -98,21 +98,10 @@ namespace Prisc.UI.Dialogs.ColorPicker
         public static readonly IBrush Dark = new ImmutableSolidColorBrush(Color.FromRgb(0x16, 0x18, 0x1C));
         public static readonly IBrush Light = new ImmutableSolidColorBrush(Colors.White);
 
-        /// <summary>Whether <paramref name="fill"/> is light enough to want dark ink: WCAG relative
-        /// luminance over 0.18, the point where dark and white ink have about equal contrast.</summary>
-        public static bool IsLight(Color fill) => RelativeLuminance(fill) > 0.18;
+        /// <summary>Whether <paramref name="fill"/> is light enough to want dark ink
+        /// (<see cref="AccentColors.IsLight"/>).</summary>
+        public static bool IsLight(Color fill) => AccentColors.IsLight(fill);
 
         public static IBrush For(Color fill) => IsLight(fill) ? Dark : Light;
-
-        public static double RelativeLuminance(Color color)
-        {
-            static double Channel(byte c)
-            {
-                var v = c / 255d;
-                return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
-            }
-
-            return 0.2126 * Channel(color.R) + 0.7152 * Channel(color.G) + 0.0722 * Channel(color.B);
-        }
     }
 }

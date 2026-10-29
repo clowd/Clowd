@@ -1142,6 +1142,23 @@ namespace Prisc.VideoSDK.Tests
                 MacKd(0, 61), MacKd(10, 54), MacKd(20, 35), Ku(30, 61), Ku(40, 54))).FullText);
         }
 
+        /// <summary>Every Windows modifier, whichever VK reports it (the generic one or either side's),
+        /// plays its role and reads its Windows word in Ctrl, Alt, Shift, Win order.</summary>
+        [Theory]
+        [InlineData(17, 18, 16, 91)]    // generic Ctrl, Alt, Shift; left Win
+        [InlineData(162, 164, 160, 91)] // left sides
+        [InlineData(163, 165, 161, 92)] // right sides
+        public void Windows_modifier_names_follow_the_windows_keyboard(int ctrl, int alt, int shift, int win)
+        {
+            var run = Assert.Single(KeyboardLayout.Segment(new[]
+            {
+                Kd(0, win), Kd(10, shift), Kd(20, alt), Kd(30, ctrl), Kd(40, 80),
+                Ku(50, ctrl), Ku(60, alt), Ku(70, shift), Ku(80, win),
+            }, 1000));
+            Assert.True(run.IsChord);
+            Assert.Equal("Ctrl+Alt+Shift+Win+P", run.FullText);
+        }
+
         /// <summary>Return, the keypad's own Enter and Esc all close their run with the key
         /// included — the Mac codes for them (36 / 76 / 53), not the Win32 13 / 27, which in this
         /// space are the W key and the minus key and would end nothing.</summary>

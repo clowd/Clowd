@@ -17,7 +17,7 @@ namespace Prisc.VideoSDK.Tests
     [Collection("HelperLocator.Override")]
     public sealed class JobRunnerTests : IDisposable
     {
-        private const string RenderStem = "Prisc.VideoRender";
+        private const string RenderStem = HelperNames.VideoRender;
         private static readonly TimeSpan Bound = TimeSpan.FromSeconds(60);
 
         /// <summary>The render tool's test knob: it waits after its first frame until the quit
@@ -26,7 +26,7 @@ namespace Prisc.VideoSDK.Tests
         /// quit grace and the render ends done{ok}); a quit lost on the wire is the
         /// RenderArgsCompatTests cancel test's to catch, as there it shows up as a kill.</summary>
         internal static readonly IReadOnlyDictionary<string, string> HoldForQuit =
-            new Dictionary<string, string> { ["PRISC_RENDER_TEST_HOLD_FOR_QUIT"] = "1" };
+            new Dictionary<string, string> { [Prisc.Interop.EnvVars.RenderTestHoldForQuit] = "1" };
 
         private readonly List<string> _tempPaths = new();
 
@@ -58,7 +58,7 @@ namespace Prisc.VideoSDK.Tests
             Assert.SkipUnless(TestFFmpeg.Available, TestFFmpeg.SkipReason);
             string dll = RenderArgsCompatTests.FindRenderDll();
             Assert.SkipWhen(dll == null, "Prisc.VideoRender.dll not found: build the exe project.");
-            string exe = Path.Combine(Path.GetDirectoryName(dll)!, Platform.ExeName(RenderStem));
+            string exe = Path.Combine(Path.GetDirectoryName(dll)!, Prisc.Interop.NativeProbe.ExeName(RenderStem));
             Assert.SkipUnless(File.Exists(exe), "Prisc.VideoRender has no apphost beside " + dll);
             HelperLocator.Override = stem => stem == RenderStem ? exe : null;
 

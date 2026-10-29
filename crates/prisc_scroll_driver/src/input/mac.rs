@@ -1,6 +1,6 @@
 //! The macOS half of [`crate::input`]: `CGEventCreateScrollWheelEvent2` for
 //! the wheel, `CGEventPostToPid` for the second rung, `NSRunningApplication`
-//! for the raise, `CGEventSourceKeyState` for the Esc poll, and
+//! for the raise, `prisc_platform::input` for the Esc poll, and
 //! `CGWindowListCopyWindowInfo` for every question about who is where.
 //!
 //! Everything here is in CG points, which is the space the `scroll` marker
@@ -24,9 +24,8 @@ use std::time::Instant;
 
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 use objc2_core_foundation::CFRetained;
-use objc2_core_graphics::{
-    CGEvent, CGEventSource, CGEventSourceStateID, CGEventTapLocation, CGPreflightScreenCaptureAccess, CGScrollEventUnit, CGWindowID,
-};
+use objc2_core_graphics::{CGEvent, CGEventSource, CGEventSourceStateID, CGEventTapLocation, CGScrollEventUnit, CGWindowID};
+use prisc_platform::permissions::{self, Permission};
 
 use super::{WheelDir, RAISE_POLL, RAISE_TIMEOUT};
 use prisc_rust_core::desktop::{self, CGPoint, WindowFilter, NORMAL_WINDOW_LAYERS};
@@ -55,8 +54,8 @@ use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 const LINES_PER_NOTCH: i32 = 3;
 
 /// Virtual key code for Escape (`kVK_Escape`). Carbon's `Events.h` numbering,
-/// which is what `CGEventSourceKeyState` takes.
-const KEY_CODE_ESCAPE: u16 = 53;
+/// which is what `prisc_platform::input::is_key_down` takes on macOS.
+const KEY_CODE_ESCAPE: u32 = 53;
 
 /// The window the driver is scrolling: a `CGWindowID` and the pid that owns
 /// it. The pid is carried alongside because it is what does the work — it
@@ -95,9 +94,11 @@ impl WindowEntry {
 /// helper: the honest move is to say which permission is missing and stop.
 /// Screen Recording takes a Prisc restart; an Accessibility grant reads true
 /// live, so the next run picks it up. The message travels to the user as the fatal `error`
-/// event's message, so it is written for them and not for a log.
+/// event's message, so it is written for them and not for a log. Both checks are
+/// `prisc_platform::permissions`, the rule the hotkey hook and the UI share: Accessibility is
+/// `AXIsProcessTrusted` and post-event access, the pair a posted event needs.
 pub fn preflight() -> anyhow::Result<()> {
-    if !CGPreflightScreenCaptureAccess() {
+    if !permissions::state(Permission::ScreenRecording).is_usable() {
         bail!(
             "Prisc needs Screen Recording permission to photograph the page while it scrolls. Enable Prisc under Privacy & \
              Security → Screen & System Audio Recording, then restart Prisc."
@@ -105,7 +106,7 @@ pub fn preflight() -> anyhow::Result<()> {
     }
     // Without Accessibility the window server drops every event we post and
     // the run would end as a single screenshot with no reason attached.
-    if !unsafe { AXIsProcessTrusted() } {
+    if !permissions::state(Permission::Accessibility).is_usable() {
         bail!(
             "Prisc needs Accessibility permission to scroll the window for you. Enable Prisc under Privacy & Security → \
              Accessibility, then start the scroll capture again."
@@ -314,7 +315,7 @@ pub fn cursor_pos() -> Option<ScreenPoint> {
 /// reading — the HUD's FINISH button and the automatic end detection both
 /// still end the run.
 pub fn escape_pressed() -> bool {
-    CGEventSource::key_state(CGEventSourceStateID::CombinedSessionState, KEY_CODE_ESCAPE)
+    prisc_platform::input::is_key_down(KEY_CODE_ESCAPE).unwrap_or(false)
 }
 
 /// Inject `ticks` wheel notches at `point`.
@@ -415,13 +416,6 @@ fn rect_from_cg(rect: desktop::CGRect) -> ScreenRect {
 
 fn as_cg_point(point: ScreenPoint) -> CGPoint {
     CGPoint::new(point.x as f64, point.y as f64)
-}
-
-#[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
-    /// Whether this process may drive other applications — the Accessibility
-    /// permission. Without it `CGEventPost` is a no-op (see [`preflight`]).
-    fn AXIsProcessTrusted() -> bool;
 }
 
 #[cfg(test)]

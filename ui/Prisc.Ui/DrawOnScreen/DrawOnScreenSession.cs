@@ -202,7 +202,7 @@ namespace Prisc.UI.DrawOnScreen
 
                 // the strip goes to the monitor the user is looking at, which the mouse is the best
                 // guess of before any pointer event has reached us
-                var hasCursor = CursorPosition.TryGet(_toolbar, out var cursor);
+                var hasCursor = CursorPosition.TryGet(out var cursor);
                 var anchor = (hasCursor ? DesktopScreens.FromPoint(_toolbar, cursor) : null)
                     ?? DesktopScreens.Primary(_toolbar)
                     ?? screens.FirstOrDefault();
@@ -633,7 +633,7 @@ namespace Prisc.UI.DrawOnScreen
         /// the first canvas when that cannot be told.</summary>
         private Overlay OverlayUnderCursor()
         {
-            if (_toolbar != null && CursorPosition.TryGet(_toolbar, out var cursor)
+            if (_toolbar != null && CursorPosition.TryGet(out var cursor)
                 && DesktopScreens.FromPoint(_toolbar, cursor) is { } screen)
             {
                 var match = _overlays.FirstOrDefault(o => o.Window.Screen.Bounds == screen.Bounds);
@@ -719,7 +719,7 @@ namespace Prisc.UI.DrawOnScreen
             var shots = new Bitmap[screens.Count];
             for (var i = 0; i < screens.Count; i++)
             {
-                shots[i] = ScreenPixels.Grab(screens[i].Bounds, screens[i].Scaling);
+                shots[i] = ScreenPixels.Grab(screens[i].Bounds);
                 if (shots[i] == null)
                 {
                     Debug.WriteLine($"Draw on Instant Screenshot: could not grab the screen at {screens[i].Bounds}");
@@ -835,12 +835,12 @@ namespace Prisc.UI.DrawOnScreen
         // Focus
         // ====================================================================
 
-        /// <summary>Whether the toolbar or a canvas has the keyboard right now (unsettled). On Windows
-        /// that is the system's foreground window, not <see cref="WindowBase.IsActive"/>, which a
-        /// refused SetForegroundWindow still sets (see <see cref="WindowNativeExtensions.IsForeground"/>).</summary>
-        private bool HasKeyboard => OperatingSystem.IsWindows()
-            ? WindowNativeExtensions.IsForeground(_toolbar) || _overlays.Any(o => WindowNativeExtensions.IsForeground(o.Window))
-            : _toolbar?.IsActive == true || _overlays.Any(o => o.Window.IsActive);
+        /// <summary>Whether the toolbar or a canvas has the keyboard right now (unsettled): the system's
+        /// foreground window on Windows, not <see cref="WindowBase.IsActive"/>, which a refused
+        /// SetForegroundWindow still sets; the key window of the active app on macOS (see
+        /// <see cref="WindowNativeExtensions.IsForeground"/>).</summary>
+        private bool HasKeyboard =>
+            WindowNativeExtensions.IsForeground(_toolbar) || _overlays.Any(o => WindowNativeExtensions.IsForeground(o.Window));
 
         /// <summary>
         /// Puts the keyboard on the toolbar: past the foreground lock on Windows

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Prisc;
 using Prisc.Config;
+using Prisc.Interop.Testing;
 using Prisc.UI;
 using Prisc.UI.Config;
 using Prisc.UI.Helpers;
@@ -183,6 +184,7 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public void Committing_through_the_manager_takes_the_gesture_from_its_other_owner()
         {
+            InteropTestGate.Require(); // the manager formats and checks gestures through prisc_interop
             // the Windows defaults, where Capture Region's only gesture is PrtScr
             using var manager = new HotkeyManager(new FakeHost(), new SettingsHotkey(OSPlatform.Windows));
             foreach (var id in Enum.GetValues<HotkeyId>())
@@ -202,6 +204,7 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public void A_re_recording_through_the_manager_keeps_the_others_shortcut_objects()
         {
+            InteropTestGate.Require(); // the manager formats and checks gestures through prisc_interop
             using var manager = new HotkeyManager(new FakeHost(), new SettingsHotkey());
             foreach (var id in Enum.GetValues<HotkeyId>())
                 manager.SetAction(id, () => { });

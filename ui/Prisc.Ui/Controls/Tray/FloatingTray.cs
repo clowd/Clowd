@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using System.Threading;
 using Avalonia;
 using Avalonia.Animation;
@@ -8,6 +7,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Prisc.Interop;
 
 namespace Prisc.UI.Controls.Tray
 {
@@ -91,7 +91,8 @@ namespace Prisc.UI.Controls.Tray
         /// <summary>
         /// Swells an accent glow round the strip and lets it fade, to draw the eye to it; a second burst
         /// restarts the first. Only a tray in a window that reserves the glow's room may call it
-        /// (<see cref="FloatingTrayOptions.EngagedFrame"/>). Skipped with Windows' animation effects off.
+        /// (<see cref="FloatingTrayOptions.EngagedFrame"/>). Skipped when the user turned animations off
+        /// (Windows' animation effects, macOS Reduce Motion).
         /// </summary>
         public void PlayGlowBurst()
         {
@@ -103,19 +104,19 @@ namespace Prisc.UI.Controls.Tray
             _ = BurstAnimation.RunAsync(_burst, _burstRun.Token);
         }
 
-        /// <summary>Windows' "Animation effects" setting. Every other platform animates.</summary>
+        /// <summary>Whether the user wants UI animations: Windows' "Animation effects", the inverse
+        /// of macOS' Reduce Motion (<see cref="SystemPreferences"/>). A failed query animates.</summary>
         internal static bool AnimationsEnabled()
         {
-            if (!OperatingSystem.IsWindows())
+            try
+            {
+                return SystemPreferences.AnimationsEnabled();
+            }
+            catch (InteropException)
+            {
                 return true;
-            return !SystemParametersInfo(SPI_GETCLIENTAREAANIMATION, 0, out var enabled, 0) || enabled;
+            }
         }
-
-        private const uint SPI_GETCLIENTAREAANIMATION = 0x1042;
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, [MarshalAs(UnmanagedType.Bool)] out bool pvParam, uint fWinIni);
 
         protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
         {

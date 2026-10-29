@@ -15,8 +15,12 @@
 ```cmd
 git clone https://github.com/priscapp/Prisc.git
 cargo build -p prisc_capture
+cargo build -p prisc_interop
 dotnet build ui/Prisc.Ui/Prisc.Ui.csproj
 ```
+
+`prisc_interop` is the native library Prisc.Ui and Prisc.VideoRender load in-process; neither starts
+without it (see [Native interop (prisc_interop)](#native-interop-prisc_interop)).
 
 A plain `cargo build` / `cargo test` covers the app crates (the workspace's `default-members`) and
 stays fast. The recorder stack builds libobs with CMake and only builds when asked (`cargo rec`, see
@@ -47,9 +51,9 @@ target dir so it never blocks your own builds).
 ### Finding the helpers
 
 Prisc.Ui spawns its helpers (`prisc_capture`, `prisc_scroll_driver`, `prisc_recorder`,
-`prisc_share_region`, `prisc_vid2gif`, `prisc_ai`, `Prisc.VideoRender`) and loads the
-`prisc_hotkeys` library through one lookup, `HelperLocator` (`ui/Prisc.Ipc`), with one override.
-For each file, the first hit wins:
+`prisc_share_region`, `prisc_vid2gif`, `prisc_ai`, `Prisc.VideoRender`) through one lookup,
+`HelperLocator` (`ui/Prisc.Ipc`), with one override; the `prisc_interop` loader uses the same probe
+(`NativeProbe`, `ui/Prisc.Interop`). For each file, the first hit wins:
 
 1. each directory of `PRISC_HELPERS_DIR`, then its `recorder/` subdirectory. It is a path list,
    separated like `PATH` (`;` on Windows, `:` elsewhere),
@@ -111,26 +115,63 @@ On Windows there is also `prisc_shell_ext`, a small COM dll (`IExplorerCommand`)
 
 Global hotkeys, gesture recording in the hotkey settings and the Draw on Screen keystroke overlay all
 go through one keyboard hook in the `prisc_hotkeys` crate (`WH_KEYBOARD_LL` on Windows, a
-`CGEventTap` on macOS, which needs the Accessibility permission; there is no Linux backend yet). The
-capturer links it statically. Prisc.Ui P/Invokes it as a native library, `prisc_hotkeys.dll` /
-`libprisc_hotkeys.dylib`, which release packages ship beside the Prisc.Ui executable.
-`cargo build -p prisc_capture` builds the library as a dependency, so the build block above needs no
-extra step. `HelperLocator.FindLibrary` finds it like any helper (see
-[Finding the helpers](#finding-the-helpers)), with one addition to the dev walk-up: it takes the
-newest of `target/{debug,release}/` and `target/{debug,release}/deps/`. Building a dependent crate
-leaves the library in `deps/` without copying it up a level, so both places are checked.
+`CGEventTap` on macOS, which needs the Accessibility permission; there is no Linux backend yet). It
+is a plain Rust library: the capturer links it, and Prisc.Ui reaches it through `prisc_interop`'s
+`prisc_hotkeys_*` and `prisc_gesture_*` exports. The C# key enum
+(`ui/Prisc.Shared/Hotkeys/HotkeyKey.g.cs`), the status codes (`HotkeyErrorCodes.g.cs`) and the
+keystroke overlay's keycap legends are generated from the crate's tables by `cargo codegen`.
 
-While Prisc.Ui runs, it holds the library open, so relinking it fails (LNK1104 on Windows). Close
-Prisc.Ui and the standby `prisc_capture` process, build, then relaunch.
+### Native interop (prisc_interop)
 
-The C# key enum and the ABI constants (`ui/Prisc.Shared/Hotkeys/HotkeyKey.g.cs` and
-`ui/Prisc.Ui/Services/Hotkeys/HotkeysAbi.g.cs`) are generated from the crate's key table and
-checked by `cargo test -p prisc_hotkeys`. After changing a key, an ABI code or the event struct,
-rewrite both with:
+C# reaches native code only through `crates/prisc_interop`, one library loaded in-process by
+Prisc.Ui, Prisc.VideoRender and the test hosts (`prisc_interop.dll` / `libprisc_interop.dylib`,
+shipped beside the Prisc.Ui executable). Its C ABI is a thin layer over the shared Rust crates
+(`prisc_platform`, `prisc_rust_core`, `prisc_hotkeys`, `prisc_ipc`); the rules it keeps are in
+`crates/prisc_interop/README.md`. The C# side, `ui/Prisc.Interop`, is generated plus a thin
+hand-written wrapper per area.
+
+Build it before running Prisc.Ui or any test project from a checkout:
 
 ```sh
-PRISC_HOTKEYS_REGEN=1 cargo test -p prisc_hotkeys csharp_mirror
+cargo build -p prisc_interop
 ```
+
+The loader finds it like a helper (above), with two additions: `PRISC_INTEROP_PATH` names the file
+outright (set but not an existing file means unavailable, no fallback), and the dev walk-up also
+looks in `target/{debug,release}/deps/`, where building a dependent crate leaves it. A Debug build of
+`ui/Prisc.Interop` warns when no library is found. A library built from different `src/ffi` sources
+than the C# bindings is refused at load (the ABI hash, README section E): run `cargo codegen`, then
+build again.
+
+Everything generated from Rust into C# comes from one command in `crates/prisc_codegen` (the
+`DllImport`s, structs and enums of `ui/Prisc.Interop/Generated`, the ABI hash, the shared
+environment variable names, the helper message catalogs and names, the hotkey tables, and the
+contract constants shared with the Rust helpers):
+
+```sh
+cargo codegen            # rewrite every generated file
+cargo codegen --check    # list what is stale, change nothing
+cargo test -p prisc_codegen   # the gate: fails on a stale or orphaned file and on any crate rule
+```
+
+Edit the Rust source and regenerate; never edit a `.g.cs` file by hand. Hand-written native interop
+anywhere else in `ui/` fails `tools/check-native-interop.sh`; the few places that keep it (the loader,
+the callback thunks, FFmpeg's buffer callbacks) are listed in
+`tools/native-interop-allowlist/permanent.txt`.
+
+While Prisc.Ui, Prisc.VideoRender or a test host runs it holds the library open, so relinking it
+fails on Windows (LNK1104). Close them (and the standby `prisc_capture`) before rebuilding.
+
+The Windows half compiles on any machine with the target installed, which is how to check a change
+to it from a Mac:
+
+```sh
+rustup target add x86_64-pc-windows-msvc
+cargo clippy -p prisc_interop --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+```
+
+The Avalonia previewer loads Prisc.Ui's views in its own process, which needs the library too for
+any view that formats a gesture or reads an OS value, so build it before previewing those.
 
 ## Recording stack (libobs)
 
@@ -253,14 +294,27 @@ moving on it, such as `glxgears`).
 ## Tests
 
 ```cmd
+cargo test -p prisc_platform
+cargo test -p prisc_interop
+cargo test -p prisc_codegen
+cargo test -p prisc_ipc
+cargo test -p prisc_rust_core
 cargo test -p prisc_hotkeys
 cargo test -p prisc_capture
+cargo test -p prisc_scroll_driver
 cargo test -p prisc_shell_ext
 cargo test -p prisc_ai
+cargo build -p prisc_interop
+dotnet test ui/Prisc.Interop.Tests/Prisc.Interop.Tests.csproj
+dotnet test ui/Prisc.Ipc.Tests/Prisc.Ipc.Tests.csproj
 dotnet test ui/Prisc.VideoSDK.Tests/Prisc.VideoSDK.Tests.csproj
 dotnet test ui/Prisc.Shared.Tests/Prisc.Shared.Tests.csproj
 dotnet test ui/Prisc.Drawing.Tests/Prisc.Drawing.Tests.csproj
 ```
+
+Tests that need `prisc_interop` skip when it is missing; set `PRISC_INTEROP_REQUIRED=1` (CI does)
+to make them fail instead. Prisc.Ui has a probe of every interop wrapper and kept facade,
+`Prisc.Ui --interop-probe <out.json>`, which CI runs on both OSes.
 
 The recorder crates' tests are listed under [Recording stack (libobs)](#recording-stack-libobs).
 

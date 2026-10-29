@@ -35,8 +35,7 @@ use windows::Win32::Graphics::Dwm::{
 };
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject,
-    EndPaint, GetMonitorInfoW, InvalidateRect, MonitorFromRect, SelectObject, HBRUSH, HDC,
-    MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT, SRCCOPY,
+    EndPaint, InvalidateRect, SelectObject, HBRUSH, HDC, PAINTSTRUCT, SRCCOPY,
 };
 use windows::Win32::Graphics::GdiPlus::{
     FillModeAlternate, GdipAddPathArcI, GdipAddPathRectangleI, GdipClosePathFigure, GdipCreateFont,
@@ -53,7 +52,7 @@ use windows::Win32::Graphics::GdiPlus::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::WM_MOUSELEAVE;
 use windows::Win32::UI::HiDpi::{
-    AdjustWindowRectExForDpi, GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI,
+    AdjustWindowRectExForDpi, GetDpiForWindow,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     ReleaseCapture, SetCapture, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT, VK_SPACE,
@@ -72,6 +71,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use prisc_obs_platform::region::Rect;
+use prisc_rust_core::color::{from_u32, palette, relative_luminance, to_u32};
+use prisc_rust_core::desktop::screens::{self, Fallback};
+use prisc_rust_core::geometry::{RectExt, ScreenRect};
 
 use crate::commands::Command;
 
@@ -176,8 +178,9 @@ const PROMPT_BTN_RADIUS: i32 = 5;
 // relationships those two sit in: a fill one step up from the background for the
 // footer, a hairline one step above that, and text at full/60% strength.
 
-/// Window background — Prisc's dark `ApplicationBackgroundColor`.
-const CLR_BG: u32 = 0x202020;
+/// Window background: Prisc's dark `ApplicationBackgroundColor`, the ground the
+/// app's palette is built on.
+const CLR_BG: u32 = to_u32(palette::DARK_GROUND);
 /// Footer strip: Semi's `SemiColorFill0` over the background (white at ~4%).
 const CLR_FOOTER: u32 = 0x282828;
 /// Hairline between the content and the footer.
@@ -185,9 +188,10 @@ const CLR_DIVIDER: u32 = 0x333333;
 /// Heading, and the supporting line at reduced strength.
 const CLR_TEXT: u32 = 0xF2F2F2;
 const CLR_TEXT_DIM: u32 = 0x9EA4A9;
-/// The OK button's default fill: a mid blue that carries white text. The
-/// caller can replace it (`UiConfig::accent`); hover and pressed are derived
-/// from whichever accent is in effect by [`accent_hot`] and [`accent_down`].
+/// The OK button's default accent: a mid blue that carries white text. The
+/// caller can replace it (`UiConfig::accent`); the fill and its hover and
+/// pressed shades come from whichever accent is in effect through
+/// [`button_fills`].
 const CLR_ACCENT: u32 = 0x54A9FF;
 const CLR_BTN_TEXT: u32 = 0xFFFFFF;
 /// Button label on an accent too light to carry white.
@@ -420,39 +424,20 @@ fn colorref(rgb: u32) -> u32 {
     ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF)
 }
 
-/// Applies `f` to each channel of a 0xRRGGBB colour.
-fn map_channels(rgb: u32, f: impl Fn(u32) -> u32) -> u32 {
-    (f((rgb >> 16) & 0xFF).min(255) << 16)
-        | (f((rgb >> 8) & 0xFF).min(255) << 8)
-        | f(rgb & 0xFF).min(255)
+/// The OK button's fill at rest, under the pointer and pressed: steps 5, 6 and
+/// 7 of the app's dark accent ramp (`prisc_rust_core::color::palette`), the
+/// fills Prisc's own accent buttons use, so the prompt reacts the way the app
+/// does.
+fn button_fills(accent: u32) -> [u32; 3] {
+    let ramp = palette::ramp(from_u32(accent), true);
+    [to_u32(ramp[5]), to_u32(ramp[6]), to_u32(ramp[7])]
 }
 
-/// Hover fill: the accent moved 12% of the way to white.
-fn accent_hot(accent: u32) -> u32 {
-    map_channels(accent, |c| c + (255 - c) * 12 / 100)
-}
-
-/// Pressed fill: the accent at 85% brightness.
-fn accent_down(accent: u32) -> u32 {
-    map_channels(accent, |c| (c * 85 + 50) / 100)
-}
-
-/// The button label for an accent: white, unless the accent is light enough
-/// that white would wash out. The cut is relative luminance 0.5, which keeps
-/// the default blue (≈0.38) on the white label the design was drawn with.
-fn button_text_for(accent: u32) -> u32 {
-    let lin = |c: u32| {
-        let c = c as f32 / 255.0;
-        if c <= 0.04045 {
-            c / 12.92
-        } else {
-            ((c + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    let l = 0.2126 * lin((accent >> 16) & 0xFF)
-        + 0.7152 * lin((accent >> 8) & 0xFF)
-        + 0.0722 * lin(accent & 0xFF);
-    if l > 0.5 {
+/// The button label for a fill: white, unless the fill is light enough that
+/// white would wash out. The cut is relative luminance 0.5, which keeps the
+/// default blue (about 0.38) on the white label the design was drawn with.
+fn button_text_for(fill: u32) -> u32 {
+    if relative_luminance(from_u32(fill)) > 0.5 {
         CLR_BTN_TEXT_DARK
     } else {
         CLR_BTN_TEXT
@@ -476,57 +461,50 @@ fn scalef(dpi: u32, v: f32) -> f32 {
 /// The work area (screen minus taskbar) of the display the region is on, in
 /// capture space, and that display's effective DPI.
 ///
-/// MONITOR_DEFAULTTONEAREST answers the two cases a containment test cannot: a
-/// region straddling two displays (the one it overlaps most wins) and a region
-/// that intersects none (rejected by the app core before the window exists, but
-/// a lookup must still return something rather than a null monitor).
+/// The display comes from the shared screen list (`desktop::screens::at_rect`
+/// with the Nearest fallback, the lookup the capture overlay and Prisc.Ui
+/// use), which answers the two cases a containment test cannot: a region
+/// straddling two displays (the one it overlaps most wins) and a region that
+/// intersects none (rejected by the app core before the window exists, but a
+/// lookup must still return something rather than a null monitor).
 ///
 /// The DPI is the monitor's, not `GetDpiForWindow`'s: the window has not been
 /// moved to that monitor yet, so its own DPI is still whichever monitor
 /// CW_USEDEFAULT dropped it on, and on a mixed-DPI desktop sizing the prompt
 /// from that would come out at the wrong scale for where it is about to land.
 ///
-/// Both queries fall back rather than fail. A prompt at 96 dpi somewhere on the
+/// Both fall back rather than fail. A prompt at 96 dpi somewhere on the
 /// virtual desktop is a cosmetic miss; a prompt that never appears is a share
 /// the user cannot start at all.
 unsafe fn region_monitor(region: Rect) -> (Rect, u32) {
-    let rc = RECT {
-        left: region.x,
-        top: region.y,
-        right: region.x.saturating_add(region.w as i32),
-        bottom: region.y.saturating_add(region.h as i32),
-    };
-    let monitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
-
-    let mut mi = MONITORINFO {
-        cbSize: mem::size_of::<MONITORINFO>() as u32,
-        ..Default::default()
-    };
-    let work = if GetMonitorInfoW(monitor, &mut mi).as_bool() {
-        let w = mi.rcWork;
-        Rect {
-            x: w.left,
-            y: w.top,
-            w: (w.right - w.left).max(0) as u32,
-            h: (w.bottom - w.top).max(0) as u32,
+    let rect = ScreenRect::from_xy_size(
+        region.x,
+        region.y,
+        i32::try_from(region.w).unwrap_or(i32::MAX),
+        i32::try_from(region.h).unwrap_or(i32::MAX),
+    );
+    match screens::at_rect(rect, Fallback::Nearest) {
+        Ok(Some(screen)) => {
+            let w = screen.work_area.unwrap_or(screen.bounds);
+            let work = Rect {
+                x: w.min_x(),
+                y: w.min_y(),
+                w: w.width().max(0) as u32,
+                h: w.height().max(0) as u32,
+            };
+            // the effective DPI the shared scale was made from (1.0, so 96, when unreadable)
+            (work, (screen.scale * 96.0).round() as u32)
         }
-    } else {
-        Rect {
-            x: GetSystemMetrics(SM_XVIRTUALSCREEN),
-            y: GetSystemMetrics(SM_YVIRTUALSCREEN),
-            w: GetSystemMetrics(SM_CXVIRTUALSCREEN).max(0) as u32,
-            h: GetSystemMetrics(SM_CYVIRTUALSCREEN).max(0) as u32,
+        _ => {
+            let virtual_screen = Rect {
+                x: GetSystemMetrics(SM_XVIRTUALSCREEN),
+                y: GetSystemMetrics(SM_YVIRTUALSCREEN),
+                w: GetSystemMetrics(SM_CXVIRTUALSCREEN).max(0) as u32,
+                h: GetSystemMetrics(SM_CYVIRTUALSCREEN).max(0) as u32,
+            };
+            (virtual_screen, 96)
         }
-    };
-
-    let mut dpi_x = 0u32;
-    let mut dpi_y = 0u32;
-    let dpi = match GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) {
-        Ok(()) if dpi_x != 0 => dpi_x,
-        _ => 96,
-    };
-
-    (work, dpi)
+    }
 }
 
 /// Sizes AND places the prompt window: PROMPT_CLIENT_W x PROMPT_CLIENT_H
@@ -1028,12 +1006,13 @@ unsafe fn draw_prompt(app: *mut App, hdc: HDC, cw: i32, ch: i32, dpi: u32) {
 /// no control here, so nothing else can put a pixel inside it or around it. The
 /// corners the rounded rect gives up show the footer it sits on.
 unsafe fn draw_ok_button(g: &Gfx, l: &PromptLayout, dpi: u32, accent: u32, hot: bool, down: bool) {
+    let [rest, over, pressed] = button_fills(accent);
     let fill = if down {
-        accent_down(accent)
+        pressed
     } else if hot {
-        accent_hot(accent)
+        over
     } else {
-        accent
+        rest
     };
     g.fill_round_rect(l.button, scale(dpi, PROMPT_BTN_RADIUS), fill);
     g.text(
@@ -1045,7 +1024,7 @@ unsafe fn draw_ok_button(g: &Gfx, l: &PromptLayout, dpi: u32, accent: u32, hot: 
             // no bolder weight to give and would silently stay semibold.
             families: &FONT_TEXT,
             size_px: scalef(dpi, PROMPT_BTN_PX),
-            color: button_text_for(accent),
+            color: button_text_for(rest),
             bold: true,
             centered: true,
         },

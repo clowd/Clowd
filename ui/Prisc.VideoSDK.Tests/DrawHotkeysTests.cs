@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Input;
 using Prisc;
+using Prisc.Interop.Testing;
 using Prisc.UI.DrawOnScreen;
 using Xunit;
 
@@ -106,6 +107,7 @@ namespace Prisc.VideoSDK.Tests
         [Fact]
         public void Labels_read_as_the_keys_are_printed()
         {
+            InteropTestGate.Require();
             var ctrl = OperatingSystem.IsMacOS() ? "Cmd" : "Ctrl";
             Assert.Equal("Esc", DrawHotkeys.Hint(DrawHotkeys.ClickThrough));
             Assert.Equal("B", DrawHotkeys.Hint(DrawHotkeys.Tool(ToolType.Brush)));

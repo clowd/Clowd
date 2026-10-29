@@ -81,7 +81,7 @@ pub struct Cli {
 
     /// Quality, 0-51 (lower = better): an x264-style CRF that each encoder
     /// maps onto its own quality scale (see encoder_config.rs).
-    #[arg(long, default_value = "24", value_parser = clap::value_parser!(u16).range(0..=51))]
+    #[arg(long, default_value = "24", value_parser = clap::value_parser!(u16).range(0..=i64::from(prisc_rust_core::encoding::MAX_CRF)))]
     pub crf: u16,
 
     /// Aspect-preserving downscale cap; 0 = off.

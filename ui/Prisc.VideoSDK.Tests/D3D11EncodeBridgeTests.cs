@@ -71,8 +71,8 @@ namespace Prisc.VideoSDK.Tests
             var rig = RequireShareableRing(width, height, slots);
             try
             {
-                rig.Bridge = D3D11EncodeBridge.TryCreate(rig.Ring, out var reason);
-                Assert.SkipWhen(rig.Bridge == null && D3D11EncodeBridge.IsMissingCapability(reason),
+                rig.Bridge = D3D11EncodeBridge.TryCreate(rig.Ring, out var reason, out bool missingCapability);
+                Assert.SkipWhen(rig.Bridge == null && missingCapability,
                     "this GPU cannot run the D3D11 encode bridge: " + reason);
                 Assert.True(rig.Bridge != null, "the bridge did not come up on a shareable ring: " + reason);
                 return rig;
@@ -99,9 +99,20 @@ namespace Prisc.VideoSDK.Tests
         private static (int Y, int U, int V) Sample((byte[] Y, byte[] Uv) planes, int w, int x, int y)
             => (planes.Y[y * w + x], planes.Uv[(y / 2) * w + (x / 2) * 2], planes.Uv[(y / 2) * w + (x / 2) * 2 + 1]);
 
+        /// <summary>The BT.601 limited-range NV12 samples of an opaque colour (the test's own
+        /// oracle; the crate's self-check computes the same in Rust).</summary>
+        private static (double Y, double U, double V) Bt601Limited(SKColor color)
+        {
+            double r = color.Red, g = color.Green, b = color.Blue;
+            double ey = 0.299 * r + 0.587 * g + 0.114 * b;
+            double eu = (b - ey) / 1.772; // 0.5 / (1 - Kb)
+            double ev = (r - ey) / 1.402; // 0.5 / (1 - Kr)
+            return (16 + 219 * ey / 255, 128 + 224 * eu / 255, 128 + 224 * ev / 255);
+        }
+
         private static void AssertBt601(SKColor color, (int Y, int U, int V) sample, string where, int tolerance = 4)
         {
-            var (ey, eu, ev) = D3D11EncodeBridge.Bt601Limited(color);
+            var (ey, eu, ev) = Bt601Limited(color);
             Assert.True(Math.Abs(sample.Y - ey) <= tolerance && Math.Abs(sample.U - eu) <= tolerance && Math.Abs(sample.V - ev) <= tolerance,
                 $"{where}: got YUV ({sample.Y},{sample.U},{sample.V}) for {color}, expected BT.601 limited ({ey:F1},{eu:F1},{ev:F1})");
         }
@@ -282,27 +293,29 @@ namespace Prisc.VideoSDK.Tests
             rig.Ring.Wait(1);
         }
 
-        /// <summary>A self-check that fails after the slot was submitted — here the first pool
-        /// allocation, standing in for a driver refusing the first GPU wait or blit — must hand
-        /// slot 0 back to the ring idle: TryCreate's caller falls back to readback over the same
-        /// ring, and its first Begin is on that very slot. The frame count must not move either
-        /// (nothing was wrapped), and a healthy bridge must still come up over the ring.</summary>
+        /// <summary>A bridge whose creation fails after the converter (self-checked) and the frames
+        /// context are up leaves nothing behind: no frame, slot 0 idle for the readback protocol
+        /// (what RenderJob does next), and a healthy bridge still comes up over the same ring. The
+        /// native self-check's own recovery of slot 0 (released or abandoned on each failure path)
+        /// is covered by the crate's Windows tests (ring.rs,
+        /// recover_shared_slot_releases_or_abandons_and_leaves_the_slot_idle, which runs on WARP,
+        /// and nv12.rs, a_failed_self_check_leaves_slot_zero_idle, which needs a hardware GPU with
+        /// a D3D11 video device and prints a skip on WARP).</summary>
         [Fact]
-        public void Failed_self_check_leaves_the_ring_idle_for_readback()
+        public void Failed_creation_leaves_the_ring_idle_for_readback()
         {
             const int w = 48, h = 32;
             using var rig = RequireShareableRing(w, h, 2);
             int live = HardwareFrame.LiveCount;
 
-            var failed = D3D11EncodeBridge.TryCreate(rig.Ring, out var reason, bridge => bridge.Frames.Dispose());
+            var failed = D3D11EncodeBridge.TryCreate(rig.Ring, out var reason, out bool missingCapability,
+                _ => throw new InvalidOperationException("injected after the converter came up"));
             Assert.Null(failed);
-            // a GPU that cannot run the bridge fails before the self-check ever runs
-            Assert.SkipWhen(D3D11EncodeBridge.IsMissingCapability(reason),
-                "this GPU cannot run the D3D11 encode bridge: " + reason);
-            Assert.Contains("HardwareFrames", reason, StringComparison.Ordinal); // the disposed pool, not a ring-state message
+            // a GPU that cannot run the bridge fails before the hook ever runs
+            Assert.SkipWhen(missingCapability, "this GPU cannot run the D3D11 encode bridge: " + reason);
+            Assert.Equal("injected after the converter came up", reason);
             Assert.Equal(live, HardwareFrame.LiveCount);
 
-            // the readback protocol on slot 0: what RenderJob does next
             rig.Ring.Begin(0).Clear(new SKColor(0x11, 0x22, 0x33));
             rig.Ring.Submit(0);
             var pixels = rig.Ring.Wait(0);
@@ -310,8 +323,7 @@ namespace Prisc.VideoSDK.Tests
             Marshal.Copy(pixels.Address, first, 0, 4);
             Assert.Equal(new byte[] { 0x33, 0x22, 0x11, 0xFF }, first);
 
-            // and the shared protocol again, through a bridge that does come up
-            rig.Bridge = D3D11EncodeBridge.TryCreate(rig.Ring, out reason);
+            rig.Bridge = D3D11EncodeBridge.TryCreate(rig.Ring, out reason, out _);
             Assert.True(rig.Bridge != null, "the bridge did not come up after a failed attempt: " + reason);
             var probe = new SKColor(200, 60, 30);
             using var frame = RoundTrip(rig, 0, c => c.Clear(probe));

@@ -23,9 +23,9 @@
 
 use std::path::Path;
 
-/// Mirrors `SettingsCapture.FilenamePattern`'s own default, and the fallback
-/// both sides apply when the setting is blank.
-pub const DEFAULT_FILENAME_PATTERN: &str = "yyyy-MM-dd HH-mm-ss";
+/// `SettingsCapture.FilenamePattern`'s own default, and the fallback both sides
+/// apply when the setting is blank (one constant, `SharedDefaults` in C#).
+pub use prisc_rust_core::contract::defaults::DEFAULT_FILENAME_PATTERN;
 
 /// Highest collision suffix tried before giving up on the pattern — the loop
 /// bound in `PathConstants.GetFreePatternFileName`.

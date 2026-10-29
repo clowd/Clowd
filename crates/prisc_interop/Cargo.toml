@@ -1,0 +1,169 @@
+[package]
+name = "prisc_interop"
+version = "1.0.0"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# The only native library C# loads in-process (Prisc.Ui, Prisc.VideoRender and their tests): a thin
+# C ABI over prisc_platform, prisc_rust_core, prisc_hotkeys and prisc_ipc, plus the OS code that has
+# no other Rust consumer. README.md is the ABI contract; crates/prisc_codegen generates the C#
+# bindings from src/ffi (`cargo codegen`) and enforces the crate rules (`cargo test -p prisc_codegen`).
+#
+# Never a dependency of anything (no workspace entry), and never depends on sentry, the telemetry
+# feature of prisc_rust_core or any GPL / recorder-stack crate: it runs inside processes that
+# already report, and it is MIT.
+
+[lib]
+# cdylib for the hosts, rlib only so tests/ can link the crate. The rlib is never shipped.
+crate-type = ["cdylib", "rlib"]
+
+[[test]]
+# The macOS AppKit cases must run on the process's real main thread, which libtest never uses, so
+# these targets bring their own `fn main()` and run their cases in sequence (README, section C).
+name = "main_thread_window"
+harness = false
+
+[[test]]
+name = "main_thread_macapp"
+harness = false
+
+[dependencies]
+prisc_platform.workspace = true
+# The workspace entry has default features off, so this is `desktop` and nothing else: never
+# `telemetry`, which would pull sentry into the library.
+prisc_rust_core = { workspace = true, features = ["desktop"] }
+prisc_hotkeys.workspace = true
+prisc_ipc.workspace = true
+
+[build-dependencies]
+# build.rs `include!`s crates/prisc_codegen/src/abi_fingerprint.rs (std + syn + quote +
+# proc-macro2) to stamp the ABI fingerprint into OUT_DIR. All three are already built for
+# serde_derive.
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits"] }
+
+[dev-dependencies]
+# tests/infra.rs opens the built cdylib to read the hash the C# loader reads.
+libloading.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# windows-core at the same 0.62 minor as `windows`, so HRESULT / GUID / Interface are the same types
+# the `windows` signatures use.
+windows-core = "0.62"
+# One feature per line, sorted. An area may append the one line it finds missing.
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_DirectShow",
+    "Win32_Media_MediaFoundation",
+    "Win32_Security",
+    "Win32_Storage_Packaging_Appx",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Console",
+    "Win32_System_JobObjects",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Ole",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Accessibility",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(unix)'.dependencies]
+# dlopen for the FFmpeg library-directory preparation.
+libc.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+# The crates below are declared DIRECTLY, with an explicit version and default-features = false,
+# rather than `workspace = true`: their root entries are bare versions whose defaults prisc_capture
+# and prisc_scroll_driver rely on, and Cargo ignores `default-features = false` on an inherited
+# entry that did not set it ("`default-features` is ignored for <dep>"), so an inherited entry
+# would silently build everything. `cargo build -p prisc_interop 2>&1 | grep -iE
+# '.?default-features.? is ignored'` must stay empty (CI checks it).
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    # NSWorkspace.accessibilityDisplayShouldReduceMotion (prisc_system_animations_enabled)
+    "NSAccessibility",
+    "NSApplication",
+    "NSButton",
+    "NSControl",
+    # -[NSWindow initWithContentRect:styleMask:backing:defer:] (NSBackingStoreType), in the
+    # main-thread window tests
+    "NSGraphics",
+    "NSPasteboard",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSView",
+    "NSWindow",
+    "NSWorkspace",
+    "objc2-core-foundation",
+] }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSArray",
+    "NSDictionary",
+    "NSEnumerator",
+    "NSGeometry",
+    "NSObject",
+    "NSString",
+    "NSURL",
+] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "CFArray",
+    "CFBase",
+    "CFCGTypes",
+    "CFData",
+    "CFDictionary",
+    "CFNumber",
+    "CFRunLoop",
+    "CFString",
+] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = [
+    "std",
+    "objc2",
+    "CGDataProvider",
+    "CGDirectDisplay",
+    "CGDisplayConfiguration",
+    "CGError",
+    "CGEvent",
+    "CGEventSource",
+    "CGEventTypes",
+    "CGImage",
+    "CGRemoteOperation",
+    "CGWindow",
+    "libc",
+] }
+objc2-metal = { version = "0.3", default-features = false, features = ["std", "MTLCommandQueue", "MTLDevice"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat"] }
+objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2-core-audio-types"] }
+objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
+# AudioOutputUnitStart/Stop (AudioOutputUnit), the render callback typedef (AUComponent), and the
+# AudioQueue input path of the microphone. `objc2-core-audio-types` is the optional-dependency
+# feature that makes the callback and buffer-list types exist at all.
+objc2-audio-toolbox = { version = "0.3", default-features = false, features = [
+    "std",
+    "AUComponent",
+    "AudioComponent",
+    "AudioOutputUnit",
+    "AudioQueue",
+    "AudioUnitProperties",
+    "objc2-core-audio-types",
+    "objc2-core-foundation",
+] }

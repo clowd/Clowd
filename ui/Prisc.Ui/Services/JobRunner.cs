@@ -19,11 +19,11 @@ namespace Prisc.UI.Services
     }
 
     /// <summary>The terminal state of a job run. <see cref="Message"/> is user-facing;
-    /// <see cref="Diagnostics"/> is the helper's stderr tail, for the crash report only.</summary>
+    /// <see cref="Diagnostics"/> is the helper's stderr tail, for reports only.</summary>
     internal sealed record JobRunResult(JobOutcome Outcome, string OutputPath, long Bytes, string Message, string Diagnostics)
     {
-        public static JobRunResult Success(string outputPath, long bytes) =>
-            new(JobOutcome.Success, outputPath, bytes, null, null);
+        public static JobRunResult Success(string outputPath, long bytes, string diagnostics = null) =>
+            new(JobOutcome.Success, outputPath, bytes, null, diagnostics);
 
         public static JobRunResult Canceled() =>
             new(JobOutcome.Canceled, null, 0, null, null);
@@ -81,7 +81,7 @@ namespace Prisc.UI.Services
                 args.Add(maxHeight.ToString(CultureInfo.InvariantCulture));
             }
 
-            return new JobRunner("prisc_vid2gif", "GIF conversion", args, new HelperStartOptions());
+            return new JobRunner(HelperNames.Vid2gif, "GIF conversion", args, new HelperStartOptions());
         }
 
         /// <summary>A render of an already-written render-args file (a serialized project plus its
@@ -99,14 +99,14 @@ namespace Prisc.UI.Services
             var environment = new Dictionary<string, string>();
             var ffmpegDir = FFmpegLoader.FindBesideRecorder();
             if (!String.IsNullOrEmpty(ffmpegDir))
-                environment[FFmpegLoader.EnvVarName] = ffmpegDir;
+                environment[Prisc.Interop.EnvVars.FfmpegPath] = ffmpegDir;
             if (extraEnvironment != null)
             {
                 foreach (var (name, value) in extraEnvironment)
                     environment[name] = value;
             }
 
-            return new JobRunner("Prisc.VideoRender", "video render", new[] { renderArgsPath },
+            return new JobRunner(HelperNames.VideoRender, "video render", new[] { renderArgsPath },
                 new HelperStartOptions { Environment = environment });
         }
 
@@ -128,9 +128,9 @@ namespace Prisc.UI.Services
             var exePath = HelperLocator.Find(_stem);
             if (exePath == null)
             {
-                var name = Platform.ExeName(_stem);
+                var name = Prisc.Interop.NativeProbe.ExeName(_stem);
                 throw new FileNotFoundException(
-                    $"Could not find {name}. It ships with Prisc; set {HelperLocator.EnvVarName} to the folder holding it to override.",
+                    $"Could not find {name}. It ships with Prisc; set {Prisc.Interop.EnvVars.HelpersDir} to the folder holding it to override.",
                     name);
             }
 
@@ -172,7 +172,7 @@ namespace Prisc.UI.Services
             switch (outcome.Terminal)
             {
                 case JobEvent.Done { Result: JobResult.Ok } done when outcome.Failure == HelperFailure.None:
-                    return JobRunResult.Success(done.Path, (long)(done.Bytes ?? 0));
+                    return JobRunResult.Success(done.Path, (long)(done.Bytes ?? 0), outcome.StderrTail);
                 case JobEvent.Done { Result: JobResult.Cancelled } when outcome.Failure == HelperFailure.None:
                     return JobRunResult.Canceled();
             }

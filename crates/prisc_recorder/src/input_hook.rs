@@ -423,8 +423,8 @@ mod imp {
         kCFRunLoopCommonModes, kCFRunLoopDefaultMode, CFMachPort, CFRetained, CFRunLoop,
     };
     use objc2_core_graphics::{
-        CGEvent, CGEventField, CGEventMask, CGEventSource, CGEventSourceStateID,
-        CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventTapProxy, CGEventType,
+        CGEvent, CGEventField, CGEventMask, CGEventTapLocation, CGEventTapOptions,
+        CGEventTapPlacement, CGEventTapProxy, CGEventType,
     };
 
     use super::{cg_button_bit, send, HookCtx, RawEventKind};
@@ -444,10 +444,6 @@ mod imp {
     /// latency floor — events wake the loop immediately.
     const RUN_LOOP_TURN_SECS: f64 = 0.1;
 
-    /// `kCGEventSourceStateCombinedSessionState` — the same state id
-    /// `platform::macos::get_mouse_info` samples button state from.
-    const COMBINED_SESSION_STATE: CGEventSourceStateID = CGEventSourceStateID::CombinedSessionState;
-
     /// The tap's `CFMachPort`, published once `CGEventTapCreate` returns so the
     /// callback can re-arm itself. 0 until then.
     static TAP: AtomicUsize = AtomicUsize::new(0);
@@ -459,7 +455,8 @@ mod imp {
     /// mid-keystroke is the easy way to reproduce it — never delivers its up
     /// event to any tap, so without this it reads as held for the rest of the
     /// recording and every later frame row carries a phantom key.
-    /// `CGEventSourceKeyState` bypasses the tap entirely and can arbitrate.
+    /// `prisc_platform::input::is_key_down` (`CGEventSourceKeyState`, combined session state)
+    /// bypasses the tap entirely and can arbitrate.
     ///
     /// Keys only: secure input withholds key events specifically, while mouse
     /// events keep flowing, so buttons have no equivalent stranding path.
@@ -469,7 +466,7 @@ mod imp {
         for vk in keys {
             // Reads true key state without a tap — so it stays truthful even
             // while secure input is withholding events. No permission needed.
-            if !CGEventSource::key_state(COMBINED_SESSION_STATE, vk as u16) {
+            if prisc_platform::input::is_key_down(vk) == Some(false) {
                 ctx.state.key_up(vk);
                 send(RawEventKind::KeyUp { vk });
             }

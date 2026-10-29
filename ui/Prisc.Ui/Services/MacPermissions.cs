@@ -1,51 +1,50 @@
 using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using System.Threading;
 using Avalonia.Threading;
+using Prisc.Interop;
 
 namespace Prisc.UI
 {
     /// <summary>
-    /// The two macOS privacy permissions Prisc cannot work without, and the only place that talks
-    /// to TCC. Backs the Permissions group on the System settings page, the gate in front of the
-    /// capture overlay (<see cref="ScreenCapturePage"/>) and the eyedropper
-    /// (<see cref="Prisc.Util.ScreenPixels"/>).
+    /// The two macOS privacy permissions Prisc cannot work without. Backs the Permissions group on the
+    /// System settings page, the gate in front of the capture overlay (<see cref="ScreenCapturePage"/>)
+    /// and the eyedropper (<see cref="Prisc.Util.ScreenPixels"/>).
     /// </summary>
     /// <remarks>
-    /// Every member is safe to call on any platform: off macOS <see cref="IsRelevant"/> is false
-    /// and both permissions read as granted, so callers need no <c>OperatingSystem.IsMacOS()</c>
-    /// dance of their own.
+    /// Every member is safe to call on any platform: off macOS <see cref="IsRelevant"/> is false and
+    /// both permissions read as granted (prisc_interop answers NotApplicable there), so callers need
+    /// no <c>OperatingSystem.IsMacOS()</c> dance of their own.
     ///
-    /// Screen Recording is checked with <c>CGPreflightScreenCaptureAccess</c> and Accessibility
-    /// with <c>AXIsProcessTrusted</c>. Both are per-app decisions recorded in TCC against the
-    /// bundle, not the individual executable, which is what makes a check here meaningful for the
-    /// out-of-process Rust capturer: <c>prisc_capture</c> ships inside
-    /// <c>Prisc.app/Contents/MacOS</c> and is launched by us, so TCC holds Prisc.app responsible
-    /// for its captures.
+    /// The checks go through prisc_interop (<see cref="Permissions"/>), which answers with the one
+    /// rule the hotkey hook, the scrolling driver and the capturer share: Screen Recording is
+    /// <c>CGPreflightScreenCaptureAccess</c>, Accessibility is
+    /// <c>AXIsProcessTrusted &amp;&amp; CGPreflightPostEventAccess</c> (an event tap needs both). Both
+    /// are per-app decisions recorded in TCC against the bundle, not the individual executable, which
+    /// is what makes a check here meaningful for the out-of-process Rust capturer:
+    /// <c>prisc_capture</c> ships inside <c>Prisc.app/Contents/MacOS</c> and is launched by us, so TCC
+    /// holds Prisc.app responsible for its captures.
     ///
-    /// Requesting is one-shot by OS design. <c>CGRequestScreenCaptureAccess</c> shows the system
-    /// prompt only until the user answers it once; every later call just returns the stored answer
-    /// without showing anything. So the settings button asks first and, once asking has stopped
-    /// working, sends the user to System Settings instead — a button that silently does nothing is
-    /// the worst of the three options.
+    /// Requesting is one-shot by OS design. The system prompt shows only until the user answers it
+    /// once; every later request just returns the stored answer without showing anything. So the
+    /// settings button asks first and, once asking has stopped working, sends the user to System
+    /// Settings instead: a button that silently does nothing is the worst of the three options.
     ///
-    /// Screen Recording cannot be picked up by a running process: macOS hands the app that TCC
-    /// answer at launch, so granting it takes effect on the next start, and callers say so rather
-    /// than leaving the user to wonder why the toggle they just flipped changed nothing.
-    /// Accessibility is different: <c>AXIsProcessTrusted</c> answers live, and the hotkey hooks
-    /// (<see cref="NativeHotkeyHost"/>'s and the standby capturer's) poll it while they are down
-    /// and restart once it turns true, so that grant needs no restart.
+    /// Screen Recording cannot be picked up by a running process: macOS hands the app that TCC answer
+    /// at launch, so granting it takes effect on the next start, and callers say so rather than
+    /// leaving the user to wonder why the toggle they just flipped changed nothing. Accessibility is
+    /// different: it answers live, and the hotkey hooks (<see cref="NativeHotkeyHost"/>'s and the
+    /// standby capturer's) poll it while they are down and restart once it turns true, so that grant
+    /// needs no restart.
     /// </remarks>
     internal static class MacPermissions
     {
-        /// <summary>Whether this platform has these permissions at all — false everywhere but macOS,
+        /// <summary>Whether this platform has these permissions at all: false everywhere but macOS,
         /// where the Permissions settings group is hidden entirely.</summary>
         public static bool IsRelevant => OperatingSystem.IsMacOS();
 
-        /// <summary>The nav label of the settings page the Permissions group heads: "System", or —
-        /// MainWindow's badge — "Permission Needed" while a permission is missing.</summary>
+        /// <summary>The nav label of the settings page the Permissions group heads: "System", or (the
+        /// MainWindow badge) "Permission Needed" while a permission is missing.</summary>
         public static string NavLabel(bool permissionMissing) => permissionMissing ? NavLabelMissing : NavLabelGranted;
 
         private const string NavLabelGranted = "System";
@@ -56,50 +55,61 @@ namespace Prisc.UI
         /// hook's own check says no and the nav still reads "System".</summary>
         public const string GrantLocation = "Settings → " + NavLabelMissing + " (the " + NavLabelGranted + " page)";
 
-        /// <summary>Raised after a successful <see cref="Request"/> or <see cref="OpenSettings"/> so
-        /// open UI can re-read the statuses.</summary>
+        /// <summary>Raised on macOS after every <see cref="Request"/> (whatever it answered), after
+        /// <see cref="OpenSettings"/> and on <see cref="Refresh"/>, so open UI can re-read the
+        /// statuses. Raised on the caller's thread; subscribers post their re-read.</summary>
         public static event EventHandler StateChanged;
 
-        // the platform checks below are spelled out as OperatingSystem.IsMacOS() rather than going
-        // through IsRelevant so CA1416 can see the guard and the P/Invokes need no suppression.
-
         /// <summary>Screen Recording: needed by the capture overlay, the screenshot itself, video
-        /// recording and the eyedropper. True off macOS.</summary>
-        public static bool HasScreenRecording => !OperatingSystem.IsMacOS() || MacOS.PreflightScreenCapture();
+        /// recording and the eyedropper. True off macOS. Never prompts; any thread.</summary>
+        public static bool HasScreenRecording => IsUsable(PermissionKind.ScreenRecording, "macperm.preflight-screen");
 
         /// <summary>Accessibility: needed by the global keyboard hook behind the hotkeys
-        /// (<see cref="NativeHotkeyHost"/>). True off macOS.</summary>
-        public static bool HasAccessibility => !OperatingSystem.IsMacOS() || MacOS.IsProcessTrusted();
+        /// (<see cref="NativeHotkeyHost"/>) and by scrolling capture. True off macOS. Never prompts;
+        /// any thread.</summary>
+        public static bool HasAccessibility => IsUsable(PermissionKind.Accessibility, "macperm.ax-trusted");
 
         /// <summary>
-        /// Asks the OS for <paramref name="permission"/>, showing its own prompt if it still has one
-        /// to show, and returns whether the permission is granted as of the call returning.
+        /// Makes sure <paramref name="permission"/> is granted: when it already is, returns true at
+        /// once without prompting; otherwise asks the OS, which shows its own prompt if it still has
+        /// one to show, and returns whether the permission is usable as of the call returning.
         /// </summary>
         /// <remarks>
-        /// A false return does NOT mean the user refused. macOS only ever offers each prompt once —
-        /// after any first answer these calls return the stored verdict without showing anything —
-        /// and for Screen Recording even a fresh grant usually reports false, because the process
-        /// was handed that TCC answer at launch and cannot be told otherwise until it restarts. So
-        /// false means "not usable yet", covering refused, already-answered and (Screen Recording)
-        /// just-granted-pending-restart alike; callers should follow it with
-        /// <see cref="OpenSettings"/> (plus, for Screen Recording, a restart hint) rather than
-        /// treating it as a refusal. An Accessibility grant reads true as soon as it is made, so
-        /// callers can just check <see cref="HasAccessibility"/> again and need no restart hint.
+        /// A false return does NOT mean the user refused. macOS only ever offers each prompt once (after
+        /// any first answer the request returns the stored verdict without showing anything), and for
+        /// Screen Recording even a fresh grant reports false, because the process was handed that TCC
+        /// answer at launch and cannot be told otherwise until it restarts. So false means "not usable
+        /// yet", covering refused, already-answered and (Screen Recording) just-granted-pending-restart
+        /// alike; callers should follow it with <see cref="OpenSettings"/> (plus, for Screen Recording,
+        /// a restart hint) rather than treating it as a refusal. An Accessibility grant reads true as
+        /// soon as it is made, so callers can just check <see cref="HasAccessibility"/> again and need
+        /// no restart hint.
         /// </remarks>
         public static bool Request(MacPermission permission)
         {
-            if (!OperatingSystem.IsMacOS() || IsGranted(permission))
-                return IsGranted(permission);
-
-            var granted = permission switch
+            var kind = ToKind(permission);
+            bool usable;
+            try
             {
-                MacPermission.ScreenRecording => MacOS.RequestScreenCapture(),
-                MacPermission.Accessibility => MacOS.RequestProcessTrust(),
-                _ => true,
-            };
+                usable = Permissions.Ensure(kind).IsUsable();
+            }
+            catch (Exception ex)
+            {
+                // fail open like the plain checks: a request that cannot answer falls back to the
+                // non-prompting read (which itself answers true when it cannot answer either), so
+                // a broken native call never sends a user who has the permission to the grant
+                // dialog.
+                Debug.WriteLine("[MacPermissions] requesting " + permission + " failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "macperm.request");
+                usable = IsUsable(kind, "macperm.request-fallback");
+            }
 
-            StateChanged?.Invoke(null, EventArgs.Empty);
-            return granted;
+            // the request may find the permission granted since open UI last read it (granted in
+            // System Settings, then a capture started without re-activating a Prisc window), so
+            // every request nudges subscribers to re-read, not only the ones that left it missing.
+            if (IsRelevant)
+                StateChanged?.Invoke(null, EventArgs.Empty);
+            return usable;
         }
 
         /// <summary>Opens the System Settings pane for <paramref name="permission"/>, where the user
@@ -141,7 +151,7 @@ namespace Prisc.UI
             _ => true,
         };
 
-        /// <summary>Re-reads the permissions and notifies subscribers — used when a window is
+        /// <summary>Re-reads the permissions and notifies subscribers: used when a window is
         /// activated again after the user has been away in System Settings.</summary>
         public static void Refresh()
         {
@@ -149,149 +159,26 @@ namespace Prisc.UI
                 StateChanged?.Invoke(null, EventArgs.Empty);
         }
 
-        [SupportedOSPlatform("macos")]
-        private static class MacOS
+        private static PermissionKind ToKind(MacPermission permission) => permission switch
         {
-            public static bool PreflightScreenCapture()
+            MacPermission.ScreenRecording => PermissionKind.ScreenRecording,
+            MacPermission.Accessibility => PermissionKind.Accessibility,
+            _ => throw new ArgumentOutOfRangeException(nameof(permission), permission, null),
+        };
+
+        private static bool IsUsable(PermissionKind kind, string sentryOperation)
+        {
+            try
             {
-                try
-                {
-                    return CGPreflightScreenCaptureAccess();
-                }
-                catch (Exception ex)
-                {
-                    // an older macOS without the symbol (it landed in 10.15) would throw here; the
-                    // permission does not exist there, so nothing is being withheld.
-                    Debug.WriteLine("[MacPermissions] CGPreflightScreenCaptureAccess unavailable: " + ex);
-                    SentryConfig.CaptureHandled(ex, "macperm.preflight-screen");
-                    return true;
-                }
+                return Permissions.State(kind).IsUsable();
             }
-
-            public static bool RequestScreenCapture()
+            catch (Exception ex)
             {
-                try
-                {
-                    return CGRequestScreenCaptureAccess();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[MacPermissions] CGRequestScreenCaptureAccess unavailable: " + ex);
-                    SentryConfig.CaptureHandled(ex, "macperm.request-screen");
-                    return false;
-                }
-            }
-
-            public static bool IsProcessTrusted()
-            {
-                try
-                {
-                    return AXIsProcessTrusted();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[MacPermissions] AXIsProcessTrusted unavailable: " + ex);
-                    SentryConfig.CaptureHandled(ex, "macperm.ax-trusted");
-                    return true;
-                }
-            }
-
-            /// <summary>AXIsProcessTrustedWithOptions with kAXTrustedCheckOptionPrompt, which is the
-            /// only way to make macOS offer the Accessibility prompt. Returns the current trust
-            /// state, so a false here is the "already answered" case.</summary>
-            public static bool RequestProcessTrust()
-            {
-                // AX looks the option up by value (CFEqual) and dereferences what it finds without a
-                // null check: a dictionary it cannot find the key in crashes the process (SIGSEGV in
-                // CFGetTypeID) the moment the app is not yet trusted, so never hand it one.
-                if (kCFBooleanTrue == IntPtr.Zero || kCFTypeDictionaryKeyCallBacks == IntPtr.Zero
-                    || kCFTypeDictionaryValueCallBacks == IntPtr.Zero)
-                    return false;
-
-                IntPtr key = IntPtr.Zero, options = IntPtr.Zero;
-                try
-                {
-                    key = CFStringCreateWithCString(IntPtr.Zero, "AXTrustedCheckOptionPrompt", kCFStringEncodingUTF8);
-                    if (key == IntPtr.Zero)
-                        return false;
-
-                    // the CFType callbacks, not NULL ones: NULL callbacks compare keys by pointer, so
-                    // AX's own kAXTrustedCheckOptionPrompt never matches this freshly created string.
-                    options = CFDictionaryCreate(IntPtr.Zero, new[] { key }, new[] { kCFBooleanTrue }, 1,
-                                                 kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks);
-                    if (options == IntPtr.Zero)
-                        return false;
-
-                    return AXIsProcessTrustedWithOptions(options);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[MacPermissions] AXIsProcessTrustedWithOptions failed: " + ex);
-                    SentryConfig.CaptureHandled(ex, "macperm.ax-trusted-opts");
-                    return false;
-                }
-                finally
-                {
-                    if (options != IntPtr.Zero)
-                        CFRelease(options);
-                    if (key != IntPtr.Zero)
-                        CFRelease(key);
-                }
-            }
-
-            private const string CoreGraphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
-            private const string CoreFoundation = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
-            private const string ApplicationServices =
-                "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices";
-
-            private const uint kCFStringEncodingUTF8 = 0x08000100;
-
-            [DllImport(CoreGraphics)]
-            [return: MarshalAs(UnmanagedType.I1)]
-            private static extern bool CGPreflightScreenCaptureAccess();
-
-            [DllImport(CoreGraphics)]
-            [return: MarshalAs(UnmanagedType.I1)]
-            private static extern bool CGRequestScreenCaptureAccess();
-
-            [DllImport(ApplicationServices)]
-            [return: MarshalAs(UnmanagedType.I1)]
-            private static extern bool AXIsProcessTrusted();
-
-            [DllImport(ApplicationServices)]
-            [return: MarshalAs(UnmanagedType.I1)]
-            private static extern bool AXIsProcessTrustedWithOptions(IntPtr options);
-
-            [DllImport(CoreFoundation)]
-            private static extern IntPtr CFStringCreateWithCString(IntPtr allocator, string cStr, uint encoding);
-
-            [DllImport(CoreFoundation)]
-            private static extern IntPtr CFDictionaryCreate(IntPtr allocator, IntPtr[] keys, IntPtr[] values, nint count,
-                                                            IntPtr keyCallBacks, IntPtr valueCallBacks);
-
-            [DllImport(CoreFoundation)]
-            private static extern void CFRelease(IntPtr cf);
-
-            // exported data, not functions, so they have to be resolved by hand: kCFBooleanTrue is a
-            // CFBooleanRef variable (read its value), the callbacks are structs CFDictionaryCreate
-            // takes by address.
-            private static readonly IntPtr kCFBooleanTrue = ResolveCoreFoundationData("kCFBooleanTrue", dereference: true);
-            private static readonly IntPtr kCFTypeDictionaryKeyCallBacks = ResolveCoreFoundationData("kCFTypeDictionaryKeyCallBacks", dereference: false);
-            private static readonly IntPtr kCFTypeDictionaryValueCallBacks = ResolveCoreFoundationData("kCFTypeDictionaryValueCallBacks", dereference: false);
-
-            private static IntPtr ResolveCoreFoundationData(string name, bool dereference)
-            {
-                try
-                {
-                    var address = NativeLibrary.GetExport(NativeLibrary.Load(CoreFoundation), name);
-                    return dereference ? Marshal.ReadIntPtr(address) : address;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[MacPermissions] could not resolve " + name + ": " + ex);
-                    SentryConfig.CaptureHandled(ex, "macperm.cfdata");
-                    return IntPtr.Zero;
-                }
+                // a check that cannot answer must not lock the user out of the feature: the capturer
+                // and the hook still meet the OS's own refusal and report it.
+                Debug.WriteLine("[MacPermissions] reading " + kind + " failed: " + ex);
+                SentryConfig.CaptureHandled(ex, sentryOperation);
+                return true;
             }
         }
     }
@@ -299,11 +186,11 @@ namespace Prisc.UI
     /// <summary>
     /// The system Accessibility prompt, shown at most once per app run by whichever path first
     /// finds the permission missing: the shell's own hook (<see cref="NativeHotkeyHost"/>) or the
-    /// standby capturer's hotkey status (<see cref="CaptureStandbySupervisor"/> — in warm-capture
+    /// standby capturer's hotkey status (<see cref="CaptureStandbySupervisor"/>; in warm-capture
     /// mode the shell may own no gesture at all). Neither the crate nor the capturer prompts
-    /// (<c>AXIsProcessTrusted</c> never does), yet the prompt is what puts Prisc in the
-    /// Accessibility list, sparing the user its '+' button. Once, because the alert comes back on
-    /// every <see cref="MacPermissions.Request"/> while the permission is missing.
+    /// (their checks never do), yet the prompt is what puts Prisc in the Accessibility list,
+    /// sparing the user its '+' button. Once, because the alert comes back on every
+    /// <see cref="MacPermissions.Request"/> while the permission is missing.
     /// </summary>
     internal sealed class AccessibilityPrompt
     {

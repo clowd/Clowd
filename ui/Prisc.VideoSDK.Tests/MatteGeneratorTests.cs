@@ -62,7 +62,7 @@ namespace Prisc.VideoSDK.Tests
         /// <summary>Points the prisc_ai lookup at <paramref name="exe"/>; null means "not installed".
         /// Every other helper is still looked up as usual.</summary>
         private void UseAi(string exe) =>
-            HelperLocator.Override = stem => stem == "prisc_ai" ? exe ?? Path.Combine(_cacheDir, "no-prisc-ai") : null;
+            HelperLocator.Override = stem => stem == HelperNames.Ai ? exe ?? Path.Combine(_cacheDir, "no-prisc-ai") : null;
 
         public void Dispose()
         {

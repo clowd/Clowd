@@ -18,3 +18,5 @@ bb = "build -p prisc_capture --release"
 # The recorder stack (libobs via CMake, 20-40 min cold) is outside default-members; these build it.
 rec = "build -p prisc_recorder -p prisc_share_region -p prisc_vid2gif"
 recr = "build --release -p prisc_recorder -p prisc_share_region -p prisc_vid2gif"
+# Regenerates every Rust-to-C# mirror (crates/prisc_codegen); `cargo codegen --check` only reports.
+codegen = "run -q -p prisc_codegen --"

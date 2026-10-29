@@ -346,7 +346,11 @@ public static class LegacyClowdShellCleanup
     /// <summary>The executables Prisc runs out of its bundle, other than this process.</summary>
     private static bool IsAnyPriscProcessRunning()
     {
-        string[] names = { "Prisc.Ui", "Prisc.VideoRender", "prisc_capture", "prisc_scroll_driver", "prisc_ai", "prisc_recorder", "prisc_share_region", "prisc_vid2gif" };
+        string[] names =
+        {
+            "Prisc.Ui", Prisc.Ipc.HelperNames.VideoRender, Prisc.Ipc.HelperNames.Capture, Prisc.Ipc.HelperNames.ScrollDriver,
+            Prisc.Ipc.HelperNames.Ai, Prisc.Ipc.HelperNames.Recorder, Prisc.Ipc.HelperNames.ShareRegion, Prisc.Ipc.HelperNames.Vid2gif,
+        };
         var self = Environment.ProcessId;
 
         foreach (var name in names)

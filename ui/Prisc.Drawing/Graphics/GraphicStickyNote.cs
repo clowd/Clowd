@@ -7,6 +7,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Media.Immutable;
 using Avalonia.Platform;
 using Prisc.Drawing.Rendering;
+using Prisc.Interop;
 
 namespace Prisc.Drawing.Graphics
 {
@@ -194,67 +195,31 @@ namespace Prisc.Drawing.Graphics
             map[nameof(LiftStyle)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Text;
         }
 
-        internal override Color TextColor => GetInk(ObjectColor);
+        internal override Color TextColor
+        {
+            get
+            {
+                // a repaint asks for the ink at least twice, and the paper rarely changes; one
+                // reference, so a reader on another thread never sees half of an update
+                var paper = ObjectColor;
+                var cached = _ink;
+                if (cached is null || cached.Paper != paper)
+                    _ink = cached = new InkForPaper(paper, GetInk(paper));
+                return cached.Ink;
+            }
+        }
 
-        // text on a note must read at least this well (WCAG AAA for body text)
-        internal const double InkContrast = 7;
+        private sealed record InkForPaper(Color Paper, Color Ink);
+
+        private InkForPaper _ink;
 
         /// <summary>
-        /// The ink for a paper: a deep shade of the paper's own hue (dark gold on butter, berry on
-        /// rose, ...), darkened until it reaches <see cref="InkContrast"/> against the paper. A dark
-        /// paper gets a pale tint of its hue instead; a gray one, a neutral.
+        /// The ink for a paper (<c>prisc_color_note_ink</c>): a deep shade of the paper's own hue
+        /// (dark gold on butter, berry on rose, ...) that reaches
+        /// <see cref="SharedDefaults.NoteInkContrast"/> against the paper. A dark paper gets a pale
+        /// tint of its hue instead; a gray one, a neutral.
         /// </summary>
-        internal static Color GetInk(Color paper)
-        {
-            var (h, s, l) = ToHsl(paper);
-            var darkInk = RenderResources.GetLuminance(paper) > 0.18;
-            s = Math.Min(s, 0.75);
-
-            var ink = darkInk ? Colors.Black : Colors.White;
-            for (double li = darkInk ? 0.32 : 0.86; li >= 0 && li <= 1; li += darkInk ? -0.02 : 0.02)
-            {
-                var candidate = FromHsl(h, s, li);
-                if (RenderResources.GetContrastRatio(candidate, paper) >= InkContrast)
-                {
-                    ink = candidate;
-                    break;
-                }
-            }
-
-            return ink;
-        }
-
-        private static (double H, double S, double L) ToHsl(Color c)
-        {
-            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
-            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
-            double l = (max + min) / 2, d = max - min;
-            if (d == 0)
-                return (0, 0, l);
-
-            var s = d / (1 - Math.Abs(2 * l - 1));
-            var h = max == r ? (g - b) / d % 6 : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
-            return ((h * 60 + 360) % 360, s, l);
-        }
-
-        private static Color FromHsl(double h, double s, double l)
-        {
-            var c = (1 - Math.Abs(2 * l - 1)) * s;
-            var x = c * (1 - Math.Abs(h / 60 % 2 - 1));
-            var m = l - c / 2;
-            var (r, g, b) = h switch
-            {
-                < 60 => (c, x, 0d),
-                < 120 => (x, c, 0d),
-                < 180 => (0d, c, x),
-                < 240 => (0d, x, c),
-                < 300 => (x, 0d, c),
-                _ => (c, 0d, x),
-            };
-
-            static byte Channel(double v) => (byte)Math.Round(Math.Clamp(v, 0, 1) * 255);
-            return Color.FromRgb(Channel(r + m), Channel(g + m), Channel(b + m));
-        }
+        internal static Color GetInk(Color paper) => Color.FromUInt32(0xFF000000 | ColorMath.NoteInk(paper.ToUInt32()));
 
         // the drop shadow is the paper's, which typing never changes
         internal override bool ShadowIncludesText => false;

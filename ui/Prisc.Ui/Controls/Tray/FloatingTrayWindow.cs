@@ -11,6 +11,7 @@ using Avalonia.Media.Immutable;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Prisc.Interop;
 using Prisc.PlatformUtil;
 using Prisc.UI.Helpers;
 
@@ -307,7 +308,7 @@ namespace Prisc.UI.Controls.Tray
             {
                 // macOS: lift the window above the menu-bar level BEFORE any positioning, or a
                 // position that overlaps the menu bar does not stick. No-op on Windows.
-                WindowNativeExtensions.SetCanCoverMenuBar(this);
+                WindowNativeExtensions.PrepareOverlay(this, OverlayFlags.CoverMenuBar);
 
                 // a platform that cannot composite a transparent window would paint the shadow's
                 // reserve as a solid band: drop the shadow and give the room back.

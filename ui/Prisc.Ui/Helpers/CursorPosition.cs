@@ -1,7 +1,5 @@
-using System;
-using System.Runtime.InteropServices;
 using Avalonia;
-using Avalonia.Controls;
+using Prisc.Interop;
 
 namespace Prisc.UI.Helpers
 {
@@ -13,45 +11,16 @@ namespace Prisc.UI.Helpers
     /// </summary>
     internal static class CursorPosition
     {
-        /// <param name="anyWindow">Any live window; on macOS it is the route to the primary screen,
-        /// whose height flips AppKit's bottom-left origin.</param>
-        public static bool TryGet(Window anyWindow, out PixelPoint pt)
+        public static bool TryGet(out PixelPoint pt)
         {
+            if (NativeCursor.TryGetPosition(out var x, out var y))
+            {
+                pt = new PixelPoint(x, y);
+                return true;
+            }
+
             pt = default;
-
-            if (OperatingSystem.IsWindows())
-            {
-                if (!GetCursorPos(out var p))
-                    return false;
-                pt = new PixelPoint(p.X, p.Y);
-                return true;
-            }
-
-            if (OperatingSystem.IsMacOS())
-            {
-                // NSEvent +mouseLocation: points, origin at the primary screen's bottom-left, y up
-                var primary = DesktopScreens.Primary(anyWindow);
-                var nsEvent = WindowNativeExtensions.objc_getClass("NSEvent");
-                if (primary == null || nsEvent == IntPtr.Zero)
-                    return false;
-
-                var loc = WindowNativeExtensions.objc_msgSend_NSPoint(nsEvent, WindowNativeExtensions.sel_registerName("mouseLocation"));
-                pt = new PixelPoint((int)Math.Floor(loc.X), (int)Math.Floor(primary.Bounds.Height - loc.Y));
-                return true;
-            }
-
             return false;
         }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int X;
-            public int Y;
-        }
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetCursorPos(out POINT lpPoint);
     }
 }
