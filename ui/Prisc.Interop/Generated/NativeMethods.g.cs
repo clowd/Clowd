@@ -565,10 +565,13 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_nv12_texture_release_windows(void* texture);
 
         /// <summary>
-        ///  Starts a supervised hook. The first event is a Status with the initial state.
+        ///  Starts a supervised hook and writes its handle to `out_hook` (null on failure). The first
+        ///  event is a Status with the state the first start left, queued before this returns; a hook that
+        ///  is down is not a failure here (it says so in that Status, and comes back by itself where it
+        ///  can).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_UNSUPPORTED` (Linux).
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null `out_hook`); `PRISC_E_UNSUPPORTED` on an OS with
+        ///  no hook backend (Linux); `PRISC_E_OS` when the supervisor thread cannot be started.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -576,11 +579,13 @@ namespace Prisc.Interop
         internal static extern int prisc_hotkeys_create(PriscHotkeys** out_hook);
 
         /// <summary>
-        ///  Registers a gesture; a validation refusal comes back at once as `PRISC_E_INVALID_ARG` with a
-        ///  `PriscGestureRefusal`. Ids stay stable across hook restarts.
+        ///  Registers `key` + `modifiers` and writes its id to `out_id` (stable across hook restarts, never
+        ///  reused by the handle). A gesture is refused at once with `PRISC_E_INVALID_ARG` and its
+        ///  `PriscGestureRefusal` in `out_refusal` (optional; `None` on success): `InvalidKey`, `NoKey`,
+        ///  `InvalidModifiers`, `ModifierOnly`, `UnsupportedKey`, `Duplicate`. While the hook is down a
+        ///  registration is accepted and held; it goes live when the hook comes back.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`, `PRISC_E_INVALID_ARG`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -588,10 +593,9 @@ namespace Prisc.Interop
         internal static extern int prisc_hotkeys_register(PriscHotkeys* hook, int key, uint modifiers, uint* out_id, int* out_refusal);
 
         /// <summary>
-        ///  Unregisters `id` (OK in every state).
+        ///  Unregisters `id`: OK in every state, and for an id that is not (or no longer) registered.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`, `PRISC_E_INVALID_ARG` (null `hook`).
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -599,10 +603,9 @@ namespace Prisc.Interop
         internal static extern int prisc_hotkeys_unregister(PriscHotkeys* hook, uint id);
 
         /// <summary>
-        ///  Turns the observe stream (Key events) on or off; persists across restarts.
+        ///  Turns the observe stream (Key events) on (non-zero) or off; holds across hook restarts.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`, `PRISC_E_INVALID_ARG` (null `hook`).
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -610,10 +613,12 @@ namespace Prisc.Interop
         internal static extern int prisc_hotkeys_set_observe(PriscHotkeys* hook, byte observe);
 
         /// <summary>
-        ///  Arms a one-shot gesture recording.
+        ///  Arms a one-shot gesture recording and writes its session token (nonzero, never reused by the
+        ///  handle) to `out_session`. The next non-modifier key-down is swallowed and reported as a
+        ///  Recorded event; while armed, registered gestures do not fire. Arming again replaces the
+        ///  session.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE` (hook down).
+        ///  Status: `PRISC_OK`, `PRISC_E_INVALID_ARG`, `PRISC_E_STATE` (the hook is down).
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -621,10 +626,9 @@ namespace Prisc.Interop
         internal static extern int prisc_hotkeys_start_recording(PriscHotkeys* hook, uint* out_session);
 
         /// <summary>
-        ///  Cancels `session` if it is still armed.
+        ///  Cancels `session` if it is still the armed one; a no-op otherwise.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`, `PRISC_E_INVALID_ARG` (null `hook`).
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -632,10 +636,11 @@ namespace Prisc.Interop
         internal static extern int prisc_hotkeys_stop_recording(PriscHotkeys* hook, uint session);
 
         /// <summary>
-        ///  Waits up to `timeout_ms` for the next event.
+        ///  Waits up to `timeout_ms` for the next event and writes it to `out_event` (an empty event when
+        ///  there is none). A Status event's `reason` is the caller's to free. Calls are serialized.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_TIMEOUT`, `PRISC_S_CLOSED` (stopped and drained), `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK` (an event), `PRISC_S_TIMEOUT`, `PRISC_S_CLOSED` (stopped, and every event
+        ///  delivered), `PRISC_E_INVALID_ARG`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -643,9 +648,12 @@ namespace Prisc.Interop
         internal static extern int prisc_hotkeys_next_event(PriscHotkeys* hook, uint timeout_ms, PriscHotkeysEvent* out_event);
 
         /// <summary>
-        ///  Stops the hook and joins its threads; idempotent, safe concurrently with `prisc_hotkeys_next_event`.
+        ///  Stops the hook and its supervisor and joins their threads, so registered gestures reach other
+        ///  apps again. Idempotent, and safe while another thread waits in `prisc_hotkeys_next_event`,
+        ///  which then drains what is queued and answers `PRISC_S_CLOSED`. Every later call but destroy is
+        ///  a harmless no-op (recording answers `PRISC_E_STATE`).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`.
+        ///  Status: `PRISC_OK`, `PRISC_E_INVALID_ARG` (null `hook`).
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -655,7 +663,7 @@ namespace Prisc.Interop
         /// <summary>
         ///  Stops (if needed) and frees the hook; null is `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`.
+        ///  Status: `PRISC_OK`.
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -1330,13 +1338,28 @@ namespace Prisc.Interop
         ///  A `PriscHotkeysEventKind`.
         /// </summary>
         public uint kind;
+        /// <summary>
+        ///  Hotkey: the registration id; RecordingModifiers, Recorded: the recording session; else 0.
+        /// </summary>
         public uint id;
+        /// <summary>
+        ///  Recorded, Key: the key (the hotkey key table's value, 0 = none).
+        /// </summary>
         public int key;
+        /// <summary>
+        ///  The modifier bits (Alt 1, Control 2, Shift 4, Meta 8).
+        /// </summary>
         public uint modifiers;
+        /// <summary>
+        ///  Key: the Windows virtual-key code or macOS CGKeyCode, passed through.
+        /// </summary>
         public uint raw_code;
+        /// <summary>
+        ///  Key: the Unicode scalar a key-down types, 0 for none.
+        /// </summary>
         public uint ch;
         /// <summary>
-        ///  bit0 down, bit1 repeat, bit2 recoverable (Status only).
+        ///  `PriscHotkeysEventFlags`.
         /// </summary>
         public uint flags;
         /// <summary>
@@ -1344,7 +1367,8 @@ namespace Prisc.Interop
         /// </summary>
         public int hook_state;
         /// <summary>
-        ///  Status with a down state only; mode 1, the receiver frees it.
+        ///  Status with a down state only: why, in the hook's words (mode 1, the receiver frees it with
+        ///  `prisc_string_free`); empty otherwise.
         /// </summary>
         public PriscString reason;
     }

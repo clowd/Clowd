@@ -30,11 +30,11 @@ use objc2_app_kit::{NSEvent, NSEventType};
 use objc2_core_foundation::{kCFRunLoopCommonModes, kCFRunLoopDefaultMode, CFMachPort, CFRetained, CFRunLoop};
 use objc2_core_graphics::{
     CGError, CGEvent, CGEventField, CGEventFlags, CGEventMask, CGEventTapInformation, CGEventTapLocation, CGEventTapOptions,
-    CGEventTapPlacement, CGEventTapProxy, CGEventType, CGGetEventTapList, CGPreflightPostEventAccess,
+    CGEventTapPlacement, CGEventTapProxy, CGEventType, CGGetEventTapList,
 };
 
 use crate::core::{HookCore, Verdict};
-use crate::hotkeys::Shared;
+use crate::hotkeys::{Shared, StartFailure};
 use crate::key::mac_positional;
 use crate::{Error, Event, Key, Modifiers};
 
@@ -78,12 +78,6 @@ const NX_CODE_BASE: u16 = 0x100;
 /// KBGetLayoutType's answer for ISO keyboards ('ISO '; ANSI is 'ANSI', JIS 'JIS ', unknown '????').
 const KEYBOARD_ISO: u32 = u32::from_be_bytes(*b"ISO ");
 
-#[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
-    /// Whether this process holds the Accessibility permission. Never prompts.
-    fn AXIsProcessTrusted() -> bool;
-}
-
 #[link(name = "Carbon", kind = "framework")]
 extern "C" {
     /// The physical layout (ANSI, ISO, JIS) of a keyboard type. Exported by HIToolbox but in no
@@ -91,13 +85,12 @@ extern "C" {
     fn KBGetLayoutType(keyboard_type: i16) -> u32;
 }
 
-/// Whether this process may run the keyboard tap. Neither query prompts. AXIsProcessTrusted is
-/// answered from a cache after its first call (about 10 ms, then microseconds), so alone it may
-/// never see a revocation; CGPreflightPostEventAccess asks tccd every time (about 8 ms), which is
-/// why the tick asks from a watcher thread, not from the thread every key waits on.
+/// Whether this process may run the keyboard tap: prisc_platform's Accessibility rule
+/// (`AXIsProcessTrusted && CGPreflightPostEventAccess`), the one every crate and the UI share.
+/// Never prompts. The post-event preflight asks tccd every time (about 8 ms), which is why the
+/// tick asks from a watcher thread, not from the thread every key waits on.
 fn permitted() -> bool {
-    // SAFETY: a plain query with no arguments.
-    (unsafe { AXIsProcessTrusted() }) && CGPreflightPostEventAccess()
+    prisc_platform::permissions::accessibility()
 }
 
 /// The tap `run` installs and how it checks on it. Always `KEYBOARD` outside tests, which use a
@@ -243,11 +236,11 @@ impl ReenableBudget {
     }
 }
 
-pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, Error> {
+pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, StartFailure> {
     spawn_with(shared, tx, TapConfig::KEYBOARD)
 }
 
-fn spawn_with(shared: Arc<Shared>, tx: Sender<Event>, config: TapConfig) -> Result<Backend, Error> {
+fn spawn_with(shared: Arc<Shared>, tx: Sender<Event>, config: TapConfig) -> Result<Backend, StartFailure> {
     let stop_requested = Arc::new(AtomicBool::new(false));
     let revoked = Arc::new(AtomicBool::new(false));
     let (ready_tx, ready_rx) = mpsc::channel();
@@ -257,7 +250,7 @@ fn spawn_with(shared: Arc<Shared>, tx: Sender<Event>, config: TapConfig) -> Resu
             let (shared, stop_requested, revoked) = (shared.clone(), stop_requested.clone(), revoked.clone());
             move || run(shared, tx, stop_requested, revoked, ready_tx, config)
         })
-        .map_err(|e| Error::HookFailed(e.to_string()))?;
+        .map_err(|e| StartFailure::from(Error::HookFailed(e.to_string())))?;
     match ready_rx.recv() {
         Ok(Ok(run_loop)) => {
             let mut backend = Backend {
@@ -272,7 +265,7 @@ fn spawn_with(shared: Arc<Shared>, tx: Sender<Event>, config: TapConfig) -> Resu
             let watcher = thread::Builder::new()
                 .name("prisc-hotkeys-watch".into())
                 .spawn(move || watch(config.permitted, config.tick, revoked, hook, shared, stop_rx))
-                .map_err(|e| Error::HookFailed(e.to_string()))?;
+                .map_err(|e| StartFailure::from(Error::HookFailed(e.to_string())))?;
             backend.watcher = Some((stop_tx, watcher));
             Ok(backend)
         }
@@ -282,7 +275,7 @@ fn spawn_with(shared: Arc<Shared>, tx: Sender<Event>, config: TapConfig) -> Resu
         }
         Err(_) => {
             let _ = thread.join();
-            Err(Error::HookFailed("the hook thread exited during startup".into()))
+            Err(Error::HookFailed("the hook thread exited during startup".into()).into())
         }
     }
 }
@@ -306,16 +299,16 @@ fn run(
     tx: Sender<Event>,
     stop_requested: Arc<AtomicBool>,
     revoked: Arc<AtomicBool>,
-    ready: Sender<Result<RunLoopRef, Error>>,
+    ready: Sender<Result<RunLoopRef, StartFailure>>,
     config: TapConfig,
 ) {
-    let fail = |error| {
+    let fail = |failure: StartFailure| {
         shared.alive.store(false, Ordering::Release);
-        let _ = ready.send(Err(error));
+        let _ = ready.send(Err(failure));
     };
 
     if !(config.permitted)() {
-        fail(Error::PermissionDenied);
+        fail(Error::PermissionDenied.into());
         return;
     }
 
@@ -326,13 +319,17 @@ fn run(
         // SAFETY: no tap was created, so nothing else holds `ctx`.
         drop(unsafe { Box::from_raw(ctx) });
         // Without the permission the tap may come back NULL rather than stripped.
-        fail(match (config.permitted)() {
-            true => Error::HookFailed("could not create the event tap".into()),
-            false => Error::PermissionDenied,
-        });
+        fail(
+            match (config.permitted)() {
+                true => Error::HookFailed("could not create the event tap".into()),
+                false => Error::PermissionDenied,
+            }
+            .into(),
+        );
         return;
     };
-    // A stale grant passes the check above and yields a tap that never sees a key.
+    // A stale grant passes the check above and yields a tap that never sees a key: a permission
+    // failure, with the detail that granting again will not fix it (the supervisor reports it).
     let granted = tap_list().and_then(|after| tap_granted(&before, &after, std::process::id() as i32, &config));
     if granted == Some(false) {
         CGEvent::tap_enable(&tap, false);
@@ -340,7 +337,10 @@ fn run(
         drop(tap);
         // SAFETY: the tap is invalidated and was never on a run loop, so no callback can run.
         drop(unsafe { Box::from_raw(ctx) });
-        fail(Error::PermissionDenied);
+        fail(StartFailure {
+            error: Error::PermissionDenied,
+            stale_grant: true,
+        });
         return;
     }
     // SAFETY: `ctx` is live and only this thread touches it.
@@ -353,7 +353,7 @@ fn run(
         drop(tap);
         // SAFETY: the tap is invalidated and was never on a run loop, so no callback can run.
         drop(unsafe { Box::from_raw(ctx) });
-        fail(Error::HookFailed("could not attach the event tap to a run loop".into()));
+        fail(Error::HookFailed("could not attach the event tap to a run loop".into()).into());
         return;
     };
     run_loop.add_source(Some(&source), modes);

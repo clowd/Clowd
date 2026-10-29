@@ -46,8 +46,13 @@ impl std::error::Error for Error {}
 /// knows "permission", and the supervisor decides it is stale.
 pub const STALE_GRANT_CODE: &str = "stale_grant";
 
+/// The code the capturer reports for a gesture string that does not parse (`Gesture::from_str`
+/// failed), so there is no gesture to validate. Not an [`Error`] variant: the hook only ever sees
+/// parsed gestures.
+pub const INVALID_GESTURE_CODE: &str = "invalid_gesture";
+
 /// Every machine-readable hotkey status code, `(C# name, code)`: one per [`Error`] variant in
-/// declaration order, then [`STALE_GRANT_CODE`]. The capturer's `settings_status` event carries
+/// declaration order, then [`STALE_GRANT_CODE`] and [`INVALID_GESTURE_CODE`]. The capturer's `settings_status` event carries
 /// these codes (HELPER_PROTOCOL.md section 4.5) and C# gets them generated as `HotkeyErrorCodes`
 /// (`cargo codegen`), so a code is spelled once.
 pub const ERROR_CODES: &[(&str, &str)] = &[
@@ -60,6 +65,7 @@ pub const ERROR_CODES: &[(&str, &str)] = &[
     ("Duplicate", "duplicate"),
     ("HookStopped", "hook_stopped"),
     ("StaleGrant", STALE_GRANT_CODE),
+    ("InvalidGesture", INVALID_GESTURE_CODE),
 ];
 
 impl Error {
@@ -97,8 +103,11 @@ mod tests {
         for (i, error) in all.iter().enumerate() {
             assert_eq!(ERROR_CODES[i].1, error.code(), "{error:?}");
         }
-        assert_eq!(ERROR_CODES.len(), all.len() + 1);
-        assert_eq!(ERROR_CODES.last().unwrap().1, STALE_GRANT_CODE);
+        let extra: Vec<_> = ERROR_CODES[all.len()..]
+            .iter()
+            .map(|(_, code)| *code)
+            .collect();
+        assert_eq!(extra, [STALE_GRANT_CODE, INVALID_GESTURE_CODE]);
         for (i, (name, code)) in ERROR_CODES.iter().enumerate() {
             for (other_name, other_code) in &ERROR_CODES[i + 1..] {
                 assert_ne!(name, other_name);

@@ -38,7 +38,7 @@ rid_has_ai() {
 # app_files.
 app_packages() {
   local rid=$1
-  echo prisc_capture prisc_hotkeys
+  echo prisc_capture
   # prisc_scroll_driver is a compile_error! on Linux (no backend there).
   case "$rid" in linux-*) ;; *) echo prisc_scroll_driver ;; esac
   if rid_has_ai "$rid"; then echo prisc_ai; fi
@@ -75,12 +75,6 @@ app_binaries() {
   exe=$(rid_exe "$rid")
   echo "prisc_capture$exe"
   case "$rid" in linux-*) ;; *) echo "prisc_scroll_driver$exe" ;; esac
-  # The global hotkey library Prisc.Ui P/Invokes (HelperLocator.FindLibrary).
-  # Linux has no hotkey backend yet and Prisc.Ui never loads it there.
-  case "$rid" in
-    win-*) echo prisc_hotkeys.dll ;;
-    osx-*) echo libprisc_hotkeys.dylib ;;
-  esac
   if rid_has_ai "$rid"; then echo "prisc_ai$exe"; fi
   # The in-process interop library (app_packages_isolated) that Prisc.Ui and
   # Prisc.VideoRender load from beside themselves.

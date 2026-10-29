@@ -24,7 +24,7 @@ namespace Prisc.VideoSDK.Tests
     [Collection(HeadlessApp.Collection)]
     public class HotkeyRecordingRecoveryTests
     {
-        private const string Denied = NativeHotkeyHost.PermissionMessage;
+        private const string Denied = HotkeyStatusText.PermissionMessage;
 
         [AvaloniaFact]
         public void A_field_drops_its_recording_error_once_the_hook_is_back()
@@ -144,7 +144,7 @@ namespace Prisc.VideoSDK.Tests
 
         /// <summary>A hook that is down: registrations wait, recording is refused with the
         /// permission message, until <see cref="Recover"/> brings it back the way
-        /// <see cref="NativeHotkeyHost.RetryStart"/> does.</summary>
+        /// <see cref="NativeHotkeyHost"/> does when the supervised hook reports it running.</summary>
         private sealed class DownHost : IGlobalTriggerHost
         {
             public readonly List<Registration> Live = new();

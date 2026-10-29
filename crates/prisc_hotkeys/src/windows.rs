@@ -13,8 +13,8 @@ use windows::core::w;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::Threading::{GetCurrentThread, GetCurrentThreadId, SetThreadPriority, THREAD_PRIORITY_HIGHEST};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, GetKeyState, GetKeyboardLayout, SendInput, ToUnicodeEx, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-    KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_MENU, VK_SHIFT,
+    GetKeyState, GetKeyboardLayout, SendInput, ToUnicodeEx, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+    KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_MENU, VK_SHIFT,
 };
 use windows::Win32::UI::Input::{GetRegisteredRawInputDevices, RegisterRawInputDevices, RAWINPUTDEVICE, RIDEV_INPUTSINK, RIDEV_REMOVE};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::core::{HookCore, Verdict};
-use crate::hotkeys::Shared;
+use crate::hotkeys::{Shared, StartFailure};
 use crate::watchdog::Watchdog;
 use crate::winstate::{WinEvent, WinState, MASK_MARKER, MASK_VK, SIDE_KEYS};
 use crate::{Error, Event};
@@ -58,7 +58,7 @@ impl Drop for Backend {
     }
 }
 
-pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, Error> {
+pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, StartFailure> {
     let (ready_tx, ready_rx) = mpsc::channel();
     let thread = thread::Builder::new()
         .name("prisc-hotkeys-hook".into())
@@ -71,11 +71,11 @@ pub(crate) fn spawn(shared: Arc<Shared>, tx: Sender<Event>) -> Result<Backend, E
         }),
         Ok(Err(error)) => {
             let _ = thread.join();
-            Err(error)
+            Err(error.into())
         }
         Err(_) => {
             let _ = thread.join();
-            Err(Error::HookFailed("the hook thread exited during startup".into()))
+            Err(Error::HookFailed("the hook thread exited during startup".into()).into())
         }
     }
 }
@@ -282,9 +282,9 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
     }
 }
 
+/// The physical (async) state of `vk`, read the way every crate reads it (prisc_platform).
 fn key_down(vk: u16) -> bool {
-    // SAFETY: trivially safe.
-    unsafe { GetAsyncKeyState(vk as i32) as u16 & 0x8000 != 0 }
+    prisc_platform::input::is_key_down(u32::from(vk)).unwrap_or(false)
 }
 
 /// The eight side bits in the async key state: the logical state (injected edges count) of every

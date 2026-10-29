@@ -28,10 +28,6 @@ namespace Prisc.UI
     {
         private const int MaxConsecutiveFailures = 3;
 
-        /// <summary>The status <c>error_code</c> of a gesture the capturer cannot hook because
-        /// macOS has not granted Accessibility. The capturer never prompts; the shell does.</summary>
-        internal const string PermissionErrorCode = "permission";
-
         /// <summary>A process that has been running this long forgives earlier crashes:
         /// without this, three unrelated crashes weeks apart (say one per GPU driver
         /// update) would silently degrade a long-lived session to one-shot forever.
@@ -393,7 +389,7 @@ namespace Prisc.UI
                 Read(hotkeys?.Monitor, HotkeyId.CaptureFullscreen),
             };
             return new StandbyHotkeyStatus(actions,
-                actions.Any(a => a.Gestures.Any(g => g.ErrorCode == PermissionErrorCode)));
+                actions.Any(a => a.Gestures.Any(g => g.ErrorCode == HotkeyErrorCodes.Permission)));
 
             static (HotkeyId Id, ExternalGestureStatus[] Gestures) Read(IReadOnlyList<CaptureHotkeyStatus> statuses, HotkeyId id) =>
                 (id, (statuses ?? Array.Empty<CaptureHotkeyStatus>())
@@ -401,16 +397,17 @@ namespace Prisc.UI
                     .ToArray());
         }
 
-        /// <summary>Asks for Accessibility when the capturer reports a gesture down for want of it —
-        /// in warm-capture mode the shell may own no gesture at all, so its own hook never gets to
-        /// ask. The capturer runs inside Prisc.app, so the grant covers it; it retries its hook by
-        /// itself and reports again once the grant lands. A process macOS already trusts got a stale
-        /// grant: the prompt would show nothing yet spend this run's one, which the grant missing
-        /// for real (once the user removes Prisc from the list) still needs.</summary>
-        /// <param name="isTrusted">AXIsProcessTrusted; never prompts.</param>
-        internal static void PromptIfNeeded(StandbyHotkeyStatus status, AccessibilityPrompt prompt, Func<bool> isTrusted)
+        /// <summary>Asks for Accessibility when the capturer reports a gesture down for want of it
+        /// (<see cref="HotkeyErrorCodes.Permission"/>): in warm-capture mode the shell may own no
+        /// gesture at all, so its own hook never gets to ask. The capturer runs inside Prisc.app, so
+        /// the grant covers it; it retries its hook by itself and reports again once the grant
+        /// lands. A stale grant (<see cref="HotkeyErrorCodes.StaleGrant"/>, which the capturer's
+        /// supervisor tells apart itself) never asks: the prompt would show nothing yet spend this
+        /// run's one, which the grant missing for real (once the user removes Prisc from the list)
+        /// still needs.</summary>
+        internal static void PromptIfNeeded(StandbyHotkeyStatus status, AccessibilityPrompt prompt)
         {
-            if (status.NeedsAccessibility && !isTrusted())
+            if (status.NeedsAccessibility)
                 prompt.RequestOnce();
         }
 
@@ -435,7 +432,7 @@ namespace Prisc.UI
                         return;
                     // in warm mode the shell registers none of the screenshot gestures itself, so
                     // this report is its only sign that it should ask for Accessibility
-                    PromptIfNeeded(status, AccessibilityPrompt.Shared, () => MacPermissions.HasAccessibility);
+                    PromptIfNeeded(status, AccessibilityPrompt.Shared);
                     var manager = HotkeyManager.Current;
                     if (manager == null)
                         return;

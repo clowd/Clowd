@@ -2,268 +2,96 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using Avalonia.Threading;
-using static Prisc.UI.HotkeysAbi;
+using Prisc.Interop;
 
 namespace Prisc.UI
 {
     /// <summary>
-    /// <see cref="IGlobalTriggerHost"/> over the native prisc_hotkeys library (WH_KEYBOARD_LL on
-    /// Windows, a CGEventTap on macOS). Owned by <see cref="HotkeyManager"/>. The hook starts
-    /// lazily on the first registration, observer or recording, and runs until the host is
-    /// disposed on app exit — on macOS restarting by itself if it cannot start or dies.
+    /// <see cref="IGlobalTriggerHost"/> over prisc_interop's supervised global keyboard hook
+    /// (WH_KEYBOARD_LL on Windows, a CGEventTap on macOS). Owned by <see cref="HotkeyManager"/>. The
+    /// hook starts lazily on the first registration, observer or recording, and runs until the host
+    /// is disposed on app exit.
     /// </summary>
     /// <remarks>
-    /// The hook itself decides what to swallow and only queues what happened; nothing here runs on
-    /// it. A dedicated event thread (<c>prisc-hotkeys-events</c>) blocks on the queue, hands key
-    /// edges to the observers right there, and posts everything else to the UI thread — hotkey
-    /// actions, recording progress and status changes.
-    /// <para>Native-call discipline: registrations and recording sessions can outlive the host
-    /// (an editor window closing during shutdown), so they never hold the native handle. Every call
-    /// goes through a host method that takes <see cref="_gate"/> and does nothing once the host is
-    /// disposed; the event thread is the only other user of the handle, and the handle is freed
-    /// only after that thread has ended.</para>
-    /// <para>If the hook cannot start (no Accessibility permission on macOS, Linux, the library
-    /// missing), every registration and recording reports why, and the app keeps running. A
-    /// missing permission asks for it (<see cref="AccessibilityPrompt"/>, once per run). If it
-    /// dies later (it reports itself stopped, or its event queue fails), the hook is stopped for
-    /// good — so the gestures it swallowed reach apps again — and every live registration and
-    /// recording fails with the reason. Nothing restarts it short of restarting the app, except
-    /// on macOS below.</para>
-    /// <para>On macOS every way the tap fails to start or reports itself stopped — a missing
-    /// permission, a NULL tap, a grant revoked under a running one — comes down to that grant,
-    /// which <c>AXIsProcessTrusted</c> reports live, so there the host polls it while the hook is
-    /// down (<see cref="RetryStart"/>) and, once it reads as granted, starts a new hook and moves
-    /// the registrations and observers onto it: their statuses flip back to registered without a
-    /// restart. A poll rather than window activation, because Prisc mostly lives in the tray — the
-    /// user grants in System Settings and goes straight back to the app they were in. Windows
-    /// failures, and a failed event queue anywhere, are specific to the process and stay put.
-    /// A stale grant (granted as far as <c>AXIsProcessTrusted</c> says, yet the tap gets no keys)
-    /// says so (<see cref="StaleGrantMessage"/>) and is retried less and less often, up to every
-    /// 32 s, until it heals or the permission reads as missing.</para>
+    /// <para>The hook itself decides what to swallow and only queues what happened; nothing here runs
+    /// on it. A dedicated event thread (<c>prisc-hotkeys-events</c>) blocks on the queue, hands key
+    /// edges to the observers right there, and posts everything else to the UI thread: hotkey
+    /// actions, recording progress and state changes.</para>
+    /// <para>Supervision is the hook's own (prisc_hotkeys' supervisor, shared with the standby
+    /// capturer): a hook that cannot start or dies is retried where that can help (macOS: a missing
+    /// or stale Accessibility grant, a tap that could not be made or died), a stale grant backing off
+    /// to every 32 s; registrations keep their ids across restarts, and every change of state arrives
+    /// as a Status event. This host maps those onto the registrations' statuses and the user text
+    /// (<see cref="HotkeyStatusText"/>), fails a live recording when the hook goes down, and raises
+    /// <see cref="RecordingAvailable"/> when it comes back.</para>
+    /// <para>A missing permission asks for it (<see cref="AccessibilityPrompt"/>, once per run) while
+    /// the hook has never run; a grant revoked under a running hook is the user's choice and asks for
+    /// nothing. A stale grant asks for nothing either: the System page shows it as granted.</para>
+    /// <para>Native-call discipline: registrations and recording sessions can outlive the host (an
+    /// editor window closing during shutdown), so they never hold the hook. Every call goes through a
+    /// host method that takes <see cref="_gate"/> and does nothing once the host is disposed; the
+    /// event thread is the only other user, and the wrapper's lease keeps the handle alive under a
+    /// call in flight.</para>
     /// </remarks>
     internal sealed class NativeHotkeyHost : IGlobalTriggerHost, IDisposable
     {
         private const uint EventTimeoutMs = 500;
+
+        /// <summary>The first event (the initial Status) is queued before the hook's create returns;
+        /// this only bounds a wait for one that is not.</summary>
+        private const uint FirstStatusTimeoutMs = 2000;
+
         private static readonly TimeSpan PumpJoinTimeout = TimeSpan.FromSeconds(2);
 
-        /// <summary>The retry poll, matching the standby capturer's own (CAPTURE_PROTOCOL.md).</summary>
-        private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(2);
-
-        /// <summary>How long a retry waits for a dead hook's event thread, whose queue is closed and
-        /// draining, before leaving its handle for the next tick.</summary>
-        private static readonly TimeSpan DeadPumpJoinTimeout = TimeSpan.FromMilliseconds(100);
-
-        /// <summary>No restart hint: the host picks the grant up by itself.</summary>
-        internal const string PermissionMessage =
-            "Could not start the global hotkey listener. Grant Accessibility permission to Prisc under " +
-            MacPermissions.GrantLocation + "; the hotkeys start working as soon as you do.";
-
-        /// <summary>The permission check passed, yet the tap was made without key events: a grant
-        /// macOS still lists (an older build's, or one removed with '−' while AXIsProcessTrusted
-        /// still answers yes) but no longer honours. Granting again does nothing; re-adding does.
-        /// The System page shows Accessibility as granted, so this must not ask for it.</summary>
-        internal const string StaleGrantMessage =
-            "Could not start the global hotkey listener. macOS lists Prisc as allowed to use Accessibility, " +
-            "but the permission no longer works: remove Prisc from System Settings → Privacy & Security → " +
-            "Accessibility and add it again; the hotkeys start working as soon as you do.";
-
-        /// <summary>The longest a stale grant waits between attempts, in retry ticks (32 s): each
-        /// attempt makes and tears down a keyboard tap on the UI thread.</summary>
-        private const int StaleGrantMaxTicks = 16;
-
         private readonly object _gate = new();
-        private readonly Dictionary<uint, Registration> _registrations = new(); // live on _handle, by id
-        private readonly List<Registration> _waiting = new(); // for a hook to come back (_recoverable)
+        private readonly Dictionary<uint, Registration> _registrations = new(); // held by the hook, by id
         private Action<GlobalKeyEvent>[] _observers = Array.Empty<Action<GlobalKeyEvent>>();
-        private IntPtr _handle; // the live hook's, or a dead one's until a retry or Dispose frees it
+        private INativeHotkeys _native;
         private Thread _pump;
         private bool _started;
-        private string _hookError; // non-null while the hook failed to start or is dead
-        private bool _recoverable; // _hookError may heal (macOS), so RetryStart tries again
-        private int _generation; // bumped per hook started, so a dead hook's late events spare its successor
+
+        /// <summary>Non-null when there is no hook to wait for: it could not be created, or its event
+        /// queue failed. Every registration and recording fails with it.</summary>
+        private string _deadError;
+
+        private HookState _state = HookState.Running;
+        private string _stateError = ""; // the user text of a down _state
+        private bool _everRan;
+        private int _statusSeq; // bumped per Status, so a down state ends only the recordings it saw start
         private bool _reportedHookFailure;
         private bool _reportedHookStop;
-        private int _staleGrantTicks; // retry ticks between attempts while the grant is stale (0: none)
-        private int _staleGrantSkip; // ticks left before the next of those attempts
-        private Timer _retryTimer;
         private bool _disposed;
 
         // UI thread only (written by StartRecording and the session, read by posted callbacks)
         private volatile Session _recording;
 
-        private readonly INativeHotkeys _native;
+        private readonly Func<INativeHotkeys> _create;
         private readonly Action<Action> _post;
-        private readonly bool _isMacOS;
-        private readonly Func<bool> _isTrusted;
         private readonly AccessibilityPrompt _accessibilityPrompt;
-        private readonly TimeSpan _retryInterval;
         private readonly Action<Exception, string> _report;
 
-        /// <summary>Raised by <see cref="RetryStart"/> once the hook is back.</summary>
+        /// <summary>Raised on the UI thread when the hook is running again after it was down.</summary>
         public event EventHandler RecordingAvailable;
 
         public NativeHotkeyHost()
-            : this(HotkeysNative.Binding, action => Dispatcher.UIThread.Post(action), OperatingSystem.IsMacOS(),
-                   () => MacPermissions.HasAccessibility, AccessibilityPrompt.Shared, RetryInterval,
+            : this(HotkeysBinding.Create, action => Dispatcher.UIThread.Post(action), AccessibilityPrompt.Shared,
                    SentryConfig.CaptureHandled)
         {
         }
 
-        /// <param name="native">The library (a fake in tests).</param>
+        /// <param name="create">Starts the supervised hook (a fake in tests).</param>
         /// <param name="post">Runs an action on the UI thread, in order.</param>
-        /// <param name="isMacOS">Whether a hook that is down may come back (see <see cref="RetryStart"/>).</param>
-        /// <param name="isTrusted">The live Accessibility check (<c>AXIsProcessTrusted</c>).</param>
         /// <param name="accessibilityPrompt">Asked when the hook lacks the permission.</param>
-        /// <param name="retryInterval">How often a hook that is down is tried again;
-        /// <see cref="Timeout.InfiniteTimeSpan"/> leaves it to <see cref="RetryStart"/> calls.</param>
         /// <param name="report">Files a handled error (<see cref="SentryConfig.CaptureHandled"/>).</param>
-        internal NativeHotkeyHost(INativeHotkeys native, Action<Action> post, bool isMacOS, Func<bool> isTrusted,
-                                  AccessibilityPrompt accessibilityPrompt, TimeSpan retryInterval,
+        internal NativeHotkeyHost(Func<INativeHotkeys> create, Action<Action> post, AccessibilityPrompt accessibilityPrompt,
                                   Action<Exception, string> report)
         {
-            _native = native ?? throw new ArgumentNullException(nameof(native));
+            _create = create ?? throw new ArgumentNullException(nameof(create));
             _post = post ?? throw new ArgumentNullException(nameof(post));
-            _isMacOS = isMacOS;
-            _isTrusted = isTrusted ?? throw new ArgumentNullException(nameof(isTrusted));
             _accessibilityPrompt = accessibilityPrompt ?? throw new ArgumentNullException(nameof(accessibilityPrompt));
-            _retryInterval = retryInterval;
             _report = report ?? throw new ArgumentNullException(nameof(report));
-        }
-
-        /// <summary>
-        /// Starts the hook again if it is down for a reason that may heal and the Accessibility
-        /// permission now reads as granted, moving the waiting registrations and the observers onto
-        /// the new hook. UI thread (the retry timer posts it while the hook is down); a no-op in
-        /// every other state. An attempt that fails gives the waiting registrations its own error;
-        /// one that fails in a way that cannot heal ends the retries and leaves them failed.
-        /// </summary>
-        internal void RetryStart()
-        {
-            Thread deadPump;
-            lock (_gate)
-            {
-                if (_disposed || _hookError == null || !_recoverable)
-                    return;
-                if (!_isTrusted())
-                {
-                    // really missing now (a stale grant removed, say): the next grant is the fix,
-                    // so it is tried on the next tick that reads it
-                    _staleGrantTicks = _staleGrantSkip = 0;
-                    return;
-                }
-                // a stale grant heals only when the user re-adds Prisc: back off rather than make
-                // a tap every tick, but never stop, since re-adding mid-run is what heals it
-                if (_staleGrantSkip > 0)
-                {
-                    _staleGrantSkip--;
-                    return;
-                }
-                deadPump = _pump;
-            }
-
-            // a dead hook's handle may only be freed once its event thread has delivered the
-            // Stopped and ended. Joined outside the gate, which that thread takes to dispatch.
-            if (deadPump != null && !deadPump.Join(DeadPumpJoinTimeout))
-                return;
-
-            var outcomes = new List<(Registration Registration, bool IsRegistered, string Error)>();
-            string stillDown;
-            lock (_gate)
-            {
-                if (_disposed || _hookError == null || !_recoverable || _pump != deadPump)
-                    return;
-
-                // nothing else can be using it: its event thread has ended and every other call
-                // takes the gate, and finds _handle replaced below
-                if (_handle != IntPtr.Zero)
-                    _native.Free(_handle);
-                _handle = IntPtr.Zero;
-                _pump = null;
-                _started = false;
-                _hookError = null;
-                _recoverable = false;
-
-                EnsureStartedLocked();
-                stillDown = _hookError;
-                if (stillDown != null)
-                {
-                    // still down, maybe for another reason now (granted, but the tap still cannot
-                    // be made): the waiting rows say what this attempt said, not the first one
-                    foreach (var registration in _waiting)
-                        outcomes.Add((registration, false, stillDown));
-                    // a failure that cannot heal (a panic): stop polling, and the waiting
-                    // registrations fail for good. Otherwise EnsureStartedLocked kept the timer.
-                    if (!_recoverable)
-                    {
-                        StopRetryTimerLocked();
-                        _waiting.Clear();
-                    }
-                }
-                else
-                {
-                    StopRetryTimerLocked();
-                    if (_observers.Length > 0)
-                        _native.SetObserve(_handle, true);
-
-                    var waiting = _waiting.ToArray();
-                    _waiting.Clear();
-                    foreach (var registration in waiting)
-                    {
-                        var gesture = registration.Gesture;
-                        int result = _native.Register(_handle, (int)gesture.Key, (uint)gesture.Modifiers, out var id);
-                        if (result == CH_OK)
-                        {
-                            registration.Id = id;
-                            _registrations[id] = registration;
-                            outcomes.Add((registration, true, ""));
-                        }
-                        else
-                        {
-                            // died again already: the new hook's Stopped restarts the timer
-                            if (result == CH_ERR_STOPPED)
-                                _waiting.Add(registration);
-                            outcomes.Add((registration, false, RegisterError(result, gesture)));
-                        }
-                    }
-                }
-            }
-
-            foreach (var (registration, isRegistered, error) in outcomes)
-                registration.SetStatus(isRegistered, error);
-            if (stillDown != null)
-                return;
-
-            Debug.WriteLine("[NativeHotkeyHost] the global hotkey listener is running again");
-            RecordingAvailable?.Invoke(this, EventArgs.Empty);
-        }
-
-        /// <summary>Whether the retry timer is running (tests).</summary>
-        internal bool IsRetrying
-        {
-            get
-            {
-                lock (_gate)
-                    return _retryTimer != null;
-            }
-        }
-
-        // must be called while holding _gate.
-        private void StartRetryTimerLocked()
-        {
-            if (_retryTimer != null || _retryInterval == Timeout.InfiniteTimeSpan)
-                return;
-
-            _retryTimer = new Timer(_ => _post(RetryStart), null, _retryInterval, _retryInterval);
-        }
-
-        // must be called while holding _gate.
-        private void StopRetryTimerLocked()
-        {
-            _retryTimer?.Dispose();
-            _retryTimer = null;
         }
 
         public IGlobalTriggerRegistration RegisterTrigger(HotkeyGesture gesture, Action executed, bool fireOnRepeat = false)
@@ -277,22 +105,31 @@ namespace Prisc.UI
                     return Registration.Failed("The hotkey host has been shut down.");
 
                 EnsureStartedLocked();
-                if (_hookError != null)
-                    return _recoverable ? WaitLocked(gesture, executed, fireOnRepeat, _hookError) : Registration.Failed(_hookError);
+                if (_deadError != null)
+                    return Registration.Failed(_deadError);
 
-                int result = _native.Register(_handle, (int)gesture.Key, (uint)gesture.Modifiers, out var id);
-                // the hook died and its Stopped is still on the way: wait for its successor too
-                if (result == CH_ERR_STOPPED && _isMacOS)
-                    return WaitLocked(gesture, executed, fireOnRepeat, _hookError ?? StoppedMessage);
-                if (result != CH_OK)
-                    return Registration.Failed(RegisterError(result, gesture));
+                uint id;
+                GestureRefusal refusal;
+                try
+                {
+                    if (!_native.TryRegister((int)gesture.Key, (uint)gesture.Modifiers, out id, out refusal))
+                        return Registration.Failed(HotkeyStatusText.For(refusal, gesture));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[NativeHotkeyHost] register threw: " + ex);
+                    return Registration.Failed("Could not register the hotkey: " + ex.Message);
+                }
 
-                return AddRegistration(id, gesture, executed, fireOnRepeat);
+                bool running = _state == HookState.Running;
+                var registration = new Registration(this, gesture, executed, fireOnRepeat, running, running ? "" : _stateError) { Id = id };
+                _registrations[id] = registration;
+                return registration;
             }
         }
 
-        /// <summary>Tracks a registration the hook accepted under <paramref name="id"/>: from here
-        /// its presses run <paramref name="executed"/> until it is disposed.</summary>
+        /// <summary>Tracks a registration the hook holds under <paramref name="id"/>: from here its
+        /// presses run <paramref name="executed"/> until it is disposed (tests).</summary>
         internal Registration AddRegistration(uint id, HotkeyGesture gesture, Action executed, bool fireOnRepeat)
         {
             lock (_gate)
@@ -302,26 +139,6 @@ namespace Prisc.UI
                 return registration;
             }
         }
-
-        /// <summary>A registration for a hook that is down, made for real by <see cref="RetryStart"/>
-        /// once it is back. Must be called while holding _gate.</summary>
-        private Registration WaitLocked(HotkeyGesture gesture, Action executed, bool fireOnRepeat, string error)
-        {
-            var registration = new Registration(this, gesture, executed, fireOnRepeat, isRegistered: false, error);
-            _waiting.Add(registration);
-            return registration;
-        }
-
-        // must be called while holding _gate.
-        private string RegisterError(int result, HotkeyGesture gesture) => result switch
-        {
-            CH_ERR_DUPLICATE => "Gesture is already in-use by another hotkey.",
-            CH_ERR_UNSUPPORTED_KEY or CH_ERR_INVALID_KEY => $"The key '{gesture}' cannot be used as a global hotkey.",
-            CH_ERR_MODIFIER_KEY => "A modifier key on its own cannot be a global hotkey.",
-            CH_ERR_NO_KEY => "This gesture has no key.",
-            CH_ERR_STOPPED => _hookError ?? StoppedMessage,
-            _ => $"Could not register the hotkey (error {result}).",
-        };
 
         public IDisposable ObserveKeys(Action<GlobalKeyEvent> observer)
         {
@@ -335,8 +152,9 @@ namespace Prisc.UI
                 EnsureStartedLocked();
                 // copy-on-write: the event thread reads the array without taking the lock
                 _observers = [.. _observers, observer];
-                if (_observers.Length == 1 && _handle != IntPtr.Zero)
-                    _native.SetObserve(_handle, true);
+                // the hook keeps the switch across restarts, so it is set whatever its state
+                if (_observers.Length == 1 && _native != null)
+                    CallLocked(native => native.SetObserve(true), "set_observe");
                 return new ObserverHandle(this, observer);
             }
         }
@@ -350,8 +168,8 @@ namespace Prisc.UI
                     return;
 
                 _observers = _observers.Where((_, i) => i != index).ToArray();
-                if (_observers.Length == 0 && _handle != IntPtr.Zero && !_disposed)
-                    _native.SetObserve(_handle, false);
+                if (_observers.Length == 0 && _native != null && !_disposed)
+                    CallLocked(native => native.SetObserve(false), "set_observe");
             }
         }
 
@@ -363,7 +181,7 @@ namespace Prisc.UI
             if (failed == null) throw new ArgumentNullException(nameof(failed));
 
             uint token;
-            int generation;
+            int seq;
             lock (_gate)
             {
                 if (_disposed)
@@ -373,9 +191,15 @@ namespace Prisc.UI
                 }
 
                 EnsureStartedLocked();
-                if (_hookError != null)
+                if (_deadError != null)
                 {
-                    error = _hookError;
+                    error = _deadError;
+                    return null;
+                }
+
+                if (_state != HookState.Running)
+                {
+                    error = _stateError;
                     return null;
                 }
 
@@ -385,36 +209,48 @@ namespace Prisc.UI
                     return null;
                 }
 
-                if (_native.StartRecording(_handle, out token) != CH_OK)
+                bool started;
+                try
                 {
-                    error = _hookError ?? StoppedMessage;
+                    started = _native.TryStartRecording(out token);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[NativeHotkeyHost] start_recording threw: " + ex);
+                    error = "Could not start recording: " + ex.Message;
                     return null;
                 }
-                generation = _generation;
+
+                if (!started)
+                {
+                    // down already, its Status still on the way
+                    error = HotkeyStatusText.StoppedError("", restartsItself: true);
+                    return null;
+                }
+                seq = _statusSeq;
             }
 
             error = null;
-            return BeginSession(token, generation, modifiersChanged, recorded, failed);
+            return BeginSession(token, seq, modifiersChanged, recorded, failed);
         }
 
-        /// <summary>UI thread: makes the session the hook of <paramref name="generation"/> just
-        /// armed under <paramref name="token"/> the live one, which the posted recording events are
-        /// delivered to.</summary>
-        internal IDisposable BeginSession(uint token, int generation, Action<HotkeyModifiers> modifiersChanged,
+        /// <summary>UI thread: makes the session the hook just armed under <paramref name="token"/>,
+        /// as of Status <paramref name="seq"/>, the live one the recording events are delivered to.</summary>
+        internal IDisposable BeginSession(uint token, int seq, Action<HotkeyModifiers> modifiersChanged,
             Action<HotkeyGesture> recorded, Action<string> failed)
         {
-            var session = new Session(this, token, generation, modifiersChanged, recorded, failed);
+            var session = new Session(this, token, seq, modifiersChanged, recorded, failed);
             _recording = session;
             return session;
         }
 
-        private void StopRecording(uint token, int generation)
+        private void StopRecording(uint token)
         {
             lock (_gate)
             {
-                // a token is only meaningful to the hook that issued it
-                if (_handle != IntPtr.Zero && !_disposed && generation == _generation)
-                    _native.StopRecording(_handle, token);
+                // tokens are the hook's own across restarts: a stale one cancels nothing
+                if (_native != null && !_disposed)
+                    CallLocked(native => native.StopRecording(token), "stop_recording");
             }
         }
 
@@ -422,77 +258,83 @@ namespace Prisc.UI
         {
             lock (_gate)
             {
-                _waiting.Remove(registration);
                 uint id = registration.Id;
                 if (id == 0 || !_registrations.Remove(id))
                     return;
-                if (_handle != IntPtr.Zero && !_disposed)
-                    _native.Unregister(_handle, id);
+                if (_native != null && !_disposed)
+                    CallLocked(native => native.Unregister(id), "unregister");
             }
         }
 
-        // must be called while holding _gate. Tried once per hook: only RetryStart tries again,
-        // and only after a failure that may heal (_recoverable).
+        // must be called while holding _gate. A call on a hook that is gone (stopped after its queue
+        // failed) is harmless; one that throws is a defect worth a report, never a crash.
+        private void CallLocked(Action<INativeHotkeys> call, string operation)
+        {
+            try
+            {
+                call(_native);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[NativeHotkeyHost] {operation} threw: {ex}");
+                _report(ex, "hotkey." + operation);
+            }
+        }
+
+        // must be called while holding _gate. Creates the one hook this host ever has: the hook
+        // restarts itself, so a failure here is one with no hook to wait for.
         private void EnsureStartedLocked()
         {
             if (_started)
                 return;
 
             _started = true;
-            var loadError = _native.EnsureLoaded();
-            if (loadError != null)
-            {
-                _hookError = loadError;
-                Debug.WriteLine("[NativeHotkeyHost] " + loadError);
-                // a release build ships the library beside the app: missing or stale is a defect
-                if (!OperatingSystem.IsLinux())
-                    _report(new InvalidOperationException(loadError), "hotkey.library");
-                return;
-            }
-
-            var buffer = new byte[512];
-            int result;
-            IntPtr handle;
+            INativeHotkeys native;
             try
             {
-                result = _native.Start(out handle, buffer);
+                native = _create();
+            }
+            catch (InteropException ex) when (ex.Status == InteropStatus.Unsupported)
+            {
+                _deadError = HotkeyStatusText.UnsupportedMessage;
+                return;
+            }
+            catch (InteropUnavailableException ex)
+            {
+                _deadError = HotkeyStatusText.StartError(ex.Message);
+                Debug.WriteLine("[NativeHotkeyHost] " + _deadError);
+                // a release build ships the library beside the app: missing is a defect
+                if (!OperatingSystem.IsLinux())
+                    _report(ex, "hotkey.library");
+                return;
             }
             catch (Exception ex)
             {
-                // a library that loaded but cannot be called: a defect, like a missing one
-                _hookError = StartError(ex);
-                Debug.WriteLine("[NativeHotkeyHost] start threw: " + ex);
+                _deadError = HotkeyStatusText.StartError(ex.Message);
+                Debug.WriteLine("[NativeHotkeyHost] create threw: " + ex);
                 _report(ex, "hotkey.hook-start");
                 return;
             }
 
-            if (result != CH_OK)
+            // the first event is the hook's initial state, queued before create returned
+            HotkeyEvent first;
+            try
             {
-                bool staleGrant = result == CH_ERR_PERMISSION && _isMacOS && _isTrusted();
-                _hookError = staleGrant ? StaleGrantMessage : StartError(result, Utf8(buffer, buffer.Length));
-                Debug.WriteLine("[NativeHotkeyHost] " + _hookError);
-                // a NULL tap on macOS comes down to the grant too, as the standby capturer treats it
-                _recoverable = _isMacOS && result is CH_ERR_PERMISSION or CH_ERR_HOOK_FAILED;
-                // a listed app gets no prompt: keep this run's one for a grant that is really missing
-                if (result == CH_ERR_PERMISSION && !staleGrant)
-                    _accessibilityPrompt.RequestOnce();
-                _staleGrantTicks = staleGrant ? Math.Clamp(_staleGrantTicks * 2, 2, StaleGrantMaxTicks) : 0;
-                _staleGrantSkip = _staleGrantTicks > 0 ? _staleGrantTicks - 1 : 0;
-                // once: a retried failure would otherwise report every RetryInterval
-                if (result == CH_ERR_HOOK_FAILED && !_reportedHookFailure)
-                {
-                    _reportedHookFailure = true;
-                    _report(new InvalidOperationException(_hookError), "hotkey.hook-start");
-                }
-                if (_recoverable)
-                    StartRetryTimerLocked();
+                if (native.NextEvent(FirstStatusTimeoutMs, out first) != InteropStatus.Ok || first.Kind != HotkeysEventKind.Status)
+                    throw new InvalidOperationException("the hook reported no initial state");
+            }
+            catch (Exception ex)
+            {
+                _deadError = HotkeyStatusText.StartError(ex.Message);
+                Debug.WriteLine("[NativeHotkeyHost] " + _deadError);
+                _report(ex, "hotkey.hook-start");
+                StopAndDispose(native);
                 return;
             }
 
-            _handle = handle;
-            int generation = ++_generation;
-            _staleGrantTicks = _staleGrantSkip = 0;
-            _pump = new Thread(() => Pump(handle, generation))
+            _native = native;
+            UpdateStateLocked(first);
+            _pump = new Thread(() => Pump(native))
             {
                 Name = "prisc-hotkeys-events",
                 IsBackground = true,
@@ -501,88 +343,74 @@ namespace Prisc.UI
             _pump.Start();
         }
 
-        /// <summary>Why <c>prisc_hotkeys_start</c> refused, from its code and the message it
-        /// copied out. A missing permission (macOS only) asks for no restart: the host picks the
-        /// grant up by itself.</summary>
-        internal static string StartError(int result, string detail) => result switch
+        // must be called while holding _gate: takes in a Status, asks for the permission or files a
+        // report where that is due. Returns the state it replaced.
+        private HookState UpdateStateLocked(HotkeyEvent status)
         {
-            CH_ERR_PERMISSION => PermissionMessage,
-            CH_ERR_UNSUPPORTED => "Global hotkeys are not supported on Linux yet.",
-            _ => "Could not start the global hotkey listener: " + (String.IsNullOrEmpty(detail) ? $"error {result}" : detail),
-        };
-
-        /// <summary>Why the hook could not start when the call itself threw.</summary>
-        internal static string StartError(Exception exception) =>
-            "Could not start the global hotkey listener: " + exception.Message;
-
-        /// <summary>What every registration and recording reports once the hook has died, with the
-        /// reason it gave (or none). Only a hook that comes back by itself
-        /// (<paramref name="restartsItself"/>, macOS) asks for no restart.</summary>
-        internal static string StoppedError(string reason, bool restartsItself = false) =>
-            "The global hotkey listener stopped" + (String.IsNullOrEmpty(reason) ? "." : ": " + reason.TrimEnd('.') + ".")
-            + (restartsItself ? "" : " Restart Prisc to use global hotkeys again.");
-
-        /// <summary>What a call reports when it finds the hook dead before its Stopped arrived.</summary>
-        private string StoppedMessage => StoppedError("", restartsItself: _isMacOS);
-
-        /// <summary>What a <c>prisc_hotkeys_next_event</c> result means for the event thread.</summary>
-        internal enum NextEvent
-        {
-            /// <summary>An event was filled in.</summary>
-            Event,
-            Timeout,
-            /// <summary>The queue closed: the hook stopped and everything it queued was delivered.
-            /// The only clean end.</summary>
-            Closed,
-            /// <summary>Anything else (<c>CH_ERR_PANIC</c>, <c>CH_ERR_NULL</c>): the queue failed
-            /// with the hook possibly still running and swallowing its gestures.</summary>
-            Failed,
+            var was = _state;
+            _state = status.HookState;
+            _statusSeq++;
+            string code = HotkeyStatusText.CodeOf(_state);
+            _stateError = code == null ? "" : HotkeyStatusText.For(code, status.Reason, status.IsRecoverable);
+            Debug.WriteLine("[NativeHotkeyHost] hook state " + _state + (code == null ? "" : ": " + _stateError));
+            switch (_state)
+            {
+                case HookState.Running:
+                    _everRan = true;
+                    break;
+                case HookState.PermissionMissing:
+                    // a grant revoked under a running hook is the user's choice: ask only for one
+                    // that was never there
+                    if (!_everRan)
+                        _accessibilityPrompt.RequestOnce();
+                    break;
+                case HookState.Failed:
+                    // once: a retried failure would otherwise report every retry
+                    if (!_reportedHookFailure)
+                    {
+                        _reportedHookFailure = true;
+                        _report(new InvalidOperationException(_stateError), "hotkey.hook-start");
+                    }
+                    break;
+                case HookState.Stopped:
+                    // once per run where the hook restarts itself, as a tap that keeps dying would
+                    // otherwise report every time
+                    bool report = !(status.IsRecoverable && _reportedHookStop);
+                    _reportedHookStop |= status.IsRecoverable && report;
+                    if (report)
+                        _report(new InvalidOperationException(_stateError), "hotkey.stopped");
+                    break;
+            }
+            return was;
         }
 
-        internal static NextEvent ClassifyNextEvent(int result) => result switch
-        {
-            1 => NextEvent.Event,
-            0 => NextEvent.Timeout,
-            -1 => NextEvent.Closed,
-            _ => NextEvent.Failed,
-        };
-
-        /// <summary>The event thread of the hook of <paramref name="generation"/>: the only user of
-        /// <paramref name="handle"/> outside <see cref="_gate"/>. Ends when the queue closes (the
-        /// hook stopped and everything it queued was delivered), or fails — the hook is then
-        /// stopped here.</summary>
-        private void Pump(IntPtr handle, int generation)
+        /// <summary>The event thread: the only user of the hook outside <see cref="_gate"/>. Ends
+        /// when the queue closes (the host stopped it) or fails, which stops the hook for good.</summary>
+        private void Pump(INativeHotkeys native)
         {
             while (true)
             {
-                int result;
-                HotkeyEventNative ev;
+                InteropStatus result;
+                HotkeyEvent ev;
                 try
                 {
-                    result = _native.NextEvent(handle, out ev, EventTimeoutMs);
+                    result = native.NextEvent(EventTimeoutMs, out ev);
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[NativeHotkeyHost] next_event threw: " + ex);
-                    HookFailed(handle, generation, StoppedError(ex.Message), ex, "hotkey.events", stopHook: true, recoverable: false);
+                    QueueFailed(native, ex);
                     return;
                 }
 
-                switch (ClassifyNextEvent(result))
-                {
-                    case NextEvent.Timeout:
-                        continue;
-                    case NextEvent.Closed:
-                        return;
-                    case NextEvent.Failed:
-                        HookFailed(handle, generation, StoppedError($"error {result}"), null, "hotkey.events", stopHook: true,
-                            recoverable: false);
-                        return;
-                }
+                if (result == InteropStatus.Timeout)
+                    continue;
+                if (result != InteropStatus.Ok)
+                    return;
 
                 try
                 {
-                    Dispatch(handle, generation, ev);
+                    Dispatch(ev);
                 }
                 catch (Exception ex)
                 {
@@ -592,34 +420,30 @@ namespace Prisc.UI
             }
         }
 
-        private void Dispatch(IntPtr handle, int generation, HotkeyEventNative ev)
+        private void Dispatch(HotkeyEvent ev)
         {
-            bool down = (ev.Flags & 1) != 0;
-            bool repeat = (ev.Flags & 2) != 0;
             var modifiers = (HotkeyModifiers)ev.Modifiers;
-
-            switch ((int)ev.Kind)
+            switch (ev.Kind)
             {
-                case CH_EVENT_HOTKEY:
+                case HotkeysEventKind.Hotkey:
                 {
                     Registration registration;
                     lock (_gate)
                         _registrations.TryGetValue(ev.Id, out registration);
-                    if (registration == null || (repeat && !registration.FireOnRepeat))
+                    if (registration == null || (ev.IsRepeat && !registration.FireOnRepeat))
                         return;
 
                     _post(() => RunHotkey(registration));
                     break;
                 }
 
-                case CH_EVENT_KEY:
+                case HotkeysEventKind.Key:
                 {
                     var observers = _observers;
                     if (observers.Length == 0)
                         return;
 
-                    var character = ev.Ch == 0 ? null : char.ConvertFromUtf32((int)ev.Ch);
-                    var key = new GlobalKeyEvent(down, repeat, (int)ev.RawCode, modifiers, character);
+                    var key = new GlobalKeyEvent(ev.IsDown, ev.IsRepeat, ev.RawCode, modifiers, ev.Character);
                     foreach (var observer in observers)
                     {
                         try
@@ -634,7 +458,7 @@ namespace Prisc.UI
                     break;
                 }
 
-                case CH_EVENT_RECORDING_MODIFIERS:
+                case HotkeysEventKind.RecordingModifiers:
                 {
                     uint token = ev.Id;
                     _post(() =>
@@ -646,7 +470,7 @@ namespace Prisc.UI
                     break;
                 }
 
-                case CH_EVENT_RECORDED:
+                case HotkeysEventKind.Recorded:
                 {
                     uint token = ev.Id;
                     var gesture = new HotkeyGesture((HotkeyKey)ev.Key, modifiers);
@@ -654,22 +478,82 @@ namespace Prisc.UI
                     break;
                 }
 
-                case CH_EVENT_STOPPED:
-                {
-                    // the hook ended itself; the queue drains and closes after this. On macOS this
-                    // is the grant again (a revoked one ends the tap): RetryStart brings it back.
-                    var buffer = new byte[512];
-                    int length = _native.StopReason(handle, buffer);
-                    HookFailed(handle, generation, StoppedError(Utf8(buffer, length), restartsItself: _isMacOS), null,
-                        "hotkey.stopped", stopHook: false, recoverable: _isMacOS);
+                case HotkeysEventKind.Status:
+                    ApplyStatus(ev);
                     break;
-                }
             }
         }
 
+        /// <summary>Event thread: the hook came up, went down, or is down for another reason now.</summary>
+        private void ApplyStatus(HotkeyEvent status)
+        {
+            Registration[] registrations;
+            bool running, cameBack;
+            string error;
+            int seq;
+            lock (_gate)
+            {
+                if (_disposed || _deadError != null)
+                    return;
+
+                var was = UpdateStateLocked(status);
+                running = _state == HookState.Running;
+                cameBack = running && was != HookState.Running;
+                error = _stateError;
+                seq = _statusSeq;
+                registrations = _registrations.Values.ToArray();
+            }
+
+            if (running)
+            {
+                _post(() =>
+                {
+                    foreach (var registration in registrations)
+                        registration.SetStatus(true, "");
+                    if (cameBack)
+                    {
+                        Debug.WriteLine("[NativeHotkeyHost] the global hotkey listener is running again");
+                        RecordingAvailable?.Invoke(this, EventArgs.Empty);
+                    }
+                });
+            }
+            else
+            {
+                _post(() => ApplyHookFailure(error, registrations, seq));
+            }
+        }
+
+        /// <summary>Event thread: the hook's queue failed, with the hook possibly still running and
+        /// swallowing its gestures: stop it, so they reach apps again, and fail everything for good.</summary>
+        private void QueueFailed(INativeHotkeys native, Exception exception)
+        {
+            try
+            {
+                native.Stop();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[NativeHotkeyHost] stop threw: " + ex);
+            }
+
+            Registration[] failed;
+            string error;
+            int seq;
+            lock (_gate)
+            {
+                if (_disposed || _deadError != null)
+                    return;
+                error = _deadError = HotkeyStatusText.StoppedError(exception.Message);
+                seq = ++_statusSeq;
+                failed = _registrations.Values.ToArray();
+            }
+
+            _report(exception, "hotkey.events");
+            _post(() => ApplyHookFailure(error, failed, seq));
+        }
+
         /// <summary>UI thread: runs a press's action, unless its registration was disposed (or the
-        /// host shut down, or its hook died) after the press was posted — its owner has already
-        /// let it go.</summary>
+        /// host shut down) after the press was posted: its owner has already let it go.</summary>
         internal void RunHotkey(Registration registration)
         {
             lock (_gate)
@@ -690,7 +574,7 @@ namespace Prisc.UI
         }
 
         /// <summary>UI thread: hands a recorded gesture to the live session. One whose token is not
-        /// the live session's belongs to a canceled (or failed) one, and is dropped.</summary>
+        /// the live session's belongs to a cancelled (or failed) one, and is dropped.</summary>
         internal void DeliverRecorded(uint token, HotkeyGesture gesture)
         {
             var session = _recording;
@@ -701,102 +585,31 @@ namespace Prisc.UI
             session.OnRecorded(gesture);
         }
 
-        /// <summary>
-        /// Event thread: the hook of <paramref name="generation"/> is dead — it reported itself
-        /// stopped, or its queue failed. Latches <see cref="_hookError"/> so every later
-        /// registration and recording fails fast with it, stops the hook when it may still be
-        /// running (<paramref name="stopHook"/>), so the gestures it swallowed reach apps again,
-        /// and fails everything live on the UI thread. Acts once per hook. A
-        /// <paramref name="recoverable"/> failure (macOS) moves the registrations to wait for
-        /// <see cref="RetryStart"/>, which clears the latch when it starts the next hook.
-        /// </summary>
-        private void HookFailed(IntPtr handle, int generation, string error, Exception exception, string operation,
-            bool stopHook, bool recoverable)
+        /// <summary>UI thread: the hook is down as of Status <paramref name="seq"/>. Every
+        /// registration it held reports <paramref name="error"/>, and a recording started before that
+        /// Status ends with it: no gesture will come, and the recording's owner (and through it the
+        /// standby capturer's paused hotkeys) must not wait for one. The ended session is also
+        /// cancelled on the hook: the hook may already be back (the down and Running Statuses both
+        /// still queued when the recording started), and an arm left on it would swallow the user's
+        /// next key press for a session nobody listens to. For a token the hook no longer knows, the
+        /// cancel does nothing.</summary>
+        internal void ApplyHookFailure(string error, Registration[] failed, int seq)
         {
-            if (stopHook)
-            {
-                try
-                {
-                    // thread-safe and idempotent; the handle is freed only after this thread ends
-                    _native.Stop(handle);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[NativeHotkeyHost] stop threw: " + ex);
-                }
-            }
-
-            // the user switching Accessibility off is expected, not a defect
-            bool revoked = recoverable && !_isTrusted();
-
-            Registration[] failed;
-            bool report;
-            lock (_gate)
-            {
-                if (_disposed || _hookError != null || generation != _generation)
-                    return;
-
-                _hookError = error;
-                _recoverable = recoverable;
-                // one waiting for this hook's successor (it found the hook dead first) has none now
-                failed = recoverable ? _registrations.Values.ToArray() : [.. _registrations.Values, .. _waiting];
-                if (!recoverable)
-                    _waiting.Clear();
-                // once per run: on macOS a hook that keeps dying is restarted each time
-                report = !revoked && !(recoverable && _reportedHookStop);
-                _reportedHookStop |= recoverable && report;
-                if (recoverable)
-                {
-                    _registrations.Clear();
-                    foreach (var registration in failed)
-                    {
-                        registration.Id = 0;
-                        _waiting.Add(registration);
-                    }
-                    StartRetryTimerLocked();
-                }
-            }
-
-            Debug.WriteLine("[NativeHotkeyHost] " + error);
-            if (report)
-                _report(exception ?? new InvalidOperationException(error), operation);
-            _post(() => ApplyHookFailure(error, failed, generation));
-        }
-
-        /// <summary>UI thread: the hook of <paramref name="generation"/> died. Every registration it
-        /// held fails with <paramref name="error"/> — unless a retry that ran first has set their
-        /// statuses itself — and a live recording on it ends with it: no gesture will come, and the
-        /// recording's owner (and through it the standby capturer's paused hotkeys) must not wait
-        /// for one.</summary>
-        internal void ApplyHookFailure(string error, Registration[] failed, int generation)
-        {
-            bool superseded;
-            lock (_gate)
-                superseded = _generation != generation;
-            if (!superseded)
-            {
-                foreach (var registration in failed)
-                    registration.SetStatus(false, error);
-            }
+            foreach (var registration in failed)
+                registration.SetStatus(false, error);
 
             var session = _recording;
-            if (session != null && session.Generation == generation)
+            if (session != null && session.Seq < seq)
             {
                 _recording = null;
                 session.OnFailed(error);
+                StopRecording(session.Token);
             }
-        }
-
-        private static string Utf8(byte[] buffer, int length)
-        {
-            length = Math.Clamp(length, 0, buffer.Length);
-            int end = Array.IndexOf(buffer, (byte)0, 0, length);
-            return Encoding.UTF8.GetString(buffer, 0, end < 0 ? length : end);
         }
 
         public void Dispose()
         {
-            IntPtr handle;
+            INativeHotkeys native;
             Thread pump;
             lock (_gate)
             {
@@ -804,22 +617,20 @@ namespace Prisc.UI
                     return;
 
                 _disposed = true;
-                handle = _handle;
+                native = _native;
                 pump = _pump;
-                StopRetryTimerLocked();
                 _registrations.Clear();
-                _waiting.Clear();
                 _observers = Array.Empty<Action<GlobalKeyEvent>>();
             }
 
             _recording = null;
-            if (handle == IntPtr.Zero)
+            if (native == null)
                 return;
 
             try
             {
-                // thread-safe, and makes the event thread's next_event return -1 once drained
-                _native.Stop(handle);
+                // makes the event thread's NextEvent drain and report Closed
+                native.Stop();
             }
             catch (Exception ex)
             {
@@ -828,16 +639,23 @@ namespace Prisc.UI
             }
 
             if (pump != null && !pump.Join(PumpJoinTimeout))
-            {
-                // freeing under a live next_event would be a use-after-free: leak instead (this is
-                // app exit). _disposed already keeps every other host method off the handle.
-                Debug.WriteLine("[NativeHotkeyHost] event thread did not exit; leaking the handle");
-                return;
-            }
+                Debug.WriteLine("[NativeHotkeyHost] event thread did not exit; the handle goes once its call returns");
 
-            lock (_gate)
-                _handle = IntPtr.Zero;
-            _native.Free(handle);
+            // the wrapper's lease defers the native destroy past a call still in flight
+            native.Dispose();
+        }
+
+        private static void StopAndDispose(INativeHotkeys native)
+        {
+            try
+            {
+                native.Stop();
+                native.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[NativeHotkeyHost] stop threw: " + ex);
+            }
         }
 
         private sealed class ObserverHandle : IDisposable
@@ -859,14 +677,14 @@ namespace Prisc.UI
             }
         }
 
-        /// <summary>One recording (UI thread). Ends once: recorded, failed (its hook died), or
+        /// <summary>One recording (UI thread). Ends once: recorded, failed (the hook went down), or
         /// disposed (a cancel).</summary>
         private sealed class Session : IDisposable
         {
             public uint Token { get; }
 
-            /// <summary>The hook it records on (<see cref="_generation"/>).</summary>
-            public int Generation { get; }
+            /// <summary>The Status it started under (<see cref="_statusSeq"/>).</summary>
+            public int Seq { get; }
 
             private readonly NativeHotkeyHost _host;
             private readonly Action<HotkeyModifiers> _modifiersChanged;
@@ -874,12 +692,12 @@ namespace Prisc.UI
             private readonly Action<string> _failed;
             private bool _finished;
 
-            public Session(NativeHotkeyHost host, uint token, int generation, Action<HotkeyModifiers> modifiersChanged,
+            public Session(NativeHotkeyHost host, uint token, int seq, Action<HotkeyModifiers> modifiersChanged,
                            Action<HotkeyGesture> recorded, Action<string> failed)
             {
                 _host = host;
                 Token = token;
-                Generation = generation;
+                Seq = seq;
                 _modifiersChanged = modifiersChanged;
                 _recorded = recorded;
                 _failed = failed;
@@ -943,7 +761,7 @@ namespace Prisc.UI
                 _finished = true;
                 if (ReferenceEquals(_host._recording, this))
                     _host._recording = null;
-                _host.StopRecording(Token, Generation);
+                _host.StopRecording(Token);
             }
         }
 
@@ -953,7 +771,7 @@ namespace Prisc.UI
             public readonly Action Executed;
             public readonly bool FireOnRepeat;
 
-            /// <summary>Its id on the live hook; 0 while it waits for one. Under the host's _gate.</summary>
+            /// <summary>Its id on the hook, stable across the hook's restarts. Under the host's _gate.</summary>
             public uint Id;
 
             private NativeHotkeyHost _host;
@@ -975,8 +793,8 @@ namespace Prisc.UI
                 Error = error ?? "";
             }
 
-            /// <summary>A registration that failed up-front and never fires (a hook that cannot
-            /// come back, a key the hook cannot use, a conflict).</summary>
+            /// <summary>A registration that failed up front and never fires (no hook, a key the hook
+            /// cannot use, a duplicate).</summary>
             public static Registration Failed(string error) => new(null, null, null, false, false, error);
 
             // called on the UI thread
