@@ -8,20 +8,24 @@
 //! (depth 0, nothing special). A host that calls an export while another export is still on the
 //! stack of the same thread (a log sink that should not, a callback inside an export) gets a
 //! nested entry: the guard keeps a thread-local depth, saves the outer call's last-error slot on a
-//! nested entry and restores it on exit, so the outer call's error survives. Rust code never calls
-//! an export itself (prisc_codegen's lint).
+//! nested entry and, if it held an error, restores it on exit, so the outer call's error survives.
+//! An empty outer slot (the usual case: the outer guard cleared it and its body is still running)
+//! is not restored, so the nested call's own failure stays readable by whoever called it. Rust code
+//! never calls an export itself (prisc_codegen's lint).
 //!
 //! [`callback_guard`] wraps every OS-called trampoline under `src/platform` (CoreAudio render and
 //! input procs, HAL listeners, the WinEvent proc, the NSServices method): it catches a panic,
 //! records it on the owning handle's [`CallbackPanic`] slot, which that handle's next export
 //! drains, and returns a benign value. It logs nothing (audio threads must not), and an unwind
-//! never reaches the OS frame.
+//! never reaches the OS frame. A panic recorded on [`CallbackPanic::process`] (no handle) is
+//! drained by the next export of any kind, which reports it to the log sink.
 //!
 //! The workspace keeps `panic = "unwind"`; with `abort` there would be nothing to catch.
 
 use std::any::Any;
 use std::cell::Cell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use crate::error::{self, Result};
@@ -47,6 +51,7 @@ pub(crate) fn guard(export: &'static str, body: impl FnOnce() -> Result<i32>) ->
     set_depth(outer_depth + 1);
     let saved = (outer_depth > 0).then(error::take);
     error::clear();
+    log_process_callback_panic();
 
     let status = match catch_unwind(AssertUnwindSafe(body)) {
         Ok(Ok(status)) => status,
@@ -55,10 +60,21 @@ pub(crate) fn guard(export: &'static str, body: impl FnOnce() -> Result<i32>) ->
     };
 
     set_depth(outer_depth);
-    if let Some(saved) = saved {
+    if let Some(saved) = saved.filter(|saved| !saved.message.is_empty() || saved.code != 0) {
         error::restore(saved);
     }
     status
+}
+
+/// Reports a panic caught on [`CallbackPanic::process`] (a trampoline with no handle to record it
+/// on) to the log sink, once. One relaxed load when there is none, so every export can afford it.
+fn log_process_callback_panic() {
+    if !PROCESS_CALLBACK_PANIC_PENDING.swap(false, Ordering::AcqRel) {
+        return;
+    }
+    if let Some(text) = PROCESS_CALLBACK_PANIC.take() {
+        let _ = catch_unwind(AssertUnwindSafe(|| log::emit(PriscInteropLogLevel::Error, &text)));
+    }
 }
 
 /// The failure path of [`guard`], itself caught: if reporting panics (a host log sink that
@@ -88,8 +104,9 @@ fn payload_text(payload: &(dyn Any + Send)) -> String {
 /// trampoline reaches it through its user pointer (or the hook registry).
 ///
 /// [`CallbackPanic::process`] is the slot for a trampoline that has no handle to reach (a
-/// registry lookup before the handle is known). The NSServices method has no later export that
-/// would drain such a slot, so it owns a static slot and reports a caught panic to the log sink.
+/// registry lookup before the handle is known); the next export of any kind drains it to the log
+/// sink ([`guard`]). The NSServices method may run with no export ever following it, so it owns
+/// a static slot and reports a caught panic to the log sink at once.
 pub(crate) struct CallbackPanic(Mutex<Option<String>>);
 
 #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))] // no OS callback runs our code there
@@ -126,6 +143,9 @@ impl CallbackPanic {
             .0
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some(text);
+        if std::ptr::eq(self, &PROCESS_CALLBACK_PANIC) {
+            PROCESS_CALLBACK_PANIC_PENDING.store(true, Ordering::Release);
+        }
     }
 }
 
@@ -135,8 +155,10 @@ impl Default for CallbackPanic {
     }
 }
 
-#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 static PROCESS_CALLBACK_PANIC: CallbackPanic = CallbackPanic::new();
+
+/// Set when [`PROCESS_CALLBACK_PANIC`] has a panic for [`guard`] to log.
+static PROCESS_CALLBACK_PANIC_PENDING: AtomicBool = AtomicBool::new(false);
 
 /// Runs an OS-called trampoline body; on a panic returns `benign` and records the panic text on
 /// `slot` (the owning handle's [`CallbackPanic`], or [`CallbackPanic::process`]). A later panic
@@ -194,6 +216,18 @@ mod tests {
     }
 
     #[test]
+    fn a_nested_failure_is_readable_right_after_the_nested_call() {
+        let status = guard("prisc_interop_selftest", || {
+            let inner = guard("prisc_interop_selftest", || Err(Error::invalid_arg("inner")));
+            assert_eq!(inner, PriscInteropStatus::InvalidArg as i32);
+            assert_eq!(error::snapshot().message, "inner");
+            Ok(0)
+        });
+        assert_eq!(status, 0);
+        assert_eq!(depth(), 0);
+    }
+
+    #[test]
     fn a_nested_entry_keeps_the_outer_error() {
         let status = guard("prisc_interop_selftest", || {
             error::set(PriscInteropStatus::State as i32, 0, "outer");
@@ -229,6 +263,13 @@ mod tests {
         assert_eq!(e.status, PriscInteropStatus::Panic);
         assert!(e.message.contains("output A failed"), "{}", e.message);
         assert!(a.check().is_ok(), "reading clears the slot");
+    }
+
+    #[test]
+    fn the_next_export_drains_a_handleless_callback_panic() {
+        assert_eq!(callback_guard(CallbackPanic::process(), 0u8, || panic!("lookup failed")), 0);
+        assert_eq!(guard("prisc_interop_selftest", || Ok(0)), 0);
         assert_eq!(CallbackPanic::process().take(), None);
+        assert!(!PROCESS_CALLBACK_PANIC_PENDING.load(Ordering::Acquire));
     }
 }

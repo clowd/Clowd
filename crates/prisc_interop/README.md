@@ -62,7 +62,9 @@ it fits (never truncates, never allocates); `prisc_last_error_code() -> i64` is 
 A6. Panic guard (`src/panic.rs`): every export body is `panic::guard("<its own name>", || ...)`.
 Rust code never calls an export (lint). The host may re-enter from an OS-loop callback (R20): the
 guard keeps a thread-local depth, and a nested entry saves the outer last-error slot and restores
-it on exit, so the outer call's error survives. Workspace keeps `panic = "unwind"`.
+it on exit when it held an error, so the outer call's error survives; an empty outer slot is left
+alone, so the nested call's own failure stays readable by its caller. Workspace keeps
+`panic = "unwind"`.
 
 ## B. Types
 
@@ -145,9 +147,9 @@ and returns the benign value (it logs nothing, so audio paths stay silent). `<sl
 `panic::CallbackPanic` that the handle's state owns, reached through the trampoline's user pointer
 (or the hook registry); each export on that handle drains it first (`slot.check()?`) and so reports
 the panic as `PRISC_E_PANIC`, while other handles never see it. A trampoline that has no handle to
-reach yet (a registry lookup before the handle is known) uses `CallbackPanic::process()`. The
-NSServices method has no later export that would drain a slot, so it owns a static one and
-reports a caught panic to the log sink at once. Without the guard a panic would abort the process
+reach yet (a registry lookup before the handle is known) uses `CallbackPanic::process()`, which
+the next export of any kind drains to the log sink. The NSServices method may run with no export
+following it, so it owns a static slot and reports a caught panic to the log sink at once. Without the guard a panic would abort the process
 (abort-on-unwind out of `extern "C"`) or unwind into Objective-C frames.
 
 ## D. Crate rules (enforced by prisc_codegen's lint, one gate: `cargo test -p prisc_codegen`)
