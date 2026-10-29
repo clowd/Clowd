@@ -32,6 +32,8 @@ pub enum PriscGpuBackend {
     Metal = 2,
 }
 
+crate::convert::ffi_enum!(PriscGpuBackend: i32 { None, D3D12, Metal });
+
 /// Device creation options; bit flags (`[Flags]` in C#).
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

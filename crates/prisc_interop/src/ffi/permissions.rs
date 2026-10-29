@@ -13,6 +13,10 @@ pub enum PriscPermissionKind {
     Camera = 3,
 }
 
+crate::convert::ffi_enum!(PriscPermissionKind: i32 {
+    ScreenRecording, Accessibility, Microphone, Camera
+});
+
 /// What the OS says about a permission.
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +27,10 @@ pub enum PriscPermissionState {
     /// The OS has no such permission (every kind off macOS).
     NotApplicable = 3,
 }
+
+crate::convert::ffi_enum!(PriscPermissionState: i32 {
+    Granted, Denied, NotDetermined, NotApplicable
+});
 
 /// The current state of a permission (a `PriscPermissionKind`) as a `PriscPermissionState`. Never
 /// prompts.

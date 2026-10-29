@@ -12,6 +12,8 @@ pub enum PriscActivationPolicy {
     Prohibited = 2,
 }
 
+crate::convert::ffi_enum!(PriscActivationPolicy: i32 { Regular, Accessory, Prohibited });
+
 /// macOS: sets the activation policy (a `PriscActivationPolicy`) and, for Regular when asked,
 /// activates the app, in one hop.
 ///

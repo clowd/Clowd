@@ -20,6 +20,8 @@ pub enum PriscAudioInputEventKind {
     Stopped = 1,
 }
 
+crate::convert::ffi_enum!(PriscAudioInputEventKind: u32 { Data, Stopped });
+
 /// Why the input stopped by itself.
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,6 +29,8 @@ pub enum PriscAudioInputStop {
     DeviceLost = 1,
     RequeueFailed = 2,
 }
+
+crate::convert::ffi_enum!(PriscAudioInputStop: i32 { DeviceLost, RequeueFailed });
 
 /// One input event (24 bytes), borrowed for the callback.
 #[repr(C)]

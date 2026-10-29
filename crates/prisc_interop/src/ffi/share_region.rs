@@ -19,6 +19,10 @@ pub enum PriscShareRegionHandle {
     Body = 8,
 }
 
+crate::convert::ffi_enum!(PriscShareRegionHandle: i32 {
+    TopLeft, TopRight, BottomLeft, BottomRight, Left, Top, Right, Bottom, Body
+});
+
 /// The region clamped to the minimum size the helper accepts.
 ///
 /// Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,

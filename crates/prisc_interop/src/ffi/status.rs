@@ -35,6 +35,10 @@ pub enum PriscInteropStatus {
     Capability = -7,
 }
 
+crate::convert::ffi_enum!(PriscInteropStatus: i32 {
+    Ok, None, Timeout, Closed, Unsupported, InvalidArg, Os, Panic, State, Permission, Capability
+});
+
 // The Rust spellings the export bodies use. Crate-private: csbindgen would drop the negative
 // ones, and C# gets the enum above instead.
 #[allow(dead_code)]

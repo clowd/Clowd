@@ -22,6 +22,8 @@ pub enum PriscInteropLogLevel {
     Debug = 3,
 }
 
+crate::convert::ffi_enum!(PriscInteropLogLevel: i32 { Error, Warn, Info, Debug });
+
 /// The log sink: `level` is a `PriscInteropLogLevel`, `msg` is UTF-8 of `len` bytes, not
 /// NUL-terminated, valid only during the call. `user` is what `prisc_log_set_callback` was given.
 pub type PriscLogCallback = Option<unsafe extern "C" fn(level: i32, msg: *const u8, len: usize, user: *mut c_void)>;

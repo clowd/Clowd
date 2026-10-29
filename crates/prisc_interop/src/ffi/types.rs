@@ -55,6 +55,10 @@ pub enum PriscGestureRefusal {
     Reserved = 7,
 }
 
+crate::convert::ffi_enum!(PriscGestureRefusal: i32 {
+    None, NoKey, InvalidKey, InvalidModifiers, ModifierOnly, UnsupportedKey, Duplicate, Reserved
+});
+
 /// What `prisc_window_prepare_overlay` sets up on a window; bit flags (`[Flags]` in C#). A bit
 /// that does not apply on an OS is a truthful no-op there.
 #[repr(u32)]

@@ -37,6 +37,8 @@ pub enum PriscScreenFallback {
     Primary = 2,
 }
 
+crate::convert::ffi_enum!(PriscScreenFallback: i32 { None, Nearest, Primary });
+
 /// Every screen, written into `out` up to `capacity` entries; `out_count` always receives the full
 /// count (`capacity` 0 with a null `out` is a sizing probe, README B7).
 ///

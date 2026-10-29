@@ -67,8 +67,11 @@ B1. `#[repr(C)]` structs and `#[repr(i32|u32|u8)]` enums live only in `src/ffi/`
 `PriscPoint { x, y: i32 }`).
 
 B2. No enum type appears in an export signature or a `#[repr(C)]` field (R6). Parameters and
-fields are `i32`/`u32`; Rust converts with `TryFrom` and answers `PRISC_E_INVALID_ARG` on an
-unknown value. Enums are emitted to C# as public enums for the wrappers.
+fields are `i32`/`u32`; Rust converts with `from_raw` (`convert::ffi_enum!`, or `convert::flags`
+for a bit-flag enum) and answers `PRISC_E_INVALID_ARG` on an unknown value. Every enum not named
+`*Flags` has its `crate::convert::ffi_enum!` invocation right after its declaration, listing exactly
+its variants (prisc_codegen's lint, rule 13). Enums are emitted to C# as public enums for the
+wrappers.
 
 B3. No `bool` across the boundary (R7): `u8`, 0 or 1; Rust treats any non-zero input as true.
 
@@ -128,9 +131,13 @@ COM objects take no apartment.
 
 C5. Every `extern "C"` (or `"C-unwind"`, `"system"`) fn under `src/platform/**` that the OS calls
 (CoreAudio render proc, AudioQueue input callback, HAL property listener, WinEvent proc, every
-`define_class!` method) is a trampoline whose body is `panic::callback_guard(<benign value>, || ...)`:
-it catches a panic, records it for the next export on that handle (audio paths log nothing), and
-returns the benign value. Otherwise a panic aborts the process (abort-on-unwind out of `extern "C"`)
+`define_class!` method) is a trampoline whose body is
+`panic::callback_guard(<slot>, <benign value>, || ...)`: it catches a panic, records it on `<slot>`
+and returns the benign value (it logs nothing, so audio paths stay silent). `<slot>` is the
+`panic::CallbackPanic` that the handle's state owns, reached through the trampoline's user pointer
+(or the hook registry); each export on that handle drains it first (`slot.check()?`) and so reports
+the panic as `PRISC_E_PANIC`, while other handles never see it. Only a trampoline with no handle to
+reach (an NSServices method) uses `CallbackPanic::process()`. Otherwise a panic aborts the process (abort-on-unwind out of `extern "C"`)
 or unwinds into Objective-C frames (critique-risk F13).
 
 ## D. Crate rules (enforced by prisc_codegen's lint, one gate: `cargo test -p prisc_codegen`)
@@ -194,8 +201,9 @@ C#) gives "stale bindings: run cargo codegen" at load instead of undefined behav
 
 ## F. Adding an export (README "how to")
 
-1. Declare it in the area's `src/ffi/<area>.rs` with docs, status list and its `Thread:` line;
-   implement the OS halves in `src/platform/...` or call the shared rlib.
+1. Declare it in the area's `src/ffi/<area>.rs` with docs, status list and its `Thread:` line
+   (a new or changed enum keeps its `ffi_enum!` list in step, B2); implement the OS halves in
+   `src/platform/...` or call the shared rlib.
 2. `cargo codegen` (regenerates NativeMethods, InteropTypes and InteropAbi).
 3. Write the C# wrapper in the area's `ui/Prisc.Interop/<Area>.cs` (lease every handle call, R19).
 4. Rust tests (null args, unsupported off-OS, layout), a C# smoke test, `cargo test -p prisc_codegen`.

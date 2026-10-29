@@ -13,7 +13,10 @@
 //! 7. every export starts with `prisc_`, is unique, is `unsafe extern "C"`, returns `i32` (the two
 //!    last-error readers excepted), has exactly one `Thread:` line from the vocabulary (D5), and
 //!    its body's first statement is `panic::guard("<its own name>", ...)` (A6);
-//! 8. every enum has an explicit `#[repr(i32|u32|u8)]` and explicit discriminants.
+//! 8. every enum has an explicit `#[repr(i32|u32|u8)]` and explicit discriminants;
+//! 13. every enum not named `*Flags` has exactly one `convert::ffi_enum!` invocation under src/ffi,
+//!     with the enum's repr type and exactly its variants, so `from_raw` cannot fall behind the
+//!     declaration; a `*Flags` enum has none (it goes through `convert::flags`) (B2).
 //!
 //! Over `crates/prisc_interop/src/**` (test modules excluded):
 //! - no function body calls an export (A6);
@@ -570,7 +573,190 @@ pub fn lint_ffi(files: &[(PathBuf, String)]) -> Vec<Violation> {
         };
         lint.items(&file.items, &mut seen);
     }
+    lint_ffi_enum_calls(&parsed, &mut out);
     out
+}
+
+/// One enum declared under src/ffi, for rule 13.
+struct EnumDecl {
+    file: PathBuf,
+    line: usize,
+    repr: Option<String>,
+    variants: Vec<String>,
+}
+
+/// The arguments of `ffi_enum!(Name: raw { A, B })`.
+struct FfiEnumCall {
+    name: syn::Ident,
+    raw: syn::Ident,
+    variants: Vec<syn::Ident>,
+}
+
+impl syn::parse::Parse for FfiEnumCall {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let name = input.parse()?;
+        input.parse::<syn::Token![:]>()?;
+        let raw = input.parse()?;
+        let content;
+        syn::braced!(content in input);
+        let variants = syn::punctuated::Punctuated::<syn::Ident, syn::Token![,]>::parse_terminated(&content)?
+            .into_iter()
+            .collect();
+        Ok(Self {
+            name,
+            raw,
+            variants,
+        })
+    }
+}
+
+fn collect_enum_decls(items: &[syn::Item], file: &Path, out: &mut BTreeMap<String, EnumDecl>) {
+    for item in items {
+        match item {
+            syn::Item::Enum(e) => {
+                out.insert(
+                    e.ident.to_string(),
+                    EnumDecl {
+                        file: file.to_path_buf(),
+                        line: line_of(e.ident.span()),
+                        repr: repr_of(&e.attrs).map(|r| {
+                            r.trim_start_matches("repr(")
+                                .trim_end_matches(')')
+                                .to_string()
+                        }),
+                        variants: e
+                            .variants
+                            .iter()
+                            .map(|v| v.ident.to_string())
+                            .collect(),
+                    },
+                );
+            }
+            syn::Item::Mod(m) if !in_test_mod(&m.attrs) => {
+                if let Some((_, items)) = &m.content {
+                    collect_enum_decls(items, file, out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_ffi_enum_calls<'a>(items: &'a [syn::Item], file: &'a Path, out: &mut Vec<(&'a Path, &'a syn::ItemMacro)>) {
+    for item in items {
+        match item {
+            syn::Item::Macro(m)
+                if m.mac
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|s| s.ident == "ffi_enum") =>
+            {
+                out.push((file, m));
+            }
+            syn::Item::Mod(m) if !in_test_mod(&m.attrs) => {
+                if let Some((_, items)) = &m.content {
+                    collect_ffi_enum_calls(items, file, out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Rule 13: the `ffi_enum!` lists match the enum declarations one for one.
+fn lint_ffi_enum_calls(parsed: &[(&PathBuf, syn::File)], out: &mut Vec<Violation>) {
+    let mut enums = BTreeMap::new();
+    let mut calls = Vec::new();
+    for (path, file) in parsed {
+        collect_enum_decls(&file.items, path, &mut enums);
+        collect_ffi_enum_calls(&file.items, path, &mut calls);
+    }
+    let mut covered = HashSet::new();
+    for (file, mac) in calls {
+        let mut push = |line: usize, message: String| {
+            out.push(Violation {
+                file: file.to_path_buf(),
+                line,
+                rule: "13-ffi-enum",
+                message,
+            });
+        };
+        let call: FfiEnumCall = match mac.mac.parse_body() {
+            Ok(call) => call,
+            Err(e) => {
+                push(line_of(e.span()), format!("ffi_enum! needs `Name: raw {{ A, B }}`: {e}"));
+                continue;
+            }
+        };
+        let name = call.name.to_string();
+        let line = line_of(call.name.span());
+        let Some(decl) = enums.get(&name) else {
+            push(line, format!("ffi_enum!({name}) names no enum declared under src/ffi"));
+            continue;
+        };
+        if name.ends_with("Flags") {
+            push(
+                line,
+                format!("{name} is a bit-flag enum; check it with convert::flags, not ffi_enum!"),
+            );
+            continue;
+        }
+        if !covered.insert(name.clone()) {
+            push(line, format!("{name} has a second ffi_enum! invocation"));
+            continue;
+        }
+        let raw = call.raw.to_string();
+        if decl.repr.as_deref() != Some(raw.as_str()) {
+            push(
+                line,
+                format!(
+                    "ffi_enum!({name}: {raw}) does not match the enum's #[repr({})]",
+                    decl.repr.as_deref().unwrap_or("?")
+                ),
+            );
+        }
+        let listed: Vec<String> = call
+            .variants
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        let missing: Vec<&str> = decl
+            .variants
+            .iter()
+            .filter(|v| !listed.contains(v))
+            .map(String::as_str)
+            .collect();
+        let extra: Vec<&str> = listed
+            .iter()
+            .filter(|v| !decl.variants.contains(v))
+            .map(String::as_str)
+            .collect();
+        let mut sorted = listed.clone();
+        sorted.sort();
+        sorted.dedup();
+        if !missing.is_empty() || !extra.is_empty() || sorted.len() != listed.len() {
+            push(
+                line,
+                format!(
+                    "ffi_enum!({name}) must list exactly the enum's variants (missing: [{}], unknown: [{}]{})",
+                    missing.join(", "),
+                    extra.join(", "),
+                    if sorted.len() != listed.len() { ", with duplicates" } else { "" }
+                ),
+            );
+        }
+    }
+    for (name, decl) in &enums {
+        if !name.ends_with("Flags") && !covered.contains(name) {
+            out.push(Violation {
+                file: decl.file.clone(),
+                line: decl.line,
+                rule: "13-ffi-enum",
+                message: format!("enum {name} needs a crate::convert::ffi_enum! invocation next to it (README B2)"),
+            });
+        }
+    }
 }
 
 fn collect_decls(items: &[syn::Item], decls: &mut Decls) {

@@ -13,6 +13,8 @@ pub enum PriscDeviceKind {
     AudioOutput = 2,
 }
 
+crate::convert::ffi_enum!(PriscDeviceKind: i32 { Video, AudioInput, AudioOutput });
+
 /// One device (48 bytes). `id` and `name` are mode 2: owned by the array, freed by
 /// `prisc_devices_free`.
 #[repr(C)]

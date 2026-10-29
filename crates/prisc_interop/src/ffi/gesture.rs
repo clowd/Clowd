@@ -25,6 +25,8 @@ pub enum PriscGestureStyle {
     ModifiersPrefix = 2,
 }
 
+crate::convert::ffi_enum!(PriscGestureStyle: i32 { Serialized, Display, ModifiersPrefix });
+
 /// The OS whose conventions apply.
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,6 +36,8 @@ pub enum PriscGestureOs {
     MacOS = 2,
     Linux = 3,
 }
+
+crate::convert::ffi_enum!(PriscGestureOs: i32 { Current, Windows, MacOS, Linux });
 
 /// Parses UTF-8 gesture text (ASCII case-insensitive); a parse error is `PRISC_E_INVALID_ARG` with
 /// the reason as the last error.

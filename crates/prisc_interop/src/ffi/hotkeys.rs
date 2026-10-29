@@ -22,6 +22,10 @@ pub enum PriscHotkeysEventKind {
     Status = 5,
 }
 
+crate::convert::ffi_enum!(PriscHotkeysEventKind: u32 {
+    Hotkey, RecordingModifiers, Recorded, Key, Status
+});
+
 /// The hook's state in a Status event.
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,6 +35,10 @@ pub enum PriscHookState {
     PermissionStale = 2,
     Failed = 3,
 }
+
+crate::convert::ffi_enum!(PriscHookState: i32 {
+    Running, PermissionMissing, PermissionStale, Failed
+});
 
 /// One hook event (48 bytes on 64-bit).
 #[repr(C)]

@@ -35,6 +35,8 @@ pub enum PriscOkLchPlane {
     ChromaHue = 2,
 }
 
+crate::convert::ffi_enum!(PriscOkLchPlane: i32 { LightnessChroma, LightnessHue, ChromaHue });
+
 /// The channel `prisc_oklch_paint_track` paints.
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,6 +45,8 @@ pub enum PriscOkLchChannel {
     Chroma = 1,
     Hue = 2,
 }
+
+crate::convert::ffi_enum!(PriscOkLchChannel: i32 { Lightness, Chroma, Hue });
 
 /// The effective accent, the comet colours and the three ramps for one accent colour.
 ///

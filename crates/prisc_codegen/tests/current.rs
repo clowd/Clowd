@@ -90,6 +90,8 @@ pub struct PriscThing { _private: [u8; 0] }
 #[repr(i32)]
 pub enum PriscKind { A = 0, B = 1 }
 
+crate::convert::ffi_enum!(PriscKind: i32 { A, B });
+
 pub type PriscCallback = Option<unsafe extern "C" fn(user: *mut c_void, rect: *const PriscRect)>;
 
 /// Does it.
@@ -193,7 +195,35 @@ fn lint_rejects_negative_consts_and_implicit_discriminants() {
         .map(|(r, _)| r)
         .collect();
     found.sort();
-    assert_eq!(found, ["6-const-literal", "8-enum-repr", "8-enum-repr"]);
+    assert_eq!(found, ["13-ffi-enum", "6-const-literal", "8-enum-repr", "8-enum-repr"]);
+}
+
+#[test]
+fn lint_keeps_ffi_enum_lists_in_step_with_the_enums() {
+    let added_variant = GOOD.replace("pub enum PriscKind { A = 0, B = 1 }", "pub enum PriscKind { A = 0, B = 1, C = 2 }");
+    let found = lint::lint_ffi(&[file("thing.rs", &added_variant)]);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule, "13-ffi-enum");
+    assert!(found[0].message.contains("missing: [C]"), "{}", found[0].message);
+
+    let no_call = GOOD.replace("crate::convert::ffi_enum!(PriscKind: i32 { A, B });", "");
+    let line = GOOD
+        .lines()
+        .position(|l| l.starts_with("pub enum PriscKind"))
+        .unwrap()
+        + 1;
+    assert_eq!(rules(&[file("thing.rs", &no_call)]), [("13-ffi-enum", line)]);
+
+    let wrong_raw = GOOD.replace("ffi_enum!(PriscKind: i32", "ffi_enum!(PriscKind: u32");
+    assert_eq!(rules(&[file("thing.rs", &wrong_raw)])[0].0, "13-ffi-enum");
+
+    let flags = format!("{GOOD}\n#[repr(u32)]\npub enum PriscThingFlags {{ None = 0, A = 1 }}\n");
+    assert_eq!(rules(&[file("thing.rs", &flags)]), []);
+    let flags_call = format!("{flags}\ncrate::convert::ffi_enum!(PriscThingFlags: u32 {{ None, A }});\n");
+    assert_eq!(rules(&[file("thing.rs", &flags_call)])[0].0, "13-ffi-enum");
+
+    let unknown = format!("{GOOD}\ncrate::convert::ffi_enum!(PriscNothing: i32 {{ A }});\n");
+    assert_eq!(rules(&[file("thing.rs", &unknown)])[0].0, "13-ffi-enum");
 }
 
 #[test]
@@ -208,7 +238,7 @@ fn lint_rejects_threads_export_calls_and_unguarded_trampolines() {
     let platform = (
         PathBuf::from("crates/prisc_interop/src/platform/macos/audio_output.rs"),
         "unsafe extern \"C\" fn render(user: *mut u8) -> i32 {\n    0\n}\nunsafe extern \"C\" fn ok(user: *mut u8) -> i32 {\n    \
-         crate::panic::callback_guard(0, || 1)\n}\n"
+         crate::panic::callback_guard(&STATE.panic, 0, || 1)\n}\n"
             .to_string(),
     );
     let found: Vec<(&str, usize)> = lint::lint_crate(&[util, platform], &exports)
