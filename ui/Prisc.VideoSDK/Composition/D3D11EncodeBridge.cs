@@ -35,7 +35,7 @@ namespace Prisc.VideoSDK.Composition
     /// than producing a wrong render.</para>
     ///
     /// <para>Lifetime: create on the ring's (composer) thread, because the self-check draws through
-    /// the ring's slot 0; call <see cref="Convert"/> from one thread at a time (the convert stage);
+    /// the ring's slot 0, which must be idle; call <see cref="Convert"/> from one thread at a time (the convert stage);
     /// dispose after the encoder opened over <see cref="Frames"/> was closed and before the ring.
     /// Creation is all-or-nothing and leaves slot 0 idle, so the caller stays on readback over the
     /// same ring.</para>
@@ -74,37 +74,41 @@ namespace Prisc.VideoSDK.Composition
 
         /// <summary>
         /// Builds the bridge over a shareable ring, or returns null with the reason. Must run on the
-        /// ring's thread (the self-check composes a frame through slot 0, which must be idle and is
-        /// idle again on return either way).
+        /// ring's thread (the converter's creation self-checks through slot 0, which must be idle
+        /// and is idle again on return either way).
         /// </summary>
-        /// <param name="beforeSelfCheck">For tests: runs once the converter and the frames context
-        /// are up, just before the self-check. Throwing from it stands in for a failure at that
-        /// point.</param>
+        /// <param name="missingCapability">True when the crate answered that this machine simply
+        /// cannot run the bridge (<see cref="Interop.InteropStatus.Capability"/>: no shareable ring,
+        /// no Direct3D 11.4 runtime, or a Direct3D 11 device without video processing, as on the
+        /// GitHub Windows runner's virtual GPU) as opposed to something going wrong on a capable
+        /// one, a wrong self-check conversion included. Tests skip on the former and fail on the
+        /// latter; the render falls back to readback on both.</param>
+        /// <param name="afterBuilt">For tests: runs once the converter (self-checked) and the frames
+        /// context are up, just before the bridge is handed out. Throwing from it stands in for a
+        /// late failure, which must leave nothing behind.</param>
         public static D3D11EncodeBridge TryCreate(D3D12ReadbackRing ring, out string failureReason,
-            Action<D3D11EncodeBridge> beforeSelfCheck = null)
+            out bool missingCapability, Action<D3D11EncodeBridge> afterBuilt = null)
         {
             ArgumentNullException.ThrowIfNull(ring);
-            if (!ring.Shareable)
-            {
-                failureReason = "the readback ring's textures and fences are not shareable on this driver";
-                return null;
-            }
+            missingCapability = false;
 
             var bridge = new D3D11EncodeBridge(ring);
             try
             {
-                bridge._converter = Interop.GpuNv12Converter.TryCreate(ring.Device, ring.Ring, out failureReason, out _);
+                // One native call builds the converter and runs its self-check, recovery of slot 0
+                // included.
+                bridge._converter = Interop.GpuNv12Converter.TryCreate(ring.Device, ring.Ring, out failureReason, out var status);
                 if (bridge._converter == null)
+                {
+                    missingCapability = status == Interop.InteropStatus.Capability;
                     return null;
+                }
 
-                var converter = bridge._converter;
                 bridge._frames = new HardwareFrames(ring.Device, ring.Width, ring.Height,
-                    converter.AcquireTexture, Interop.GpuNv12Converter.ReleaseTexture,
+                    bridge._converter.AcquireTexture, Interop.GpuNv12Converter.ReleaseTexture,
                     "Direct3D 11 NV12 textures (VideoProcessor BGRA->NV12, BT.601 limited)");
 
-                beforeSelfCheck?.Invoke(bridge);
-                // The whole check, recovery of slot 0 included, is one native call.
-                converter.SelfCheck(D3D12ReadbackRing.FenceTimeout);
+                afterBuilt?.Invoke(bridge);
 
                 var built = bridge;
                 bridge = null; // ownership passes to the caller
@@ -114,8 +118,8 @@ namespace Prisc.VideoSDK.Composition
             catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or Interop.InteropException
                                        or DllNotFoundException or EntryPointNotFoundException)
             {
-                // a native call refused mid-way, a fence that never signalled, a self-check
-                // mismatch, or no FFmpeg D3D11VA: every one of them means "readback on this machine"
+                // a native call refused mid-way, a fence that never signalled, or no FFmpeg
+                // D3D11VA: every one of them means "readback on this machine"
                 failureReason = ex.Message;
                 return null;
             }
@@ -125,30 +129,10 @@ namespace Prisc.VideoSDK.Composition
             }
         }
 
-        /// <summary>
-        /// Whether a <see cref="TryCreate"/> failure reason says this machine simply cannot run the
-        /// bridge (no shareable ring, no Direct3D 11.4 runtime, or a Direct3D 11 device without
-        /// video processing: the GitHub Windows runner's virtual GPU answers E_NOINTERFACE to
-        /// ID3D11VideoDevice) as opposed to something going wrong on a capable one. Tests skip on
-        /// the former and fail on the latter. The crate keeps the step names these markers match.
-        /// </summary>
-        public static bool IsMissingCapability(string failureReason)
-        {
-            if (String.IsNullOrEmpty(failureReason))
-                return false;
-            foreach (var marker in new[]
-                     {
-                         "not shareable", "QueryInterface(ID3D11Device5", "QueryInterface(ID3D11DeviceContext4)",
-                         "QueryInterface(ID3D11VideoDevice)", "QueryInterface(ID3D11VideoContext)",
-                         "CreateVideoProcessorEnumerator", "ID3D11VideoDevice::CreateVideoProcessor ",
-                     })
-            {
-                if (failureReason.Contains(marker, StringComparison.Ordinal))
-                    return true;
-            }
-
-            return false;
-        }
+        /// <summary><see cref="TryCreate(D3D12ReadbackRing, out string, out bool, Action{D3D11EncodeBridge})"/>
+        /// for a caller that falls back the same way whatever the cause (the render).</summary>
+        public static D3D11EncodeBridge TryCreate(D3D12ReadbackRing ring, out string failureReason)
+            => TryCreate(ring, out failureReason, out _);
 
         // -------------------------------------------------------------------- per frame
 
@@ -157,7 +141,8 @@ namespace Prisc.VideoSDK.Composition
         /// (which returned <paramref name="renderFenceValue"/>) into a pooled NV12 texture and
         /// returns it as a frame for the encoder. Nothing here waits on the CPU; the ring's
         /// <see cref="D3D12ReadbackRing.ReleaseShared"/> for the slot may follow at once. One
-        /// thread at a time.
+        /// thread at a time (the bridge's own bookkeeping is not synchronised; the native convert
+        /// is).
         /// </summary>
         public HardwareFrame Convert(int slot, ulong renderFenceValue)
         {

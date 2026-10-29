@@ -48,20 +48,12 @@ namespace Prisc.UI.Harness
                 using var ring = GpuReadbackRing.TryCreate(device, 64, 48, 2, out reason, out var status);
                 if (ring == null)
                     return status == InteropStatus.Unsupported ? ProbeOutcome.Unsupported(reason) : ProbeOutcome.Unavailable(reason);
-                var converter = GpuNv12Converter.TryCreate(device, ring, out var converterReason, out _);
-                string nv12;
-                if (converter == null)
-                {
-                    nv12 = "unavailable: " + converterReason;
-                }
-                else
-                {
-                    using (converter)
-                    {
-                        converter.SelfCheck(TimeSpan.FromSeconds(30));
-                        nv12 = "self-check ok";
-                    }
-                }
+                // Creation runs the conversion self-check, so a converter that comes back is checked;
+                // a capable GPU on which it failed is an error, as a failed check always was.
+                using var converter = GpuNv12Converter.TryCreate(device, ring, out var converterReason, out var converterStatus);
+                if (converter == null && converterStatus != InteropStatus.Capability)
+                    return new ProbeOutcome("error", Error: "the NV12 converter failed on a capable GPU: " + converterReason);
+                string nv12 = converter != null ? "self-check ok" : "unavailable: " + converterReason;
                 return new Dictionary<string, object>
                 {
                     ["rowPitch"] = ring.RowPitch,

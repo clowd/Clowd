@@ -230,7 +230,6 @@ namespace Prisc.VideoSDK.Tests
                 Assert.Fail("the converter did not come up over a shareable ring: " + reason);
             }
 
-            converter.SelfCheck(TimeSpan.FromSeconds(30));
             IntPtr texture = converter.AcquireTexture();
             Assert.NotEqual(IntPtr.Zero, texture);
             converter.Dispose();

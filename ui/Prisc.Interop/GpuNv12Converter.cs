@@ -27,11 +27,15 @@ namespace Prisc.Interop
         }
 
         /// <summary>
-        /// Builds the converter over a shareable ring of <paramref name="device"/>, or returns null
-        /// with the reason. Never throws for a driver that refused: the caller stays on readback.
+        /// Builds the converter over a shareable ring of <paramref name="device"/> and self-checks
+        /// it (one known colour through slot 0, converted and compared with BT.601 limited range),
+        /// or returns null with the reason. Slot 0 must be idle and is idle again either way, so a
+        /// caller that falls back reads back over the same ring. Never throws for a driver that
+        /// refused: the caller stays on readback.
         /// </summary>
         /// <param name="status">The crate's status: <see cref="InteropStatus.Capability"/> for the
-        /// conditions under which this GPU cannot run the zero-copy path at all.</param>
+        /// conditions under which this GPU cannot run the zero-copy path at all (skip), anything
+        /// else for a capable GPU on which it failed, a wrong self-check conversion included.</param>
         public static GpuNv12Converter? TryCreate(GpuDevice device, GpuReadbackRing ring, out string failureReason, out InteropStatus status)
         {
             ArgumentNullException.ThrowIfNull(device);
@@ -57,24 +61,9 @@ namespace Prisc.Interop
             return new GpuNv12Converter(created);
         }
 
-        /// <summary>
-        /// One known colour through the whole zero-copy path (slot 0 of the ring cleared, shared,
-        /// converted, read back, compared with BT.601 limited range). Slot 0 must be idle and is idle
-        /// again whatever happens, so a caller that falls back reads back over the same ring.
-        /// </summary>
-        /// <exception cref="InteropException">The check failed; <see cref="InteropException.Status"/>
-        /// is <see cref="InteropStatus.Capability"/> for samples off the expectation.</exception>
-        /// <exception cref="TimeoutException">A fence did not arrive within <paramref name="timeout"/>.</exception>
-        public void SelfCheck(TimeSpan timeout)
-        {
-            using var lease = Lease();
-            GpuStatus.Check(NativeMethods.prisc_gpu_nv12_converter_self_check_windows((PriscGpuNv12Converter*)lease.Handle,
-                    GpuTimeout.Milliseconds(timeout)),
-                "prisc_gpu_nv12_converter_self_check_windows");
-        }
-
         /// <summary>Converts a shared slot (ready at <paramref name="fenceValue"/>) into
-        /// <paramref name="dstTexture"/>, a texture from <see cref="AcquireTexture"/>.</summary>
+        /// <paramref name="dstTexture"/>, a texture from <see cref="AcquireTexture"/>. Safe from any
+        /// thread: the crate serialises concurrent converts.</summary>
         /// <param name="signalQueued">Written on every path, before this method throws: whether the
         /// consumed-fence signal reached the GPU timeline. A refused GPU wait queues nothing, so the
         /// slot must be abandoned; a refused blit still queues the signal, so it can be released.</param>
