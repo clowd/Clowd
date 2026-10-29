@@ -11,8 +11,8 @@ namespace Prisc.Shared.Tests
     /// <c>Gesture</c> (<c>prisc_gesture_*</c>), since the settings file, the standby capturer's
     /// command line and its status echo all carry that one text. The grammar's vectors live beside
     /// it in Rust (gesture.rs, reserved.rs); these are the marshalling smoke tests of each operation,
-    /// the full-table round trips that pin the generated C# enums to the Rust table, and the per-OS
-    /// reserved cases through the overload callers use.
+    /// the full-table round trips that pin the generated C# enums to the Rust table, and one reserved
+    /// case per OS through the overload callers use.
     /// </summary>
     public class HotkeyGestureTests
     {
@@ -133,66 +133,19 @@ namespace Prisc.Shared.Tests
         }
 
         [Fact]
-        public void Task_switching_and_task_manager_are_reserved_on_windows()
+        public void The_os_argument_picks_that_os_reserved_list()
         {
+            // the per-OS tables and their negatives live in reserved.rs; this checks the OS crosses
             InteropTestGate.Require();
-            var reserved = new[]
-            {
-                new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Alt),
-                new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Alt | HotkeyModifiers.Shift),
-                new HotkeyGesture(HotkeyKey.Escape, HotkeyModifiers.Alt),
-                new HotkeyGesture(HotkeyKey.Escape, HotkeyModifiers.Control),
-                new HotkeyGesture(HotkeyKey.Escape, HotkeyModifiers.Control | HotkeyModifiers.Shift),
-            };
+            var altTab = new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Alt);
+            var cmdQ = new HotkeyGesture(HotkeyKey.Q, HotkeyModifiers.Meta);
 
-            foreach (var gesture in reserved)
-            {
-                Assert.True(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.Windows), gesture.ToSerializedString());
-                // Alt+Tab is an ordinary combination on a Mac
-                Assert.False(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.OSX), gesture.ToSerializedString());
-                Assert.False(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.Linux), gesture.ToSerializedString());
-            }
-
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Tab), OSPlatform.Windows));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Control), OSPlatform.Windows));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Escape), OSPlatform.Windows));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Q, HotkeyModifiers.Meta), OSPlatform.Windows));
+            Assert.True(HotkeyGesture.IsSystemReserved(altTab, OSPlatform.Windows));
+            Assert.False(HotkeyGesture.IsSystemReserved(altTab, OSPlatform.OSX));
+            Assert.False(HotkeyGesture.IsSystemReserved(altTab, OSPlatform.Linux));
+            Assert.True(HotkeyGesture.IsSystemReserved(cmdQ, OSPlatform.OSX));
+            Assert.False(HotkeyGesture.IsSystemReserved(cmdQ, OSPlatform.Windows));
             Assert.False(HotkeyGesture.IsSystemReserved(null, OSPlatform.Windows));
-        }
-
-        [Fact]
-        public void Switching_spotlight_leaving_the_window_and_the_ways_out_of_a_hang_are_reserved_on_macos()
-        {
-            InteropTestGate.Require();
-            const HotkeyModifiers Cmd = HotkeyModifiers.Meta;
-            var reserved = new[]
-            {
-                new HotkeyGesture(HotkeyKey.Tab, Cmd),
-                new HotkeyGesture(HotkeyKey.Tab, Cmd | HotkeyModifiers.Shift),
-                new HotkeyGesture(HotkeyKey.Oem3, Cmd),
-                new HotkeyGesture(HotkeyKey.Oem3, Cmd | HotkeyModifiers.Shift),
-                new HotkeyGesture(HotkeyKey.OemBackslash, Cmd),
-                new HotkeyGesture(HotkeyKey.Space, Cmd),
-                new HotkeyGesture(HotkeyKey.Q, Cmd),
-                new HotkeyGesture(HotkeyKey.W, Cmd),
-                new HotkeyGesture(HotkeyKey.H, Cmd),
-                new HotkeyGesture(HotkeyKey.M, Cmd),
-                new HotkeyGesture(HotkeyKey.Escape, Cmd | HotkeyModifiers.Alt),
-                new HotkeyGesture(HotkeyKey.Q, Cmd | HotkeyModifiers.Control),
-            };
-
-            foreach (var gesture in reserved)
-            {
-                Assert.True(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.OSX), gesture.ToSerializedString());
-                Assert.False(HotkeyGesture.IsSystemReserved(gesture, OSPlatform.Windows), gesture.ToSerializedString());
-            }
-
-            // the screenshot keys are a screenshot tool's to take over
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.D3, Cmd | HotkeyModifiers.Shift), OSPlatform.OSX));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.D4, Cmd | HotkeyModifiers.Shift), OSPlatform.OSX));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.D5, Cmd | HotkeyModifiers.Shift), OSPlatform.OSX));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Q, Cmd | HotkeyModifiers.Shift), OSPlatform.OSX));
-            Assert.False(HotkeyGesture.IsSystemReserved(new HotkeyGesture(HotkeyKey.Tab, HotkeyModifiers.Alt), OSPlatform.OSX));
             Assert.False(HotkeyGesture.IsSystemReserved(null, OSPlatform.OSX));
         }
 
