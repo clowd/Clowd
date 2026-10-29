@@ -295,10 +295,12 @@ namespace Prisc.Interop
         /// <summary>
         ///  Creates the GPU device: D3D12 on the first hardware adapter with feature level 11.0 and a direct
         ///  queue (Windows; a software adapter only with `AllowSoftwareAdapter`), the system default Metal
-        ///  device and a queue (macOS).
+        ///  device and a queue (macOS). `out_info` is filled in full; its pointers and `adapter_name` are
+        ///  borrowed from the device and valid until `prisc_gpu_device_destroy`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_CAPABILITY`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null out pointer, unknown flag bit);
+        ///  `PRISC_E_CAPABILITY` when no adapter qualifies or the Mac has no Metal device (composite on the
+        ///  CPU); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows and macOS.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -306,10 +308,10 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_device_create(uint flags, PriscGpuDevice** out_device, PriscGpuDeviceInfo* out_info);
 
         /// <summary>
-        ///  Releases the device; a ring or converter created from it keeps what it needs alive. Null is
-        ///  `PRISC_OK`.
+        ///  Releases the device handle; a ring or converter created from it keeps what it needs alive, and
+        ///  the Direct3D 11 reference FFmpeg holds stays valid. Null is `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`.
+        ///  Status: `PRISC_OK`.
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -317,11 +319,12 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_device_destroy(PriscGpuDevice* device);
 
         /// <summary>
-        ///  Windows: the D3D11 device on the same adapter (created on first use) with a reference
-        ///  transferred to the caller (FFmpeg releases it).
+        ///  Windows: the D3D11 device on the same adapter (created on first use, then shared with the NV12
+        ///  converter) with a reference transferred to the caller: FFmpeg's `AVD3D11VADeviceContext`
+        ///  releases it exactly once. A refused `D3D11CreateDevice` and an adapter LUID mismatch are
+        ///  `PRISC_E_OS`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -329,11 +332,14 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_d3d11_device_acquire_windows(PriscGpuDevice* device, void** out_d3d11);
 
         /// <summary>
-        ///  Windows: creates the readback ring and self-checks it (slot 0 cleared, submitted and read back);
-        ///  a mismatch is `PRISC_E_CAPABILITY`, so the caller falls back to the CPU path.
+        ///  Windows: creates the readback ring (shareable with the D3D11 twin when the driver allows) and
+        ///  self-checks it: slot 0 is cleared to a known colour, read back through the copy queue and
+        ///  compared, and a mismatch is `PRISC_E_CAPABILITY`, so the caller falls back to the synchronous
+        ///  ring. `out_info` is filled on success.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_CAPABILITY`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null pointer, zero size or slot count);
+        ///  `PRISC_E_CAPABILITY` (unexpected copy footprint, self-check mismatch or timeout); `PRISC_E_OS`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -341,9 +347,11 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_readback_ring_create_windows(PriscGpuDevice* device, uint width, uint height, uint slots, PriscGpuReadbackRing** out_ring, PriscGpuRingInfo* out_info);
 
         /// <summary>
-        ///  Windows: drains, unmaps and frees the ring; null is `PRISC_OK`.
+        ///  Windows: drains the copy queue (bounded at 30 s), unmaps every readback buffer and closes the
+        ///  wait event, then releases the handle; a converter built on the ring keeps its fences and
+        ///  textures alive. Null is `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`.
+        ///  Status: `PRISC_OK`.
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -351,99 +359,115 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_readback_ring_destroy_windows(PriscGpuReadbackRing* ring);
 
         /// <summary>
-        ///  Windows: moves `slot` from idle to composing and lends its `ID3D12Resource*`.
+        ///  Windows: moves `slot` from idle to composing and lends its `ID3D12Resource*` (the same pointer
+        ///  every frame, valid until the ring's destroy). Wrap it for Skia with `ResourceState = COMMON`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE` (the slot is not idle);
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_begin_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_readback_ring_begin_windows(PriscGpuReadbackRing* ring, uint slot, void** out_texture);
 
         /// <summary>
-        ///  Windows: returns a composing `slot` to idle.
+        ///  Windows: returns a composing `slot` to idle (wrapping the texture for Skia failed).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_cancel_begin_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_readback_ring_cancel_begin_windows(PriscGpuReadbackRing* ring, uint slot);
 
         /// <summary>
-        ///  Windows: submits the copy of `slot` to its readback buffer (the copy path).
+        ///  Windows: ends drawing on a composing `slot` (after Skia flushed and submitted it on the direct
+        ///  queue) and queues its copy to the readback buffer: the render fence is signalled behind the
+        ///  draws, the copy queue waits for it on the GPU, copies and signals the consumed fence. Writes the
+        ///  fence value the copy reaches. Nothing waits on the CPU.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_OS`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_submit_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_readback_ring_submit_windows(PriscGpuReadbackRing* ring, uint slot, ulong* out_fence_value);
 
         /// <summary>
-        ///  Windows: signals `slot` for the D3D11 twin (the zero-copy path).
+        ///  Windows: ends drawing on a composing `slot` for an external GPU consumer (the zero-copy path):
+        ///  signals the render fence and writes its value, which the consumer waits for and then signals on
+        ///  the consumed fence; no copy is queued.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_OS`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_submit_shared_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_readback_ring_submit_shared_windows(PriscGpuReadbackRing* ring, uint slot, ulong* out_fence_value);
 
         /// <summary>
-        ///  Windows: waits for `slot`'s copy and lends the mapped pixels.
+        ///  Windows: waits (at most `timeout_ms`, `u32::MAX` is infinite) for `slot`'s copy, makes the slot
+        ///  idle and lends its mapped readback memory and row pitch (valid until the slot's next begin).
+        ///  On `PRISC_S_TIMEOUT` the slot stays in flight, the out parameters are untouched, and the caller
+        ///  may wait again.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_TIMEOUT`, `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_S_TIMEOUT`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE` (not submitted,
+        ///  or submitted for an external consumer); `PRISC_E_OS` (a removed device);
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_wait_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_readback_ring_wait_windows(PriscGpuReadbackRing* ring, uint slot, uint timeout_ms, byte** out_address, uint* out_row_bytes);
 
         /// <summary>
-        ///  Windows: waits until the D3D11 twin is done with a shared `slot` and returns it to idle.
+        ///  Windows: waits (at most `timeout_ms`) until the external consumer of a shared `slot` signalled
+        ///  the consumed fence for it, then makes the slot idle. On `PRISC_S_TIMEOUT` it stays in flight.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_TIMEOUT`, `PRISC_E_INVALID_ARG`, `PRISC_E_STATE`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_S_TIMEOUT`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_OS`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_release_shared_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_readback_ring_release_shared_windows(PriscGpuReadbackRing* ring, uint slot, uint timeout_ms);
 
         /// <summary>
-        ///  Windows: gives up on a shared `slot` after a failure, leaving it reusable.
+        ///  Windows: gives up on a shared `slot` whose consumer failed before it could signal: the consumed
+        ///  fence is moved to the slot's value from the CPU when it is behind (never backwards) and the
+        ///  slot is idle again. Nothing is waited for; the caller vouches no GPU read is pending.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_OS`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_abandon_shared_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_readback_ring_abandon_shared_windows(PriscGpuReadbackRing* ring, uint slot);
 
         /// <summary>
-        ///  Windows: waits until the consumer fence reaches `value`.
+        ///  Windows: waits (at most `timeout_ms`) until the consumed fence reaches `value`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_TIMEOUT`, `PRISC_E_INVALID_ARG`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_S_TIMEOUT`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE` (the ring was
+        ///  destroyed under a converter); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_wait_consumed_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_readback_ring_wait_consumed_windows(PriscGpuReadbackRing* ring, ulong value, uint timeout_ms);
 
         /// <summary>
-        ///  Windows: opens the ring's shared slots on the D3D11 twin and creates the BT.601 limited-range
-        ///  video processor and its texture pool.
+        ///  Windows: opens the ring's shared slots and fences on the D3D11 twin and creates the BT.601
+        ///  limited-range video processor. `PRISC_E_CAPABILITY` for exactly the conditions the C# skip
+        ///  predicate names (a ring that is not shareable, no ID3D11Device5 / ID3D11DeviceContext4 /
+        ///  ID3D11VideoDevice / ID3D11VideoContext, a refused processor enumerator or processor); the
+        ///  message keeps the `"{step} failed (0x{hr})"` shape. A ring from another device is
+        ///  `PRISC_E_INVALID_ARG`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_CAPABILITY`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_CAPABILITY`; `PRISC_E_OS`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -451,11 +475,16 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_nv12_converter_create_windows(PriscGpuDevice* device, PriscGpuReadbackRing* ring, PriscGpuNv12Converter** out_converter);
 
         /// <summary>
-        ///  Windows: converts a cleared slot and compares three BT.601 sample points; on any failure leaves
-        ///  slot 0 idle itself.
+        ///  Windows: one known colour through the whole zero-copy path: slot 0 cleared on the direct queue,
+        ///  submitted for the shared protocol, converted into a fresh texture, read back and compared at
+        ///  three points with BT.601 limited range (tolerance 4). Slot 0 must be idle and is idle again on
+        ///  every outcome (released when the consumed signal was queued, abandoned otherwise), so a caller
+        ///  that falls back carries on with readback over the same ring. Each fence wait is bounded by
+        ///  `timeout_ms`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_CAPABILITY`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_CAPABILITY` (the samples are off: a driver that ignores the colour
+        ///  space); `PRISC_E_STATE` (slot 0 not idle); `PRISC_E_OS`; `PRISC_E_INVALID_ARG`;
+        ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -463,43 +492,52 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_nv12_converter_self_check_windows(PriscGpuNv12Converter* converter, uint timeout_ms);
 
         /// <summary>
-        ///  Windows: converts shared `slot` (ready at `fence_value`) into `dst_texture` (NV12).
+        ///  Windows: converts shared `slot` (ready at `fence_value`, from the ring's shared submit) into
+        ///  `dst_texture`, a texture from `prisc_gpu_nv12_texture_acquire_windows` on this converter.
+        ///  Queues a GPU wait on the render fence, the blit, a signal of the consumed fence with the same
+        ///  value, and a flush; nothing waits on the CPU. `out_signal_queued` is written on every path:
+        ///  1 when the consumed signal reached the GPU timeline (release the slot), 0 when nothing was
+        ///  queued (abandon it). The signal goes out even when the blit was refused.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (slot out of range, a texture not from this
+        ///  converter); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_nv12_converter_convert_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_nv12_converter_convert_windows(PriscGpuNv12Converter* converter, uint slot, ulong fence_value, void* dst_texture, byte* out_signal_queued);
 
         /// <summary>
-        ///  Windows: waits until every queued conversion has finished.
+        ///  Windows: waits (at most `timeout_ms`) until every conversion this converter queued has
+        ///  completed; `PRISC_OK` at once before the first.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_TIMEOUT`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_S_TIMEOUT`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE` (the ring was
+        ///  destroyed first); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_nv12_converter_drain_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_nv12_converter_drain_windows(PriscGpuNv12Converter* converter, uint timeout_ms);
 
         /// <summary>
-        ///  Windows: reads an NV12 texture back through a staging copy (tests).
+        ///  Windows: reads one of this converter's NV12 textures back through a staging copy: the tightly
+        ///  packed luma plane (`width * height` bytes) into `y` and the interleaved chroma plane
+        ///  (`width * height / 2`) into `uv`. Blocks until every queued conversion completed (tests).
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null or short buffers, a foreign texture);
+        ///  `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
         ///
-        ///  Thread: any thread, never concurrently with another call on the same handle.
+        ///  Thread: any thread.
         /// </summary>
         [DllImport(__DllName, EntryPoint = "prisc_gpu_nv12_converter_read_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int prisc_gpu_nv12_converter_read_windows(PriscGpuNv12Converter* converter, void* texture, byte* y, nuint y_len, byte* uv, nuint uv_len);
 
         /// <summary>
-        ///  Windows: drains (bounded at 2 s) and releases the converter; textures still out keep its inner
-        ///  state alive. Null is `PRISC_OK`.
+        ///  Windows: drains (bounded at 2 s, outcome swallowed: the ordered path drains first with
+        ///  `prisc_gpu_nv12_converter_drain_windows`) and releases the handle; textures still out keep the
+        ///  converter's inner state alive until they are released. Null is `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`.
+        ///  Status: `PRISC_OK`.
         ///
         ///  Thread: any thread, never concurrently with another call on the same handle.
         /// </summary>
@@ -507,10 +545,11 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_nv12_converter_destroy_windows(PriscGpuNv12Converter* converter);
 
         /// <summary>
-        ///  Windows: an NV12 texture from the converter's pool for FFmpeg's frame pool.
+        ///  Windows: a new NV12 texture (render-target and shader-resource bindable, with the converter's
+        ///  output view) for FFmpeg's frame pool; the raw `ID3D11Texture2D*` is the frame's identity and is
+        ///  owned by the crate until `prisc_gpu_nv12_texture_release_windows`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`, `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -518,10 +557,13 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_nv12_texture_acquire_windows(PriscGpuNv12Converter* converter, void** out_texture);
 
         /// <summary>
-        ///  Windows: returns a pool texture (FFmpeg's free path); safe after the converter was destroyed.
+        ///  Windows: releases a texture from `prisc_gpu_nv12_texture_acquire_windows` and its output view.
+        ///  Takes no converter: the texture is looked up in a crate-wide registry whose entry keeps its
+        ///  converter alive, so a release after the converter (or the encoder wrapper) was destroyed is
+        ///  safe, and the last texture back frees the converter. A pointer the crate does not know (null,
+        ///  never handed out, released already) is `PRISC_S_NONE`, never an error.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_NONE` (unknown pointer), `PRISC_E_UNSUPPORTED` off Windows.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE`; `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: any thread.
         /// </summary>
