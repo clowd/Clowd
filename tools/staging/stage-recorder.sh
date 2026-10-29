@@ -106,7 +106,7 @@ stage_macos() {
   #    signature, so they are self-resolving for any consumer that dlopens
   #    them, and the dev tree and this bundle carry byte-identical files.
   #    `cp -a` keeps the versioned aliases as symlinks. The app's own
-  #    libprisc_hotkeys.dylib shares the profile dir under build.sh.
+  #    libprisc_interop.dylib shares the profile dir under build.sh.
   find "$src" -maxdepth 1 -name '*.dylib' ! -name 'libprisc_*' -exec cp -a {} "$dist/Frameworks/" \;
   for f in libavcodec.dylib libavformat.dylib libavutil.dylib libx264.dylib; do
     require "Frameworks/$f"

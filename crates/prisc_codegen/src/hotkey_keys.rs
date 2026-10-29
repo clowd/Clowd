@@ -2,8 +2,8 @@
 //! Prisc.Shared), moved here from prisc_hotkeys' `src/csharp.rs`, and the keystroke overlay's keycap
 //! legends (`ui/Prisc.VideoSDK/Composition/KeycapLegends.g.cs`). The mirror carries the enums and the
 //! canonical names only: gesture text is parsed and printed by prisc_hotkeys through the
-//! `prisc_gesture_*` exports, so C# has no parser, alias table or label table of its own. The legacy
-//! hook ABI's constants and `AbiVersion` live in hotkey_status.rs's `HotkeysAbi.g.cs`.
+//! `prisc_gesture_*` exports, so C# has no parser, alias table or label table of its own. The hook's
+//! event and status shapes cross the C ABI as prisc_interop's `prisc_hotkeys_*` types (abi.rs).
 
 use std::fmt::Write as _;
 use std::path::Path;

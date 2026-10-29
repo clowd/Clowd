@@ -41,7 +41,9 @@ unsafe impl Sync for Sink {}
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
 
 /// Hands one line to the sink, if there is one. One lock read when there is none. Runs on the
-/// thread that called the export; never called from an OS callback thread.
+/// thread that called the export, or on the macOS main thread from an AppKit dispatch that runs
+/// outside any export (the NSServices delivery reporting a caught panic); never from an audio or
+/// other OS callback thread. Takes only the read lock, so it never waits on itself.
 pub(crate) fn emit(level: PriscInteropLogLevel, message: &str) {
     let sink = SINK
         .read()
