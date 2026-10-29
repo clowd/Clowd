@@ -235,11 +235,13 @@ namespace Prisc.VideoSDK.Composition
                         return false;
                     }
 
-                    // Skip software adapters (Microsoft Basic Render Driver / WARP) — the CPU
-                    // Skia backend is faster and simpler than WARP for compositing.
+                    // Skip software adapters (Microsoft Basic Render Driver / WARP): the CPU
+                    // Skia backend is faster and simpler than WARP for compositing. Tests on a GPU-less
+                    // CI runner opt in with PRISC_GPU_ALLOW_WARP=1 to exercise this path on WARP.
                     DXGI_ADAPTER_DESC1 desc = default;
                     hr = ComCall(candidate, VtblGetDesc1, &desc);
-                    if (hr < 0 || (desc.Flags & DxgiAdapterFlagSoftware) != 0)
+                    bool allowWarp = Environment.GetEnvironmentVariable(Prisc.Interop.EnvVars.GpuAllowWarp) == "1";
+                    if (hr < 0 || ((desc.Flags & DxgiAdapterFlagSoftware) != 0 && !allowWarp))
                     {
                         Release(candidate);
                         continue;

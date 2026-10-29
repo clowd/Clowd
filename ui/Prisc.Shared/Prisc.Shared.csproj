@@ -19,6 +19,10 @@
                      Visibility="Public" />
   </ItemGroup>
   <ItemGroup>
+    <!-- prisc_interop: the gesture, colour and constant logic shared with the Rust helpers. -->
+    <ProjectReference Include="..\Prisc.Interop\Prisc.Interop.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Meziantou.Framework.ResxSourceGenerator" Version="2.0.0" PrivateAssets="all" />
     <PackageReference Include="Clowd.Clipboard.Gdi" Version="1.1.4" />

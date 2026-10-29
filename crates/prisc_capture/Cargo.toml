@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 prisc_ipc.workspace = true
+# The permission checks and the foreground grant every Prisc process answers the same way.
+prisc_platform.workspace = true
 prisc_rust_core = { workspace = true, features = ["desktop", "telemetry"] }
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }

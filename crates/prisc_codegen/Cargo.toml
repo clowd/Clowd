@@ -1,0 +1,39 @@
+[package]
+name = "prisc_codegen"
+version = "1.0.0"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# The only code that writes into ui/: every Rust-to-C# mirror (the prisc_interop bindings, the
+# public interop enums, the ABI fingerprint, the helper protocol codecs, the hotkey key table and
+# status codes, the shared environment variable names, the typed contract constants and the
+# session.json golden sample), plus the lint that enforces prisc_interop's crate rules.
+# `cargo codegen` regenerates; `cargo test -p prisc_codegen` fails on any stale, missing or
+# orphaned output and on any rule violation. Never shipped. Never depends on prisc_interop (it
+# reads crates/prisc_interop/src/ffi as files), nor on anything GPL or from the recorder stack.
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "prisc_codegen"
+path = "src/main.rs"
+
+[dependencies]
+prisc_hotkeys.workspace = true
+prisc_ipc.workspace = true
+# No features: contracts and session only, never desktop or telemetry.
+prisc_rust_core.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+# Pinned exactly, not caret: its output is committed and compared byte for byte, so a patch
+# release that changed one space would fail the gate for whoever updated the lockfile first.
+csbindgen = "=1.9.8"
+# span-locations: the lint reports file:line.
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits", "visit"] }

@@ -52,5 +52,7 @@
     <ProjectReference Include="..\Prisc.Geometry\Prisc.Geometry.csproj" />
     <!-- HelperLocator: where prisc_ai and the recorder's FFmpeg live -->
     <ProjectReference Include="..\Prisc.Ipc\Prisc.Ipc.csproj" />
+    <!-- prisc_interop: the GPU devices, CoreAudio output and the FFmpeg library preparation -->
+    <ProjectReference Include="..\Prisc.Interop\Prisc.Interop.csproj" />
   </ItemGroup>
 </Project>

@@ -10,6 +10,8 @@ edition = "2021"
 # image, euclid and sentry all reach this crate through prisc_rust_core and are not named directly.
 [dependencies]
 prisc_ipc.workspace = true
+# The permission preflight and the Esc poll (physical key state), shared with the other helpers.
+prisc_platform.workspace = true
 prisc_rust_core = { workspace = true, features = ["desktop", "telemetry"] }
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }

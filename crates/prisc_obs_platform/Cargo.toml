@@ -9,6 +9,8 @@ license = "GPL-2.0-or-later"
 # overlay and the scrolling driver. Not `telemetry`: the helper binaries enable it
 # themselves, off Linux only (HELPER_PROTOCOL.md §3.4).
 prisc_rust_core = { workspace = true, features = ["desktop"] }
+# The physical mouse-button state for the input-capture frame rows, shared with the hook.
+prisc_platform = { workspace = true }
 prisc_obs = { workspace = true }
 prisc_obs_sys = { workspace = true }
 

@@ -3,7 +3,7 @@
 //! Each `ipc_catalog!` invocation below is the only place its messages are written. It expands
 //! into the serde types a helper emits and parses (`Event`, `Command`, the string enums and
 //! records) and into `SPEC`, the same catalog as data, from which [`CatalogSpec::catalog_hash`]
-//! and the C# mirror (`src/csharp.rs`) are produced. The common `hello`, `error` and `quit`
+//! and the C# mirror (`crates/prisc_codegen/src/ipc.rs`, `cargo codegen`) are produced. The common `hello`, `error` and `quit`
 //! (§2.2, §2.3) are injected into every catalog.
 //!
 //! DSL notes: message and string-enum value names are written in PascalCase and go on the wire

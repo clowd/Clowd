@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The C# side of crates/prisc_interop, the one native library Prisc loads in-process: the
+       generated bindings (Generated/*.g.cs, `cargo codegen`), the loader and the public wrappers.
+       Every [DllImport] in the solution lives here and is generated. Deliberately no
+       PackageReference and no ProjectReference: Prisc.Shared, Prisc.Ipc, Prisc.VideoSDK and
+       Prisc.Ui all reference this leaf, so anything added here is added to all of them. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Prisc.Interop</RootNamespace>
+    <!-- The generated bindings are raw pointers and function pointers throughout. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- CA2255: [ModuleInitializer] in library code is the advanced scenario it allows here: the
+         DllImport resolver must be in place before the first P/Invoke in any host, and installing
+         it does no I/O. -->
+    <NoWarn>$(NoWarn);CA2007;CA2255</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Prisc.Interop.Tests" />
+    <InternalsVisibleTo Include="Prisc.VideoSDK.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- InteropTestGate is source-linked into every test project that touches natives (it needs
+         xunit, which this project must not reference). -->
+    <Compile Remove="Testing\**" />
+    <None Include="Testing\**" />
+  </ItemGroup>
+  <!-- Debug only: the same dev walk-up the loader does, so a missing library is a build warning
+       with the command that fixes it instead of a dialog at first launch. -->
+  <Target Name="WarnWhenInteropLibraryMissing" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'">
+    <PropertyGroup>
+      <_PriscCargoRoot>$([MSBuild]::GetDirectoryNameOfFileAbove('$(MSBuildProjectDirectory)', 'Cargo.toml'))</_PriscCargoRoot>
+      <_PriscInteropLib Condition="$([MSBuild]::IsOSPlatform('Windows'))">prisc_interop.dll</_PriscInteropLib>
+      <_PriscInteropLib Condition="$([MSBuild]::IsOSPlatform('OSX'))">libprisc_interop.dylib</_PriscInteropLib>
+      <_PriscInteropLib Condition="'$(_PriscInteropLib)' == ''">libprisc_interop.so</_PriscInteropLib>
+      <_PriscInteropFound>false</_PriscInteropFound>
+      <_PriscInteropFound Condition="'$(PRISC_INTEROP_PATH)' != ''">true</_PriscInteropFound>
+      <_PriscInteropFound Condition="'$(_PriscCargoRoot)' != '' And (Exists('$(_PriscCargoRoot)/target/debug/$(_PriscInteropLib)') Or Exists('$(_PriscCargoRoot)/target/release/$(_PriscInteropLib)') Or Exists('$(_PriscCargoRoot)/target/debug/deps/$(_PriscInteropLib)') Or Exists('$(_PriscCargoRoot)/target/release/deps/$(_PriscInteropLib)'))">true</_PriscInteropFound>
+    </PropertyGroup>
+    <Warning Condition="'$(_PriscInteropFound)' != 'true'"
+             Text="$(_PriscInteropLib) was not found under target/debug or target/release: Prisc.Ui, Prisc.VideoRender and the interop tests need it. Build it with: cargo build -p prisc_interop" />
+  </Target>
+</Project>

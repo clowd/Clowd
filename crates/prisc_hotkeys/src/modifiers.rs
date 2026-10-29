@@ -31,7 +31,7 @@ impl Modifiers {
 
     /// Every name a gesture's modifier part may use (ASCII case-insensitive): the canonical names
     /// `Gesture` prints first, then the shorthands people write. `None` adds nothing.
-    pub(crate) const NAMES: &'static [(&'static str, Modifiers)] = &[
+    pub const NAMES: &'static [(&'static str, Modifiers)] = &[
         ("None", Modifiers::NONE),
         ("Control", Modifiers::CONTROL),
         ("Alt", Modifiers::ALT),

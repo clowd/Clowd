@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// A path list (`;` on Windows, `:` elsewhere) of directories probed before the executable's
 /// own. The only helper-lookup variable there is.
-pub const HELPERS_DIR_VAR: &str = "PRISC_HELPERS_DIR";
+pub const HELPERS_DIR_VAR: &str = crate::env::HELPERS_DIR;
 
 /// The executable `stem` (plus `.exe` on Windows): each directory of `$PRISC_HELPERS_DIR` in
 /// order, then the directory of the running executable. `None` when none of them has it.

@@ -1,10 +1,17 @@
-//! The C ABI Prisc.Ui P/Invokes. Events are pulled (`prisc_hotkeys_next_event` on one dedicated
-//! thread), never pushed through callbacks, so the hook can never enter managed code.
+//! The legacy C ABI Prisc.Ui P/Invokes from `prisc_hotkeys.dll` / `libprisc_hotkeys.dylib` until the
+//! hook moves behind prisc_interop's `prisc_hotkeys_*` exports, which is when this file goes. The
+//! exports carry a `prisc_hotkeys_legacy_` prefix so that prisc_interop, which links this crate as
+//! an rlib, never sees a second definition of one of its own symbols.
+//!
+//! Events are pulled (`prisc_hotkeys_legacy_next_event` on one dedicated thread), never pushed
+//! through callbacks, so the hook can never enter managed code.
 //!
 //! Rust never hands out an allocated string: all text is copied into caller buffers (the dll is
 //! built `+crt-static` and has its own heap). The C# side gets the constants and the event struct
-//! generated from `ABI_CONSTS` / `EVENT_FIELDS` (`csharp.rs`); only the function signatures are
-//! hand-written there, guarded by `ABI_REVISION`, which folds into `prisc_hotkeys_abi_version`.
+//! generated from `ABI_CONSTS` / `EVENT_FIELDS` (`crates/prisc_codegen/src/hotkey_status.rs`,
+//! `cargo codegen`); only the function signatures are hand-written there, guarded by
+//! `ABI_REVISION`, which folds into `prisc_hotkeys_legacy_abi_version`. These items are public for
+//! prisc_codegen only.
 
 use std::fmt::Write as _;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -17,7 +24,7 @@ use crate::hotkeys::lock;
 use crate::{Error, Event, Events, Gesture, HotkeyId, Hotkeys, Key, Modifiers};
 
 /// Bump whenever an exported function signature changes (the only part of the ABI not hashed).
-pub(crate) const ABI_REVISION: u32 = 1;
+pub const ABI_REVISION: u32 = 1;
 
 const CH_OK: i32 = 0;
 const CH_ERR_UNSUPPORTED: i32 = -1;
@@ -40,7 +47,7 @@ const CH_EVENT_KEY: u32 = 4;
 const CH_EVENT_STOPPED: u32 = 5;
 
 /// Every return code and event kind, as the generator renders them and the ABI hash folds them.
-pub(crate) const ABI_CONSTS: &[(&str, i32)] = &[
+pub const ABI_CONSTS: &[(&str, i32)] = &[
     ("CH_OK", CH_OK),
     ("CH_ERR_UNSUPPORTED", CH_ERR_UNSUPPORTED),
     ("CH_ERR_PERMISSION", CH_ERR_PERMISSION),
@@ -62,7 +69,7 @@ pub(crate) const ABI_CONSTS: &[(&str, i32)] = &[
 ];
 
 /// `PriscHotkeysEvent`'s fields in order, with their C types (the generator's source for the C# struct).
-pub(crate) const EVENT_FIELDS: &[(&str, &str)] = &[
+pub const EVENT_FIELDS: &[(&str, &str)] = &[
     ("kind", "uint32_t"),
     ("id", "uint32_t"),
     ("key", "int32_t"),
@@ -115,7 +122,7 @@ impl Handle {
 
 /// 32-bit FNV-1a over every part of the ABI that is data: the revision, the codes, the event
 /// struct's field names and the whole key table (names, values, aliases).
-pub(crate) fn abi_version() -> u32 {
+pub fn abi_version() -> u32 {
     let mut text = format!("rev={ABI_REVISION};");
     for (name, value) in ABI_CONSTS {
         let _ = write!(text, "{name}={value};");
@@ -224,7 +231,7 @@ fn guard(body: impl FnOnce() -> i32) -> i32 {
 /// # Safety
 /// Always safe to call.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_abi_version() -> u32 {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_abi_version() -> u32 {
     catch_unwind(abi_version).unwrap_or(0)
 }
 
@@ -234,7 +241,7 @@ pub unsafe extern "C" fn prisc_hotkeys_abi_version() -> u32 {
 /// # Safety
 /// `out` is null or valid for a write; `err_buf` is null or valid for `err_cap` bytes.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_start(out: *mut *mut Handle, err_buf: *mut u8, err_cap: u32) -> i32 {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_start(out: *mut *mut Handle, err_buf: *mut u8, err_cap: u32) -> i32 {
     guard(|| {
         if out.is_null() {
             return CH_ERR_NULL;
@@ -256,9 +263,9 @@ pub unsafe extern "C" fn prisc_hotkeys_start(out: *mut *mut Handle, err_buf: *mu
 /// Registers `key` + `modifiers`; `*out_id` = the HotkeyId on `CH_OK`.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`; `out_id` is null or valid for a write.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`; `out_id` is null or valid for a write.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_register(h: *mut Handle, key: i32, modifiers: u32, out_id: *mut u32) -> i32 {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_register(h: *mut Handle, key: i32, modifiers: u32, out_id: *mut u32) -> i32 {
     guard(|| {
         let (Some(handle), false) = (h.as_ref(), out_id.is_null()) else {
             return CH_ERR_NULL;
@@ -290,9 +297,9 @@ pub unsafe extern "C" fn prisc_hotkeys_register(h: *mut Handle, key: i32, modifi
 /// Unregisters `id`. A no-op for an unknown id or a stopped hook.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_unregister(h: *mut Handle, id: u32) {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_unregister(h: *mut Handle, id: u32) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(handle) = h.as_ref() {
             if let Some(hotkeys) = lock(&handle.hotkeys).as_ref() {
@@ -305,9 +312,9 @@ pub unsafe extern "C" fn prisc_hotkeys_unregister(h: *mut Handle, id: u32) {
 /// Turns the observe stream (`CH_EVENT_KEY`) on (nonzero) or off.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_set_observe(h: *mut Handle, observe: u32) {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_set_observe(h: *mut Handle, observe: u32) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(handle) = h.as_ref() {
             if let Some(hotkeys) = lock(&handle.hotkeys).as_ref() {
@@ -321,9 +328,9 @@ pub unsafe extern "C" fn prisc_hotkeys_set_observe(h: *mut Handle, observe: u32)
 /// or `CH_ERR_NULL`.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`; `out_session` is null or valid for a write.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`; `out_session` is null or valid for a write.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_start_recording(h: *mut Handle, out_session: *mut u32) -> i32 {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_start_recording(h: *mut Handle, out_session: *mut u32) -> i32 {
     guard(|| {
         let (Some(handle), false) = (h.as_ref(), out_session.is_null()) else {
             return CH_ERR_NULL;
@@ -342,9 +349,9 @@ pub unsafe extern "C" fn prisc_hotkeys_start_recording(h: *mut Handle, out_sessi
 /// Cancels `session` if it is still armed; a no-op otherwise.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_stop_recording(h: *mut Handle, session: u32) {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_stop_recording(h: *mut Handle, session: u32) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(handle) = h.as_ref() {
             if let Some(hotkeys) = lock(&handle.hotkeys).as_ref() {
@@ -358,9 +365,9 @@ pub unsafe extern "C" fn prisc_hotkeys_stop_recording(h: *mut Handle, session: u
 /// drained). Callers are serialized internally; intended for ONE dedicated thread.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`; `out` is null or valid for a write.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`; `out` is null or valid for a write.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_next_event(h: *mut Handle, out: *mut PriscHotkeysEvent, timeout_ms: u32) -> i32 {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_next_event(h: *mut Handle, out: *mut PriscHotkeysEvent, timeout_ms: u32) -> i32 {
     guard(|| {
         let (Some(handle), false) = (h.as_ref(), out.is_null()) else {
             return CH_ERR_NULL;
@@ -384,9 +391,9 @@ pub unsafe extern "C" fn prisc_hotkeys_next_event(h: *mut Handle, out: *mut Pris
 /// excluding the NUL, 0 if there is none.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`; `buf` is null or valid for `cap` bytes.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`; `buf` is null or valid for `cap` bytes.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_stop_reason(h: *mut Handle, buf: *mut u8, cap: u32) -> u32 {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_stop_reason(h: *mut Handle, buf: *mut u8, cap: u32) -> u32 {
     catch_unwind(AssertUnwindSafe(|| match h.as_ref() {
         Some(handle) => lock(&handle.stop_reason)
             .as_deref()
@@ -400,9 +407,9 @@ pub unsafe extern "C" fn prisc_hotkeys_stop_reason(h: *mut Handle, buf: *mut u8,
 /// returns -1 once drained. Afterwards every other call except free is a safe no-op / `CH_ERR_STOPPED`.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_stop(h: *mut Handle) {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_stop(h: *mut Handle) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(handle) = h.as_ref() {
             // Dropped outside the lock: the join can take a moment.
@@ -416,9 +423,9 @@ pub unsafe extern "C" fn prisc_hotkeys_stop(h: *mut Handle) {
 /// flight or follow. Kept separate from stop because the pump may be inside next_event.
 ///
 /// # Safety
-/// `h` is null or a live handle from `prisc_hotkeys_start`, with no other call in flight or to follow.
+/// `h` is null or a live handle from `prisc_hotkeys_legacy_start`, with no other call in flight or to follow.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_hotkeys_free(h: *mut Handle) {
+pub unsafe extern "C" fn prisc_hotkeys_legacy_free(h: *mut Handle) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if !h.is_null() {
             drop(Box::from_raw(h));
@@ -484,20 +491,20 @@ mod tests {
         let mut event = PriscHotkeysEvent::default();
         let mut buf = [0u8; 8];
         unsafe {
-            assert_eq!(prisc_hotkeys_start(null_mut(), null_mut(), 0), CH_ERR_NULL);
-            assert_eq!(prisc_hotkeys_register(null_mut(), Key::A as i32, 0, &mut id), CH_ERR_NULL);
-            assert_eq!(prisc_hotkeys_register(h, Key::A as i32, 0, null_mut()), CH_ERR_NULL);
-            assert_eq!(prisc_hotkeys_start_recording(null_mut(), &mut id), CH_ERR_NULL);
-            assert_eq!(prisc_hotkeys_start_recording(h, null_mut()), CH_ERR_NULL);
-            assert_eq!(prisc_hotkeys_next_event(null_mut(), &mut event, 0), CH_ERR_NULL);
-            assert_eq!(prisc_hotkeys_next_event(h, null_mut(), 0), CH_ERR_NULL);
-            assert_eq!(prisc_hotkeys_stop_reason(null_mut(), buf.as_mut_ptr(), 8), 0);
-            prisc_hotkeys_unregister(null_mut(), 1);
-            prisc_hotkeys_set_observe(null_mut(), 1);
-            prisc_hotkeys_stop_recording(null_mut(), 1);
-            prisc_hotkeys_stop(null_mut());
-            prisc_hotkeys_free(null_mut());
-            prisc_hotkeys_free(h);
+            assert_eq!(prisc_hotkeys_legacy_start(null_mut(), null_mut(), 0), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_legacy_register(null_mut(), Key::A as i32, 0, &mut id), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_legacy_register(h, Key::A as i32, 0, null_mut()), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_legacy_start_recording(null_mut(), &mut id), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_legacy_start_recording(h, null_mut()), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_legacy_next_event(null_mut(), &mut event, 0), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_legacy_next_event(h, null_mut(), 0), CH_ERR_NULL);
+            assert_eq!(prisc_hotkeys_legacy_stop_reason(null_mut(), buf.as_mut_ptr(), 8), 0);
+            prisc_hotkeys_legacy_unregister(null_mut(), 1);
+            prisc_hotkeys_legacy_set_observe(null_mut(), 1);
+            prisc_hotkeys_legacy_stop_recording(null_mut(), 1);
+            prisc_hotkeys_legacy_stop(null_mut());
+            prisc_hotkeys_legacy_free(null_mut());
+            prisc_hotkeys_legacy_free(h);
         }
     }
 
@@ -507,22 +514,22 @@ mod tests {
         let mut id = 7u32;
         unsafe {
             assert_eq!(
-                prisc_hotkeys_register(h, Key::A as i32, Modifiers::CONTROL.bits() as u32, &mut id),
+                prisc_hotkeys_legacy_register(h, Key::A as i32, Modifiers::CONTROL.bits() as u32, &mut id),
                 CH_ERR_STOPPED
             );
             assert_eq!(id, 0);
             // Argument errors come first.
-            assert_eq!(prisc_hotkeys_register(h, 0, 0, &mut id), CH_ERR_NO_KEY);
-            assert_eq!(prisc_hotkeys_register(h, 100004, 0, &mut id), CH_ERR_INVALID_KEY);
-            assert_eq!(prisc_hotkeys_register(h, Key::A as i32, 0x10, &mut id), CH_ERR_INVALID_MODS);
+            assert_eq!(prisc_hotkeys_legacy_register(h, 0, 0, &mut id), CH_ERR_NO_KEY);
+            assert_eq!(prisc_hotkeys_legacy_register(h, 100004, 0, &mut id), CH_ERR_INVALID_KEY);
+            assert_eq!(prisc_hotkeys_legacy_register(h, Key::A as i32, 0x10, &mut id), CH_ERR_INVALID_MODS);
             let mut session = 7u32;
-            assert_eq!(prisc_hotkeys_start_recording(h, &mut session), CH_ERR_STOPPED);
+            assert_eq!(prisc_hotkeys_legacy_start_recording(h, &mut session), CH_ERR_STOPPED);
             assert_eq!(session, 0);
-            prisc_hotkeys_unregister(h, 1);
-            prisc_hotkeys_set_observe(h, 1);
-            prisc_hotkeys_stop_recording(h, 1);
-            prisc_hotkeys_stop(h);
-            prisc_hotkeys_stop(h);
+            prisc_hotkeys_legacy_unregister(h, 1);
+            prisc_hotkeys_legacy_set_observe(h, 1);
+            prisc_hotkeys_legacy_stop_recording(h, 1);
+            prisc_hotkeys_legacy_stop(h);
+            prisc_hotkeys_legacy_stop(h);
 
             // The queue still drains, then reports closed; the Stopped reason is kept.
             tx.send(Event::Hotkey {
@@ -535,8 +542,8 @@ mod tests {
             drop(tx);
             let mut event = PriscHotkeysEvent::default();
             let mut buf = [0u8; 64];
-            assert_eq!(prisc_hotkeys_stop_reason(h, buf.as_mut_ptr(), 64), 0);
-            assert_eq!(prisc_hotkeys_next_event(h, &mut event, 0), 1);
+            assert_eq!(prisc_hotkeys_legacy_stop_reason(h, buf.as_mut_ptr(), 64), 0);
+            assert_eq!(prisc_hotkeys_legacy_next_event(h, &mut event, 0), 1);
             assert_eq!(
                 event,
                 PriscHotkeysEvent {
@@ -546,14 +553,14 @@ mod tests {
                     ..Default::default()
                 }
             );
-            assert_eq!(prisc_hotkeys_next_event(h, &mut event, 0), 1);
+            assert_eq!(prisc_hotkeys_legacy_next_event(h, &mut event, 0), 1);
             assert_eq!(event.kind, CH_EVENT_STOPPED);
-            assert_eq!(prisc_hotkeys_next_event(h, &mut event, 0), -1);
-            let n = prisc_hotkeys_stop_reason(h, buf.as_mut_ptr(), 64) as usize;
+            assert_eq!(prisc_hotkeys_legacy_next_event(h, &mut event, 0), -1);
+            let n = prisc_hotkeys_legacy_stop_reason(h, buf.as_mut_ptr(), 64) as usize;
             assert_eq!(&buf[..=n], b"the event tap was invalidated\0");
-            assert_eq!(prisc_hotkeys_stop_reason(h, buf.as_mut_ptr(), 8), 7);
+            assert_eq!(prisc_hotkeys_legacy_stop_reason(h, buf.as_mut_ptr(), 8), 7);
             assert_eq!(&buf[..8], b"the eve\0");
-            prisc_hotkeys_free(h);
+            prisc_hotkeys_legacy_free(h);
         }
     }
 
@@ -562,8 +569,8 @@ mod tests {
         let (h, _tx) = handle_without_hook();
         let mut event = PriscHotkeysEvent::default();
         unsafe {
-            assert_eq!(prisc_hotkeys_next_event(h, &mut event, 1), 0);
-            prisc_hotkeys_free(h);
+            assert_eq!(prisc_hotkeys_legacy_next_event(h, &mut event, 1), 0);
+            prisc_hotkeys_legacy_free(h);
         }
     }
 
@@ -654,7 +661,7 @@ mod tests {
     #[test]
     fn abi_version_is_stable_and_exported() {
         assert_eq!(abi_version(), abi_version());
-        assert_eq!(unsafe { prisc_hotkeys_abi_version() }, abi_version());
+        assert_eq!(unsafe { prisc_hotkeys_legacy_abi_version() }, abi_version());
         // Error codes the C side switches on.
         assert_eq!(code_of(&Error::Duplicate), CH_ERR_DUPLICATE);
         assert_eq!(code_of(&Error::HookFailed(String::new())), CH_ERR_HOOK_FAILED);

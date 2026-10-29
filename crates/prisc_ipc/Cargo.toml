@@ -8,8 +8,9 @@ edition.workspace = true
 rust-version.workspace = true
 
 # The helper protocol (crates/prisc_capture/HELPER_PROTOCOL.md): the message catalogs every
-# helper speaks, their exit codes, the stdio channel and process lifetime, and the generator of
-# the C# mirror in ui/Prisc.Ipc. A leaf: no libobs, no prisc_rust_core.
+# helper speaks, their exit codes, the stdio channel and process lifetime, and the shared
+# environment variable names. The C# mirror in ui/Prisc.Ipc is generated from it by
+# crates/prisc_codegen. A leaf: no libobs, no prisc_rust_core.
 
 [dependencies]
 serde.workspace = true

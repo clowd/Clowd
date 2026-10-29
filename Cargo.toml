@@ -1,16 +1,19 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_ipc", "crates/prisc_rust_core",
-    "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
+    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_codegen", "crates/prisc_hotkeys", "crates/prisc_interop",
+    "crates/prisc_ipc", "crates/prisc_platform", "crates/prisc_rust_core", "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
     "crates/prisc_build_support", "crates/prisc_ffmpeg_sys", "crates/prisc_obs", "crates/prisc_obs_platform",
     "crates/prisc_obs_sys", "crates/prisc_recorder", "crates/prisc_share_region", "crates/prisc_vid2gif",
 ]
 # Plain `cargo build/test` stays fast and toolchain-light: the recorder stack (libobs via CMake,
 # 20-40 min cold, needs the obs-studio submodule + cmake + LLVM) builds only when asked: `cargo rec`.
+# prisc_codegen is a default member so a plain `cargo test` runs its gate (every generated C# file
+# current, every prisc_interop crate rule); prisc_interop so a plain `cargo build` puts the library
+# where the dotnet dev walk-up finds it.
 default-members = [
-    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_ipc", "crates/prisc_rust_core",
-    "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
+    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_codegen", "crates/prisc_hotkeys", "crates/prisc_interop",
+    "crates/prisc_ipc", "crates/prisc_platform", "crates/prisc_rust_core", "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
 ]
 
 [workspace.package]
@@ -29,8 +32,13 @@ rust-version = "1.89"
 # codes, the desktop queries and Sentry setup. Default features are off here so each
 # consumer names the `desktop` and `telemetry` modules it actually uses.
 prisc_rust_core = { path = "crates/prisc_rust_core", default-features = false }
-# The global hotkey hook: linked into prisc_capture, and built as prisc_hotkeys.dll / .dylib for Prisc.Ui.
+# The global hotkey hook: linked into prisc_capture and prisc_interop, and (until it folds into
+# prisc_interop) still built as prisc_hotkeys.dll / .dylib for Prisc.Ui.
 prisc_hotkeys = { path = "crates/prisc_hotkeys" }
+# Leaf OS primitives (permissions, physical key state, the foreground grant) shared by every crate
+# that asks those questions. prisc_interop and prisc_codegen are never dependencies, so they have
+# no entry here.
+prisc_platform = { path = "crates/prisc_platform" }
 # The helper protocol: message catalogs, exit codes, the stdio channel (crates/prisc_capture/HELPER_PROTOCOL.md).
 prisc_ipc = { path = "crates/prisc_ipc" }
 # The recorder stack's internal crates (libobs/FFmpeg bindings and the platform layer).

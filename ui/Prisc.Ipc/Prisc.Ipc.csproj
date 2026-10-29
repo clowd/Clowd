@@ -10,6 +10,11 @@
     <RootNamespace>Prisc.Ipc</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <!-- NativeProbe (the one helper and library probe) and EnvVars; later the stdout guard,
+         the kill-on-close job and the foreground grant. -->
+    <ProjectReference Include="..\Prisc.Interop\Prisc.Interop.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="Prisc.Ipc.Tests" />
     <!-- for HelperLocator.Override, the seam DenoiseGeneratorTests and MatteGeneratorTests use -->
     <InternalsVisibleTo Include="Prisc.VideoSDK.Tests" />
