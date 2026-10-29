@@ -14,8 +14,9 @@ namespace Prisc.VideoSDK.Tests
     /// the option names and values each encoder is handed, the generic rate-control fields, and
     /// the description line. The crf mapping itself (NVENC cq, the VideoToolbox slider and bitrate)
     /// is <c>prisc_rust_core::encoding</c>, shared with the recorder, and its tables are pinned
-    /// there (crates/prisc_rust_core/src/encoding.rs); the rows here check that the settings carry
-    /// what that one call returns.
+    /// there (crates/prisc_rust_core/src/encoding.rs), its marshalling smoke in Prisc.Interop.Tests;
+    /// the rows here check that the settings carry what that one call returns, with no number of
+    /// the mapping repeated.
     /// </summary>
     public class H264EncoderSettingsTests
     {
@@ -67,12 +68,12 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Theory]
-        [InlineData(21, 25)]
-        [InlineData(51, 51)] // clamped: 55 is off NVENC's scale
-        public void Nvenc_is_constant_quality_vbr_at_crf_plus_four(int crf, int cq)
+        [InlineData(21)]
+        [InlineData(51)] // where the Rust table clamps
+        public void Nvenc_is_constant_quality_vbr_at_the_mapped_cq(int crf)
         {
             InteropTestGate.Require();
-            Assert.Equal(cq, H264Quality.For(crf, 1920, 1080, 60, 1).NvencCq);
+            var cq = H264Quality.For(crf, 1920, 1080, 60, 1).NvencCq;
             var s = At(VideoEncoder.Nvenc, crf);
             Assert.Equal("h264_nvenc", s.CodecName);
             Assert.Equal("vbr", Opt(s, "rc"));
@@ -110,13 +111,13 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Theory]
-        [InlineData(0, 70)]   // 100 clamped to the slider's useful top
-        [InlineData(23, 55)]
-        [InlineData(51, 15)]
-        public void VideoToolbox_quality_inverts_crf_onto_the_clamped_slider(int crf, int q)
+        [InlineData(0)]
+        [InlineData(23)]
+        [InlineData(51)]
+        public void VideoToolbox_quality_is_the_mapped_slider_in_lambda_units(int crf)
         {
             InteropTestGate.Require();
-            Assert.Equal(q, H264Quality.For(crf, 1920, 1080, 30, 1).VideoToolboxQuality);
+            var q = H264Quality.For(crf, 1920, 1080, 30, 1).VideoToolboxQuality;
             Assert.Equal(q * ffmpeg.FF_QP2LAMBDA, At(VideoEncoder.VideoToolbox, crf).GlobalQuality);
         }
 
@@ -150,12 +151,12 @@ namespace Prisc.VideoSDK.Tests
         }
 
         [Theory]
-        [InlineData(3440, 1440, 30, 1, 4000)]
-        [InlineData(1920, 1080, 30000, 1001, 1673)] // 0.4186 * (29.97/30) * 4000 = 1672.7
-        public void VideoToolbox_bitrate_scales_by_pixel_rate_within_bounds(int w, int h, int fpsNum, int fpsDen, int kbps)
+        [InlineData(3440, 1440, 30, 1)]
+        [InlineData(1920, 1080, 30000, 1001)]
+        public void VideoToolbox_fallback_bitrate_is_the_mapped_rate(int w, int h, int fpsNum, int fpsDen)
         {
             InteropTestGate.Require();
-            Assert.Equal(kbps, H264Quality.For(23, w, h, fpsNum, fpsDen).VideoToolboxBitrateKbps);
+            var kbps = H264Quality.For(23, w, h, fpsNum, fpsDen).VideoToolboxBitrateKbps;
             Assert.Equal(kbps * 1000L, At(VideoEncoder.VideoToolbox, 23, w, h, fpsNum, fpsDen).BitrateFallback.BitRate);
         }
 

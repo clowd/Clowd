@@ -60,9 +60,9 @@ namespace Prisc.Interop.Tests
 
             Assert.Equal(0x2F7CAEu, palette.Effective);
             Assert.Equal((0x3B97D2u, 0x83B4D8u), (palette.CometBody, palette.CometHead));
-            Assert.Equal(10, palette.Light.Length);
-            Assert.Equal(new uint[] { 0xEEF5F9, 0xD5E5EF, 0xACCBDF, 0x82B0CE, 0x5996BE, 0x2F7CAE, 0x296D99, 0x22597D, 0x1A4561, 0x133246 },
-                palette.Light.ToArray());
+            // the ramps' vectors are palette.rs's; both ends and the base catch a misread stride
+            Assert.Equal((10, 10, 10), (palette.Light.Length, palette.Dark.Length, palette.DarkText.Length));
+            Assert.Equal((0xEEF5F9u, 0x2F7CAEu, 0x133246u), (palette.Light.Span[0], palette.Light.Span[5], palette.Light.Span[9]));
             Assert.Equal(0x2F7CAEu, palette.Dark.Span[5]);
             Assert.Equal(0x79ABCBu, palette.DarkText.Span[5]);
             Assert.Equal(0x3B97D2u, ColorMath.Palette(0xFF3B97D2, maintainContrast: false).Effective);
