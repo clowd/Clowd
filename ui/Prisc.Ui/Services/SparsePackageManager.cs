@@ -86,10 +86,8 @@ namespace Prisc.UI
             }
             catch (Prisc.Interop.InteropException ex) when (ex.NativeCode != 0)
             {
-                // the Win32 code, as this tag always carried it (HRESULT_FROM_WIN32 keeps it in the
-                // low 16 bits)
-                long code = ex.NativeCode;
-                identity = "error " + ((code & 0xFFFF0000L) == 0x80070000L ? code & 0xFFFF : code);
+                // the Win32 code GetCurrentPackageFullName returned, as this tag always carried it
+                identity = "error " + ex.NativeCode;
             }
             catch (Exception ex)
             {

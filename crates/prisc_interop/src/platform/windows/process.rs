@@ -11,10 +11,10 @@ use windows::Win32::System::JobObjects::{
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
 };
 use windows::Win32::System::LibraryLoader::SetDllDirectoryW;
-use windows_core::{HRESULT, PCWSTR, PWSTR};
+use windows_core::{PCWSTR, PWSTR};
 
 use crate::error::{Error, Result};
-use crate::platform::windows::{hresult_error, os_error};
+use crate::platform::windows::os_error;
 
 /// The process-wide job: its HANDLE as an integer (HANDLE is not `Sync`), or the latched failure
 /// to create it. Never closed: the OS closes it when this process ends, which is the point.
@@ -76,20 +76,26 @@ pub(crate) fn package_full_name() -> Result<Option<String>> {
         ERROR_INSUFFICIENT_BUFFER => {}
         // a packaged process with an empty name has nothing to report
         ERROR_SUCCESS => return Ok(None),
-        other => return Err(hresult_error(HRESULT::from_win32(other.0), "GetCurrentPackageFullName(size)")),
+        other => return Err(package_error(other.0, "GetCurrentPackageFullName(size)")),
     }
     let mut buffer = vec![0u16; length as usize];
     // SAFETY: `buffer` holds `length` units, the size the sizing call asked for.
     match unsafe { GetCurrentPackageFullName(&mut length, Some(PWSTR(buffer.as_mut_ptr()))) } {
         ERROR_SUCCESS => {}
         APPMODEL_ERROR_NO_PACKAGE => return Ok(None),
-        other => return Err(hresult_error(HRESULT::from_win32(other.0), "GetCurrentPackageFullName")),
+        other => return Err(package_error(other.0, "GetCurrentPackageFullName")),
     }
     let end = buffer
         .iter()
         .position(|&unit| unit == 0)
         .unwrap_or(buffer.len());
     Ok(Some(String::from_utf16_lossy(&buffer[..end])))
+}
+
+/// `PRISC_E_OS` carrying the Win32 code `GetCurrentPackageFullName` returned (an
+/// `APPMODEL_ERROR_*` or `ERROR_*` value, not an HRESULT), so the caller reports it as is.
+fn package_error(code: u32, call: &str) -> Error {
+    Error::os(i64::from(code), format!("{call} failed ({code})."))
 }
 
 #[cfg(test)]
