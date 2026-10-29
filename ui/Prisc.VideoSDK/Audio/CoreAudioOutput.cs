@@ -48,9 +48,9 @@ namespace Prisc.VideoSDK.Audio
         {
             if (sampleRate <= 0)
                 throw new ArgumentOutOfRangeException(nameof(sampleRate));
-            // The upper bound keeps the stream-format byte arithmetic from overflowing, and belongs
-            // here with every other argument check rather than surfacing out of Play.
-            if (channels <= 0 || channels > 4096)
+            // Checked here as well as in CoreAudioOutputDevice.Open: the unit opens lazily in Play,
+            // so this fails early, with every other argument check, instead of out of Play.
+            if (channels <= 0 || channels > CoreAudioOutputDevice.MaxChannels)
                 throw new ArgumentOutOfRangeException(nameof(channels));
 
             lock (_sync)

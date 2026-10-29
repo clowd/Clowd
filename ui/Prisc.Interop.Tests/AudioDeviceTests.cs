@@ -162,8 +162,27 @@ namespace Prisc.Interop.Tests
         public void Output_arguments_are_checked_in_csharp()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => CoreAudioOutputDevice.Open(0, 2, (_, _, _) => { }));
-            Assert.Throws<ArgumentOutOfRangeException>(() => CoreAudioOutputDevice.Open(48000, 4097, (_, _, _) => { }));
+            Assert.Throws<ArgumentOutOfRangeException>(() => CoreAudioOutputDevice.Open(48000, CoreAudioOutputDevice.MaxChannels + 1, (_, _, _) => { }));
             Assert.Throws<ArgumentNullException>(() => CoreAudioOutputDevice.Open(48000, 2, null!));
+        }
+
+        /// <summary>The C# <see cref="CoreAudioOutputDevice.MaxChannels"/> is the crate's MAX_CHANNELS:
+        /// one more is refused for its channel count, and the limit itself passes the channel check and
+        /// is refused only for the null callback checked after it (on every OS, before any device).</summary>
+        [Fact]
+        public unsafe void The_channel_limit_matches_the_crate()
+        {
+            InteropTestGate.Require();
+            PriscAudioOutput* output = null;
+            PriscAudioOutputInfo info = default;
+            int status = NativeMethods.prisc_audio_output_create(48000, CoreAudioOutputDevice.MaxChannels + 1, null, null, &output, &info);
+            Assert.Equal((int)InteropStatus.InvalidArg, status);
+            Assert.Contains("channels", Native.LastErrorMessage(), StringComparison.Ordinal);
+
+            status = NativeMethods.prisc_audio_output_create(48000, CoreAudioOutputDevice.MaxChannels, null, null, &output, &info);
+            Assert.Equal((int)InteropStatus.InvalidArg, status);
+            Assert.DoesNotContain("channels", Native.LastErrorMessage(), StringComparison.Ordinal);
+            Assert.True(output == null);
         }
 
         // ---------------------------------------------------------------------------------- input
@@ -228,6 +247,79 @@ namespace Prisc.Interop.Tests
             Assert.Equal(latched, Volatile.Read(ref buffers));
             Assert.Equal(0, Volatile.Read(ref stops));
             Assert.Throws<InvalidOperationException>(() => input.Start());
+        }
+
+        /// <summary>A handler that returned false ended delivery, so a later request is not the first.</summary>
+        [Fact]
+        public void Request_stop_after_a_handler_ended_delivery_is_not_first()
+        {
+            InteropTestGate.Require();
+            int buffers = 0;
+            using var input = OpenInput(_ =>
+            {
+                Interlocked.Increment(ref buffers);
+                return false;
+            }, (_, _) => { });
+
+            input.Start();
+            if (!SpinWait.SpinUntil(() => Volatile.Read(ref buffers) > 0, 3000))
+            {
+                Assert.SkipWhen(Environment.GetEnvironmentVariable("CI") != null, "no microphone data on this CI machine");
+                Assert.Fail("no microphone data within 3 s");
+            }
+
+            Assert.False(input.RequestStop());
+            Thread.Sleep(200);
+            Assert.Equal(1, Volatile.Read(ref buffers));
+        }
+
+        /// <summary>A handler of one input may stop and dispose another (a device switch): neither call
+        /// reaches the library from the callback thread (C3), the stop answers first exactly once, the
+        /// other input delivers nothing after it, and its teardown completes off the callback.</summary>
+        [Fact]
+        public void A_handler_may_stop_and_dispose_another_input()
+        {
+            InteropTestGate.Require();
+            int otherBuffers = 0, otherStops = 0;
+            using var other = OpenInput(_ =>
+            {
+                Interlocked.Increment(ref otherBuffers);
+                return true;
+            }, (_, _) => Interlocked.Increment(ref otherStops));
+            bool? firstStop = null, secondStop = null;
+            int latched = -1;
+            var done = new ManualResetEventSlim();
+            int calls = 0;
+            using var input = OpenInput(_ =>
+            {
+                if (Interlocked.Increment(ref calls) == 1)
+                {
+                    firstStop = other.RequestStop();
+                    latched = Volatile.Read(ref otherBuffers);
+                    secondStop = other.RequestStop();
+                    other.Dispose();
+                    done.Set();
+                }
+
+                return true;
+            }, (_, _) => { });
+
+            other.Start();
+            if (!SpinWait.SpinUntil(() => Volatile.Read(ref otherBuffers) > 0, 3000))
+            {
+                Assert.SkipWhen(Environment.GetEnvironmentVariable("CI") != null, "no microphone data on this CI machine");
+                Assert.Fail("no microphone data within 3 s");
+            }
+
+            input.Start();
+            Assert.True(done.Wait(3000), "the first input delivered nothing within 3 s");
+            Assert.True(firstStop);
+            Assert.False(secondStop);
+            Thread.Sleep(300);
+            // At most one buffer already inside the other handler when the stop landed.
+            Assert.InRange(Volatile.Read(ref otherBuffers), latched, latched + 1);
+            Assert.Equal(0, Volatile.Read(ref otherStops));
+            Assert.Throws<ObjectDisposedException>(() => other.RequestStop());
         }
 
         [Fact]

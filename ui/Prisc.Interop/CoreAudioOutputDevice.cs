@@ -49,6 +49,10 @@ namespace Prisc.Interop
         /// <summary>The rate <see cref="LatencyFrames"/> counts in: the device side of the unit.</summary>
         public int DeviceSampleRateHz { get; }
 
+        /// <summary>The most channels <see cref="Open"/> accepts. Mirrors <c>MAX_CHANNELS</c> in
+        /// crates/prisc_interop/src/ffi/audio_output.rs, which refuses more with InvalidArg.</summary>
+        public const int MaxChannels = 4096;
+
         /// <summary>How many exceptions the handler threw (each buffer played silence). Zero in a
         /// healthy run.</summary>
         public long RenderFaults => Interlocked.Read(ref _binding.Faults);
@@ -59,14 +63,14 @@ namespace Prisc.Interop
         /// belongs on a play path, not a paint path.
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">A rate of zero or less, or channels outside
-        /// 1..4096.</exception>
+        /// 1..<see cref="MaxChannels"/>.</exception>
         /// <exception cref="InvalidOperationException">No default output unit, or an AudioToolbox call
         /// failed (the inner <see cref="InteropException"/> carries the OSStatus).</exception>
         /// <exception cref="InteropException"><see cref="InteropStatus.Unsupported"/> off macOS.</exception>
         public static CoreAudioOutputDevice Open(int sampleRateHz, int channels, AudioRenderHandler render)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleRateHz);
-            if (channels <= 0 || channels > 4096)
+            if (channels <= 0 || channels > MaxChannels)
                 throw new ArgumentOutOfRangeException(nameof(channels));
             ArgumentNullException.ThrowIfNull(render);
             InteropLibrary.Require();

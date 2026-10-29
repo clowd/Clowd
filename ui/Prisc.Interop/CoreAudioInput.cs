@@ -22,9 +22,11 @@ namespace Prisc.Interop
     /// <remarks>
     /// <para>Both handlers run on the OS audio threads, never two at once and never after
     /// <see cref="Dispose"/> returns. They must not block for long. Calling <see cref="RequestStop"/>
-    /// or <see cref="Dispose"/> from inside a handler is allowed: neither calls into the library from
-    /// there (ABI rule C3), the first ends delivery when the handler returns and the second finishes
-    /// the teardown on the thread pool.</para>
+    /// or <see cref="Dispose"/> from inside a handler, of this input or of another one, is allowed:
+    /// neither calls into the library from a callback thread (ABI rule C3). A stop there takes effect
+    /// on this side at once (no data handler of the stopped input starts afterwards) and reaches the
+    /// library when the handler returns (its own input) or on the thread pool (another input); a
+    /// dispose there finishes its teardown on the thread pool.</para>
     /// <para>Every call goes through a lease (R19), and <see cref="Dispose"/> ends delivery first, so
     /// a teardown racing <see cref="RequestStop"/> on another thread destroys the input only after that
     /// call is out of the library. The handlers are rooted by a <see cref="GCHandle"/> freed after the
@@ -124,11 +126,36 @@ namespace Prisc.Interop
             return RequestStopCore();
         }
 
+        /// <summary>
+        /// <see cref="InputBinding.Ended"/> decides "first" on every path: <see cref="Receive"/> sets it
+        /// when delivery ends there (a stop event, a handler that returned false or threw), and every
+        /// request swaps it. Outside a callback the library is asked as well, which catches a stop
+        /// event it has decided on but not delivered yet. Inside this input's own handler the library
+        /// cannot end delivery behind it (it holds the input's delivery lock), so the flag alone is
+        /// exact. Inside a callback the request is <see cref="InputBinding.StopPending"/> until the
+        /// library hears of it: from the handler's return (this input) or the thread pool (another).
+        /// </summary>
         private bool RequestStopCore()
         {
-            if (ReferenceEquals(t_current, _binding))
-                return Interlocked.Exchange(ref _binding.EndRequested, 1) == 0;
+            bool first = Interlocked.Exchange(ref _binding.Ended, 1) == 0;
+            InputBinding? current = t_current;
+            if (current == null)
+                return NativeRequestStop() && first;
 
+            // No export call on a callback thread (C3).
+            Volatile.Write(ref _binding.StopPending, 1);
+            if (first && !ReferenceEquals(current, _binding))
+            {
+                // The one case the flag cannot see from here is a device loss the library decided an
+                // instant before and has not delivered yet: that stop handler still runs.
+                ThreadPool.QueueUserWorkItem(static input => input.NativeRequestStopQuietly(), this, preferLocal: false);
+            }
+
+            return first;
+        }
+
+        private bool NativeRequestStop()
+        {
             using var lease = _handle.Lease();
             byte first = 0;
             AudioStatus.Check(NativeMethods.prisc_audio_input_request_stop((PriscAudioInput*)lease.Handle, &first),
@@ -136,17 +163,31 @@ namespace Prisc.Interop
             return first != 0;
         }
 
+        private void NativeRequestStopQuietly()
+        {
+            try
+            {
+                NativeRequestStop();
+            }
+            catch (Exception)
+            {
+                // Disposed meanwhile (its destroy ends delivery), or a panic report: the flag already
+                // stops the handlers, and nothing on the thread pool may throw.
+            }
+        }
+
         /// <summary>Ends delivery, waits out a handler in flight, and closes the device. Idempotent; no
-        /// handler runs after it returns (from inside a handler, the teardown completes on the thread
-        /// pool once that handler has returned).</summary>
+        /// handler runs after it returns (from inside any input's handler, the teardown completes on the
+        /// thread pool, where it can wait out a handler and call the library).</summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
 
-            if (ReferenceEquals(t_current, _binding))
+            if (t_current != null)
             {
-                Interlocked.Exchange(ref _binding.EndRequested, 1);
+                Volatile.Write(ref _binding.Ended, 1);
+                Volatile.Write(ref _binding.StopPending, 1);
                 ThreadPool.QueueUserWorkItem(static input => input.Teardown(), this, preferLocal: false);
                 return;
             }
@@ -168,12 +209,18 @@ namespace Prisc.Interop
             _handle.Dispose();
         }
 
-        /// <summary>What the user pointer roots: the two handlers and the in-handler stop request.</summary>
+        /// <summary>What the user pointer roots: the two handlers and the stop state.</summary>
         private sealed class InputBinding
         {
             internal readonly AudioInputDataHandler OnData;
             internal readonly AudioInputStoppedHandler OnStopped;
-            internal int EndRequested;
+
+            /// <summary>1 once delivery has ended as far as this side knows; the arbiter of "first".</summary>
+            internal int Ended;
+
+            /// <summary>1 once a stop was requested from inside a callback, where the library cannot
+            /// be told yet: no data handler runs, and the next Data event ends delivery natively.</summary>
+            internal int StopPending;
 
             internal InputBinding(AudioInputDataHandler onData, AudioInputStoppedHandler onStopped)
             {
@@ -211,19 +258,30 @@ namespace Prisc.Interop
         private static byte Receive(void* user, PriscAudioInputEvent* e)
         {
             // Nothing may escape an UnmanagedCallersOnly method: an exception here is a fail-fast.
+            InputBinding? binding = null;
             try
             {
-                var binding = (InputBinding)GCHandle.FromIntPtr((IntPtr)user).Target!;
+                binding = (InputBinding)GCHandle.FromIntPtr((IntPtr)user).Target!;
                 var outer = t_current;
                 t_current = binding;
                 try
                 {
                     if (e->kind == (uint)AudioInputEventKind.Data)
                     {
-                        bool keep = binding.OnData(new ReadOnlySpan<byte>(e->data, (int)e->data_len));
-                        return keep && Volatile.Read(ref binding.EndRequested) == 0 ? (byte)1 : (byte)0;
+                        if (Volatile.Read(ref binding.StopPending) != 0)
+                            return 0;
+                        if (!binding.OnData(new ReadOnlySpan<byte>(e->data, (int)e->data_len)))
+                        {
+                            Volatile.Write(ref binding.Ended, 1);
+                            return 0;
+                        }
+
+                        return Volatile.Read(ref binding.StopPending) == 0 ? (byte)1 : (byte)0;
                     }
 
+                    // The library ended delivery before any request reached it, so a request from
+                    // now on (the stop handler's own included) is not the first.
+                    Volatile.Write(ref binding.Ended, 1);
                     binding.OnStopped((AudioInputStop)e->stop, e->os_status);
                     return 0;
                 }
@@ -235,6 +293,8 @@ namespace Prisc.Interop
             catch
             {
                 // A handler that threw ends delivery, like one that returned false.
+                if (binding != null)
+                    Volatile.Write(ref binding.Ended, 1);
                 return 0;
             }
         }

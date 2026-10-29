@@ -162,7 +162,7 @@ namespace Prisc.VideoSDK.Tests
             using var output = new CoreAudioOutput();
             Assert.Throws<ArgumentOutOfRangeException>(() => output.Initialize(0, Channels, 50, _ => { }));
             Assert.Throws<ArgumentOutOfRangeException>(() => output.Initialize(SampleRate, 0, 50, _ => { }));
-            Assert.Throws<ArgumentOutOfRangeException>(() => output.Initialize(SampleRate, 4097, 50, _ => { }));
+            Assert.Throws<ArgumentOutOfRangeException>(() => output.Initialize(SampleRate, Prisc.Interop.CoreAudioOutputDevice.MaxChannels + 1, 50, _ => { }));
             Assert.Throws<ArgumentNullException>(() => output.Initialize(SampleRate, Channels, 50, null));
         }
 
