@@ -9,6 +9,7 @@ ui/Prisc.Interop/InteropLibrary.cs            NativeLibrary         The loader r
 ui/Prisc.Interop/InteropLibrary.cs            DllImport             The loader registers the DllImportResolver that points every generated import at the checked library.
 ui/Prisc.Interop/InteropLibrary.cs            delegate-unmanaged    The loader reads the ABI hash through a function pointer before any generated import may resolve.
 ui/Prisc.Interop/AssemblyInfo.cs              DllImport             DefaultDllImportSearchPaths for the generated imports of the one native library.
+ui/Prisc.Interop/Prisc.Interop.csproj         DllImport             Project comments that explain where the generated DllImports and their resolver live.
 
 # Callbacks the OS API is shaped around (ABI rule C3): static thunks handed to Rust.
 ui/Prisc.Interop/*.cs                         UnmanagedCallersOnly  Callback thunks (log sink, audio, NSServices, foreground watch) that Rust invokes, per ABI rule C3.
