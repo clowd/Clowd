@@ -71,7 +71,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use prisc_obs_platform::region::Rect;
-use prisc_rust_core::color::{palette, relative_luminance, Rgb8};
+use prisc_rust_core::color::{from_u32, palette, relative_luminance, to_u32};
 use prisc_rust_core::desktop::screens::{self, Fallback};
 use prisc_rust_core::geometry::{RectExt, ScreenRect};
 
@@ -180,7 +180,7 @@ const PROMPT_BTN_RADIUS: i32 = 5;
 
 /// Window background: Prisc's dark `ApplicationBackgroundColor`, the ground the
 /// app's palette is built on.
-const CLR_BG: u32 = rgb(palette::DARK_GROUND);
+const CLR_BG: u32 = to_u32(palette::DARK_GROUND);
 /// Footer strip: Semi's `SemiColorFill0` over the background (white at ~4%).
 const CLR_FOOTER: u32 = 0x282828;
 /// Hairline between the content and the footer.
@@ -424,25 +424,20 @@ fn colorref(rgb: u32) -> u32 {
     ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF)
 }
 
-/// A palette colour as 0xRRGGBB.
-const fn rgb(c: Rgb8) -> u32 {
-    ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | c[2] as u32
-}
-
 /// The OK button's fill at rest, under the pointer and pressed: steps 5, 6 and
 /// 7 of the app's dark accent ramp (`prisc_rust_core::color::palette`), the
 /// fills Prisc's own accent buttons use, so the prompt reacts the way the app
 /// does.
 fn button_fills(accent: u32) -> [u32; 3] {
-    let ramp = palette::ramp([(accent >> 16) as u8, (accent >> 8) as u8, accent as u8], true);
-    [rgb(ramp[5]), rgb(ramp[6]), rgb(ramp[7])]
+    let ramp = palette::ramp(from_u32(accent), true);
+    [to_u32(ramp[5]), to_u32(ramp[6]), to_u32(ramp[7])]
 }
 
 /// The button label for a fill: white, unless the fill is light enough that
 /// white would wash out. The cut is relative luminance 0.5, which keeps the
 /// default blue (about 0.38) on the white label the design was drawn with.
 fn button_text_for(fill: u32) -> u32 {
-    if relative_luminance([(fill >> 16) as u8, (fill >> 8) as u8, fill as u8]) > 0.5 {
+    if relative_luminance(from_u32(fill)) > 0.5 {
         CLR_BTN_TEXT_DARK
     } else {
         CLR_BTN_TEXT
