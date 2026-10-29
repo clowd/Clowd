@@ -78,8 +78,7 @@ use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSApplication, NSApplicationDidChangeScreenParametersNotification, NSBackingStoreType,
     NSBezelStyle, NSButton, NSButtonType, NSColor, NSEvent, NSFont, NSLineBreakMode, NSScreen,
-    NSTextField, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask,
-    NSWindowWillCloseNotification,
+    NSTextField, NSView, NSWindow, NSWindowStyleMask, NSWindowWillCloseNotification,
 };
 use objc2_foundation::{
     NSNotification, NSNotificationCenter, NSPoint, NSRect, NSRunLoop, NSRunLoopCommonModes, NSSize,
@@ -87,6 +86,7 @@ use objc2_foundation::{
 };
 
 use prisc_obs_platform::region::Rect;
+use prisc_rust_core::desktop::overlay::{self, OverlayFlags};
 
 use super::{AppEvents, UiConfig};
 use crate::commands::Command;
@@ -853,8 +853,11 @@ fn begin_mirror_phase() {
     // mirror out of the capture and freeze the meeting app's share until the
     // user switched back. `Stationary` additionally keeps it from being dragged
     // around by the Spaces-switch animation.
-    window.setCollectionBehavior(
-        NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::Stationary,
+    // The bits come from the overlay module every Prisc process shares; this
+    // window takes the two-flag subset and keeps its normal level.
+    overlay::apply(
+        &window,
+        OverlayFlags::CAN_JOIN_ALL_SPACES | OverlayFlags::STATIONARY,
     );
 
     // Park it: the region's size, hung off a display corner with one point

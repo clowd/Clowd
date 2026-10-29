@@ -500,27 +500,25 @@ impl SystemInterop {
             })
             .collect();
 
-        desktop::monitors()
+        // The shared screen list (desktop::screens, the one Prisc.Ui reads too): rcMonitor bounds,
+        // the effective DPI scale (1.0 when unreadable) and the refresh rate, unknown for the
+        // 0 / 1 "hardware default" sentinels, where the overlay targets its own 60 Hz.
+        desktop::screens::list()
             .expect("Unable to enumerate monitors")
             .into_iter()
-            .filter_map(|m| {
-                // Bounds and refresh rate come from the display mode, the DPI
-                // scale from GetDpiForMonitor; a monitor missing either is
-                // skipped.
-                let (Some(mode), Some(dpi)) = (m.display_mode(), m.dpi()) else {
-                    error!("monitor {:?} ({:?}) could not be described", m.device_name, m.handle);
-                    return None;
-                };
-                let adapter = adapters.get(&m.device_name);
-                Some(MonitorInfo {
-                    bounds: ScreenRect::from_xy_size(mode.origin.x, mode.origin.y, mode.width as i32, mode.height as i32),
-                    scale_factor: dpi as f32 / 96.0,
-                    is_primary: m.is_primary,
-                    refresh_hz: mode.refresh_hz,
-                    name: m.device_name,
+            .map(|screen| {
+                let adapter = adapters.get(&screen.device_name);
+                MonitorInfo {
+                    bounds: screen.bounds,
+                    scale_factor: screen.scale as f32,
+                    is_primary: screen.is_primary,
+                    refresh_hz: screen
+                        .refresh_hz
+                        .map_or(60.0, |hz| hz as f32),
+                    name: screen.device_name,
                     adapter_id: adapter.map(|a| (a.vendor_id, a.device_id)),
                     low_vram_adapter: adapter.is_some_and(|a| a.dedicated_video_memory < LOW_VRAM_BYTES),
-                })
+                }
             })
             .collect()
     }

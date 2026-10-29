@@ -1,1 +1,3 @@
-//! Windows: screen pixels and the screen grab (`prisc_screen_read_pixel`, `prisc_screen_grab`). Filled by the area work package.
+//! Windows: nothing here. The screen grab and the pixel read are `prisc_rust_core::desktop::grab`
+//! (GDI), the grab the capture overlay and the scrolling driver use too, and `ffi/pixels.rs` calls
+//! it directly.

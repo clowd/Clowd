@@ -11,10 +11,9 @@ use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT, TRUE};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DWMWINDOWATTRIBUTE};
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, EnumDisplayDevicesW, EnumDisplayMonitors, EnumDisplaySettingsW, GdiFlush,
-    GetDC, GetDIBits, GetMonitorInfoW, GetObjectW, MonitorFromPoint, MonitorFromWindow, ReleaseDC, SelectObject, BITMAP, BITMAPINFO,
-    BITMAPINFOHEADER, BI_RGB, DEVMODEW, DIB_RGB_COLORS, DISPLAY_DEVICEW, DMDO_180, DMDO_270, DMDO_90, ENUM_CURRENT_SETTINGS, HBITMAP, HDC,
-    HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, RGBQUAD,
+    DeleteObject, EnumDisplayDevicesW, EnumDisplayMonitors, GetDC, GetDIBits, GetMonitorInfoW, GetObjectW, MonitorFromPoint,
+    MonitorFromWindow, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, DISPLAY_DEVICEW, HBITMAP, HDC, HMONITOR,
+    MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, RGBQUAD,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::Threading::{
@@ -335,31 +334,19 @@ pub fn process_image_name(pid: u32) -> String {
 // ---------------------------------------------------------------------------
 
 /// One display, as `EnumDisplayMonitors` + `GetMonitorInfoW` report it. The
-/// costlier lookups (device path, display mode, DPI) are methods, so callers
+/// costlier lookups (device path, DPI) are methods, so callers
 /// pay only for what they use.
 #[derive(Debug, Clone)]
 pub struct Monitor {
     pub handle: HMONITOR,
     /// GDI device name, e.g. `\\.\DISPLAY1`: the key DXGI outputs and
-    /// `EnumDisplaySettingsW` are matched on.
+    /// `EnumDisplaySettingsW` (the refresh rate, `screens`) are matched on.
     pub device_name: String,
     /// `rcMonitor`.
     pub bounds: ScreenRect,
     /// `rcWork`: the monitor minus the taskbar and docked app bars.
     pub work_area: ScreenRect,
     pub is_primary: bool,
-}
-
-/// `EnumDisplaySettingsW`'s current mode for a monitor.
-#[derive(Debug, Clone, Copy)]
-pub struct DisplayMode {
-    /// `dmPosition`: the monitor's origin in the virtual desktop.
-    pub origin: ScreenPoint,
-    pub width: u32,
-    pub height: u32,
-    /// `dmDisplayOrientation` in degrees (0, 90, 180 or 270).
-    pub rotation: f32,
-    pub refresh_hz: f32,
 }
 
 impl Monitor {
@@ -380,40 +367,15 @@ impl Monitor {
         (ok.as_bool() && !path.is_empty()).then_some(path)
     }
 
-    /// The monitor's current display mode, or `None` if Windows will not say.
-    pub fn display_mode(&self) -> Option<DisplayMode> {
-        let name: Vec<u16> = self
-            .device_name
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
-        let mut dm = DEVMODEW {
-            dmSize: mem::size_of::<DEVMODEW>() as u16,
-            ..Default::default()
-        };
-        if !unsafe { EnumDisplaySettingsW(PCWSTR(name.as_ptr()), ENUM_CURRENT_SETTINGS, &mut dm) }.as_bool() {
-            return None;
-        }
-        let (position, orientation) = unsafe { (dm.Anonymous1.Anonymous2.dmPosition, dm.Anonymous1.Anonymous2.dmDisplayOrientation) };
-        let rotation = match orientation {
-            DMDO_90 => 90.0,
-            DMDO_180 => 180.0,
-            DMDO_270 => 270.0,
-            _ => 0.0,
-        };
-        Some(DisplayMode {
-            origin: ScreenPoint::new(position.x, position.y),
-            width: dm.dmPelsWidth,
-            height: dm.dmPelsHeight,
-            rotation,
-            refresh_hz: dm.dmDisplayFrequency as f32,
-        })
-    }
-
     /// The monitor's effective DPI (96 = 100%), or `None` if
     /// `GetDpiForMonitor` fails.
     pub fn dpi(&self) -> Option<u32> {
         monitor_dpi(self.handle)
+    }
+
+    /// The monitor's DPI zoom ([`dpi_scale`] of [`Monitor::dpi`]).
+    pub fn scale(&self) -> f64 {
+        dpi_scale(self.dpi())
     }
 }
 
@@ -432,22 +394,26 @@ pub fn monitors() -> windows::core::Result<Vec<Monitor>> {
 
     Ok(handles
         .into_iter()
-        .filter_map(|handle| {
-            let mut info = MONITORINFOEXW::default();
-            info.monitorInfo.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
-            if !unsafe { GetMonitorInfoW(handle, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO) }.as_bool() {
-                return None;
-            }
-            let (rc, work) = (info.monitorInfo.rcMonitor, info.monitorInfo.rcWork);
-            Some(Monitor {
-                handle,
-                device_name: wide_to_string(&info.szDevice),
-                bounds: ScreenRect::from_exact(rc.left, rc.top, rc.right, rc.bottom),
-                work_area: ScreenRect::from_exact(work.left, work.top, work.right, work.bottom),
-                is_primary: info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
-            })
-        })
+        .filter_map(monitor)
         .collect())
+}
+
+/// One monitor by handle (`GetMonitorInfoW`), or `None` when Windows will not describe it (a
+/// handle from a topology that has since changed).
+pub fn monitor(handle: HMONITOR) -> Option<Monitor> {
+    let mut info = MONITORINFOEXW::default();
+    info.monitorInfo.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
+    if !unsafe { GetMonitorInfoW(handle, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO) }.as_bool() {
+        return None;
+    }
+    let (rc, work) = (info.monitorInfo.rcMonitor, info.monitorInfo.rcWork);
+    Some(Monitor {
+        handle,
+        device_name: wide_to_string(&info.szDevice),
+        bounds: ScreenRect::from_exact(rc.left, rc.top, rc.right, rc.bottom),
+        work_area: ScreenRect::from_exact(work.left, work.top, work.right, work.bottom),
+        is_primary: info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
+    })
 }
 
 fn monitor_dpi(handle: HMONITOR) -> Option<u32> {
@@ -456,8 +422,20 @@ fn monitor_dpi(handle: HMONITOR) -> Option<u32> {
     Some(dpi_x)
 }
 
+/// The DPI zoom of an effective DPI: `dpi / 96`, and 1.0 when the DPI is
+/// unknown or 0. The one spelling of the rule, shared by [`Monitor::scale`]
+/// (the screens list) and [`dpi_scale_at`] (the recorder's per-sample cursor
+/// scale).
+pub fn dpi_scale(dpi: Option<u32>) -> f64 {
+    match dpi {
+        Some(dpi) if dpi > 0 => f64::from(dpi) / 96.0,
+        _ => 1.0,
+    }
+}
+
 /// The DPI zoom (effective DPI / 96) of the monitor nearest `point`; 1.0 when
-/// it cannot be read.
+/// it cannot be read. One `MonitorFromPoint` and one `GetDpiForMonitor`, cheap
+/// enough for a per-sample caller.
 pub fn dpi_scale_at(point: ScreenPoint) -> f64 {
     let hmon = unsafe {
         MonitorFromPoint(
@@ -471,10 +449,7 @@ pub fn dpi_scale_at(point: ScreenPoint) -> f64 {
     if hmon.is_invalid() {
         return 1.0;
     }
-    match monitor_dpi(hmon) {
-        Some(dpi) if dpi != 0 => dpi as f64 / 96.0,
-        _ => 1.0,
-    }
+    dpi_scale(monitor_dpi(hmon))
 }
 
 /// The graphics adapter behind one DXGI output.
@@ -647,7 +622,7 @@ unsafe fn read_icon_planes(hdc: HDC, icon: HICON, ii: &ICONINFO) -> Option<IconB
         let stride = mono_stride(w);
         let mut planes = vec![0u8; stride * full_h as usize];
         if !get_dibits(hdc, ii.hbmMask, w, full_h, 1, &mut planes) {
-            return Some(bitmap(w, h, render_both(hdc, icon, w, h)?));
+            return Some(bitmap(w, h, render_both(icon, w, h)?));
         }
         let (and, xor) = split_mono_planes(&planes, h, stride)?;
         let pixels = IconPixels::Mono {
@@ -660,7 +635,7 @@ unsafe fn read_icon_planes(hdc: HDC, icon: HICON, ii: &ICONINFO) -> Option<IconB
     let (w, h) = bitmap_size(ii.hbmColor)?;
     let mut bgra = vec![0u8; (w as usize) * (h as usize) * 4];
     if !get_dibits(hdc, ii.hbmColor, w, h, 32, &mut bgra) {
-        return Some(bitmap(w, h, render_both(hdc, icon, w, h)?));
+        return Some(bitmap(w, h, render_both(icon, w, h)?));
     }
     if has_alpha(&bgra) {
         return Some(bitmap(
@@ -676,7 +651,7 @@ unsafe fn read_icon_planes(hdc: HDC, icon: HICON, ii: &ICONINFO) -> Option<IconB
     // ownership.
     let mut and = vec![0u8; mono_stride(w) * h as usize];
     if !get_dibits(hdc, ii.hbmMask, w, h, 1, &mut and) {
-        return Some(bitmap(w, h, render_both(hdc, icon, w, h)?));
+        return Some(bitmap(w, h, render_both(icon, w, h)?));
     }
     Some(bitmap(
         w,
@@ -742,48 +717,19 @@ unsafe fn get_dibits(hdc: HDC, hbm: HBITMAP, w: u32, h: u32, bpp: u16, buf: &mut
         == h
 }
 
-unsafe fn render_both(hdc: HDC, icon: HICON, w: u32, h: u32) -> Option<IconPixels> {
+fn render_both(icon: HICON, w: u32, h: u32) -> Option<IconPixels> {
     Some(IconPixels::Rendered {
-        over_black: render_on(hdc, icon, w, h, 0x00)?,
-        over_white: render_on(hdc, icon, w, h, 0xFF)?,
+        over_black: render_on(icon, w, h, 0x00)?,
+        over_white: render_on(icon, w, h, 0xFF)?,
     })
 }
 
-/// Draws the icon over a solid background (`bg` per channel) into a 32bpp
-/// top-down DIB section and returns its BGRA bytes.
-unsafe fn render_on(hdc: HDC, icon: HICON, w: u32, h: u32, bg: u8) -> Option<Vec<u8>> {
-    let memdc = CreateCompatibleDC(Some(hdc));
-    if memdc.is_invalid() {
-        return None;
-    }
-    let result = (|| {
-        let bi = top_down_info(w, h, 32);
-        let mut bits: *mut c_void = std::ptr::null_mut();
-        let dib = CreateDIBSection(
-            Some(memdc),
-            &bi as *const BitmapInfo2 as *const BITMAPINFO,
-            DIB_RGB_COLORS,
-            &mut bits,
-            None,
-            0,
-        )
-        .ok()?;
-        if bits.is_null() {
-            let _ = DeleteObject(dib.into());
-            return None;
-        }
-        let len = (w as usize) * (h as usize) * 4;
-        let old = SelectObject(memdc, dib.into());
-        std::ptr::write_bytes(bits as *mut u8, bg, len);
-        let drawn = DrawIconEx(memdc, 0, 0, icon, w as i32, h as i32, 0, None, DI_NORMAL);
-        let _ = GdiFlush();
-        let out = drawn
-            .is_ok()
-            .then(|| std::slice::from_raw_parts(bits as *const u8, len).to_vec());
-        SelectObject(memdc, old);
-        let _ = DeleteObject(dib.into());
-        out
-    })();
-    let _ = DeleteDC(memdc);
-    result
+/// Draws the icon over a solid background (every byte `bg`, alpha included)
+/// on the shared grab canvas ([`super::grab::render_over`]) and returns its
+/// BGRA bytes.
+fn render_on(icon: HICON, w: u32, h: u32, bg: u8) -> Option<Vec<u8>> {
+    let (w, h) = (i32::try_from(w).ok()?, i32::try_from(h).ok()?);
+    super::grab::render_over(w, h, bg, |dc| unsafe { DrawIconEx(dc, 0, 0, icon, w, h, 0, None, DI_NORMAL) })
+        .ok()
+        .map(|image| image.bgra)
 }

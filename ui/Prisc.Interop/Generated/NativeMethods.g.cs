@@ -671,11 +671,15 @@ namespace Prisc.Interop
         internal static extern int prisc_hotkeys_destroy(PriscHotkeys* hook);
 
         /// <summary>
-        ///  Seconds since the last user input: `GetLastInputInfo` against `GetTickCount` (wrap-safe) on
-        ///  Windows, `CGEventSourceSecondsSinceLastEventType` on macOS.
+        ///  Seconds since the last keyboard or mouse input anywhere on the machine, not just in Prisc:
+        ///  `GetLastInputInfo` against `GetTickCount` on Windows (the same wrapping 32-bit millisecond
+        ///  counter, so the 49.7-day wrap comes out right), `CGEventSourceSecondsSinceLastEventType` for
+        ///  the combined session and any input event on macOS. `out_seconds` is written only on
+        ///  `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE` when CoreGraphics answers no interval (a negative one);
+        ///  `PRISC_E_INVALID_ARG` for a null `out_seconds`; `PRISC_E_OS` when `GetLastInputInfo` fails;
+        ///  `PRISC_E_UNSUPPORTED` on a platform without a system idle time.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -758,11 +762,12 @@ namespace Prisc.Interop
         internal static extern int prisc_permission_request(int kind, int* out_state);
 
         /// <summary>
-        ///  The colour of one screen pixel as `0x00RRGGBB`. On macOS it answers `PRISC_E_PERMISSION` first
-        ///  when Screen Recording is missing (an unpermitted read silently returns the desktop picture).
+        ///  The colour of one screen pixel as `0x00RRGGBB` (the pixel under the point; on a Retina display
+        ///  the top-left of the point's pixels). `out_rgb` is written only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_PERMISSION`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE` when the point is on no screen; `PRISC_E_INVALID_ARG` for a
+        ///  null `out_rgb`; `PRISC_E_PERMISSION` (macOS Screen Recording); `PRISC_E_OS`;
+        ///  `PRISC_E_UNSUPPORTED` on a platform without a screen grab.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -770,11 +775,15 @@ namespace Prisc.Interop
         internal static extern int prisc_screen_read_pixel(int x, int y, uint* out_rgb);
 
         /// <summary>
-        ///  Grabs `rect` of the screen into an owned image; free it with `prisc_screen_image_free`.
+        ///  Grabs `rect` of the screen (layered windows included, alpha forced to 255) into an owned image;
+        ///  free it with `prisc_screen_image_free`. On macOS the image has the display's backing pixels (a
+        ///  16x16 point rect is 32x32 on a Retina display); on Windows it is the rect's physical pixels.
+        ///  `out_image` is written only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_PERMISSION`, `PRISC_E_CAPABILITY` (an unconvertible CoreGraphics
-        ///  format), `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `rect` or `out_image` or a rect without
+        ///  area; `PRISC_E_PERMISSION` (macOS Screen Recording); `PRISC_E_CAPABILITY` (CoreGraphics handed
+        ///  back a pixel format this does not convert); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` on a platform
+        ///  without a screen grab.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -782,10 +791,10 @@ namespace Prisc.Interop
         internal static extern int prisc_screen_grab(PriscRect* rect, PriscScreenImage* out_image);
 
         /// <summary>
-        ///  Frees a grabbed image and zeroes the struct; a second free is a no-op.
+        ///  Frees a grabbed image's pixels and zeroes the struct; a second free (or a zeroed struct) is a
+        ///  no-op.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG` for a null `image`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `image`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -842,10 +851,12 @@ namespace Prisc.Interop
 
         /// <summary>
         ///  Every screen, written into `out` up to `capacity` entries; `out_count` always receives the full
-        ///  count (`capacity` 0 with a null `out` is a sizing probe, README B7).
+        ///  count (`capacity` 0 with a null `out` is a sizing probe, README B7). An empty desktop is
+        ///  `PRISC_OK` with a count of 0.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out_count`, or a null `out` with a
+        ///  non-zero `capacity`; `PRISC_E_OS` when the OS enumeration failed (`EnumDisplayMonitors` /
+        ///  `CGGetActiveDisplayList`), code in `prisc_last_error_code`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -854,9 +865,12 @@ namespace Prisc.Interop
 
         /// <summary>
         ///  The screen containing the point, or the `fallback` (a `PriscScreenFallback`) when none does.
+        ///  Windows asks `MonitorFromPoint` (`MONITOR_DEFAULTTONULL` / `NEAREST` / `PRIMARY`); macOS picks
+        ///  from the CoreGraphics list the same way. `out` is written only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_NONE` (off-screen with fallback None), `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE` when the point is on no screen and the fallback is None (or
+        ///  the desktop has no screen at all); `PRISC_E_INVALID_ARG` for a null `out` or an unknown
+        ///  `fallback`; `PRISC_E_OS`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -864,10 +878,12 @@ namespace Prisc.Interop
         internal static extern int prisc_screens_at_point(int x, int y, int fallback, PriscScreen* @out);
 
         /// <summary>
-        ///  The screen with the largest overlap with `rect`, or the `fallback` when none overlaps.
+        ///  The screen with the largest overlap with `rect`, or the `fallback` when none overlaps. The rect
+        ///  is `x, y, x + width, y + height` exactly as `MonitorFromRect` takes it; an empty rect is looked
+        ///  up by its top-left point. `out` is written only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_S_NONE`, `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE`; `PRISC_E_INVALID_ARG` for a null `rect` or `out`, or an
+        ///  unknown `fallback`; `PRISC_E_OS`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -875,10 +891,10 @@ namespace Prisc.Interop
         internal static extern int prisc_screens_at_rect(PriscRect* rect, int fallback, PriscScreen* @out);
 
         /// <summary>
-        ///  The primary screen.
+        ///  The primary screen (the one at the desktop origin). `out` is written only on `PRISC_OK`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`, `PRISC_E_OS`.
+        ///  Status: `PRISC_OK`; `PRISC_S_NONE` on a desktop without one (a headless session, or a platform
+        ///  without a screen list); `PRISC_E_INVALID_ARG` for a null `out`; `PRISC_E_OS`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -943,11 +959,12 @@ namespace Prisc.Interop
         internal static extern int prisc_string_free(PriscString* s);
 
         /// <summary>
-        ///  Whether the user wants UI animations: `SPI_GETCLIENTAREAANIMATION` on Windows (a failed query
-        ///  reads as enabled), `!accessibilityDisplayShouldReduceMotion` on macOS.
+        ///  Whether the user wants UI animations: Windows' "Animation effects"
+        ///  (`SPI_GETCLIENTAREAANIMATION`; a failed query reads as enabled, as it did in C#), macOS'
+        ///  inverse of Reduce Motion (`NSWorkspace.accessibilityDisplayShouldReduceMotion`). Always 1 on a
+        ///  platform with neither setting. Writes 1 or 0 to `out_enabled`.
         ///
-        ///  Status: `PRISC_E_UNSUPPORTED` until the area work package implements it; then `PRISC_OK`,
-        ///  `PRISC_E_INVALID_ARG`.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out_enabled`.
         ///
         ///  Thread: any thread.
         /// </summary>
@@ -1374,7 +1391,7 @@ namespace Prisc.Interop
     }
 
     /// <summary>
-    ///  A grabbed screen image (40 bytes). The pixels are mode 2: owned by this struct and freed by
+    ///  A grabbed screen image (32 bytes). The pixels are mode 2: owned by this struct and freed by
     ///  `prisc_screen_image_free`.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -1389,10 +1406,6 @@ namespace Prisc.Interop
         public uint height;
         public uint stride;
         public uint _reserved;
-        /// <summary>
-        ///  Image pixels per DIP for this rect.
-        /// </summary>
-        public double dip_scale;
     }
 
     /// <summary>

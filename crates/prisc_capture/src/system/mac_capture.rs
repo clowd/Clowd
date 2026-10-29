@@ -3,13 +3,10 @@ use std::sync::Mutex;
 use anyhow::Result;
 use objc2_core_foundation::CFRetained;
 #[allow(deprecated)]
-use objc2_core_graphics::{
-    CGDisplayCreateImage, CGImage, CGPreflightScreenCaptureAccess, CGWindowID, CGWindowImageOption, CGWindowListCreateImage,
-    CGWindowListOption,
-};
+use objc2_core_graphics::{CGDisplayCreateImage, CGImage, CGWindowID, CGWindowImageOption, CGWindowListCreateImage, CGWindowListOption};
 
 use crate::system::MonitorInfo;
-use prisc_rust_core::desktop::{self, CGPoint, CGRect, CGSize, ImageBytes};
+use prisc_rust_core::desktop::{self, grab, CGPoint, CGRect, CGSize, ImageBytes};
 use prisc_rust_core::geometry::ScreenRect;
 
 pub struct DesktopBitmap {
@@ -54,7 +51,7 @@ pub fn take_display_image(bounds: ScreenRect) -> Option<CFRetained<CGImage>> {
 /// Settings, because Screen Recording is the shell's to explain and request
 /// (Settings → System → Permissions).
 pub fn has_screen_recording_permission() -> bool {
-    CGPreflightScreenCaptureAccess()
+    prisc_platform::permissions::screen_recording()
 }
 
 /// Capture the desktop bitmap using pre-enumerated monitors for
@@ -91,22 +88,38 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
                 continue;
             }
         };
+        // The layout rule every CoreGraphics reader shares (grab::cg_layout). Screen captures are
+        // BGRA and their rows are copied straight in; any other 32-bit layout is converted first
+        // by the shared grab, and a format it cannot convert skips the display.
+        let layout = match grab::cg_layout(&image) {
+            Ok(layout) => layout,
+            Err(e) => {
+                warn!("Display {} image: {e}, skipping", display_ids[i]);
+                continue;
+            }
+        };
         let Some(pixels) = ImageBytes::of(&image) else {
             warn!("Display {} image has no readable pixels, skipping", display_ids[i]);
             continue;
         };
-
-        let img_w = pixels.width;
-        let img_h = pixels.height;
-        let bpr = pixels.bytes_per_row;
-        let bpp = pixels.bits_per_pixel;
-
-        if bpp != 32 {
-            warn!("Display {} has unexpected bits_per_pixel={}, skipping", display_ids[i], bpp);
-            continue;
-        }
-
-        let src = pixels.bytes();
+        let converted;
+        let (src, bpr, img_w, img_h) = if layout == grab::Layout::Bgra {
+            (pixels.bytes(), pixels.bytes_per_row, pixels.width, pixels.height)
+        } else {
+            converted = match grab::from_cg_image(&image, false) {
+                Ok(converted) => converted,
+                Err(e) => {
+                    warn!("Display {} image: {e}, skipping", display_ids[i]);
+                    continue;
+                }
+            };
+            (
+                &converted.bgra[..],
+                converted.stride(),
+                converted.width as usize,
+                converted.height as usize,
+            )
+        };
 
         let dest_x = (monitor.bounds.min_x() - vd.min_x()) as usize;
         let dest_y = (monitor.bounds.min_y() - vd.min_y()) as usize;
@@ -154,8 +167,9 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
     })
 }
 
-/// Capture a single window's image via CGWindowListCreateImage.
-/// Returns BGRA pixel bytes and dimensions, or None on failure.
+/// Capture a single window's image via CGWindowListCreateImage, converted to BGRA by the shared
+/// grab (`desktop::grab::from_cg_image`, alpha kept: the window's own transparency is part of the
+/// peek). Returns BGRA pixel bytes and dimensions, or None on failure.
 pub fn capture_window_image(window_id: CGWindowID) -> Option<(Vec<u8>, u32, u32)> {
     let cg_null = CGRect::new(CGPoint::new(f64::INFINITY, f64::INFINITY), CGSize::new(0.0, 0.0));
 
@@ -167,33 +181,11 @@ pub fn capture_window_image(window_id: CGWindowID) -> Option<(Vec<u8>, u32, u32)
         window_id,
         CGWindowImageOption::BestResolution | CGWindowImageOption::BoundsIgnoreFraming,
     )?;
-    let pixels = ImageBytes::of(&image)?;
-
-    let width = pixels.width;
-    let height = pixels.height;
-    let bpr = pixels.bytes_per_row;
-    let bpp = pixels.bits_per_pixel;
-
-    if bpp != 32 || width == 0 || height == 0 {
-        warn!(
-            "capture_window_image: unexpected format bpp={} {}x{} for window {}",
-            bpp, width, height, window_id
-        );
-        return None;
-    }
-
-    let src = pixels.bytes();
-
-    let mut bgra = vec![0u8; width * height * 4];
-    for row in 0..height {
-        let src_start = row * bpr;
-        let src_end = src_start + width * 4;
-        let dst_start = row * width * 4;
-        let dst_end = dst_start + width * 4;
-        if src_end <= src.len() {
-            bgra[dst_start..dst_end].copy_from_slice(&src[src_start..src_end]);
+    match grab::from_cg_image(&image, false) {
+        Ok(image) => Some((image.bgra, image.width, image.height)),
+        Err(e) => {
+            warn!("capture_window_image: window {window_id}: {e}");
+            None
         }
     }
-
-    Some((bgra, width as u32, height as u32))
 }

@@ -133,8 +133,9 @@ namespace Prisc.Interop.Tests
         public void Stub_exports_answer_unsupported()
         {
             InteropTestGate.Require();
-            uint count = 0;
-            Assert.Equal((int)InteropStatus.Unsupported, NativeMethods.prisc_screens_list(null, 0, &count));
+            // (the desktop area's prisc_screens_list, which this used to call, is implemented)
+            PriscH264Quality quality;
+            Assert.Equal((int)InteropStatus.Unsupported, NativeMethods.prisc_encoding_h264_quality(23, 1920, 1080, 30, 1, &quality));
             Assert.Contains("not implemented yet", Native.LastErrorMessage());
         }
 
@@ -171,7 +172,7 @@ namespace Prisc.Interop.Tests
             Assert.Equal(8, sizeof(PriscPoint));
             Assert.Equal(64, sizeof(PriscScreen));
             Assert.Equal(56, (int)Marshal.OffsetOf<PriscScreen>(nameof(PriscScreen.is_primary)));
-            Assert.Equal(40, sizeof(PriscScreenImage));
+            Assert.Equal(32, sizeof(PriscScreenImage));
             Assert.Equal(48, sizeof(PriscDevice));
             Assert.Equal(8, sizeof(PriscAudioOutputInfo));
             Assert.Equal(24, sizeof(PriscAudioInputEvent));
