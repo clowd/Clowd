@@ -54,8 +54,9 @@ pub fn state(permission: Permission) -> State {
 /// Then the state is read again with the same rule as [`state`] and returned. Any thread (the
 /// prompts are posted by the OS on its own).
 pub fn request(permission: Permission) -> State {
-    if state(permission) != State::Denied {
-        return state(permission);
+    let current = state(permission);
+    if current != State::Denied {
+        return current;
     }
     imp::prompt(permission);
     state(permission)

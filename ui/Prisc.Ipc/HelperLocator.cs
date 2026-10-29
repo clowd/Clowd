@@ -31,9 +31,6 @@ namespace Prisc.Ipc
     {
         public const string EnvVarName = EnvVars.HelpersDir;
 
-        /// <summary>The one helper that is a .NET project rather than a cargo target.</summary>
-        private const string VideoRenderStem = "Prisc.VideoRender";
-
         /// <summary>Test seam (DenoiseGeneratorTests, MatteGeneratorTests): when set, it is asked first,
         /// by stem. A non-null answer is final (the path if it exists, otherwise "not found"); null
         /// falls through to the normal probe, so a seam for one helper leaves the others alone. Null
