@@ -294,7 +294,10 @@ mod tests {
                 y: s.bounds.y + s.bounds.height / 2,
             })
             .collect();
-        points.push(PriscPoint { x: i32::MIN / 2, y: i32::MIN / 2 }); // on no screen
+        points.push(PriscPoint {
+            x: i32::MIN / 2,
+            y: i32::MIN / 2,
+        }); // on no screen
         let mut hz = vec![-1.0f64; points.len()];
         let status = unsafe { prisc_screens_refresh_at(points.as_ptr(), points.len() as u32, hz.as_mut_ptr()) };
         assert_eq!(status, PRISC_OK);

@@ -1031,7 +1031,11 @@ pub(crate) mod tests {
             .expect("the shared submit is accepted");
         ring.abandon_shared(0).expect("abandon");
         assert_eq!(ring.wait_consumed(value, 0).expect("wait"), PRISC_OK);
-        assert_eq!(status(ring.abandon_shared(0).unwrap_err()), PriscInteropStatus::State, "idle: nothing to abandon");
+        assert_eq!(
+            status(ring.abandon_shared(0).unwrap_err()),
+            PriscInteropStatus::State,
+            "idle: nothing to abandon"
+        );
         assert_eq!(round_trip(&ring, [0x10, 0x20, 0x30]), [0x30, 0x20, 0x10, 0xFF]);
         assert_eq!(ring.last_signaled(), value + 1);
     }
@@ -1042,7 +1046,8 @@ pub(crate) mod tests {
             return;
         };
         ring.begin(0).expect("slot 0 is idle");
-        ring.submit(0).expect("the readback submit is accepted");
+        ring.submit(0)
+            .expect("the readback submit is accepted");
         assert_eq!(ring.finish(30_000).expect("finish"), PRISC_OK);
         assert_eq!(status(ring.begin(1).unwrap_err()), PriscInteropStatus::State);
         assert_eq!(ring.finish(0).expect("a second finish"), PRISC_OK);
