@@ -75,6 +75,17 @@ namespace Prisc.VideoSDK.Audio
         /// and it is one <see langword="int"/> written once when the unit opens.</remarks>
         public int ActualLatencyMs => Volatile.Read(ref _actualLatencyMs);
 
+        /// <summary>The open device, for tests that check what <see cref="ActualLatencyMs"/> was
+        /// derived from; null before the first <see cref="Play"/>.</summary>
+        internal CoreAudioOutputDevice Device
+        {
+            get
+            {
+                lock (_sync)
+                    return _device;
+            }
+        }
+
         public void Play()
         {
             lock (_sync)
