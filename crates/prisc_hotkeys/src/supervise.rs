@@ -1248,9 +1248,19 @@ mod tests {
         }
 
         fn next_event(events: &Self::Events, timeout: Duration) -> Result<HookEvent<u32>, RecvTimeoutError> {
-            events.recv_timeout(timeout)
+            match events.recv_timeout(timeout) {
+                Ok(HookEvent::Hotkey {
+                    id: PANIC_ID,
+                    ..
+                }) => panic!("the fake hook's queue broke"),
+                other => other,
+            }
         }
     }
+
+    /// A hotkey id no registration hands out: the fake's `next_event` panics on it, inside the
+    /// supervise thread.
+    const PANIC_ID: u32 = u32::MAX;
 
     type Starts = Arc<Mutex<VecDeque<Result<(), Down>>>>;
 
@@ -1860,6 +1870,37 @@ mod tests {
         assert!(s.register(g("F1")).is_ok(), "registering after stop is harmless");
         assert_eq!(s.start_recording(), None);
         assert_eq!(s.next_event(Duration::ZERO), Err(RecvTimeoutError::Disconnected));
+    }
+
+    #[test]
+    fn a_supervisor_panic_stops_the_hook_for_good_and_ends_the_stream() {
+        // the broken queue must not leave the hook swallowing its gestures with nobody draining it
+        let (s, script) = supervised(vec![Ok(())]);
+        assert_eq!(next(&s), running());
+        let hook = script.hook();
+        s.register(g("Control+A")).unwrap();
+        hook.send(HookEvent::Hotkey {
+            id: PANIC_ID,
+            repeat: false,
+        });
+
+        let SupervisedEvent::Status(status) = next(&s) else {
+            panic!("expected the final status");
+        };
+        let Some(Down::Error(Error::HookFailed(detail))) = &status.down else {
+            panic!("expected HookFailed, got {status:?}");
+        };
+        assert!(
+            detail.contains("the hotkey supervisor panicked: the fake hook's queue broke"),
+            "{detail}"
+        );
+        assert_eq!(&status.detail, detail);
+        assert!(!status.recoverable, "a panicked supervisor is never retried");
+        assert_eq!(s.next_event(Duration::from_secs(5)), Err(RecvTimeoutError::Disconnected));
+
+        // shut down: dropping the fake closes its queue, as dropping a real hook stops it
+        assert!(lock(&hook.tx).is_none(), "the hook was not shut down");
+        assert_eq!(script.attempts(), 1, "no hook start after the panic");
     }
 
     #[test]
