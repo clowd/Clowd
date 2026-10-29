@@ -22,7 +22,15 @@ namespace Prisc.Interop
             PriscH264Quality q;
             int status = NativeMethods.prisc_encoding_h264_quality(crf, width, height, fpsNum, fpsDen, &q);
             if (status == (int)InteropStatus.InvalidArg)
-                throw new ArgumentOutOfRangeException(nameof(crf), Native.LastErrorMessage());
+            {
+                // the message is Rust's; the parameter named is one that is out of range (the
+                // size or rate when either is, as H264EncoderSettings has always named them, and
+                // otherwise the crf), without restating the crf range here
+                var param = width <= 0 || height <= 0 ? nameof(width)
+                    : fpsNum <= 0 || fpsDen <= 0 ? nameof(fpsNum)
+                    : nameof(crf);
+                throw new ArgumentOutOfRangeException(param, Native.LastErrorMessage());
+            }
             Native.Check(status, "prisc_encoding_h264_quality");
             return new H264Quality(q.crf, q.nvenc_cq, q.vt_quality, q.vt_bitrate_kbps);
         }

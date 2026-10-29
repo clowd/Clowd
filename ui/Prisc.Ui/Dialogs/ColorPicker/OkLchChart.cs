@@ -10,22 +10,15 @@ using Prisc.Interop;
 
 namespace Prisc.UI.Dialogs.ColorPicker
 {
-    /// <summary>Which OKLCH channel an <see cref="OkLchChart"/> holds fixed (the other two are its axes).</summary>
-    public enum OkLchChartPlane
-    {
-        Lightness,
-        Chroma,
-        Hue,
-    }
-
     /// <summary>
     /// One of the OKLCH tab's gamut charts, as oklch.com draws them: a slice through OKLCH at the
     /// current value of one channel, painted wherever sRGB can show the color and left empty where it
     /// cannot, so the shape of the gamut is the picture.
+    /// <see cref="Plane"/> is the channel the chart holds fixed; the other two are its axes.
     /// <list type="bullet">
-    /// <item><see cref="OkLchChartPlane.Lightness"/>: hue across, chroma up, at the current lightness.</item>
-    /// <item><see cref="OkLchChartPlane.Chroma"/>: hue across, lightness up, at the current chroma.</item>
-    /// <item><see cref="OkLchChartPlane.Hue"/>: lightness across, chroma up, at the current hue.</item>
+    /// <item><see cref="OkLchChannel.Lightness"/>: hue across, chroma up, at the current lightness.</item>
+    /// <item><see cref="OkLchChannel.Chroma"/>: hue across, lightness up, at the current chroma.</item>
+    /// <item><see cref="OkLchChannel.Hue"/>: lightness across, chroma up, at the current hue.</item>
     /// </list>
     /// A marker sits on the current color, and a click or drag sets the two channels the chart spans
     /// (raising <see cref="Picked"/>). The tab places each under the slider of a channel it spans.
@@ -38,10 +31,11 @@ namespace Prisc.UI.Dialogs.ColorPicker
     {
         public const double MarkerDiameter = 16;
 
-        public static readonly StyledProperty<OkLchChartPlane> PlaneProperty =
-            AvaloniaProperty.Register<OkLchChart, OkLchChartPlane>(nameof(Plane));
+        public static readonly StyledProperty<OkLchChannel> PlaneProperty =
+            AvaloniaProperty.Register<OkLchChart, OkLchChannel>(nameof(Plane));
 
-        public OkLchChartPlane Plane
+        /// <summary>The channel this chart holds fixed.</summary>
+        public OkLchChannel Plane
         {
             get => GetValue(PlaneProperty);
             set => SetValue(PlaneProperty, value);
@@ -104,34 +98,27 @@ namespace Prisc.UI.Dialogs.ColorPicker
 
         private double FixedValue => Plane switch
         {
-            OkLchChartPlane.Lightness => Lightness,
-            OkLchChartPlane.Chroma => Chroma,
+            OkLchChannel.Lightness => Lightness,
+            OkLchChannel.Chroma => Chroma,
             _ => Hue,
         };
 
         // the axes: what each runs over, left to right and bottom to top
-        private double XMax => Plane == OkLchChartPlane.Hue ? 1 : 360;
-        private double YMax => Plane == OkLchChartPlane.Chroma ? 1 : OkLchColor.ChromaMax;
+        private double XMax => Plane == OkLchChannel.Hue ? 1 : 360;
+        private double YMax => Plane == OkLchChannel.Chroma ? 1 : OkLchColor.ChromaMax;
 
         private (double X, double Y) Position => Plane switch
         {
-            OkLchChartPlane.Lightness => (Hue, Chroma),
-            OkLchChartPlane.Chroma => (Hue, Lightness),
+            OkLchChannel.Lightness => (Hue, Chroma),
+            OkLchChannel.Chroma => (Hue, Lightness),
             _ => (Lightness, Chroma),
         };
 
         private (double L, double C, double H) At(double x, double y) => Plane switch
         {
-            OkLchChartPlane.Lightness => (Lightness, y, x),
-            OkLchChartPlane.Chroma => (y, Chroma, x),
+            OkLchChannel.Lightness => (Lightness, y, x),
+            OkLchChannel.Chroma => (y, Chroma, x),
             _ => (x, y, Hue),
-        };
-
-        private OkLchChannel FixedChannel => Plane switch
-        {
-            OkLchChartPlane.Lightness => OkLchChannel.Lightness,
-            OkLchChartPlane.Chroma => OkLchChannel.Chroma,
-            _ => OkLchChannel.Hue,
         };
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -197,7 +184,7 @@ namespace Prisc.UI.Dialogs.ColorPicker
                 // one native call per slice: prisc_rust_core::color::chart samples every pixel
                 // centre, then resamples the pixels on the gamut's edge on a grid and gives them
                 // the share that is in gamut as their alpha, so the cut-out edge is smooth
-                OkLch.PaintSlice(FixedChannel, Lightness, Chroma, Hue, pixelSize.Width, pixelSize.Height,
+                OkLch.PaintSlice(Plane, Lightness, Chroma, Hue, pixelSize.Width, pixelSize.Height,
                     MemoryMarshal.Cast<int, uint>(_pixels.AsSpan()));
                 using var buffer = _bitmap.Lock();
                 for (var row = 0; row < pixelSize.Height; row++)

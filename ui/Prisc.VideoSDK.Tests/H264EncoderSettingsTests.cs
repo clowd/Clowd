@@ -184,10 +184,10 @@ namespace Prisc.VideoSDK.Tests
         {
             Assert.Throws<ArgumentException>(() => At(VideoEncoder.Auto, 21));
             Assert.Throws<ArgumentException>(() => H264EncoderSettings.CodecNameOf(VideoEncoder.Auto));
-            Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 52));
-            Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, -1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 21, w: 0));
-            Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 21, fpsNum: 0));
+            Assert.Equal("crf", Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 52)).ParamName);
+            Assert.Equal("crf", Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, -1)).ParamName);
+            Assert.Equal("width", Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 21, w: 0)).ParamName);
+            Assert.Equal("fpsNum", Assert.Throws<ArgumentOutOfRangeException>(() => At(VideoEncoder.Software, 21, fpsNum: 0)).ParamName);
             Assert.Throws<ArgumentOutOfRangeException>(() => H264EncoderSettings.GopFrames(30, 0));
         }
 

@@ -126,12 +126,9 @@ namespace Prisc.UI.Controls.Tray
         public static readonly CornerRadius GripCorner = new CornerRadius(5);
 
         /// <summary>
-        /// The spec's 4 px tray padding (TrayPad, generated, as is Gap), spent as a 1 px ring plus 3 px
-        /// of inner padding so the outer box is exactly <see cref="ButtonHeight"/> + 8 (48 px) tall.
-        /// </summary>
-
-        /// <summary>
-        /// <see cref="TrayPad"/> as the tray's presenter margin, the 1 px ring included. The one
+        /// <see cref="TrayPad"/> as the tray's presenter margin, the 1 px ring included: the spec's 4 px
+        /// tray padding (TrayPad, generated, as is Gap) is spent as a 1 px ring plus 3 px of inner
+        /// padding, so the outer box is exactly <see cref="ButtonHeight"/> + 8 (48 px) tall. The one
         /// <see cref="Thickness"/>-shaped token here, because it has both a XAML consumer (the tray
         /// template's <c>ItemsPresenter</c>) and a C# one that derives a fixed tray size from
         /// <see cref="TrayPad"/> arithmetically — so the declared size and the real margin cannot drift

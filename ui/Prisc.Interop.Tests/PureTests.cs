@@ -143,7 +143,10 @@ namespace Prisc.Interop.Tests
 
             var e = Assert.Throws<ArgumentOutOfRangeException>(() => H264Quality.For(52, 1920, 1080, 30, 1));
             Assert.Contains("crf 52 is outside 0-51", e.Message, StringComparison.Ordinal);
-            Assert.Throws<ArgumentOutOfRangeException>(() => H264Quality.For(23, 1920, 1080, 30, 0));
+            Assert.Equal("crf", e.ParamName);
+            Assert.Equal("width", Assert.Throws<ArgumentOutOfRangeException>(() => H264Quality.For(23, 0, 1080, 30, 1)).ParamName);
+            Assert.Equal("width", Assert.Throws<ArgumentOutOfRangeException>(() => H264Quality.For(23, 1920, -1, 30, 1)).ParamName);
+            Assert.Equal("fpsNum", Assert.Throws<ArgumentOutOfRangeException>(() => H264Quality.For(23, 1920, 1080, 30, 0)).ParamName);
         }
     }
 }

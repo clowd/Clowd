@@ -80,6 +80,30 @@ namespace Prisc.Shared.Tests
         }
 
         [Fact]
+        public void The_palette_keeps_a_translucent_picks_alpha_where_the_accent_itself_shows()
+        {
+            InteropTestGate.Require();
+            // a light pick: darkened for white text, then lifted for the dark ground's text ramp
+            var picked = Color.FromArgb(0x80, 0xFF, 0xC0, 0x40);
+            var palette = AccentColors.Palette(picked, maintainContrast: true);
+
+            Assert.Equal(AccentColors.EnsureContrastWithWhite(picked), palette.Effective);
+            Assert.Equal(palette.Effective, palette.Light[5]);
+            Assert.Equal(palette.Effective, palette.Dark[5]);
+            Assert.Equal(0xFF, palette.Light[4].A);
+            Assert.Equal(0xFF, palette.Light[6].A);
+            Assert.Equal(0xFF, palette.DarkText[5].A);
+            Assert.Equal(0xFF, palette.CometBody.A);
+
+            // near black with the guard off: the dark fill is lifted off the ground, so it is a mix
+            var dim = AccentColors.Palette(Color.FromArgb(0x80, 0x08, 0x08, 0x10), maintainContrast: false);
+            Assert.Equal(0x80, dim.Effective.A);
+            Assert.Equal(0x80, dim.Light[5].A);
+            Assert.NotEqual(dim.Effective.ToUInt32() & 0xFFFFFF, dim.Dark[5].ToUInt32() & 0xFFFFFF);
+            Assert.Equal(0xFF, dim.Dark[5].A);
+        }
+
+        [Fact]
         public void GetEffectiveAccentColor_UsesTheChosenColorWhenNotFollowingTheSystem()
         {
             InteropTestGate.Require();

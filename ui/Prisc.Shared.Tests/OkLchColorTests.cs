@@ -1,5 +1,6 @@
 using System;
 using Avalonia.Media;
+using Prisc.Interop;
 using Prisc.Interop.Testing;
 using Xunit;
 
@@ -62,6 +63,52 @@ namespace Prisc.Shared.Tests
             Assert.Equal(0x80, new OkLchColor(0.5, 0.1, 40, 0x80 / 255d).ToColor().A);
         }
 
+        [Fact]
+        public void ToColorWithFlag_GivesTheColorAndTheGamutFlagOfOneConversion()
+        {
+            InteropTestGate.Require();
+            foreach (var value in new[] { new OkLchColor(0.7, 0.35, 150), new OkLchColor(0.628, 0.2577, 29.23, 0.5), new OkLchColor(0.5, 0, 0) })
+            {
+                Assert.Equal(value.ToColor(), value.ToColor(out var inGamut));
+                Assert.Equal(value.IsInSrgb, inGamut);
+            }
+        }
+
+        [Theory]
+        [InlineData(double.NaN, 0.1, 40)]
+        [InlineData(0.5, double.PositiveInfinity, 40)]
+        [InlineData(0.5, 0.1, double.NegativeInfinity)]
+        public void ToColor_RefusesANonFiniteChannel(double l, double c, double h)
+        {
+            InteropTestGate.Require();
+            Assert.Throws<InteropException>(() => new OkLchColor(l, c, h).ToColor());
+        }
+
+        [Theory]
+        [InlineData("0.1574", 0.1574)]
+        [InlineData(" 12,5 ", 12.5)]
+        [InlineData("-40", -40)]
+        [InlineData("1e300", 1e300)]
+        public void TryParseNumber_ReadsCssNumbersAndADecimalComma(string text, double expected)
+        {
+            Assert.True(OkLchColor.TryParseNumber(text, out var value));
+            Assert.Equal(expected, value);
+        }
+
+        [Theory]
+        [InlineData("NaN")]
+        [InlineData("Infinity")]
+        [InlineData("-Infinity")]
+        [InlineData("1e999")]
+        [InlineData("-1e999")]
+        [InlineData("")]
+        [InlineData(null)]
+        [InlineData("abc")]
+        public void TryParseNumber_RefusesNonFiniteAndOtherText(string text)
+        {
+            Assert.False(OkLchColor.TryParseNumber(text, out _));
+        }
+
         [Theory]
         [InlineData(0.628, 0.2577, 29.23, 1, "oklch(62.8% 0.2577 29.23)")]
         [InlineData(0.5, 0.1, 200, 0.5, "oklch(50% 0.1 200 / 50%)")]
@@ -92,6 +139,9 @@ namespace Prisc.Shared.Tests
         [InlineData("oklch(0.7 0.1 200")]
         [InlineData("oklch(0.7 0.1 50%)")]
         [InlineData("rgb(1, 2, 3)")]
+        [InlineData("oklch(NaN 0.1 200)")]
+        [InlineData("oklch(0.7 Infinity 200)")]
+        [InlineData("oklch(0.7 0.1 1e999)")]
         public void TryParse_RejectsOtherText(string text)
         {
             Assert.False(OkLchColor.TryParse(text, out _));

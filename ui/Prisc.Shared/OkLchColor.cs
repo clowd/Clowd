@@ -49,13 +49,31 @@ namespace Prisc
         /// <summary>
         /// The sRGB color nearest this one, alpha included. Outside the gamut the chroma is lowered,
         /// never the lightness or hue, until it fits; a lightness past either end is white or black.
+        /// A non-finite channel is refused (<see cref="InteropException"/>): text only becomes a
+        /// value through <see cref="TryParse"/> or <see cref="TryParseNumber"/>, which never yield one.
         /// </summary>
-        public Color ToColor()
+        public Color ToColor() => ToColor(out _);
+
+        /// <summary>
+        /// <see cref="ToColor()"/> and <see cref="IsInSrgb"/> from one conversion: the nearest sRGB
+        /// color, and whether this value was inside sRGB as it is.
+        /// </summary>
+        public Color ToColor(out bool inGamut)
         {
             var alpha = (byte)Math.Round(Math.Clamp(Alpha, 0, 1) * 255);
-            var rgb = OkLch.ToSrgb(L, C, H, out _);
+            var rgb = OkLch.ToSrgb(L, C, H, out inGamut);
             return Color.FromArgb(alpha, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
         }
+
+        /// <summary>
+        /// Reads one channel field as the pickers write it: a CSS number ("0.1574") in the invariant
+        /// culture, with a decimal comma taken as well for anyone who types one. Only a finite value
+        /// counts, so "NaN", "Infinity" and an overflow such as "1e999" are refused: no OKLCH channel
+        /// is non-finite, and the conversions reject one.
+        /// </summary>
+        public static bool TryParseNumber(string text, out double value) =>
+            double.TryParse((text ?? "").Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+            && double.IsFinite(value);
 
         public static double NormalizeHue(double degrees)
         {

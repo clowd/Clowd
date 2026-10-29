@@ -104,19 +104,29 @@ namespace Prisc
         /// <summary>Everything the accent drives, in one native call: the effective accent, the
         /// comet, and the light, dark and dark-text ramps <c>AccentTheme</c> repaints the theme
         /// with.</summary>
+        /// <remarks>
+        /// The maths is opaque, and the pick's alpha is laid back on where the accent itself comes
+        /// through: <see cref="AccentColorPalette.Effective"/> (so it equals
+        /// <see cref="EnsureContrastWithWhite"/> and <c>SettingsGeneral.GetEffectiveAccentColor</c>),
+        /// and step 5 of any ramp that holds it unchanged, i.e. not lifted for the dark ground. The
+        /// tints and shades around it, and a lifted step 5, are mixes and stay opaque, as is the
+        /// comet.
+        /// </remarks>
         public static AccentColorPalette Palette(Color picked, bool maintainContrast)
         {
             var p = ColorMath.Palette(Rgb(picked), maintainContrast);
-            return new AccentColorPalette(FromRgb(p.Effective), FromRgb(p.CometBody), FromRgb(p.CometHead),
+            return new AccentColorPalette(WithAlpha(picked.A, p.Effective), FromRgb(p.CometBody), FromRgb(p.CometHead),
                 Ramp(p.Light), Ramp(p.Dark), Ramp(p.DarkText));
-        }
 
-        private static Color[] Ramp(ReadOnlyMemory<uint> ramp)
-        {
-            var colors = new Color[ramp.Length];
-            for (var i = 0; i < colors.Length; i++)
-                colors[i] = FromRgb(ramp.Span[i]);
-            return colors;
+            Color[] Ramp(ReadOnlyMemory<uint> ramp)
+            {
+                var colors = new Color[ramp.Length];
+                for (var i = 0; i < colors.Length; i++)
+                    colors[i] = FromRgb(ramp.Span[i]);
+                if (colors.Length > 5 && ramp.Span[5] == p.Effective)
+                    colors[5] = WithAlpha(picked.A, p.Effective);
+                return colors;
+            }
         }
 
         private static uint Rgb(Color color) => (uint)(color.R << 16 | color.G << 8 | color.B);

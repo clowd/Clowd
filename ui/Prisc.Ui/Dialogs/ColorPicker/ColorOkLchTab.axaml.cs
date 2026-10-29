@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia;
@@ -120,7 +119,7 @@ namespace Prisc.UI.Dialogs.ColorPicker
         private void Update()
         {
             var (l, c, h) = (_color.L, _color.C, _color.H);
-            var mapped = _color.ToColor();
+            var mapped = _color.ToColor(out var inGamut);
             var opaque = Color.FromRgb(mapped.R, mapped.G, mapped.B);
 
             chartL.SetValues(l, c, h);
@@ -143,7 +142,7 @@ namespace Prisc.UI.Dialogs.ColorPicker
             sliderA.Value = _color.Alpha;
 
             swatch.Background = new SolidColorBrush(mapped);
-            gamutNote.IsVisible = !_color.IsInSrgb;
+            gamutNote.IsVisible = !inGamut;
             // a translucent fill shows the light checkerboard through it, so judge the ink on that
             var a = mapped.A / 255d;
             byte Over(byte v) => (byte)Math.Round(v * a + 230 * (1 - a));
@@ -197,10 +196,10 @@ namespace Prisc.UI.Dialogs.ColorPicker
         private static OkLchColor ParseOkLch(string text) =>
             OkLchColor.TryParse(text, out var color) ? color : throw new FormatException("Invalid oklch color");
 
-        // the fields show CSS numbers ("0.1574") in any locale, so read them back the same way, and
-        // take a decimal comma as well for anyone who types one
+        // the fields show CSS numbers ("0.1574") in any locale, so read them back the same way; a
+        // non-finite entry ("NaN", "1e999") is refused like any other bad text and snaps back
         private static double ParseNumber(string text) =>
-            double.Parse((text ?? "").Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture);
+            OkLchColor.TryParseNumber(text, out var value) ? value : throw new FormatException("Invalid number");
 
         private static double ParsePercent(string text) => ParseNumber((text ?? "").Trim().TrimEnd('%'));
 
