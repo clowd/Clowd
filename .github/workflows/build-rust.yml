@@ -90,8 +90,9 @@ jobs:
 
       # The in-process library gets a cargo invocation of its own: built beside the packages above,
       # cargo would unify features across them and hand it prisc_rust_core's `telemetry` (Sentry)
-      # from prisc_capture. Fails on cargo's "default-features is ignored" warning, which means a
-      # dependency line silently enables more than it asks for.
+      # from prisc_capture. Fails on cargo's "`default-features` is ignored for X" warning (cargo wraps
+      # the key in backticks), which means a dependency line silently enables more than it asks for,
+      # and on ld64's "duplicate symbol" warning.
       - name: Build isolated rust libraries
         shell: bash
         run: |
@@ -102,7 +103,7 @@ jobs:
             # shellcheck disable=SC2086 # word-split `-p <crate>`
             cargo build --release --target ${{ matrix.target }} $args 2>&1 | tee -a "$log"
           done < <(tools/staging/stage-app.sh packages-isolated ${{ matrix.rid }})
-          if grep -E "default-features is ignored|duplicate symbol" "$log"; then
+          if grep -E ".?default-features.? is ignored|duplicate symbol" "$log"; then
             echo "::error::the isolated build printed a default-features or duplicate symbol warning"
             exit 1
           fi
