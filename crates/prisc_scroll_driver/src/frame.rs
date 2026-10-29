@@ -1,11 +1,20 @@
 //! One screenshot of the fixed capture region.
 //!
 //! The whole of the driver's imaging: a single call that hands back the
-//! region's pixels as BGRA, top-down, tightly packed. [`win`] does it with
-//! `BitBlt` + `GetDIBits`, [`mac`] with `CGWindowListCreateImage`; both
-//! deliberately leave the mouse cursor out, because the driver parks the real
-//! cursor *inside* the region for the whole run and a cursor blob baked into
-//! every frame is something the stitcher would have to register around.
+//! region's pixels as BGRA, top-down, tightly packed, through the grab every
+//! Prisc reader of screen pixels shares (`prisc_rust_core::desktop::grab`:
+//! a GDI blit on Windows, `CGWindowListCreateImage` on macOS). Both leave the
+//! mouse cursor out, because the driver parks the real cursor *inside* the
+//! region for the whole run and a cursor blob baked into every frame is
+//! something the stitcher would have to register around. On Windows that is
+//! why the blit skips `CAPTUREBLT`: the flag re-composites layered windows
+//! into the result (a screen-wide redraw the settle loop would provoke twenty
+//! times a second) and can drag the cursor into the captured bits.
+//!
+//! Every frame is forced opaque. Composited screen content is opaque in
+//! practice, but nothing promises it, and an alpha channel that wobbled
+//! between frames would make the settle comparison see movement in a still
+//! page and land a semi-transparent PNG in the editor.
 //!
 //! Kept in BGRA — the order both platforms hand back — because everything
 //! upstream of the final PNG only ever compares and copies whole rows, so the
@@ -24,12 +33,8 @@
 
 use anyhow::Result;
 
+use prisc_rust_core::desktop::grab::{self, GrabError, Options};
 use prisc_rust_core::geometry::ScreenRect;
-
-#[cfg(target_os = "macos")]
-mod mac;
-#[cfg(windows)]
-mod win;
 
 /// One capture of the region: raw BGRA, top-down, `width * height * 4`
 /// bytes.
@@ -62,10 +67,21 @@ pub fn capture_region(rect: ScreenRect) -> Result<Frame> {
         bail!("capture region has invalid dimensions: {}x{}", rect.width(), rect.height());
     }
 
-    #[cfg(windows)]
-    let frame = win::capture_region(rect)?;
-    #[cfg(target_os = "macos")]
-    let frame = mac::capture_region(rect)?;
+    let image = grab::grab(
+        rect,
+        Options {
+            layered_windows: false,
+            opaque: true,
+        },
+    )
+    .map_err(|e| match e {
+        GrabError::Os(e) => anyhow!("capturing {rect:?} failed: {e}"),
+        other => anyhow!("capturing {rect:?}: {other}"),
+    })?;
 
-    Ok(frame)
+    Ok(Frame {
+        bgra: image.bgra,
+        width: image.width,
+        height: image.height,
+    })
 }

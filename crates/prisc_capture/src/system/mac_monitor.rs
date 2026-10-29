@@ -3,8 +3,12 @@ use std::collections::VecDeque;
 use anyhow::Result;
 
 use crate::system::MonitorInfo;
-use prisc_rust_core::desktop;
+use prisc_rust_core::desktop::screens;
 use prisc_rust_core::geometry::{LogicalPoint, RectExt, ScreenRect};
+
+/// The overlay's own frame rate target when a display reports no refresh rate (most built-in
+/// panels do not).
+const FALLBACK_REFRESH_HZ: f32 = 60.0;
 
 struct RawMonitor {
     cg_x: f64,
@@ -19,36 +23,35 @@ struct RawMonitor {
     name: String,
 }
 
+/// Every display from the shared CoreGraphics screen list (`desktop::screens`, the list Prisc.Ui
+/// reads too), shaped for the overlay: physical-pixel bounds laid out by
+/// [`compute_physical_origins`], the CG origin kept as `logical_origin`.
 pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
-    let displays = desktop::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
+    let screens = screens::list().map_err(|e| anyhow!("the display list failed: {e}"))?;
 
-    let mut raw: Vec<RawMonitor> = Vec::with_capacity(displays.len());
-    for (i, display) in displays.iter().enumerate() {
-        let cg_bounds = display.bounds;
-        let (phys_w, phys_h) = display.pixel_size();
-        let (phys_w, phys_h) = (phys_w as u32, phys_h as u32);
-        let refresh_hz = display
-            .mode
-            .map_or(0.0, |m| m.refresh_hz as f32);
+    let mut raw: Vec<RawMonitor> = Vec::with_capacity(screens.len());
+    for (i, screen) in screens.iter().enumerate() {
+        let cg_bounds = screen.bounds;
+        let (phys_w, phys_h) = (screen.pixel_width, screen.pixel_height);
 
-        let scale = if cg_bounds.size.width > 0.0 {
-            phys_w as f32 / cg_bounds.size.width as f32
+        let scale = if cg_bounds.width() > 0 {
+            phys_w as f32 / cg_bounds.width() as f32
         } else {
             1.0
         };
 
-        let refresh_hz = if refresh_hz <= 0.0 { 60.0 } else { refresh_hz };
-
         raw.push(RawMonitor {
-            cg_x: cg_bounds.origin.x,
-            cg_y: cg_bounds.origin.y,
-            cg_w: cg_bounds.size.width,
-            cg_h: cg_bounds.size.height,
+            cg_x: f64::from(cg_bounds.min_x()),
+            cg_y: f64::from(cg_bounds.min_y()),
+            cg_w: f64::from(cg_bounds.width()),
+            cg_h: f64::from(cg_bounds.height()),
             phys_w,
             phys_h,
             scale,
-            is_primary: display.is_main,
-            refresh_hz,
+            is_primary: screen.is_primary,
+            refresh_hz: screen
+                .refresh_hz
+                .map_or(FALLBACK_REFRESH_HZ, |hz| hz as f32),
             name: format!("Display {}", i + 1),
         });
     }

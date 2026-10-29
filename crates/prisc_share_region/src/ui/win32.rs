@@ -35,8 +35,7 @@ use windows::Win32::Graphics::Dwm::{
 };
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject,
-    EndPaint, GetMonitorInfoW, InvalidateRect, MonitorFromRect, SelectObject, HBRUSH, HDC,
-    MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT, SRCCOPY,
+    EndPaint, InvalidateRect, SelectObject, HBRUSH, HDC, PAINTSTRUCT, SRCCOPY,
 };
 use windows::Win32::Graphics::GdiPlus::{
     FillModeAlternate, GdipAddPathArcI, GdipAddPathRectangleI, GdipClosePathFigure, GdipCreateFont,
@@ -53,7 +52,7 @@ use windows::Win32::Graphics::GdiPlus::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::WM_MOUSELEAVE;
 use windows::Win32::UI::HiDpi::{
-    AdjustWindowRectExForDpi, GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI,
+    AdjustWindowRectExForDpi, GetDpiForWindow,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     ReleaseCapture, SetCapture, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT, VK_SPACE,
@@ -72,6 +71,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use prisc_obs_platform::region::Rect;
+use prisc_rust_core::desktop::screens::{self, Fallback};
+use prisc_rust_core::geometry::{RectExt, ScreenRect};
 
 use crate::commands::Command;
 
@@ -476,57 +477,50 @@ fn scalef(dpi: u32, v: f32) -> f32 {
 /// The work area (screen minus taskbar) of the display the region is on, in
 /// capture space, and that display's effective DPI.
 ///
-/// MONITOR_DEFAULTTONEAREST answers the two cases a containment test cannot: a
-/// region straddling two displays (the one it overlaps most wins) and a region
-/// that intersects none (rejected by the app core before the window exists, but
-/// a lookup must still return something rather than a null monitor).
+/// The display comes from the shared screen list (`desktop::screens::at_rect`
+/// with the Nearest fallback, the lookup the capture overlay and Prisc.Ui
+/// use), which answers the two cases a containment test cannot: a region
+/// straddling two displays (the one it overlaps most wins) and a region that
+/// intersects none (rejected by the app core before the window exists, but a
+/// lookup must still return something rather than a null monitor).
 ///
 /// The DPI is the monitor's, not `GetDpiForWindow`'s: the window has not been
 /// moved to that monitor yet, so its own DPI is still whichever monitor
 /// CW_USEDEFAULT dropped it on, and on a mixed-DPI desktop sizing the prompt
 /// from that would come out at the wrong scale for where it is about to land.
 ///
-/// Both queries fall back rather than fail. A prompt at 96 dpi somewhere on the
+/// Both fall back rather than fail. A prompt at 96 dpi somewhere on the
 /// virtual desktop is a cosmetic miss; a prompt that never appears is a share
 /// the user cannot start at all.
 unsafe fn region_monitor(region: Rect) -> (Rect, u32) {
-    let rc = RECT {
-        left: region.x,
-        top: region.y,
-        right: region.x.saturating_add(region.w as i32),
-        bottom: region.y.saturating_add(region.h as i32),
-    };
-    let monitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
-
-    let mut mi = MONITORINFO {
-        cbSize: mem::size_of::<MONITORINFO>() as u32,
-        ..Default::default()
-    };
-    let work = if GetMonitorInfoW(monitor, &mut mi).as_bool() {
-        let w = mi.rcWork;
-        Rect {
-            x: w.left,
-            y: w.top,
-            w: (w.right - w.left).max(0) as u32,
-            h: (w.bottom - w.top).max(0) as u32,
+    let rect = ScreenRect::from_xy_size(
+        region.x,
+        region.y,
+        i32::try_from(region.w).unwrap_or(i32::MAX),
+        i32::try_from(region.h).unwrap_or(i32::MAX),
+    );
+    match screens::at_rect(rect, Fallback::Nearest) {
+        Ok(Some(screen)) => {
+            let w = screen.work_area.unwrap_or(screen.bounds);
+            let work = Rect {
+                x: w.min_x(),
+                y: w.min_y(),
+                w: w.width().max(0) as u32,
+                h: w.height().max(0) as u32,
+            };
+            // the effective DPI the shared scale was made from (1.0, so 96, when unreadable)
+            (work, (screen.scale * 96.0).round() as u32)
         }
-    } else {
-        Rect {
-            x: GetSystemMetrics(SM_XVIRTUALSCREEN),
-            y: GetSystemMetrics(SM_YVIRTUALSCREEN),
-            w: GetSystemMetrics(SM_CXVIRTUALSCREEN).max(0) as u32,
-            h: GetSystemMetrics(SM_CYVIRTUALSCREEN).max(0) as u32,
+        _ => {
+            let virtual_screen = Rect {
+                x: GetSystemMetrics(SM_XVIRTUALSCREEN),
+                y: GetSystemMetrics(SM_YVIRTUALSCREEN),
+                w: GetSystemMetrics(SM_CXVIRTUALSCREEN).max(0) as u32,
+                h: GetSystemMetrics(SM_CYVIRTUALSCREEN).max(0) as u32,
+            };
+            (virtual_screen, 96)
         }
-    };
-
-    let mut dpi_x = 0u32;
-    let mut dpi_y = 0u32;
-    let dpi = match GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) {
-        Ok(()) if dpi_x != 0 => dpi_x,
-        _ => 96,
-    };
-
-    (work, dpi)
+    }
 }
 
 /// Sizes AND places the prompt window: PROMPT_CLIENT_W x PROMPT_CLIENT_H
