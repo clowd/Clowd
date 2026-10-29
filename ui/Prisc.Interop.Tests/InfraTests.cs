@@ -172,7 +172,7 @@ namespace Prisc.Interop.Tests
             Assert.Equal(8, sizeof(PriscPoint));
             Assert.Equal(64, sizeof(PriscScreen));
             Assert.Equal(56, (int)Marshal.OffsetOf<PriscScreen>(nameof(PriscScreen.is_primary)));
-            Assert.Equal(40, sizeof(PriscScreenImage));
+            Assert.Equal(32, sizeof(PriscScreenImage));
             Assert.Equal(48, sizeof(PriscDevice));
             Assert.Equal(8, sizeof(PriscAudioOutputInfo));
             Assert.Equal(24, sizeof(PriscAudioInputEvent));
