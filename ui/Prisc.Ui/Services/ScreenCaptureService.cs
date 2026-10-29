@@ -4,136 +4,17 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Prisc.Config;
+using Prisc.Ipc;
 using Prisc.PlatformUtil;
 using Prisc.UI.Helpers;
 
 namespace Prisc.UI
 {
-    /// <summary>
-    /// Locates the external Rust capture binaries (see CAPTURE_PROTOCOL.md): the capture overlay
-    /// <c>prisc_capture</c> and, beside it, the scrolling-capture driver
-    /// <c>prisc_scroll_driver</c>.
-    /// Probe order: the <c>PRISC_CAPTURE_PATH</c> environment variable, then alongside the Prisc.Ui
-    /// executable (release layout), then walking up from the app base directory to a cargo workspace
-    /// root and taking the more recently built of <c>target/debug</c> and <c>target/release</c>
-    /// (debug-time layout).
-    /// </summary>
-    public static class CaptureBinaryLocator
-    {
-        public const string EnvVarName = "PRISC_CAPTURE_PATH";
-
-        public static string BinaryFileName => Executable("prisc_capture");
-
-        /// <summary>The scrolling-capture driver (CAPTURE_PROTOCOL.md §2) — a separate process
-        /// from the overlay, spawned once the user has picked the region and the scroll point.
-        /// Windows-only: the overlay's SCROLL button is compiled out elsewhere.</summary>
-        public static string ScrollDriverFileName => Executable("prisc_scroll_driver");
-
-        private static string Executable(string stem) =>
-            OperatingSystem.IsWindows() ? stem + ".exe" : stem;
-
-        public static string Resolve() =>
-            Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory);
-
-        /// <summary>
-        /// Locates the scrolling-capture driver, which ships in the same directory as the overlay
-        /// in every layout — next to Prisc.Ui when installed, and in the same <c>target/</c>
-        /// profile directory when built locally. Deriving it from the overlay's resolved path
-        /// rather than probing again means the <c>PRISC_CAPTURE_PATH</c> override keeps pointing
-        /// both binaries at the same build. Returns null when either is missing.
-        /// </summary>
-        public static string ResolveScrollDriver() => ResolveScrollDriver(Resolve());
-
-        /// <summary>Testable overload. <paramref name="capturePath"/> is the overlay binary's
-        /// resolved path (null when it could not be found).</summary>
-        public static string ResolveScrollDriver(string capturePath)
-        {
-            var dir = String.IsNullOrEmpty(capturePath) ? null : Path.GetDirectoryName(capturePath);
-            if (String.IsNullOrEmpty(dir))
-                return null;
-
-            var driver = Path.Combine(dir, ScrollDriverFileName);
-            return File.Exists(driver) ? Path.GetFullPath(driver) : null;
-        }
-
-        /// <summary>Testable overload. Returns null when the binary cannot be found.</summary>
-        public static string Resolve(string envVarValue, string baseDirectory)
-        {
-            // (a) explicit override via environment variable
-            if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
-                return Path.GetFullPath(envVarValue);
-
-            // (b) next to the Prisc.Ui executable (release layout copies the binary alongside)
-            var local = Path.Combine(baseDirectory, BinaryFileName);
-            if (File.Exists(local))
-                return Path.GetFullPath(local);
-
-            // (c) walk up to a directory containing Cargo.toml (the cargo workspace root) and
-            // probe target/debug and target/release. Keep walking if a Cargo.toml has neither
-            // built binary (a crate manifest may sit below the workspace root that owns target/).
-            var dir = new DirectoryInfo(Path.GetFullPath(baseDirectory));
-            while (dir != null)
-            {
-                if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
-                {
-                    // When both profiles are built, the freshest one is the one being worked on.
-                    // Preferring debug unconditionally (the old behavior) made a just-built
-                    // --release binary unreachable for anyone with a stale target/debug lying
-                    // around, which is everybody who has ever run a plain `cargo build`.
-                    var debug = Path.Combine(dir.FullName, "target", "debug", BinaryFileName);
-                    var release = Path.Combine(dir.FullName, "target", "release", BinaryFileName);
-                    var debugBuilt = LastWriteUtcOrNull(debug);
-                    var releaseBuilt = LastWriteUtcOrNull(release);
-
-                    // Strictly-greater, so an exact tie keeps the old debug-wins behavior. Ties are
-                    // not theoretical: coarse filesystem timestamp granularity makes two builds a
-                    // moment apart compare equal.
-                    if (debugBuilt.HasValue && releaseBuilt.HasValue)
-                        return releaseBuilt.Value > debugBuilt.Value ? release : debug;
-                    if (debugBuilt.HasValue)
-                        return debug;
-                    if (releaseBuilt.HasValue)
-                        return release;
-                }
-
-                dir = dir.Parent;
-            }
-
-            return null;
-        }
-
-        /// <summary>Last-write time of <paramref name="path"/> in UTC, or null when it is absent or
-        /// cannot be stat'd. Doubles as the existence check so that a `cargo build`/`cargo clean`
-        /// running while Prisc is open — the normal state of affairs during development — makes a
-        /// candidate merely unselectable rather than throwing out of binary resolution entirely.
-        /// UTC throughout: comparing a local-time stamp against a UTC one picks the wrong profile
-        /// for most of the world, and by exactly an hour twice a year for the rest.</summary>
-        private static DateTime? LastWriteUtcOrNull(string path)
-        {
-            try
-            {
-                // One FileInfo, not File.Exists + File.GetLastWriteTimeUtc: FileInfo caches a single
-                // stat, so the existence answer and the timestamp describe the same instant.
-                var info = new FileInfo(path);
-                return info.Exists ? info.LastWriteTimeUtc : (DateTime?)null;
-            }
-            catch (IOException)
-            {
-                return null;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return null;
-            }
-        }
-    }
-
     /// <summary>
     /// <see cref="IScreenCapturePage"/> backed by the external Rust capture process
     /// (CAPTURE_PROTOCOL.md). Mirrors the WPF CaptureWindow callback dispatch: a completed
@@ -159,12 +40,6 @@ namespace Prisc.UI
         /// here, and the standby capturer's overlay tracked by its supervisor.</summary>
         public static bool IsCaptureActive =>
             Volatile.Read(ref _captureActive) != 0 || CaptureStandbySupervisor.IsOverlayOpen;
-
-        /// <summary>The capturer's exit code for "macOS has not granted Screen Recording" — see
-        /// <c>NO_SCREEN_PERMISSION</c> in crates/prisc_rust_core/src/exit.rs. Reported instead of
-        /// crashing, so a revoked permission gets the permission dialog rather than a stack trace.
-        /// </summary>
-        internal const int ExitCodeNoScreenPermission = 3;
 
         public async void Open(CaptureMode mode, RegionIntent intent = RegionIntent.Capture)
         {
@@ -205,13 +80,13 @@ namespace Prisc.UI
 
             try
             {
-                var binary = CaptureBinaryLocator.Resolve();
+                var binary = Prisc.Ipc.HelperLocator.Find("prisc_capture");
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The screen capture binary ({CaptureBinaryLocator.BinaryFileName}) could not be found. " +
-                        $"Run 'cargo build' in the Prisc repository, or set the {CaptureBinaryLocator.EnvVarName} " +
-                        "environment variable to its location.",
+                        $"The screen capture binary ({Prisc.Ipc.Platform.ExeName("prisc_capture")}) could not be found. " +
+                        $"Run 'cargo build' in the Prisc repository, or set the {Prisc.Ipc.HelperLocator.EnvVarName} " +
+                        "environment variable to the folder holding it.",
                         "Screen capture unavailable");
                     return;
                 }
@@ -221,45 +96,44 @@ namespace Prisc.UI
                 var sessionDir = SessionManager.Current.GetNextSessionDirectory();
                 Directory.CreateDirectory(sessionDir);
 
-                var psi = new ProcessStartInfo(binary)
+                // All three streams go through the client: hello and done on stdout, the log on
+                // stderr, and the stdin lease, so a dead Prisc.Ui ends the overlay instead of
+                // orphaning it. The overlay needs keyboard focus immediately (Esc / shortcuts), so it
+                // gets our foreground rights; best-effort, it only works while we hold them (hotkey
+                // or tray interaction). A kill spares its descendants: an OCR search's browser may
+                // be one of them (§7.4).
+                HelperOutcome<Prisc.Ipc.CaptureEvent> outcome;
+                try
                 {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    // capture the capturer's log output (simplelog writes its log and any
-                    // Rust panic to stderr) so a crash can be reported to the user. Rust
-                    // writes UTF-8; without pinning, .NET decodes with the OEM codepage.
-                    RedirectStandardError = true,
-                    StandardErrorEncoding = Encoding.UTF8,
-                    WorkingDirectory = Path.GetDirectoryName(binary),
-                };
-                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current, mode, intent,
-                                                          SettingsRoot.Current.General.LastSavePath))
-                    psi.ArgumentList.Add(arg);
+                    var client = await HelperClient<Prisc.Ipc.CaptureEvent, CaptureCommand>.StartAsync(HelperSpecs.Capture, binary,
+                        CaptureArguments.Build(sessionDir, SettingsRoot.Current, mode, intent, SettingsRoot.Current.General.LastSavePath),
+                        new HelperStartOptions { GrantForeground = true, KillEntireTree = false });
+                    await using (client)
+                    {
+                        // one-shot reports its session through the directory (action.txt,
+                        // session.json), so the events only matter for the terminal
+                        await foreach (var _ in client.Events.ReadAllAsync())
+                        {
+                        }
 
-                using var process = Process.Start(psi);
-                if (process == null)
-                    throw new InvalidOperationException("Failed to start capture process: " + binary);
-
-                // Hand our foreground rights to the capturer: a freshly spawned process is
-                // denied SetForegroundWindow by the foreground lock, and the overlay needs
-                // keyboard focus immediately (Esc / shortcuts). Best-effort — it only works
-                // when we hold foreground permission ourselves (hotkey / tray interaction).
-                if (OperatingSystem.IsWindows())
-                    AllowSetForegroundWindow(process.Id);
-
-                // drain stderr concurrently so a full pipe buffer can never block the
-                // process from exiting (classic redirect deadlock).
-                var stderrTask = process.StandardError.ReadToEndAsync();
-                await process.WaitForExitAsync();
-                var stderr = await stderrTask;
-
-                // Every normal outcome (edit / upload / color / video / cancel) exits 0.
-                // A non-zero exit means the capturer crashed or aborted — e.g. a GPU shader
-                // that failed to load — so surface it instead of silently treating the empty
-                // session directory as a user cancellation (which produced no error at all).
-                if (process.ExitCode != 0)
+                        outcome = await client.Completion;
+                    }
+                }
+                catch (HelperStartException ex)
                 {
-                    Debug.WriteLine($"Capture process exited with code {process.ExitCode}:\n{stderr}");
+                    // exited before hello: the same mapping as a run that ended without a terminal
+                    outcome = new HelperOutcome<Prisc.Ipc.CaptureEvent>(null, ex.ExitCode,
+                        ex.Failure is HelperFailure.NoScreenPermission or HelperFailure.CaptureFailed ? ex.Failure : HelperFailure.Crashed,
+                        ex.Data[SentryConfig.ProcessLogKey] as string ?? ex.Message);
+                }
+
+                // Every normal outcome (edit / upload / color / video / cancel) ends with done.
+                // Anything else means the capturer crashed or aborted (a GPU shader that failed to
+                // load, say), so surface it instead of silently treating the empty session
+                // directory as a user cancellation.
+                if (outcome.Failure != HelperFailure.None)
+                {
+                    Debug.WriteLine($"Capture process failed: {outcome.Describe()}\n{outcome.StderrTail}");
 
                     // the capturer mirrors its log into the session dir (stdout is lost when
                     // launched from an .app bundle); grab it before the dir is deleted.
@@ -267,31 +141,35 @@ namespace Prisc.UI
                     CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
 
                     // permission revoked between our preflight and the capturer's own check, or the
-                    // capturer's TCC verdict differs from ours — either way it is not a crash.
-                    if (process.ExitCode == ExitCodeNoScreenPermission)
+                    // capturer's TCC verdict differs from ours: either way it is not a crash.
+                    if (outcome.Failure == HelperFailure.NoScreenPermission
+                        || outcome.Error?.Code == IpcErrorCodes.Permission
+                        || outcome.ExitCode == HelperExit.NoScreenPermission)
                     {
                         await PromptForScreenRecordingPermissionAsync();
                         return;
                     }
 
                     // The capturer reports its own panics, but it cannot report the ways it dies
-                    // without running Rust code — a native fault in a GPU driver, an abort out of
-                    // an FFI frame, or a kill. Its exit code and log are all that survives
-                    // those, so report from this side. Keep the message free of the exit code so
-                    // Sentry groups every capturer death into one issue; the specifics ride along
-                    // in Data.
+                    // without running Rust code: a native fault in a GPU driver, an abort out of
+                    // an FFI frame, or a kill. Its exit and log are all that survives those, so
+                    // report from this side. Keep the message free of the exit code so Sentry
+                    // groups every capturer death into one issue; the specifics ride along in Data.
                     var crash = new InvalidOperationException("Capture process exited unexpectedly");
-                    crash.Data["exit_code"] = process.ExitCode;
+                    crash.Data["exit_code"] = outcome.ExitCode;
+                    crash.Data["failure"] = outcome.Failure.ToString();
+                    crash.Data["error_code"] = outcome.Error?.Code;
                     // Both logs in full, as the process-log.txt attachment. A death of that kind
                     // writes nothing to stderr, and the session log is the only place the adapter
-                    // it selected is named — truncating either to fit inline in Data is what
-                    // leaves these reports unactionable.
-                    SentryConfig.AttachProcessLog(crash, ("stderr", stderr), ("capture.log", captureLog));
+                    // it selected is named; truncating either to fit inline in Data is what leaves
+                    // these reports unactionable.
+                    SentryConfig.AttachProcessLog(crash, ("error", outcome.Error?.Message),
+                        ("stderr", outcome.StderrTail), ("capture.log", captureLog));
                     SentryConfig.CaptureHandled(crash, "capture.process-crash");
 
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The screen capture tool exited unexpectedly (code {process.ExitCode})." +
-                        $"\n\n{SummarizeDiagnostics(stderr, captureLog)}",
+                        $"The screen capture tool exited unexpectedly ({outcome.Describe()})." +
+                        $"\n\n{SummarizeDiagnostics(outcome.Error?.Message ?? outcome.StderrTail, captureLog)}",
                         "Screen capture failed");
                     return;
                 }
@@ -373,7 +251,7 @@ namespace Prisc.UI
         }
 
         /// <summary>Completes a session announced by the standby capturer's
-        /// PRISC_CAPTURE_FINISHED line. Runs on the UI thread via the supervisor.</summary>
+        /// <c>capture_finished</c>. Runs on the UI thread via the supervisor.</summary>
         internal static async Task ProcessStandbySessionAsync(string sessionDir)
         {
             try
@@ -439,10 +317,6 @@ namespace Prisc.UI
                 return null;
             }
         }
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
-        private static extern bool AllowSetForegroundWindow(int dwProcessId);
 
         /// <summary>Picks what to put in front of the user: the capturer's stderr when it managed to
         /// say something, and otherwise the log file it left behind. A process that dies without

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Prisc.VideoSDK.Audio;
 using Prisc.VideoSDK.Model;
+using Prisc.Ipc;
 
 namespace Prisc.VideoSDK.Ai
 {
@@ -56,7 +57,7 @@ namespace Prisc.VideoSDK.Ai
             if (String.IsNullOrEmpty(cacheDir))
                 return false;
 
-            var exe = AiLoader.TryGetPath();
+            var exe = HelperLocator.Find("prisc_ai");
             if (exe == null)
                 return false;
 

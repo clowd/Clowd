@@ -10,6 +10,8 @@ pub mod properties;
 pub mod scene;
 pub mod signal;
 pub mod source;
+pub mod tick;
+pub mod time;
 pub mod video;
 pub mod view;
 pub mod volmeter;

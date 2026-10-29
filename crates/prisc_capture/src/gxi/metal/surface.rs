@@ -34,7 +34,7 @@ use super::SURFACE_FORMAT;
 /// The image handed to `Surface::create` for the macOS backdrop layer:
 /// the cropped screenshot, when it is already available at
 /// window-creation time.
-pub type BackdropImage = core_graphics::image::CGImage;
+pub type BackdropImage = objc2_core_foundation::CFRetained<objc2_core_graphics::CGImage>;
 
 /// What surface creation hands back beside the surface itself: the two
 /// layer-backed views `WindowHandle` keeps driving afterwards - the
@@ -124,7 +124,7 @@ impl Surface {
         if let Some(ref cg_image) = backdrop {
             if let Some(layer) = bg_view.layer() {
                 unsafe {
-                    let cg_ptr: *const std::ffi::c_void = *(cg_image as *const _ as *const *const std::ffi::c_void);
+                    let cg_ptr = objc2_core_foundation::CFRetained::as_ptr(cg_image).as_ptr();
                     layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
                     layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
                 }

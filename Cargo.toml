@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_rust_core",
+    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_ipc", "crates/prisc_rust_core",
     "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
     "crates/prisc_build_support", "crates/prisc_ffmpeg_sys", "crates/prisc_obs", "crates/prisc_obs_platform",
     "crates/prisc_obs_sys", "crates/prisc_recorder", "crates/prisc_share_region", "crates/prisc_vid2gif",
@@ -9,7 +9,7 @@ members = [
 # Plain `cargo build/test` stays fast and toolchain-light: the recorder stack (libobs via CMake,
 # 20-40 min cold, needs the obs-studio submodule + cmake + LLVM) builds only when asked: `cargo rec`.
 default-members = [
-    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_rust_core",
+    "crates/prisc_ai", "crates/prisc_capture", "crates/prisc_hotkeys", "crates/prisc_ipc", "crates/prisc_rust_core",
     "crates/prisc_scroll_driver", "crates/prisc_shell_ext",
 ]
 
@@ -24,11 +24,15 @@ edition = "2021"
 rust-version = "1.89"
 
 [workspace.dependencies]
-# Shared by prisc_capture and prisc_scroll_driver: geometry, the session.json
-# contract, exit codes, Sentry setup.
-prisc_rust_core = { path = "crates/prisc_rust_core" }
+# Shared by prisc_capture, prisc_scroll_driver, prisc_ai and (through
+# prisc_obs_platform) the recorder stack: geometry, the session.json contract, exit
+# codes, the desktop queries and Sentry setup. Default features are off here so each
+# consumer names the `desktop` and `telemetry` modules it actually uses.
+prisc_rust_core = { path = "crates/prisc_rust_core", default-features = false }
 # The global hotkey hook: linked into prisc_capture, and built as prisc_hotkeys.dll / .dylib for Prisc.Ui.
 prisc_hotkeys = { path = "crates/prisc_hotkeys" }
+# The helper protocol: message catalogs, exit codes, the stdio channel (crates/prisc_capture/HELPER_PROTOCOL.md).
+prisc_ipc = { path = "crates/prisc_ipc" }
 # The recorder stack's internal crates (libobs/FFmpeg bindings and the platform layer).
 prisc_obs_sys = { path = "crates/prisc_obs_sys" }
 prisc_obs = { path = "crates/prisc_obs" }
@@ -38,8 +42,8 @@ prisc_ffmpeg_sys = { path = "crates/prisc_ffmpeg_sys" }
 # build scripts (crates/prisc_build_support).
 prisc_build_support = { path = "crates/prisc_build_support" }
 anyhow = "1.0"
-# base64 + png: the input-capture sidecar's `cursor_image` rows carry sprite
-# planes as base64-encoded PNG (crates/prisc_recorder/src/cursor_sprite.rs).
+# The input-capture sidecar's `cursor_image` rows carry sprite planes as
+# base64-encoded PNG (crates/prisc_recorder/src/cursor_sprite.rs).
 base64 = "0.23"
 # 0.72+ required: bindgen 0.71 + libclang 22 intermittently emitted opaque
 # 1-byte structs (vec2/vec3/vec4/obs_transform_info/obs_audio_data/
@@ -47,7 +51,6 @@ base64 = "0.23"
 # assert_no_opaque_regressions guard in crates/prisc_obs_sys/build.rs.
 bindgen = "0.72"
 ctrlc = { version = "3", features = ["termination"] }
-png = "0.18"
 clap = "4.6"
 image = { version = "0.25", default-features = false }
 libblur = "0.24"
@@ -95,9 +98,6 @@ arboard = "3.6"
 rfd = { version = "0.17", default-features = false }
 xdialog = "3.1"
 windows = "0.62"
-foreign-types = "0.5"
-core-graphics = "0.25"
-core-foundation = "0.10"
 objc2 = "0.6"
 objc2-core-foundation = "0.3"
 objc2-core-graphics = "0.3"

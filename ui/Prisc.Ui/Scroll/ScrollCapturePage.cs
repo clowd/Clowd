@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using Prisc.Config;
 using Prisc.PlatformUtil;
 using Prisc.UI.Helpers;
+using Prisc.Ipc;
 
 namespace Prisc.UI
 {
@@ -70,13 +71,13 @@ namespace Prisc.UI
                     return;
                 }
 
-                var binary = CaptureBinaryLocator.ResolveScrollDriver();
+                var binary = Prisc.Ipc.HelperLocator.Find("prisc_scroll_driver");
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The scrolling capture binary ({CaptureBinaryLocator.ScrollDriverFileName}) could not be found. " +
-                        $"Run 'cargo build' in the Prisc repository, or set the {CaptureBinaryLocator.EnvVarName} " +
-                        "environment variable to the capture binary's location — the driver ships beside it.",
+                        $"The scrolling capture binary ({Prisc.Ipc.Platform.ExeName("prisc_scroll_driver")}) could not be found. " +
+                        $"Run 'cargo build' in the Prisc repository, or set the {Prisc.Ipc.HelperLocator.EnvVarName} " +
+                        "environment variable to the folder holding it.",
                         "Scrolling capture unavailable");
                     CaptureSessionDispatcher.DeleteSessionDir(_sessionDir);
                     Close();
@@ -126,7 +127,7 @@ namespace Prisc.UI
 
                 HideWindows();
 
-                if (outcome.ExitCode == 0 && IsSessionResult(outcome.Result))
+                if (outcome.Clean && IsSessionResult(outcome.Result))
                 {
                     // the driver wrote session.json last, so the directory is complete: this is
                     // the same call the screenshot overlay's own completion makes, and it comes
@@ -142,7 +143,7 @@ namespace Prisc.UI
                     {
                         result.Session.Name = "Scrolling Capture";
                         EditorWindow.ShowSession(result.Session);
-                        ShowOutcomeToast(outcome.Result);
+                        ShowOutcomeToast(outcome.Result.Value);
                         Close();
                         return;
                     }
@@ -196,12 +197,13 @@ namespace Prisc.UI
                 return;
 
             _status?.SetStatus("Finishing…", "Stitching the last frames");
-            _driver?.Send(ScrollDriverCommand.Stop);
+            _driver?.Stop();
         }
 
         /// <summary>Throws the whole run away. The windows go immediately for feedback; the
         /// directory is deleted once the driver has actually exited, so the delete cannot race a
-        /// process that is still writing into it.</summary>
+        /// process that is still writing into it. The quit carries its own grace and kill, so a
+        /// driver that does not notice is still taken down.</summary>
         private void Cancel()
         {
             if (_closing || _canceled)
@@ -209,13 +211,12 @@ namespace Prisc.UI
 
             _canceled = true;
             HideWindows();
-            _driver?.Send(ScrollDriverCommand.Cancel);
-            WatchCanceledDriver();
+            _ = _driver?.ShutdownAsync();
         }
 
         /// <summary>
         /// Honors a cancel that arrived while the run was already finishing. Reaching Cancel
-        /// means moving the cursor onto the HUD, which pauses the driver rather than ending it —
+        /// means moving the cursor onto the HUD, which pauses the driver rather than ending it,
         /// but a cancel can still land in the window between the driver deciding it is done and
         /// this page hearing about it. It wins whenever it does: nothing the run produced is shown
         /// or kept. A session that
@@ -246,44 +247,6 @@ namespace Prisc.UI
             CaptureSessionDispatcher.DeleteSessionDir(_sessionDir);
             Close();
             return true;
-        }
-
-        /// <summary>
-        /// Backstop for a driver that never acts on the cancel — a wedged Win32 call, a lost
-        /// display, or a stdin write that failed so the command never arrived. Everything is
-        /// already hidden at this point, so without this the run would go on scrolling and
-        /// photographing the user's window invisibly, <see cref="ActiveInstance"/> would stay set
-        /// for the rest of the app session, and every later scrolling capture would be silently
-        /// discarded. <see cref="ScrollDriver.ShutdownAsync"/> is idempotent, so racing the
-        /// shutdown <see cref="ScrollDriver.RunAsync"/> performs on its own way out is harmless.
-        /// </summary>
-        private async void WatchCanceledDriver()
-        {
-            // the driver polls the cancel flag at the top of each step and once more after
-            // settling, so a worst-case settle cycle plus the write is well inside this.
-            var grace = TimeSpan.FromSeconds(4);
-            var driver = _driver;
-
-            try
-            {
-                await Task.Delay(grace);
-
-                // the run resolved on its own and this page has already cleaned up after it.
-                if (_closing || driver == null)
-                    return;
-
-                Debug.WriteLine("The scrolling capture driver did not exit after being canceled; killing it.");
-                await driver.ShutdownAsync();
-            }
-            catch (Exception ex)
-            {
-                // async void: nothing is awaiting this, so an escaping exception would take the
-                // process down. A failed backstop is not worth a dialog either — the cancel path
-                // in Open still owns the outcome — so it is reported and dropped here rather than
-                // funnelled through OnCriticalError.
-                Debug.WriteLine("The scrolling capture cancel watchdog failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "scroll.cancel-watchdog");
-            }
         }
 
         /// <summary>
@@ -375,44 +338,44 @@ namespace Prisc.UI
         /// <summary>True for the outcomes that leave a finished session on disk. Everything the
         /// driver can end with does, except an outright failure — a run that was stopped early,
         /// capped, or never moved is still a picture the user asked for.</summary>
-        private static bool IsSessionResult(string result) => result is
-            ScrollDriverResult.Complete or
-            ScrollDriverResult.Stopped or
-            ScrollDriverResult.MaxReached or
-            ScrollDriverResult.NoMovement;
+        private static bool IsSessionResult(ScrollResult? result) => result is
+            ScrollResult.Complete or
+            ScrollResult.Stopped or
+            ScrollResult.MaxReached or
+            ScrollResult.NoMovement;
 
         private static string DescribeState(ScrollProgress progress) => progress.State switch
         {
             // Says what it is doing, not just that it is busy: the rewind can
             // run for several seconds before the first frame is captured, and
             // an unexplained pause with a frame count of zero reads as a hang.
-            "rewinding" => "Scrolling to the top…",
+            ScrollState.Rewinding => "Scrolling to the top…",
             // The driver pauses whenever the cursor leaves the scroll point, so
             // this is the one state the user is holding in place themselves —
             // it has to say what ends it, or a frame counter that has stopped
             // advancing reads as a hang.
-            "paused" => "Paused — stop moving the mouse to resume",
+            ScrollState.Paused => "Paused: stop moving the mouse to resume",
             // …and once they have stopped, the driver counts down rather than
             // yanking the cursor back unannounced. Moving again reverts to
             // "paused" above, so the readout always matches what the mouse is
             // actually doing.
-            "resuming" => $"Resuming in {progress.ResumeInS.ToString(CultureInfo.CurrentCulture)}…",
-            "scrolling" => "Scrolling…",
-            "settling" => "Waiting for the page…",
-            "stitching" => "Stitching…",
+            ScrollState.Resuming => $"Resuming in {progress.ResumeInS.ToString(CultureInfo.CurrentCulture)}…",
+            ScrollState.Scrolling => "Scrolling…",
+            ScrollState.Settling => "Waiting for the page…",
+            ScrollState.Stitching => "Stitching…",
             _ => "Esc or Finish to stop",
         };
 
         /// <summary>Explains an outcome that is not simply "here is your image". Only the two
         /// surprising ones get a toast: a capture that stopped because it hit a limit, and one
         /// that produced a single screen because nothing scrolled.</summary>
-        private static void ShowOutcomeToast(string result)
+        private static void ShowOutcomeToast(ScrollResult result)
         {
             var message = result switch
             {
-                ScrollDriverResult.MaxReached =>
+                ScrollResult.MaxReached =>
                     "The scrolling capture hit its length limit — everything up to that point was kept.",
-                ScrollDriverResult.NoMovement => OperatingSystem.IsWindows()
+                ScrollResult.NoMovement => OperatingSystem.IsWindows()
                     ? "That window did not scroll, so only one screen was captured. Windows running as administrator ignore synthetic scrolling."
                     : "That window did not scroll, so only one screen was captured. Try aiming the scroll point at a part of the page that scrolls.",
                 _ => null,
@@ -435,9 +398,6 @@ namespace Prisc.UI
             if (!String.IsNullOrWhiteSpace(outcome?.Message))
                 return outcome.Message;
 
-            if (outcome?.Result == ScrollDriverResult.Failed)
-                return "The scrolling capture tool could not produce an image.";
-
             if (outcome?.ExitCode is int code && code != 0)
                 return $"The scrolling capture tool exited unexpectedly (code {code}).";
 
@@ -449,7 +409,7 @@ namespace Prisc.UI
             try
             {
                 ex.Data["detail"] = message;
-                ex.Data["result"] = outcome?.Result ?? "none";
+                ex.Data["result"] = outcome?.Result?.ToString() ?? "none";
                 ex.Data["exit_code"] = outcome?.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown";
                 ex.Data["frames"] = outcome?.Frames ?? 0;
 

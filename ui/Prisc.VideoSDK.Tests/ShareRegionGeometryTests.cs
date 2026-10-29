@@ -8,7 +8,7 @@ namespace Prisc.VideoSDK.Tests
     /// <summary>
     /// The drag math behind a live share-region resize, pinned rule by rule.
     /// <see cref="ShareRegionGeometry"/> is deliberately free of Avalonia, windows, dispatchers and
-    /// timers for exactly the reason <see cref="ShareRegionProtocol"/> is: a resize is the one place
+    /// timers: a resize is the one place
     /// in this feature where the code can silently produce a rectangle that is merely WRONG rather
     /// than obviously broken — off by the rounding, pinned to the wrong edge, or inside-out — and a
     /// wrong rectangle here moves the pixels a meeting is watching. None of those failures throws,
@@ -347,7 +347,7 @@ namespace Prisc.VideoSDK.Tests
         /// cases: over every handle and a spread of deltas that cross, overshoot and collapse the
         /// rectangle, the result is ALWAYS a region the helper would accept. Anything that escapes
         /// this — a negative extent, an odd side, a side under the floor — is a rectangle that
-        /// reaches <c>move</c> and comes back as a <c>command_error</c>, which the UI can only
+        /// reaches <c>move</c> and comes back as a non-fatal <c>error</c>, which the UI can only
         /// report as a failed resize.</summary>
         [Fact]
         public void A_crossing_drag_never_produces_a_negative_extent()

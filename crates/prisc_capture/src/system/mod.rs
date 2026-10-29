@@ -16,12 +16,6 @@ mod win_cursor;
 mod win_foreground;
 
 #[cfg(windows)]
-mod win_monitor;
-
-#[cfg(windows)]
-mod win_mouse;
-
-#[cfg(windows)]
 mod win_walker;
 
 #[cfg(windows)]
@@ -48,6 +42,7 @@ mod mac_mouse;
 #[cfg(target_os = "macos")]
 mod mac_walker;
 
+use prisc_rust_core::desktop;
 #[cfg(target_os = "macos")]
 use prisc_rust_core::geometry::{LogicalPoint, LogicalSize};
 use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
@@ -250,6 +245,115 @@ pub enum CursorImage {
     },
 }
 
+impl CursorImage {
+    /// The overlay's form of a cursor bitmap read off Windows
+    /// (`desktop::read_cursor`). `None` for an empty bitmap.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn from_icon(width: u32, height: u32, pixels: desktop::IconPixels) -> Option<Self> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let (w, h) = (width as usize, height as usize);
+        let stride = desktop::mono_stride(width);
+        match pixels {
+            desktop::IconPixels::Color {
+                mut bgra,
+                and_mask,
+            } => {
+                // A legacy masked cursor's color plane carries no alpha: its
+                // AND mask decides which pixels are opaque (bit set =
+                // transparent).
+                if let Some(and) = and_mask {
+                    for y in 0..h {
+                        for x in 0..w {
+                            bgra[(y * w + x) * 4 + 3] = if desktop::mono_bit(&and, stride, x, y) { 0 } else { 0xFF };
+                        }
+                    }
+                }
+                Some(CursorImage::AlphaBlended {
+                    bgra,
+                    width,
+                    height,
+                })
+            }
+            desktop::IconPixels::Mono {
+                and,
+                xor,
+            } => {
+                let fill = |plane: &[u8]| -> Vec<u8> {
+                    let mut out = vec![0u8; w * h * 4];
+                    for y in 0..h {
+                        for x in 0..w {
+                            if desktop::mono_bit(plane, stride, x, y) {
+                                out[(y * w + x) * 4..][..4].fill(0xFF);
+                            }
+                        }
+                    }
+                    out
+                };
+                Some(CursorImage::Masked {
+                    and_mask_bgra: fill(&and),
+                    xor_color_bgra: fill(&xor),
+                    width,
+                    height,
+                })
+            }
+            desktop::IconPixels::Rendered {
+                over_black,
+                over_white,
+            } => Self::from_renders(width, height, &over_black, &over_white),
+        }
+    }
+
+    /// The `DrawIconEx` fallback's two renders, over black (`b`) and over
+    /// white (`w`). Over black is already the premultiplied color, and
+    /// `w - b` is how much background shows through, so an alpha cursor is
+    /// `AlphaBlended` with `alpha = 255 - (w - b)`. A channel darker over
+    /// white (beyond `DrawIconEx` rounding) means the cursor inverts the
+    /// screen, which alpha cannot say, so
+    /// such a cursor becomes `Masked`: `(screen AND and) XOR xor` reproduces
+    /// both renders exactly with `xor = b` and `and` set wherever they differ.
+    fn from_renders(width: u32, height: u32, b: &[u8], w: &[u8]) -> Option<Self> {
+        let len = (width as usize) * (height as usize) * 4;
+        if b.len() < len || w.len() < len {
+            return None;
+        }
+        let (b, w) = (&b[..len], &w[..len]);
+        let inverts = b
+            .iter()
+            .zip(w)
+            .any(|(&b, &w)| (w as i32) < b as i32 - 16);
+        if inverts {
+            let mut and_mask_bgra = vec![0u8; len];
+            let mut xor_color_bgra = b.to_vec();
+            for i in (0..len).step_by(4) {
+                if b[i..i + 3] != w[i..i + 3] {
+                    and_mask_bgra[i..i + 4].fill(0xFF);
+                }
+                xor_color_bgra[i + 3] = 0xFF;
+            }
+            return Some(CursorImage::Masked {
+                and_mask_bgra,
+                xor_color_bgra,
+                width,
+                height,
+            });
+        }
+        let mut bgra = b.to_vec();
+        for i in (0..len).step_by(4) {
+            let seen: u32 = (0..3)
+                .map(|c| w[i + c].saturating_sub(b[i + c]) as u32)
+                .sum();
+            bgra[i + 3] = 255 - (seen / 3) as u8;
+        }
+        Some(CursorImage::AlphaBlended {
+            bgra,
+            width,
+            height,
+        })
+    }
+}
+
 /// OS cursor snapshot captured at screenshot time. Always captured
 /// regardless of user toggle — the toggle only controls rendering
 /// and inclusion in saved/copied output.
@@ -308,11 +412,11 @@ impl SystemInterop {
     }
 
     pub fn get_mouse_position(_monitors: &[MonitorInfo]) -> ScreenPoint {
-        win_mouse::get_position()
+        desktop::cursor_position().unwrap_or_default()
     }
 
     pub fn set_mouse_position(pos: ScreenPoint, _monitors: &[MonitorInfo]) {
-        win_mouse::set_position(pos)
+        desktop::set_cursor_position(pos);
     }
 
     /// Record the shell's pid (`--shell-pid`) for
@@ -359,8 +463,11 @@ impl SystemInterop {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
-                prisc_rust_core::telemetry::flush();
-                std::process::exit(EXIT_CAPTURE_FAILED);
+                crate::protocol::fail_exit(
+                    prisc_ipc::catalog::ErrorCode::Failed,
+                    format_args!("unable to capture the desktop: {err:#}"),
+                    EXIT_CAPTURE_FAILED,
+                );
             }
         };
         CapturedDesktop {
@@ -374,23 +481,46 @@ impl SystemInterop {
     }
 
     pub fn all_monitors() -> Vec<MonitorInfo> {
-        let dxgi_map = win_monitor::build_dxgi_adapter_map();
+        const LOW_VRAM_BYTES: u64 = 1024 * 1024 * 1024;
+        // GDI device name (`\\.\DISPLAY1`) -> the DXGI adapter driving it,
+        // which is what the render workers pick their GPU by.
+        let adapters: std::collections::HashMap<String, desktop::AdapterInfo> = desktop::dxgi_outputs()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|o| {
+                let a = o.adapter?;
+                info!(
+                    "DXGI output {:?} → adapter vendor=0x{:04X} device=0x{:04X} dedicated_vram={}MB",
+                    o.device_name,
+                    a.vendor_id,
+                    a.device_id,
+                    a.dedicated_video_memory / (1024 * 1024)
+                );
+                Some((o.device_name, a))
+            })
+            .collect();
 
-        win_monitor::all()
+        desktop::monitors()
             .expect("Unable to enumerate monitors")
             .into_iter()
-            .map(|m| {
-                const LOW_VRAM_BYTES: u64 = 1024 * 1024 * 1024;
-                let entry = dxgi_map.get(&m.name).copied();
-                MonitorInfo {
-                    bounds: m.bounds(),
-                    scale_factor: m.scale_factor,
+            .filter_map(|m| {
+                // Bounds and refresh rate come from the display mode, the DPI
+                // scale from GetDpiForMonitor; a monitor missing either is
+                // skipped.
+                let (Some(mode), Some(dpi)) = (m.display_mode(), m.dpi()) else {
+                    error!("monitor {:?} ({:?}) could not be described", m.device_name, m.handle);
+                    return None;
+                };
+                let adapter = adapters.get(&m.device_name);
+                Some(MonitorInfo {
+                    bounds: ScreenRect::from_xy_size(mode.origin.x, mode.origin.y, mode.width as i32, mode.height as i32),
+                    scale_factor: dpi as f32 / 96.0,
                     is_primary: m.is_primary,
-                    refresh_hz: m.frequency,
-                    name: m.name,
-                    adapter_id: entry.map(|(v, d, _)| (v, d)),
-                    low_vram_adapter: entry.is_some_and(|(_, _, vram)| vram < LOW_VRAM_BYTES),
-                }
+                    refresh_hz: mode.refresh_hz,
+                    name: m.device_name,
+                    adapter_id: adapter.map(|a| (a.vendor_id, a.device_id)),
+                    low_vram_adapter: adapter.is_some_and(|a| a.dedicated_video_memory < LOW_VRAM_BYTES),
+                })
             })
             .collect()
     }
@@ -480,8 +610,11 @@ impl SystemInterop {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
-                prisc_rust_core::telemetry::flush();
-                std::process::exit(EXIT_CAPTURE_FAILED);
+                crate::protocol::fail_exit(
+                    prisc_ipc::catalog::ErrorCode::Failed,
+                    format_args!("unable to capture the desktop: {err:#}"),
+                    EXIT_CAPTURE_FAILED,
+                );
             }
         };
         let vd = virtual_desktop_bounds(&monitors);
@@ -735,5 +868,145 @@ pub fn raise_render_thread_priority() {
     #[cfg(target_os = "macos")]
     unsafe {
         let _ = libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pixels(image: &CursorImage) -> (&[u8], Option<&[u8]>) {
+        match image {
+            CursorImage::AlphaBlended {
+                bgra,
+                ..
+            } => (bgra, None),
+            CursorImage::Masked {
+                and_mask_bgra,
+                xor_color_bgra,
+                ..
+            } => (and_mask_bgra, Some(xor_color_bgra)),
+        }
+    }
+
+    #[test]
+    fn an_alpha_cursor_is_blended_as_read() {
+        let bgra = vec![1, 2, 3, 200, 4, 5, 6, 0];
+        let image = CursorImage::from_icon(
+            2,
+            1,
+            desktop::IconPixels::Color {
+                bgra: bgra.clone(),
+                and_mask: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(pixels(&image), (&bgra[..], None));
+    }
+
+    #[test]
+    fn a_masked_color_cursor_takes_its_alpha_from_the_and_mask() {
+        // Two pixels: AND=0 (opaque), AND=1 (transparent).
+        let mut and = vec![0u8; desktop::mono_stride(2)];
+        and[0] = 0b0100_0000;
+        let image = CursorImage::from_icon(
+            2,
+            1,
+            desktop::IconPixels::Color {
+                bgra: vec![1, 2, 3, 0, 4, 5, 6, 0],
+                and_mask: Some(and),
+            },
+        )
+        .unwrap();
+        assert_eq!(pixels(&image).0, &[1, 2, 3, 0xFF, 4, 5, 6, 0][..]);
+    }
+
+    #[test]
+    fn a_mono_cursor_keeps_its_and_and_xor_planes() {
+        // 33 px wide, so the DWORD-aligned stride (8 bytes) differs from the
+        // packed row (5 bytes); pixel 32 sits in the fifth byte.
+        let stride = desktop::mono_stride(33);
+        let mut and = vec![0u8; stride];
+        let mut xor = vec![0u8; stride];
+        and[4] = 0x80;
+        xor[0] = 0x80;
+        let image = CursorImage::from_icon(
+            33,
+            1,
+            desktop::IconPixels::Mono {
+                and,
+                xor,
+            },
+        )
+        .unwrap();
+        let (and, xor) = pixels(&image);
+        let xor = xor.unwrap();
+        assert_eq!(&and[32 * 4..33 * 4], &[0xFF; 4]);
+        assert_eq!(&and[..4], &[0; 4]);
+        assert_eq!(&xor[..4], &[0xFF; 4]);
+        assert_eq!(&xor[32 * 4..33 * 4], &[0; 4]);
+    }
+
+    #[test]
+    fn an_alpha_cursor_is_recovered_from_its_two_renders() {
+        // Opaque red, half-transparent black, fully transparent.
+        let over_black = vec![0, 0, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let over_white = vec![0, 0, 200, 0, 128, 128, 128, 0, 255, 255, 255, 0];
+        let image = CursorImage::from_icon(
+            3,
+            1,
+            desktop::IconPixels::Rendered {
+                over_black,
+                over_white,
+            },
+        )
+        .unwrap();
+        assert_eq!(pixels(&image), (&[0, 0, 200, 255, 0, 0, 0, 127, 0, 0, 0, 0][..], None));
+    }
+
+    #[test]
+    fn an_inverting_cursor_is_recovered_from_its_two_renders_as_and_xor() {
+        // Opaque blue, transparent, screen invert.
+        let over_black = vec![200, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0];
+        let over_white = vec![200, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0];
+        let image = CursorImage::from_icon(
+            3,
+            1,
+            desktop::IconPixels::Rendered {
+                over_black: over_black.clone(),
+                over_white: over_white.clone(),
+            },
+        )
+        .unwrap();
+        let (and, xor) = pixels(&image);
+        let xor = xor.unwrap();
+        assert_eq!(and, &[0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255][..]);
+        assert_eq!(xor, &[200, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255][..]);
+        // The AND/XOR form reproduces both renders.
+        for (bg, render) in [(0u8, &over_black), (255u8, &over_white)] {
+            for i in (0..12).step_by(4) {
+                for c in 0..3 {
+                    assert_eq!((bg & and[i + c]) ^ xor[i + c], render[i + c]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn short_renders_and_empty_bitmaps_are_not_composited() {
+        let rendered = desktop::IconPixels::Rendered {
+            over_black: vec![0; 4],
+            over_white: vec![0; 4],
+        };
+        assert!(CursorImage::from_icon(2, 1, rendered).is_none());
+        assert!(CursorImage::from_icon(
+            0,
+            1,
+            desktop::IconPixels::Mono {
+                and: vec![],
+                xor: vec![]
+            }
+        )
+        .is_none());
     }
 }

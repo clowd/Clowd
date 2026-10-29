@@ -33,11 +33,11 @@ namespace Prisc.UI.Services
 
         public bool IsCanceled { get; private set; }
 
-        private readonly Vid2GifRunner _runner;
+        private readonly JobRunner _runner;
         private string _status = "Converting…";
         private double _progress;
 
-        internal GifConversion(SessionInfo session, Vid2GifRunner runner)
+        internal GifConversion(SessionInfo session, JobRunner runner)
         {
             Session = session;
             _runner = runner;
@@ -166,18 +166,18 @@ namespace Prisc.UI.Services
                 return null;
             }
 
-            var runner = new Vid2GifRunner();
-            var conversion = new GifConversion(session, runner);
-            runner.ProgressChanged += (s, percent) => conversion.SetProgress(percent);
-            session.ActiveGifConversion = conversion;
-
             // a snapshot: settings edited while the conversion runs apply to the next one.
             var recording = SettingsRoot.Current?.Recording;
             var quality = (recording?.GifQuality ?? GifQuality.Good).ToString().ToLowerInvariant();
             var maxWidth = recording?.GifMaxWidth ?? 0;
             var maxHeight = recording?.GifMaxHeight ?? 0;
 
-            _ = ConvertAsync(session, conversion, runner, videoPath, gifPath, quality, maxWidth, maxHeight);
+            var runner = JobRunner.ForVid2Gif(videoPath, gifPath, quality, maxWidth, maxHeight);
+            var conversion = new GifConversion(session, runner);
+            runner.ProgressChanged += (s, percent) => conversion.SetProgress(percent);
+            session.ActiveGifConversion = conversion;
+
+            _ = ConvertAsync(session, conversion, runner, gifPath);
             return session;
         }
 
@@ -222,20 +222,19 @@ namespace Prisc.UI.Services
             }
         }
 
-        private static async Task ConvertAsync(SessionInfo session, GifConversion conversion, Vid2GifRunner runner,
-            string inputPath, string gifPath, string quality, int maxWidth, int maxHeight)
+        private static async Task ConvertAsync(SessionInfo session, GifConversion conversion, JobRunner runner, string gifPath)
         {
-            Vid2GifResult result;
+            JobRunResult result;
             try
             {
-                result = await runner.RunAsync(inputPath, gifPath, quality, maxWidth, maxHeight);
+                result = await runner.RunAsync();
             }
             catch (Exception ex)
             {
                 // the process could not be started at all (missing binary, denied) — the run never
                 // began, so there is no protocol result to report.
                 Debug.WriteLine("Gif conversion could not run: " + ex);
-                result = Vid2GifResult.Error(ex.Message);
+                result = JobRunResult.Error(ex.Message);
             }
             finally
             {
@@ -245,7 +244,7 @@ namespace Prisc.UI.Services
             await Dispatcher.UIThread.InvokeAsync(() => FinishAsync(session, conversion, gifPath, result));
         }
 
-        private static async Task FinishAsync(SessionInfo session, GifConversion conversion, string gifPath, Vid2GifResult result)
+        private static async Task FinishAsync(SessionInfo session, GifConversion conversion, string gifPath, JobRunResult result)
         {
             // the entry stops being an in-progress row here whatever happened next.
             if (ReferenceEquals(session.ActiveGifConversion, conversion))
@@ -253,7 +252,7 @@ namespace Prisc.UI.Services
 
             switch (result.Outcome)
             {
-                case Vid2GifOutcome.Success:
+                case JobOutcome.Success:
                     // the tool reports the path it actually wrote; trust it over the one we asked for.
                     if (!String.IsNullOrEmpty(result.OutputPath) && IsLive(session))
                     {
@@ -273,7 +272,7 @@ namespace Prisc.UI.Services
                     Toast.Show(Toast.GetActiveOrMainWindow(), "GIF saved");
                     break;
 
-                case Vid2GifOutcome.Canceled:
+                case JobOutcome.Canceled:
                     DeleteQuietly(session);
                     DeletePartialOutput(gifPath);
                     break;

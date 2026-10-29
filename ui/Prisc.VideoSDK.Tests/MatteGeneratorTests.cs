@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Prisc.Ipc;
 using Prisc.VideoSDK.Ai;
 using Prisc.VideoSDK.Composition;
 using Prisc.VideoSDK.Media;
@@ -19,10 +20,10 @@ namespace Prisc.VideoSDK.Tests
     /// frames on the source's PTS grid, valid companion). Skips when FFmpeg, the binary
     /// (build <c>cargo build -p prisc_ai --release</c>) or an ONNX Runtime dylib (see
     /// BUILDING.md) is absent — the same gating as <see cref="DenoiseGeneratorTests"/>.
-    /// Shares that suite's collection: both configure the process-wide
-    /// <see cref="AiLoader"/>, so they must never run in parallel.
+    /// Shares that suite's collection: both set the process-wide
+    /// <see cref="HelperLocator.Override"/>, so they must never run in parallel.
     /// </summary>
-    [Collection("AiLoader")]
+    [Collection("HelperLocator.Override")]
     public class MatteGeneratorTests : IDisposable
     {
         private const int W = 64, H = 64, Fps = 16, Frames = 16;
@@ -58,9 +59,14 @@ namespace Prisc.VideoSDK.Tests
             Directory.CreateDirectory(_cacheDir);
         }
 
+        /// <summary>Points the prisc_ai lookup at <paramref name="exe"/>; null means "not installed".
+        /// Every other helper is still looked up as usual.</summary>
+        private void UseAi(string exe) =>
+            HelperLocator.Override = stem => stem == "prisc_ai" ? exe ?? Path.Combine(_cacheDir, "no-prisc-ai") : null;
+
         public void Dispose()
         {
-            AiLoader.Configure(null);
+            HelperLocator.Override = null;
             foreach (var f in _tempFiles)
             {
                 try { File.Delete(f); }
@@ -136,10 +142,7 @@ namespace Prisc.VideoSDK.Tests
 
             Assert.False(MatteGenerator.Generate(source, 0, null));
 
-            AiLoader.Configure(() => null);
-            var hadEnv = Environment.GetEnvironmentVariable(AiLoader.EnvVarName);
-            Assert.SkipWhen(!String.IsNullOrEmpty(hadEnv),
-                $"{AiLoader.EnvVarName} is set in this environment; the no-binary path cannot be observed.");
+            UseAi(null);
             Assert.False(MatteGenerator.Generate(source, 0, _cacheDir));
         }
 
@@ -205,7 +208,7 @@ namespace Prisc.VideoSDK.Tests
             Assert.SkipWhen(exe == null,
                 "prisc_ai.exe with a resolvable ONNX Runtime not found (cargo build -p prisc_ai --release, see BUILDING.md).");
 
-            AiLoader.Configure(() => exe);
+            UseAi(exe);
             var source = SourceFor(EncodeVideoFixture());
             var progress = new List<double>();
 
@@ -247,7 +250,7 @@ namespace Prisc.VideoSDK.Tests
             Assert.SkipWhen(exe == null,
                 "prisc_ai.exe with a resolvable ONNX Runtime not found (cargo build -p prisc_ai --release, see BUILDING.md).");
 
-            AiLoader.Configure(() => exe);
+            UseAi(exe);
             var source = SourceFor(EncodeVideoFixture());
             using var cts = new CancellationTokenSource();
             cts.Cancel();

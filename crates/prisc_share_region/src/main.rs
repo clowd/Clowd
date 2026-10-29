@@ -3,11 +3,11 @@
 //! can be pointed at that window and effectively share a region.
 //!
 //! This binary is a headless helper driven by the Prisc shell over pipes, the
-//! same way `prisc_recorder` is: line-oriented commands in on stdin, JSON status
-//! lines out on stdout, free-form chatter on stderr. It owns no appearance —
-//! the border around the live region and the floating controls are Prisc's
-//! windows (Prisc.Ui/Video/BorderWindow and FloatingToolbarWindow), and drawing
-//! anything here would put a second border on top of theirs.
+//! same way `prisc_recorder` is: Prisc's helper protocol, JSON commands in on
+//! stdin and JSON events out on stdout, free-form chatter on stderr. It owns no
+//! appearance: the border around the live region and the floating controls are
+//! Prisc's windows (Prisc.Ui/Video/BorderWindow and FloatingToolbarWindow), and
+//! drawing anything here would put a second border on top of theirs.
 //!
 //! # The one window
 //!
@@ -31,48 +31,27 @@
 //! design instead hid the on-screen mirror under an opaque mask window; that
 //! mask, the frame window and all their geometry are gone.)
 //!
-//! # stdin: commands (one per line, first token case-insensitive)
+//! # Protocol
 //!
-//! ```text
-//!   quit | q                        exit 0
-//!   move X,Y,W,H                    new region; also accepted spaced: move X Y W H
-//!   obscure blur [strength]         gaussian blur the preview, strength 1..=100 (default 50)
-//!   obscure pixelate [strength]     pixelate the preview, same range and default
-//!   obscure hide                    preview goes black with a centred eye-with-slash icon
-//!   obscure none | unobscure        back to the live preview
-//!   <EOF>                           equivalent to quit (orphan safety)
-//! ```
+//! The commands (`move`, `obscure`, `quit`), the events (`initialized`,
+//! `sharing_started`, `region_changed`, `obscure`, `status`, `done`), the error
+//! codes and the exit codes are specified in
+//! `crates/prisc_capture/HELPER_PROTOCOL.md` (§4.2) and generated from
+//! `crates/prisc_ipc/src/catalog.rs`. What only this binary knows:
 //!
-//! A malformed or unknown line is answered with `command_error` and otherwise
-//! ignored; nothing arriving on stdin is ever fatal.
-//!
-//! # stdout: protocol (exactly one JSON object per line, flushed)
-//!
-//! ```text
-//!   {"type":"initialized"}                                  obs is up, prompt window is showing
-//!   {"type":"sharing_started","region":{"x","y","w","h"}}    user pressed OK; mirroring
-//!   {"type":"cancelled"}                                    exiting having never mirrored
-//!   {"type":"region_changed","region":{"x","y","w","h"}}     ack of `move` (region ACTUALLY applied)
-//!   {"type":"obscure","mode":"none|blur|pixelate|hide","strength":N}   ack of obscure/unobscure
-//!   {"type":"status","fps":29.9}                            1 Hz, only after sharing_started
-//!   {"type":"command_error","message":"..."}                a line was refused, or failed
-//! ```
-//!
-//! `sharing_started` and `cancelled` are mutually exclusive and exactly one of
-//! them is emitted per session: the first when the user accepts the prompt, the
-//! second on any exit that happens before that (the prompt's close button,
-//! Escape, `quit`, stdin EOF). Together they are how the shell decides whether
-//! to show its border and floating controls, which the exit code cannot tell it
-//! — a declined prompt and a finished share both exit 0.
-//!
-//! Both regions on the wire are in **capture space** — the same space as
-//! `--region` (Windows: physical px on the virtual desktop, X/Y may be
-//! negative; macOS: CG points) — and both are what was actually applied after
-//! clamping, never what was asked for.
-//!
-//! Exit codes match prisc_recorder: 0 user quit, 1 runtime/obs error, 2 argument
-//! validation. Every exit routes through `prisc_obs_platform::exit_process` — libobs
-//! is never shut down (known OBS teardown crashes; see crates/prisc_obs/src/context.rs).
+//! - `done.result` is `stopped` once `sharing_started` went out and `cancelled`
+//!   for any exit before that (the prompt's close button, Escape, `quit`, stdin
+//!   EOF). That pair is how the shell decides whether to show its border and
+//!   floating controls, which the exit code cannot tell it: a declined prompt
+//!   and a finished share both exit 0.
+//! - Both regions on the wire are in **capture space**, the same space as
+//!   `--region` (Windows: physical px on the virtual desktop, X/Y may be
+//!   negative; macOS: CG points), and both are what was actually applied after
+//!   clamping, never what was asked for.
+//! - libobs is never shut down (known OBS teardown crashes; see
+//!   crates/prisc_obs/src/context.rs): every exit goes through
+//!   `prisc_ipc::lifetime::exit`, whose exit function is
+//!   `prisc_obs_platform::exit_process`.
 
 // Release Windows builds link as a GUI-subsystem binary. The shell spawns this
 // process with pipes for all three standard streams and shows the user only the
@@ -90,7 +69,11 @@ mod obscure;
 mod status;
 mod ui;
 
+use std::ops::ControlFlow;
+
 use clap::Parser;
+use prisc_ipc::catalog::share_region::{self, Event, ShareRegionResult};
+use prisc_ipc::catalog::ErrorCode;
 use prisc_obs_platform::region::{self, Rect};
 use prisc_obs_platform::CaptureMethod;
 
@@ -98,8 +81,8 @@ use crate::mirror::Mirror;
 use crate::ui::{AppEvents, UiConfig};
 
 // clap itself exits 2 on invalid arguments (bad flags, out-of-range values,
-// failed value parsers); the region string is parsed in main so its error can
-// route through exit_process like every other exit.
+// failed value parsers); the region string is parsed in main so its error is a
+// protocol `error{code:"usage"}` like every other argument failure.
 #[derive(Parser, Debug)]
 #[command(version, about = "Mirror a screen region into a shareable window")]
 struct Cli {
@@ -191,7 +174,9 @@ impl AppEvents for App {
         // the platform layer's command drain: a `move` is not fully applied
         // until the window itself has been resized, which happens after
         // `set_region` returns.
-        status::emit_sharing_started(self.region);
+        status::out().emit(&Event::SharingStarted {
+            region: status::wire_rect(self.region),
+        });
 
         // Opens the gate on the 1 Hz `status` lines, which have nothing to
         // report until frames are being drawn. Ordered after the line above so
@@ -203,7 +188,7 @@ impl AppEvents for App {
     fn set_region(&mut self, region: Rect) -> Result<Rect, String> {
         // On `Err` nothing changed — `Mirror::set_region` plans before it
         // mutates — so the cached region is deliberately left alone and the
-        // caller turns the reason into `command_error` instead of an ack.
+        // caller turns the reason into `error{code:"failed"}` instead of an ack.
         let applied = self.mirror.set_region(region)?;
         self.region = applied;
         Ok(applied)
@@ -214,28 +199,40 @@ impl AppEvents for App {
     }
 
     fn quit(&mut self) -> ! {
-        // Every exit that is not a crash funnels through here — the close
-        // button, Escape, a `quit` command, EOF on stdin — which makes this the
-        // one place that can tell the shell how the session ended.
-        //
-        // The shell's whole decision is binary: put the border and the floating
-        // controls on screen, or don't. `sharing_started` is the yes; without a
-        // no there is nothing to pair it with, because the process exits 0
-        // whether the user shared or backed out of the prompt. So a session
-        // that never reached the mirror phase says so on its way out.
+        // Every exit that is not a crash funnels through here: the close
+        // button, Escape, and the quit path (`quit`, EOF on stdin, a signal, a
+        // dead stdout). That makes this the one place that tells the shell how
+        // the session ended.
         //
         // `status::sharing()` rather than a flag of our own: it is set in
         // `mirror_ready` in the same breath as `sharing_started` is emitted, so
         // the two lines can never disagree about whether sharing began. Both
         // this read and that write are on the UI thread.
-        if !status::sharing() {
-            status::emit_cancelled();
-        }
-        prisc_obs_platform::exit_process(0)
+        //
+        // The 1 Hz status thread and the obscure retraction keep running until
+        // the process is gone (the exit hook can take a while to flush
+        // telemetry), but `done` finishes the channel, so anything they emit
+        // after it is dropped and `done` stays the last line.
+        let result = if status::sharing() {
+            ShareRegionResult::Stopped
+        } else {
+            ShareRegionResult::Cancelled
+        };
+        status::out().emit(&Event::Done { result });
+        prisc_ipc::lifetime::exit(prisc_ipc::exit::OK)
     }
 }
 
 fn main() {
+    // `hello` first, before libobs is initialised or called, and with stdout
+    // claimed: from here on every libobs print to fd 1 lands on stderr.
+    status::init(prisc_ipc::open::<share_region::Event>("prisc_share_region"));
+    // Every exit goes through prisc_ipc::lifetime::exit, never a drop of this
+    // guard, so the session is ended and the queue flushed by the exit hook.
+    let _sentry = prisc_rust_core::telemetry::init("prisc_share_region");
+    prisc_ipc::lifetime::on_exit(prisc_rust_core::telemetry::shutdown_hook);
+    prisc_ipc::lifetime::set_exit_fn(prisc_obs_platform::exit_process);
+
     // Route every libobs log line to stderr (and install the crash handler)
     // before anything else can touch libobs.
     prisc_obs::log::install_handlers();
@@ -243,15 +240,24 @@ fn main() {
     let cli = Cli::parse();
     let region = match region::parse_region(&cli.region) {
         Ok(r) => r,
-        Err(e) => {
-            eprintln!("Error: {e}");
-            prisc_obs_platform::exit_process(2);
-        }
+        Err(e) => status::out().fatal(ErrorCode::Usage, e),
     };
+
+    // The quit path (`quit`, stdin EOF, SIGINT/SIGTERM/SIGHUP, a dead stdout)
+    // posts into the same queue the stdin commands go through, so a `move`
+    // sent before `quit` is applied before the stop. Commands that arrive
+    // before the event loop exists are not lost: `ui::post_command` queues
+    // them, and the loop drains the queue once it starts.
+    prisc_ipc::lifetime::install(
+        |_| ui::post_command(commands::Command::Quit),
+        share_region::QUIT_GRACE + prisc_ipc::SELF_EXIT_MARGIN,
+    );
 
     // DPI awareness (Windows) must be set before any window is created or
     // monitor is enumerated; no-op on macOS.
-    prisc_obs_platform::init_process();
+    if let Err(e) = prisc_obs_platform::init_process() {
+        status::out().fatal(ErrorCode::InitFailed, e);
+    }
 
     // macOS: the NSApplication must exist, with its activation policy set,
     // BEFORE the obs bootstrap brings up Metal graphics. Accessory = no Dock
@@ -264,20 +270,10 @@ fn main() {
         use objc2::MainThreadMarker;
         use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
         let Some(mtm) = MainThreadMarker::new() else {
-            eprintln!("Fatal: main() is not on the main thread");
-            prisc_obs_platform::exit_process(1);
+            status::out().fatal(ErrorCode::InitFailed, "main() is not on the main thread");
         };
         let app = NSApplication::sharedApplication(mtm);
         let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
-    }
-
-    // Ctrl+C / SIGTERM behave like a `quit` command: clean exit 0. exit_process
-    // is `_exit`, which is async-signal-safe.
-    #[cfg(unix)]
-    {
-        if let Err(e) = ctrlc::set_handler(|| prisc_obs_platform::exit_process(0)) {
-            eprintln!("Warning: failed to install console signal handler: {e}");
-        }
     }
 
     // Exits the process itself on any construction failure (never unwinds —
@@ -294,11 +290,12 @@ fn main() {
     // line is the shell's cue to start talking to us: a `quit` sent the instant
     // it is read must find a reader on stdin, and the status thread is silent
     // until `set_sharing(true)` anyway, so there is no cost to having it up
-    // early. Commands that arrive before the event loop exists are not lost
-    // either — `ui::post_command` queues them, and the loop drains the queue
-    // once it starts.
+    // early.
     status::start_status_thread();
-    commands::spawn_stdin_thread();
+    prisc_ipc::read_commands::<share_region::Command>(|inbound| {
+        ui::post_command(commands::from_wire(inbound));
+        ControlFlow::Continue(())
+    });
 
     // `initialized` is deliberately NOT emitted here, even though libobs is up
     // and the region has resolved by this point: the message also promises that
@@ -310,8 +307,8 @@ fn main() {
     // picker hint — which are not stdin traffic and so are not covered by the
     // queue that protects commands sent this early.
     //
-    // Never returns: the platform event loop runs until events.quit() →
-    // exit_process(0), or a fatal error exits underneath it.
+    // Never returns: the platform event loop runs until events.quit() emits
+    // `done` and exits, or a fatal error exits underneath it.
     ui::run(
         region,
         UiConfig {

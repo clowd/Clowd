@@ -94,11 +94,6 @@ namespace Prisc
             // Alt+Space opens the window's system menu, which Avalonia otherwise swallows (#108).
             Window.WindowOpenedEvent.AddClassHandler<Window>((window, _) => WindowNativeExtensions.AddSystemMenuKeyHook(window));
 
-            // the SDK's AI generators resolve the inference binary through this delegate on every
-            // run — installed before Startup so the --video-edit/--video-spike harnesses (which
-            // return before the tray lifetime is set up) get it too.
-            Prisc.VideoSDK.Ai.AiLoader.Configure(AiBinaryLocator.Resolve);
-
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 // tray-resident lifetime: the tray Exit menu item is the only shutdown path (§6).

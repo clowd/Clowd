@@ -1,6 +1,7 @@
 use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+use prisc_build_support::copy_if_newer;
 
 /// Runtime plumbing for the FFmpeg libraries prisc_vid2gif links (via prisc_ffmpeg_sys):
 ///
@@ -31,13 +32,7 @@ fn main() {
 }
 
 fn windows() {
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // OUT_DIR = target/{debug,release}/build/prisc_vid2gif-<hash>/out
-    let profile_dir = out_dir
-        .ancestors()
-        .nth(3)
-        .expect("could not resolve the cargo profile dir from OUT_DIR")
-        .to_path_buf();
+    let profile_dir = prisc_build_support::cargo_profile_dir();
 
     let Some(deps_bin) = env::var_os("DEP_FFMPEG_DEPS_BIN").map(PathBuf::from) else {
         println!("cargo:warning=prisc_vid2gif: obs-deps bundle not found; runtime DLLs not copied");
@@ -92,19 +87,14 @@ fn macos() {
 }
 
 fn linux() {
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // OUT_DIR = target/{debug,release}/build/prisc_vid2gif-<hash>/out
-    let profile_dir = out_dir
-        .ancestors()
-        .nth(3)
-        .expect("could not resolve the cargo profile dir from OUT_DIR")
-        .to_path_buf();
+    let profile_dir = prisc_build_support::cargo_profile_dir();
 
     // Hard error, as on macOS: without it the binary links and then fails to
     // start.
     let root = env::var_os("DEP_FFMPEG_DEPS_ROOT").map(PathBuf::from).unwrap_or_else(|| {
         panic!(
-            "prisc_vid2gif: DEP_FFMPEG_DEPS_ROOT not set — prisc_ffmpeg_sys did not export the FFmpeg              bundle path (is its `links = \"ffmpeg\"` key still present?)"
+            "prisc_vid2gif: DEP_FFMPEG_DEPS_ROOT not set: prisc_ffmpeg_sys did not export the FFmpeg \
+             bundle path (is its `links = \"ffmpeg\"` key still present?)"
         )
     });
     let bundle = prisc_build_support::linux::FfmpegBundle { root };
@@ -117,34 +107,4 @@ fn linux() {
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", bundle.lib().display());
 
     prisc_build_support::linux::stage_ffmpeg_runtime(&bundle, &profile_dir);
-}
-
-/// Copy `src` to `dst` only when it is newer or a different size, keeping
-/// incremental builds cheap (same contract as the prisc_recorder build script).
-fn copy_if_newer(src: &Path, dst: &Path) {
-    let should_copy = match (fs::metadata(src), fs::metadata(dst)) {
-        (Ok(s), Ok(d)) => {
-            let size_changed = s.len() != d.len();
-            let newer = match (s.modified(), d.modified()) {
-                (Ok(sm), Ok(dm)) => sm > dm,
-                _ => true,
-            };
-            size_changed || newer
-        }
-        (Ok(_), Err(_)) => true,
-        _ => false,
-    };
-
-    if should_copy {
-        if let Some(parent) = dst.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        if let Err(e) = fs::copy(src, dst) {
-            println!(
-                "cargo:warning=prisc_vid2gif: failed to copy {} -> {}: {e}",
-                src.display(),
-                dst.display()
-            );
-        }
-    }
 }

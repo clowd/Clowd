@@ -3,7 +3,6 @@
     "version": "5.0",
     "versionHeightOffset": -1,
     "publicReleaseRefSpec": [
-        "^refs/heads/v4-rewrite$",
         "^refs/heads/master$"
     ],
     "gitCommitIdShortFixedLength": 8

@@ -23,6 +23,10 @@ namespace Prisc.VideoSDK.Tests
     /// </summary>
     public class NativeHotkeyHostTests
     {
+        /// <summary>A capturer <c>settings_status</c> line, decoded as the supervisor receives it.</summary>
+        private static CaptureStandbySupervisor.StandbyHotkeyStatus StandbyStatus(string line) =>
+            CaptureStandbySupervisor.ReadHotkeyStatus(((Prisc.Ipc.CaptureEvent.SettingsStatus)Prisc.Ipc.CaptureCodec.DecodeEvent(line)).Hotkeys);
+
         private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
         private static readonly HotkeyGesture ShiftA = new(HotkeyKey.A, HotkeyModifiers.Shift);
         private static readonly HotkeyGesture CtrlB = new(HotkeyKey.B, HotkeyModifiers.Control);
@@ -99,8 +103,8 @@ namespace Prisc.VideoSDK.Tests
         {
             using var rig = new Rig();
             rig.Native.StartResult = CH_ERR_PERMISSION;
-            var permission = CaptureStandbySupervisor.ParseHotkeyStatus("""
-                {"hotkeys":{"main":[{"gesture":"F12","active":false,"error":"x","error_code":"permission"}],
+            var permission = StandbyStatus("""
+                {"type":"settings_status","hotkeys":{"main":[{"gesture":"F12","active":false,"error":"x","error_code":"permission"}],
                             "window":[],"monitor":[]}}
                 """);
 
@@ -119,8 +123,8 @@ namespace Prisc.VideoSDK.Tests
         public void Only_a_permission_status_from_the_capturer_prompts()
         {
             using var rig = new Rig();
-            var other = CaptureStandbySupervisor.ParseHotkeyStatus("""
-                {"hotkeys":{"main":[{"gesture":"F12","active":false,"error":"x","error_code":"duplicate"}],
+            var other = StandbyStatus("""
+                {"type":"settings_status","hotkeys":{"main":[{"gesture":"F12","active":false,"error":"x","error_code":"duplicate"}],
                             "window":[],"monitor":[]}}
                 """);
 
@@ -134,8 +138,8 @@ namespace Prisc.VideoSDK.Tests
         public void A_capturer_permission_status_under_a_trusted_grant_keeps_the_prompt_for_a_missing_one()
         {
             using var rig = new Rig();
-            var permission = CaptureStandbySupervisor.ParseHotkeyStatus("""
-                {"hotkeys":{"main":[{"gesture":"F12","active":false,"error":"x","error_code":"permission"}],
+            var permission = StandbyStatus("""
+                {"type":"settings_status","hotkeys":{"main":[{"gesture":"F12","active":false,"error":"x","error_code":"permission"}],
                             "window":[],"monitor":[]}}
                 """);
 

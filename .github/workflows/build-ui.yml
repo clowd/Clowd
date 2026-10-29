@@ -19,6 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macos-15, not the recorder's macos-26: see build-rust.yml.
           - { rid: win-x64, os: windows-latest }
           - { rid: win-arm64, os: windows-latest }
           - { rid: osx-x64, os: macos-15 }
@@ -79,7 +80,7 @@ jobs:
 
       # The render tool is a separate thin exe over Prisc.VideoSDK; publishing into the
       # same directory shares the self-contained runtime and SDK assemblies, so the
-      # marginal cost is the apphost. VidRenderRunner looks for it beside Prisc.Ui.
+      # marginal cost is the apphost. JobRunner.ForVideoRender looks for it beside Prisc.Ui.
       - name: Publish Prisc.VideoRender
         run: >
           dotnet publish ui/Prisc.VideoRender/Prisc.VideoRender.csproj

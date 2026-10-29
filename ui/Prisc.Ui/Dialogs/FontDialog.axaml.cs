@@ -45,7 +45,7 @@ namespace Prisc.UI.Dialogs
             Icon = AppStyles.AppIcon;
 
             // a third-party font with broken metadata can carry a name Avalonia's typeface
-            // parser rejects at render time (CLOWD-10) — drop those rather than list them
+            // parser rejects at render time (see FontUtil); drop those rather than list them
             // the fonts the app embeds are listed alongside the installed ones
             _allFamilies = FontManager.Current.SystemFonts
                                       .Select(f => f.Name?.Trim())

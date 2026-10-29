@@ -1,50 +1,43 @@
 //! `--list-cameras` mode (RECORDER CORE R3): minimal libobs init, enumerate
-//! the camera devices the platform capture source offers, print exactly ONE
-//! JSON line on stdout and exit.
+//! the camera devices the platform capture source offers, answer with one
+//! terminal line after `hello` and exit.
 //!
-//! Success: `{"type":"cameras","cameras":[{"id":"...","name":"..."}]}`, exit 0.
-//! Failure: `{"type":"error","message":"..."}`, exit 1.
+//! Success: `cameras` (crates/prisc_capture/HELPER_PROTOCOL.md §4.1), exit 0.
+//! Failure: a fatal `error{code:"init_failed"}`, exit 1.
 //!
 //! The `id` is the source's property list item value — the escaped
 //! `<name>:<path>` form win-dshow expects back in `video_device_id` on
 //! Windows, an `AVCaptureDevice.uniqueID` on macOS — and is passed to
 //! `--webcam` verbatim.
 
-use std::ffi::CString;
-
 use prisc_obs::audio::AudioInfo;
 use prisc_obs::context::ObsContext;
 use prisc_obs::video::VideoInfo;
 
+use prisc_ipc::catalog::recorder::{Camera, Event};
+use prisc_ipc::catalog::ErrorCode;
+
 use crate::platform;
 use crate::status;
 
-/// Never returns; prints the single protocol line and exits.
+/// Never returns; emits the single terminal line and exits.
 pub fn run() -> ! {
     match list_cameras() {
         Ok(cameras) => {
-            let items: Vec<serde_json::Value> = cameras
-                .into_iter()
-                .map(|c| serde_json::json!({ "id": c.value, "name": c.name }))
-                .collect();
-            status::emit_json(serde_json::json!({
-                "type": "cameras",
-                "cameras": items,
-            }));
-            platform::exit_process(0)
+            status::out().emit(&Event::Cameras {
+                cameras: cameras
+                    .into_iter()
+                    .map(|c| Camera { id: c.value, name: c.name })
+                    .collect(),
+            });
+            prisc_ipc::lifetime::exit(prisc_ipc::exit::OK)
         }
-        Err(msg) => {
-            status::emit_json(serde_json::json!({
-                "type": "error",
-                "message": msg,
-            }));
-            platform::exit_process(1)
-        }
+        Err(msg) => status::out().fatal(ErrorCode::InitFailed, msg),
     }
 }
 
 fn list_cameras() -> Result<Vec<prisc_obs::properties::ListItem>, String> {
-    platform::init_process();
+    platform::init_process()?;
     let context = ObsContext::new("en-US").map_err(|e| format!("Failed to initialize OBS: {e}"))?;
 
     // Same init order as Recorder::new — data path before reset_video
@@ -84,11 +77,9 @@ fn list_cameras() -> Result<Vec<prisc_obs::properties::ListItem>, String> {
     context.add_module_path(&paths.module_bin, &paths.module_data);
     context.load_all_modules();
 
-    // Registration check (same pattern as Recorder::new: get_display_name is
-    // null exactly when the id is unregistered).
+    // Registration check (same as Recorder::new).
     let source_id = platform::WEBCAM_SOURCE_ID;
-    let source_c = CString::new(source_id).unwrap();
-    if unsafe { prisc_obs_sys::obs_source_get_display_name(source_c.as_ptr()) }.is_null() {
+    if !prisc_obs::source::is_registered(source_id) {
         return Err(format!(
             "Camera source '{source_id}' is not registered — the camera capture plugin failed \
              to load.\n  module bin:  {}\n  module data: {}",

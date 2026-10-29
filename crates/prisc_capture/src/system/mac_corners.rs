@@ -12,9 +12,10 @@
 //! round-trip (~10 ms) per window, which is why the walker runs it after
 //! publishing the snapshot rather than before.
 
-use core_graphics::geometry::{CGPoint, CGRect, CGSize};
-use core_graphics::window::{self, kCGWindowImageBestResolution, kCGWindowImageBoundsIgnoreFraming, kCGWindowListOptionIncludingWindow};
+#[allow(deprecated)]
+use objc2_core_graphics::{CGWindowImageOption, CGWindowListCreateImage, CGWindowListOption};
 use objc2_foundation::NSProcessInfo;
+use prisc_rust_core::desktop::{CGPoint, CGRect, CGSize, ImageBytes};
 
 use super::corners::{estimate_radius_from_alpha, macos_fallback_radius_points, Corner};
 use super::MonitorInfo;
@@ -74,21 +75,22 @@ pub fn probe_corner_radius(window_id: u32, bounds: CgBounds, monitors: &[Monitor
             .any(|m| contains_square(m, x, y, side))
     })?;
 
-    let rect = CGRect::new(&CGPoint::new(x, y), &CGSize::new(side, side));
-    let image = window::create_image(
+    let rect = CGRect::new(CGPoint::new(x, y), CGSize::new(side, side));
+    // Deprecated in favor of ScreenCaptureKit, which the capture has not
+    // moved to.
+    #[allow(deprecated)]
+    let image = CGWindowListCreateImage(
         rect,
-        kCGWindowListOptionIncludingWindow,
+        CGWindowListOption::OptionIncludingWindow,
         window_id,
-        kCGWindowImageBestResolution | kCGWindowImageBoundsIgnoreFraming,
+        CGWindowImageOption::BestResolution | CGWindowImageOption::BoundsIgnoreFraming,
     )?;
-    let w = image.width();
-    let h = image.height();
-    let bpr = image.bytes_per_row();
-    if image.bits_per_pixel() != 32 || w == 0 || h == 0 {
+    let pixels = ImageBytes::of(&image)?;
+    let (w, h, bpr) = (pixels.width, pixels.height, pixels.bytes_per_row);
+    if pixels.bits_per_pixel != 32 || w == 0 || h == 0 {
         return None;
     }
-    let data = image.data();
-    let bytes = data.bytes();
+    let bytes = pixels.bytes();
     if bytes.len() < (h - 1) * bpr + w * 4 {
         return None;
     }

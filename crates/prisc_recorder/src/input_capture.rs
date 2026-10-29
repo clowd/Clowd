@@ -27,24 +27,26 @@
 //! (encoder-level pause: ticks and hooks keep firing, so the gate is
 //! explicit).
 //!
-//! Lifetime: exit paths skip Drop (`platform::exit_process`), so the recorder
-//! calls [`InputCapture::close`] explicitly before *every*
-//! `emit_stopped_recording` — finish, start-failure and pre-start quit. Close
+//! Lifetime: exit paths skip Drop (they end in `platform::exit_process`), so
+//! the recorder calls [`InputCapture::close`] explicitly before *every* final
+//! `done`: finish, start-failure and pre-start quit. Close
 //! disarms the pipeline (the graphics thread keeps ticking and the hooks keep
 //! firing after `output.stop()`, so without disarming rows would keep landing
 //! after the final flush) and then flushes.
 
 use std::collections::{HashMap, VecDeque};
-use std::ffi::c_void;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
+use prisc_obs::output::OutputHandle;
+use prisc_obs::tick::TickCallback;
 use serde::Serialize;
 
-use crate::cursor_sprite::{self, SpriteEvent};
+use crate::cursor_sprite;
+use prisc_obs_platform::cursor_sprite::SpriteEvent;
 use crate::frame_clock::FrameClock;
 use crate::input_hook::{InputHook, RawEvent, RawEventKind};
 use crate::platform::{self, MonitorInfo};
@@ -192,22 +194,6 @@ pub fn map_t(event_ns: u64, t0_ns: u64, pause_offset_ns: u64) -> Option<f64> {
     let since_start = event_ns.checked_sub(t0_ns)?;
     let adjusted = since_start.checked_sub(pause_offset_ns)?;
     Some((adjusted as f64 / 1_000.0).round() / 1_000.0)
-}
-
-/// Accumulated pause time (ns) for this recorder's output. Read off the
-/// track-0 video encoder: the outputs used here are OBS_OUTPUT_ENCODED, whose
-/// pause path (`obs_encoded_output_pause`) updates only the per-encoder pause
-/// structs — `obs_output_get_pause_offset` would always return 0. All of the
-/// output's encoders pause at the same `closest_v_ts`, so track 0 speaks for
-/// the recording. NULL-safe (`obs_encoder_get_pause_offset(NULL)` is 0).
-///
-/// # Safety
-/// `output` must be a live output pointer. Callers must not race a pre-start
-/// encoder swap (`handle_configure`): only call once the recording has
-/// started (armed tick / nonzero `t0`) — encoder swaps are pre-start only.
-unsafe fn pause_offset_ns(output: *mut prisc_obs_sys::obs_output_t) -> u64 {
-    let encoder = prisc_obs_sys::obs_output_get_video_encoder(output);
-    prisc_obs_sys::obs_encoder_get_pause_offset(encoder)
 }
 
 // ---------------------------------------------------------------------------
@@ -432,10 +418,9 @@ fn writer_loop(
     rx: mpsc::Receiver<WriterMsg>,
     armed: std::sync::Arc<AtomicBool>,
     clock: std::sync::Arc<FrameClock>,
-    output_addr: usize,
+    output: OutputHandle,
     canvas_scale: f64,
 ) {
-    let output = output_addr as *mut prisc_obs_sys::obs_output_t;
     let mut w = BufWriter::new(file);
     let mut sprites = SpriteCache::new();
     let mut pending = VecDeque::new();
@@ -486,7 +471,7 @@ fn handle_msg(
     sprites: &mut SpriteCache,
     armed: &AtomicBool,
     clock: &FrameClock,
-    output: *mut prisc_obs_sys::obs_output_t,
+    output: OutputHandle,
     canvas_scale: f64,
     pending: &mut VecDeque<PendingRow>,
 ) {
@@ -508,12 +493,14 @@ fn handle_msg(
         WriterMsg::Event(event) => {
             // Evaluate once, before startup buffering. Rechecking on drain
             // would drop pre-pause edges or apply a later pause's offset.
-            if !armed.load(Ordering::Acquire) || unsafe { prisc_obs_sys::obs_output_paused(output) } {
+            // The offset is read only past the arm gate: encoder swaps
+            // (`handle_configure`) happen before the recording starts.
+            if !armed.load(Ordering::Acquire) || output.paused() {
                 return;
             }
             Some(PendingRow::Event {
                 event,
-                pause_offset: unsafe { pause_offset_ns(output) },
+                pause_offset: output.pause_offset_ns(),
             })
         }
         WriterMsg::Flush(ack) => {
@@ -543,10 +530,8 @@ fn handle_msg(
 struct TickState {
     /// Set immediately before output.start(), cleared by close.
     armed: std::sync::Arc<AtomicBool>,
-    /// close and Drop may both run; remove the callback only once.
-    registered: AtomicBool,
-    /// `*mut obs_output_t` as usize (pause state/offset reads).
-    output: usize,
+    /// Pause state/offset reads.
+    output: OutputHandle,
     /// Capture-space units per canvas pixel, applied to the row coordinates
     /// (see [`to_canvas`]).
     canvas_scale: f64,
@@ -555,28 +540,18 @@ struct TickState {
     hook: InputHook,
 }
 
-/// libobs tick callback — once per rendered frame on the graphics thread.
+/// libobs tick callback body, once per rendered frame on the graphics thread.
 /// Only sampling, cursor-sprite rasterization and a channel send; never file
 /// I/O or image encoding.
-unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        sample_tick(param);
-    }));
-}
-
-unsafe fn sample_tick(param: *mut c_void) {
-    let state = &*(param as *const TickState);
-
+fn sample_tick(state: &TickState) {
     if !state.armed.load(Ordering::Acquire) {
         return;
     }
-    let frame_ns = prisc_obs_sys::obs_get_video_frame_time();
-    let output = state.output as *mut prisc_obs_sys::obs_output_t;
-    if prisc_obs_sys::obs_output_paused(output) {
+    let frame_ns = prisc_obs::time::video_frame_time_ns();
+    if state.output.paused() {
         return;
     }
-    let offset = pause_offset_ns(output);
-
+    let offset = state.output.pause_offset_ns();
     // ONE `get_cursor_state` snapshot serves the frame row's position/kind
     // AND the sprite rasterization — the DESIGN §1 consistency contract: the
     // recorded pixels can never disagree with where the row says the cursor
@@ -626,8 +601,10 @@ pub struct InputCapture {
     /// by a pixel and desync the editor's source rect.
     canvas: (u32, u32),
     monitors: Vec<MonitorEntry>,
-    /// Boxed so the address handed to libobs stays valid when `self` moves.
-    state: Box<TickState>,
+    /// Set immediately before output.start(), cleared by close.
+    armed: std::sync::Arc<AtomicBool>,
+    /// Owns the sampling state (and with it the input hooks).
+    tick: TickCallback,
 }
 
 impl InputCapture {
@@ -640,7 +617,7 @@ impl InputCapture {
         monitors: &[MonitorInfo],
         canvas_scale: f64,
         canvas: (u32, u32),
-        output: *mut prisc_obs_sys::obs_output_t,
+        output: OutputHandle,
         clock: std::sync::Arc<FrameClock>,
     ) -> Result<InputCapture, String> {
         // Prime the cursor classifier from the calling (main) thread. The first
@@ -657,11 +634,10 @@ impl InputCapture {
 
         let writer_armed = armed.clone();
         let writer_clock = clock;
-        let output_addr = output as usize;
         std::thread::Builder::new()
             .name("input-capture-writer".to_string())
             .spawn(move || {
-                writer_loop(file, rx, writer_armed, writer_clock, output_addr, canvas_scale)
+                writer_loop(file, rx, writer_armed, writer_clock, output, canvas_scale)
             })
             .map_err(|e| format!("failed to spawn the input-capture writer: {e}"))?;
 
@@ -685,16 +661,16 @@ impl InputCapture {
             })
             .collect();
 
-        let state = Box::new(TickState {
-            armed,
-            registered: AtomicBool::new(true),
-            output: output_addr,
+        let state = TickState {
+            armed: armed.clone(),
+            output,
             canvas_scale,
             tx: tx.clone(),
             hook,
+        };
+        let tick = TickCallback::add(move |_seconds| {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sample_tick(&state)));
         });
-        let param = &*state as *const TickState as *mut c_void;
-        unsafe { prisc_obs_sys::obs_add_tick_callback(Some(tick), param) };
 
         Ok(InputCapture {
             tx,
@@ -705,7 +681,8 @@ impl InputCapture {
             ),
             canvas,
             monitors,
-            state,
+            armed,
+            tick,
         })
     }
 
@@ -732,22 +709,19 @@ impl InputCapture {
             monitors: self.monitors.clone(),
         }));
         // Header queued before arming, so it is always line 1.
-        self.state.armed.store(true, Ordering::Release);
+        self.armed.store(true, Ordering::Release);
     }
 
     /// Disarms the pipeline and makes the file durable. MUST run before every
-    /// `emit_stopped_recording` — exit paths skip Drop, and losing the tail
+    /// final `done`: exit paths skip Drop, and losing the tail
     /// of the sidecar silently desyncs the editor overlays.
     ///
     /// Remove the tick callback before the flush barrier: an in-flight tick
     /// may already have passed the arm gate. Hook events arriving afterwards
     /// are rejected by the writer's arm gate.
     pub fn close(&self) {
-        self.state.armed.store(false, Ordering::Release);
-        if self.state.registered.swap(false, Ordering::AcqRel) {
-            let param = &*self.state as *const TickState as *mut c_void;
-            unsafe { prisc_obs_sys::obs_remove_tick_callback(Some(tick), param) };
-        }
+        self.armed.store(false, Ordering::Release);
+        self.tick.remove();
         self.flush();
     }
 
@@ -1085,7 +1059,7 @@ mod tests {
 
     // -- writer sprite cache -------------------------------------------------
 
-    use crate::cursor_sprite::{RawSprite, SpritePixels};
+    use prisc_obs_platform::cursor_sprite::{RawSprite, SpritePixels};
 
     /// A 1x1 sprite whose content is controlled by `seed`, so distinct seeds
     /// dedupe apart and equal seeds dedupe together.

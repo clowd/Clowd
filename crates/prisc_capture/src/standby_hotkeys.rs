@@ -27,6 +27,7 @@ use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use prisc_hotkeys::{Error, Event, Gesture, HotkeyId, Hotkeys};
+use prisc_ipc::catalog::capture::{self, HotkeyStatus};
 use winit::event_loop::EventLoopProxy;
 
 use crate::settings::{CaptureMode, CliArgs};
@@ -119,7 +120,7 @@ fn recovery(err: &Error) -> Recovery {
     }
 }
 
-/// The machine-readable twin of an error's text in PRISC_SETTINGS_STATUS:
+/// The machine-readable twin of an error's text in `settings_status`:
 /// the shell keys behaviour (the Accessibility prompt) off this, never off
 /// the display text. Exhaustive on purpose, so a new variant picks a code.
 fn error_code(err: &Error) -> &'static str {
@@ -184,8 +185,8 @@ pub enum Poll {
     Unchanged,
     /// The hook came up, went down, failed differently, or died and was
     /// restarted at once: the gestures' new statuses, for an unsolicited
-    /// PRISC_SETTINGS_STATUS.
-    Statuses(serde_json::Map<String, serde_json::Value>),
+    /// `settings_status`.
+    Statuses(capture::Hotkeys),
     /// The hook died where that is fatal (`Recovery::Exit`).
     Fatal(String),
 }
@@ -301,12 +302,12 @@ impl<H: Hook> StandbyHotkeys<H> {
     }
 
     /// Replaces the whole gesture set from a CLI snapshot and returns the
-    /// per-gesture statuses for PRISC_SETTINGS_STATUS. Hook-based hotkeys
+    /// per-gesture statuses for `settings_status`. Hook-based hotkeys
     /// cannot conflict with other applications, so a gesture is active exactly
     /// when it parses, is usable on this OS, is not a duplicate, and the hook
     /// accepted it. A hook that is down is tried again first if
     /// `RETRY_INTERVAL` has passed since the last attempt (see `next_retry`).
-    pub fn apply(&mut self, args: &CliArgs) -> serde_json::Map<String, serde_json::Value> {
+    pub fn apply(&mut self, args: &CliArgs) -> capture::Hotkeys {
         self.requested = Some(vec![
             ("main", args.hk_main.clone(), CaptureMode::Region),
             ("window", args.hk_window.clone(), CaptureMode::Window),
@@ -417,10 +418,11 @@ impl<H: Hook> StandbyHotkeys<H> {
     }
 
     /// Brings the hook in line with `requested` and reports every gesture.
-    fn sync(&mut self) -> serde_json::Map<String, serde_json::Value> {
-        let Some(mut plan) = self.plan(self.error.as_ref()) else {
-            return serde_json::Map::new();
-        };
+    /// Only called once a snapshot set `requested`.
+    fn sync(&mut self) -> capture::Hotkeys {
+        let mut plan = self
+            .plan(self.error.as_ref())
+            .expect("sync runs after the first settings snapshot");
         let Some(hook) = self.slot.hook() else {
             return plan.statuses;
         };
@@ -443,13 +445,8 @@ impl<H: Hook> StandbyHotkeys<H> {
                     kept.push(gesture);
                 }
                 Err(err) => {
-                    if let Some(status) = plan
-                        .statuses
-                        .get_mut(name)
-                        .and_then(|entries| entries.get_mut(index))
-                    {
-                        *status = status_entry(&status["gesture"], Some((err.to_string(), error_code(&err))));
-                    }
+                    let status = &mut entries_mut(&mut plan.statuses, name)[index];
+                    *status = status_entry(std::mem::take(&mut status.gesture), Some((err.to_string(), error_code(&err))));
                 }
             }
         }
@@ -512,14 +509,29 @@ struct HotkeyPlan<'a> {
     /// Parallel to `wanted`: where its status sits in `statuses`, so a
     /// registration the hook refuses can still be reported in place.
     slots: Vec<(&'a str, usize)>,
-    statuses: serde_json::Map<String, serde_json::Value>,
+    statuses: capture::Hotkeys,
 }
 
-/// One `{gesture, active, error, error_code}` status; `error` is the text and
-/// `error_code` its stable code (see `error_code`), both null when active.
-fn status_entry(gesture: &serde_json::Value, error: Option<(String, &str)>) -> serde_json::Value {
+/// One gesture's status; `error` is the text and `error_code` its stable code
+/// (see `error_code`), both absent when active.
+fn status_entry(gesture: String, error: Option<(String, &str)>) -> HotkeyStatus {
     let (error, code) = error.unzip();
-    serde_json::json!({ "gesture": gesture, "active": error.is_none(), "error": error, "error_code": code })
+    HotkeyStatus {
+        gesture,
+        active: error.is_none(),
+        error,
+        error_code: code.map(str::to_owned),
+    }
+}
+
+/// The status list `settings_status` carries for the mode named `name`.
+fn entries_mut<'h>(hotkeys: &'h mut capture::Hotkeys, name: &str) -> &'h mut Vec<HotkeyStatus> {
+    match name {
+        "main" => &mut hotkeys.main,
+        "window" => &mut hotkeys.window,
+        "monitor" => &mut hotkeys.monitor,
+        other => unreachable!("no hotkey list named {other}"),
+    }
 }
 
 /// Resolves every gesture of every mode, in request order. Each name maps to
@@ -529,7 +541,11 @@ fn status_entry(gesture: &serde_json::Value, error: Option<(String, &str)>) -> s
 fn plan_hotkeys<'a>(requested: &[(&'a str, &[String], CaptureMode)], hook_error: Option<&Error>) -> HotkeyPlan<'a> {
     let mut wanted: Vec<(Gesture, CaptureMode)> = Vec::new();
     let mut slots = Vec::new();
-    let mut statuses = serde_json::Map::new();
+    let mut statuses = capture::Hotkeys {
+        main: Vec::new(),
+        window: Vec::new(),
+        monitor: Vec::new(),
+    };
     for &(name, gestures, mode) in requested {
         let mut entries = Vec::with_capacity(gestures.len());
         for gesture in gestures {
@@ -554,9 +570,9 @@ fn plan_hotkeys<'a>(requested: &[(&'a str, &[String], CaptureMode)], hook_error:
                     },
                 },
             };
-            entries.push(status_entry(&gesture.as_str().into(), error));
+            entries.push(status_entry(gesture.clone(), error));
         }
-        statuses.insert(name.into(), serde_json::Value::Array(entries));
+        *entries_mut(&mut statuses, name) = entries;
     }
     HotkeyPlan {
         wanted,
@@ -568,6 +584,11 @@ fn plan_hotkeys<'a>(requested: &[(&'a str, &[String], CaptureMode)], hook_error:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The wire form of a `settings_status` payload, which the assertions read.
+    fn json(statuses: &capture::Hotkeys) -> serde_json::Value {
+        serde_json::to_value(statuses).unwrap()
+    }
 
     fn gestures(list: &[&str]) -> Vec<String> {
         list.iter().map(|g| g.to_string()).collect()
@@ -611,10 +632,7 @@ mod tests {
     fn empty_lists_register_nothing_but_still_report() {
         let plan = plan(&[], &[], &[], None);
         assert!(plan.wanted.is_empty());
-        assert_eq!(
-            serde_json::Value::Object(plan.statuses),
-            serde_json::json!({ "main": [], "window": [], "monitor": [] })
-        );
+        assert_eq!(json(&plan.statuses), serde_json::json!({ "main": [], "window": [], "monitor": [] }));
     }
 
     #[test]
@@ -632,14 +650,14 @@ mod tests {
                 (gesture("Control+Shift+A"), CaptureMode::Window),
             ]
         );
-        assert_eq!(plan.statuses["window"][0]["active"], true);
+        assert_eq!(json(&plan.statuses)["window"][0]["active"], true);
         // Compared parsed: a modifier respelling and a key alias both count.
         for (i, gesture) in ["Control+Shift+A", "Return", "Shift+Control+A", "Enter"]
             .into_iter()
             .enumerate()
         {
             assert_eq!(
-                plan.statuses["monitor"][i],
+                json(&plan.statuses)["monitor"][i],
                 serde_json::json!({ "gesture": gesture, "active": false, "error": "duplicate gesture", "error_code": "duplicate" })
             );
         }
@@ -649,8 +667,8 @@ mod tests {
     fn duplicate_within_a_mode_keeps_the_first() {
         let plan = plan(&["F12", "F12"], &[], &[], None);
         assert_eq!(plan.wanted.len(), 1);
-        assert_eq!(plan.statuses["main"][0]["active"], true);
-        assert_eq!(plan.statuses["main"][1]["error"], "duplicate gesture");
+        assert_eq!(json(&plan.statuses)["main"][0]["active"], true);
+        assert_eq!(json(&plan.statuses)["main"][1]["error"], "duplicate gesture");
     }
 
     /// The shell maps statuses back by the echoed string, in order, so the
@@ -658,7 +676,8 @@ mod tests {
     #[test]
     fn status_shape_echoes_gestures_in_order() {
         let plan = plan(&["Control+Shift", "control+snapshot", "F12"], &[], &["Alt+F12"], None);
-        let main = plan.statuses["main"].as_array().unwrap();
+        let statuses = json(&plan.statuses);
+        let main = statuses["main"].as_array().unwrap();
         assert_eq!(main.len(), 3);
         assert_eq!(
             main[0],
@@ -671,14 +690,11 @@ mod tests {
         );
         assert_eq!(main[1]["gesture"], "control+snapshot");
         assert_eq!(main[1]["active"], cfg!(not(target_os = "macos")));
+        assert_eq!(main[2], serde_json::json!({ "gesture": "F12", "active": true }));
+        assert_eq!(json(&plan.statuses)["window"], serde_json::json!([]));
         assert_eq!(
-            main[2],
-            serde_json::json!({ "gesture": "F12", "active": true, "error": null, "error_code": null })
-        );
-        assert_eq!(plan.statuses["window"], serde_json::json!([]));
-        assert_eq!(
-            plan.statuses["monitor"],
-            serde_json::json!([{ "gesture": "Alt+F12", "active": true, "error": null, "error_code": null }])
+            json(&plan.statuses)["monitor"],
+            serde_json::json!([{ "gesture": "Alt+F12", "active": true }])
         );
     }
 
@@ -686,7 +702,10 @@ mod tests {
     fn listener_error_reports_on_every_gesture() {
         let plan = plan(&["F12", "Control+D1"], &[], &[], Some(&Error::PermissionDenied));
         assert!(plan.wanted.is_empty());
-        for status in plan.statuses["main"].as_array().unwrap() {
+        for status in json(&plan.statuses)["main"]
+            .as_array()
+            .unwrap()
+        {
             assert_eq!(status["active"], false);
             assert_eq!(status["error"], Error::PermissionDenied.to_string());
         }
@@ -697,7 +716,7 @@ mod tests {
     #[test]
     fn every_status_carries_a_machine_readable_code() {
         let mixed = plan(&["F12", "Control+Shift", "None", "LeftShift", "F12"], &[], &[], None);
-        let codes: Vec<_> = mixed.statuses["main"]
+        let codes: Vec<_> = json(&mixed.statuses)["main"]
             .as_array()
             .unwrap()
             .iter()
@@ -715,9 +734,9 @@ mod tests {
         );
 
         let denied = plan(&["F12"], &[], &[], Some(&Error::PermissionDenied));
-        assert_eq!(denied.statuses["main"][0]["error_code"], "permission");
+        assert_eq!(json(&denied.statuses)["main"][0]["error_code"], "permission");
         let unsupported = plan(&["F12"], &[], &[], Some(&Error::Unsupported));
-        assert_eq!(unsupported.statuses["main"][0]["error_code"], "unsupported");
+        assert_eq!(json(&unsupported.statuses)["main"][0]["error_code"], "unsupported");
     }
 
     /// The gestures the shell sends today (HotkeyGesture.ToSerializedString)
@@ -737,13 +756,11 @@ mod tests {
             "Shift+Meta+D1",
         ];
         let plan = plan(&all, &[], &[], None);
-        let main = plan.statuses["main"].as_array().unwrap();
+        let statuses = json(&plan.statuses);
+        let main = statuses["main"].as_array().unwrap();
         for (status, text) in main.iter().zip(all) {
             #[cfg(not(target_os = "macos"))]
-            assert_eq!(
-                *status,
-                serde_json::json!({ "gesture": text, "active": true, "error": null, "error_code": null })
-            );
+            assert_eq!(*status, serde_json::json!({ "gesture": text, "active": true }));
             // PrintScreen and Cancel have no macOS key code: refused up front, never a
             // silent dead hotkey.
             #[cfg(target_os = "macos")]
@@ -764,7 +781,7 @@ mod tests {
     fn none_and_modifier_keys_are_refused() {
         let plan = plan(&["None", "LeftShift", "Control+RightAlt"], &[], &[], None);
         assert!(plan.wanted.is_empty());
-        let main = &plan.statuses["main"];
+        let main = &json(&plan.statuses)["main"];
         assert_eq!(
             main[0],
             serde_json::json!({ "gesture": "None", "active": false, "error": "gesture has no key", "error_code": "no_key" })
@@ -886,7 +903,7 @@ mod tests {
         rig.hotkeys.pause_handle().set_paused(true);
         let statuses = rig.hotkeys.apply(&snapshot(&["F12"]));
         assert_eq!(
-            statuses["main"][0],
+            json(&statuses)["main"][0],
             serde_json::json!({
                 "gesture": "F12",
                 "active": false,
@@ -907,10 +924,7 @@ mod tests {
         let Poll::Statuses(statuses) = rig.hotkeys.poll(at) else {
             panic!("the hook that came up is reported unasked");
         };
-        assert_eq!(
-            statuses["main"][0],
-            serde_json::json!({ "gesture": "F12", "active": true, "error": null, "error_code": null })
-        );
+        assert_eq!(json(&statuses)["main"][0], serde_json::json!({ "gesture": "F12", "active": true }));
         let (hook, _events) = rig
             .hooks
             .try_recv()
@@ -936,7 +950,7 @@ mod tests {
             .next_retry()
             .expect("a denied hook is retried");
         for _ in 0..3 {
-            assert_eq!(rig.hotkeys.apply(&snapshot(&["F12"]))["main"][0]["error_code"], "permission");
+            assert_eq!(json(&rig.hotkeys.apply(&snapshot(&["F12"])))["main"][0]["error_code"], "permission");
         }
         assert_eq!(rig.hotkeys.next_retry(), Some(at));
     }
@@ -957,7 +971,10 @@ mod tests {
         let mut rig = rig(vec![Err(Error::Unsupported)]);
         assert!(!rig.hotkeys.should_bail());
         assert_eq!(rig.hotkeys.next_retry(), None);
-        assert_eq!(rig.hotkeys.apply(&snapshot(&["F12"]))["main"][0]["error_code"], "unsupported");
+        assert_eq!(
+            json(&rig.hotkeys.apply(&snapshot(&["F12"])))["main"][0]["error_code"],
+            "unsupported"
+        );
         assert!(matches!(
             rig.hotkeys
                 .poll(Instant::now() + RETRY_INTERVAL * 10),
@@ -994,8 +1011,8 @@ mod tests {
         match rig.hotkeys.poll(now) {
             #[cfg(target_os = "macos")]
             Poll::Statuses(statuses) => {
-                assert_eq!(statuses["main"][0]["active"], false);
-                assert_eq!(statuses["main"][0]["error_code"], "permission");
+                assert_eq!(json(&statuses)["main"][0]["active"], false);
+                assert_eq!(json(&statuses)["main"][0]["error_code"], "permission");
             }
             #[cfg(not(target_os = "macos"))]
             Poll::Fatal(reason) => assert_eq!(reason, "the Accessibility permission was revoked"),
@@ -1008,7 +1025,7 @@ mod tests {
             let Poll::Statuses(statuses) = rig.hotkeys.poll(now + RETRY_INTERVAL) else {
                 panic!("the hook that came back is reported unasked");
             };
-            assert_eq!(statuses["main"][0]["active"], true);
+            assert_eq!(json(&statuses)["main"][0]["active"], true);
             let (second, _events) = rig.hooks.try_recv().unwrap();
             assert_eq!(*lock(&second.registered), [gesture("F12")], "registered again on the new hook");
         }
@@ -1033,10 +1050,7 @@ mod tests {
         let Poll::Statuses(statuses) = rig.hotkeys.poll(now) else {
             panic!("a death and restart is reported unasked");
         };
-        assert_eq!(
-            statuses["main"][0],
-            serde_json::json!({ "gesture": "F12", "active": true, "error": null, "error_code": null })
-        );
+        assert_eq!(json(&statuses)["main"][0], serde_json::json!({ "gesture": "F12", "active": true }));
         let (second, _events) = rig.hooks.try_recv().unwrap();
         assert_eq!(*lock(&second.registered), [gesture("F12")], "registered again on the new hook");
         assert!(matches!(rig.hotkeys.poll(now + RETRY_INTERVAL), Poll::Unchanged));
@@ -1060,14 +1074,14 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("the forwarding thread wakes the loop");
         let statuses = rig.hotkeys.apply(&snapshot(&["F12", "F11"]));
-        assert_eq!(statuses["main"][1]["error_code"], "hook_stopped");
+        assert_eq!(json(&statuses)["main"][1]["error_code"], "hook_stopped");
 
         let now = Instant::now() + RETRY_INTERVAL;
         let Poll::Statuses(statuses) = rig.hotkeys.poll(now) else {
             panic!("a death and restart is reported unasked");
         };
-        assert_eq!(statuses["main"][0]["active"], true);
-        assert_eq!(statuses["main"][1]["active"], true);
+        assert_eq!(json(&statuses)["main"][0]["active"], true);
+        assert_eq!(json(&statuses)["main"][1]["active"], true);
         let (second, _events) = rig.hooks.try_recv().unwrap();
         assert_eq!(*lock(&second.registered), [gesture("F12"), gesture("F11")]);
     }
@@ -1211,7 +1225,7 @@ mod tests {
 
         for refused in [&[][..], &["None", "LeftShift", "PrintScreen"][..]] {
             let statuses = rig.hotkeys.apply(&snapshot(refused));
-            assert!(statuses["main"]
+            assert!(json(&statuses)["main"]
                 .as_array()
                 .unwrap()
                 .iter()
@@ -1224,7 +1238,7 @@ mod tests {
         // Past the rate limit already, so the snapshot itself retries.
         rig.hotkeys.next_try = Instant::now();
         let statuses = rig.hotkeys.apply(&snapshot(&["F12"]));
-        assert_eq!(statuses["main"][0]["active"], true);
+        assert_eq!(json(&statuses)["main"][0]["active"], true);
         assert!(rig.hooks.try_recv().is_ok(), "started for the new gesture");
     }
 }

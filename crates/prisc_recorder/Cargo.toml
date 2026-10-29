@@ -5,6 +5,8 @@ edition = "2021"
 license = "GPL-2.0-or-later"
 
 [dependencies]
+# The helper protocol (crates/prisc_capture/HELPER_PROTOCOL.md): stdio channel, commands, lifetime.
+prisc_ipc = { workspace = true }
 prisc_obs = { workspace = true }
 prisc_obs_sys = { workspace = true }
 prisc_obs_platform = { workspace = true }
@@ -16,153 +18,32 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 base64 = { workspace = true }
+# PNG encoding of the cursor_image sprite planes (cursor_sprite.rs).
+image = { workspace = true, features = ["png"] }
 libc = { workspace = true }
-png = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
-# POSIX signal handling only; on Windows a native SetConsoleCtrlHandler is
-# registered instead (ctrlc's HandlerRoutine returns immediately, which forfeits
-# the CTRL_CLOSE grace period — see recorder.rs).
-ctrlc = { workspace = true }
+# Sentry: panics and release-health sessions, one project with the rest of Prisc. Not on
+# Linux, where the recorder is built in the manylinux image without the sentry/TLS tree
+# (HELPER_PROTOCOL.md §3.4).
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+prisc_rust_core = { workspace = true, features = ["telemetry"] }
 
 [target.'cfg(windows)'.dependencies]
-# The imported recorder workspace's unified `windows` feature list, copied whole into each
-# recorder crate that uses `windows`.
+# Only what this crate's own Windows code uses; the platform layer's features are
+# declared in prisc_obs_platform.
 windows = { workspace = true, features = [
     "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    # Antialiased rounded shapes and text for the share-region prompt's own
-    # painting (ui/win32.rs): plain GDI has neither.
-    "Win32_Graphics_GdiPlus",
-    # DwmSetWindowAttribute: dark window chrome, the Win11 Mica backdrop and the
-    # caption/border colours that stand in for it elsewhere.
-    "Win32_Graphics_Dwm",
-    # CreateDXGIFactory1 + IDXGIAdapter1::EnumOutputs: mapping a monitor to the
-    # graphics adapter that drives it, so obs_video_info.adapter can be set to
-    # the GPU that owns the captured region (prisc_obs_platform region_adapter_index).
-    "Win32_Graphics_Dxgi",
-    # DXGI_OUTPUT_DESC (and the DXGI_MODE_DESC it embeds) sit behind the
-    # _Common gate in the generated bindings.
-    "Win32_Graphics_Dxgi_Common",
+    # The mouse hook (input_hook.rs): SetWindowsHookExW, its message loop and
+    # GetCurrentThreadId for the shutdown PostThreadMessageW.
     "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_HiDpi",
-    "Win32_UI_Input_KeyboardAndMouse",
-    # WM_MOUSELEAVE: the prompt's own hover tracking for its OK button.
-    "Win32_UI_Controls",
-    # GetModuleHandleW: the HINSTANCE for RegisterClassW/CreateWindowExW.
-    "Win32_System_LibraryLoader",
-    # ExitProcess / GetCurrentThreadId (prisc_obs_platform exit_process, input hooks).
     "Win32_System_Threading",
-    # RtlGetVersion + OSVERSIONINFOW: the real OS build number, used to resolve
-    # --capture-method auto to WGC on Windows 11+ (prisc_obs_platform
-    # resolve_capture_method). GetVersionExW/VerifyVersionInfoW report a
-    # manifest-shimmed version instead, so ntdll's is the only usable one.
-    "Wdk_System_SystemServices",
-    "Win32_System_SystemInformation",
-    # SetConsoleCtrlHandler (recorder.rs CTRL_CLOSE grace handling).
-    "Win32_System_Console",
-    # CoInitializeEx / CoCreateInstance + IMMDeviceEnumerator/IAudioEndpointVolume:
-    # --speaker-volume-compensation endpoint-volume query (replaces the
-    # hand-rolled COM vtables that windows-sys required).
-    "Win32_System_Com",
-    # IMMDevice::Activate's PROPVARIANT activation-params argument lives behind
-    # these two gates in the generated bindings (we always pass None).
-    "Win32_System_Com_StructuredStorage",
-    "Win32_System_Variant",
-    "Win32_Media_Audio",
-    "Win32_Media_Audio_Endpoints",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = { workspace = true }
-objc2-app-kit = { workspace = true, features = [
-    "NSApplication",
-    "NSResponder",
-    "NSRunningApplication",
-    "NSWindow",
-    "NSView",
-    "NSScreen",
-    "NSEvent",
-    "NSColor",
-    "NSBezierPath",
-    "NSGraphics",
-    "NSGraphicsContext",
-    "NSCursor",
-    "NSTrackingArea",
-    "NSImage",
-    # The pre-share prompt's controls (ui/appkit.rs): a label and an OK button
-    # in the mirror window before it becomes the share surface.
-    "NSControl",
-    "NSButton",
-    "NSTextField",
-    "NSButtonCell",
-    # The prompt's type ramp: a bold heading over a smaller supporting line
-    # (NSFont), the latter wrapping inside the text column (NSLineBreakMode,
-    # which the bindings gate on NSParagraphStyle).
-    "NSFont",
-    "NSParagraphStyle",
-    # Cursor sprite capture (platform/macos.rs): representation ladder + the
-    # PNG encode via representationUsingType:properties:.
-    "NSImageRep",
-    "NSBitmapImageRep",
-    # Methods taking CGFloat / NSRect / NSPoint (window init, bezier paths,
-    # colorWithSRGBRed:...) are cfg-gated on this in the generated bindings.
-    "objc2-core-foundation",
-] }
-objc2-core-foundation = { workspace = true, features = [
-    "CFCGTypes",
-    "CFString",
-    "CFUUID",
-    # Window capture (platform/macos.rs): CGWindowListCopyWindowInfo hands back
-    # a CFArray of CFDictionary window descriptions whose values are CFNumbers.
-    "CFArray",
-    "CFDictionary",
-    "CFNumber",
-    # Input hook (input_hook.rs): the event tap's CFMachPort + run-loop plumbing;
-    # CFDate gates CFRunLoopRunInMode (CFTimeInterval lives in CFDate.h).
-    "CFMachPort",
-    "CFRunLoop",
-    "CFDate",
-] }
-objc2-core-graphics = { workspace = true, features = [
-    "CGDirectDisplay",
-    "CGDisplayConfiguration",
-    "CGError",
-    "CGEvent",
-    "CGEventSource",
-    "CGEventTypes",
-    # CGCursorIsVisible (cursor sampling): deprecated since 10.9 but still the
-    # only public answer; the binding also needs `libc` (boolean_t return).
-    "CGRemoteOperation",
-    # CGWindowListCopyWindowInfo + the kCGWindow* description keys: the
-    # --window-capture enumerator (platform/macos.rs).
-    "CGWindow",
-    "libc",
-] }
-# NSDictionary/NSData: the cursor sprite PNG encode (platform/macos.rs).
-objc2-foundation = { workspace = true, features = [
-    "NSString",
-    "NSGeometry",
-    "NSNotification",
-    "NSObject",
-    "NSThread",
-    # NSScreen.screens iteration (ui/appkit.rs work_areas()).
-    "NSArray",
-    "NSEnumerator",
-    # The command poller (ui/appkit.rs): NSTimer + NSTimeInterval (declared in
-    # NSDate.h). NSRunLoop (and NSObjCRuntime, which declares NSRunLoopMode)
-    # come with it because the timer is added to NSRunLoopCommonModes by hand —
-    # the `scheduledTimer...` convenience constructor installs into the default
-    # mode only, where event tracking would stall the poll.
-    "NSTimer",
-    "NSDate",
-    "NSRunLoop",
-    "NSObjCRuntime",
-    # Cursor hashing / sprite encode (platform/macos.rs): TIFF / PNG NSData
-    # bytes, plus the empty properties NSDictionary the encode call takes.
-    "NSData",
-    "NSDictionary",
-] }
+# The input hook (input_hook.rs): the event tap's CFMachPort + run-loop plumbing;
+# CFDate gates CFRunLoopRunInMode (CFTimeInterval lives in CFDate.h).
+objc2-core-foundation = { workspace = true, features = ["CFMachPort", "CFRunLoop", "CFDate"] }
+objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventSource", "CGEventTypes"] }
 
 [build-dependencies]
 # Linux: stages the shared FFmpeg bundle (and, for prisc_recorder, libobs + plugins)

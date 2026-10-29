@@ -11,6 +11,31 @@ pub struct ObsSceneItem {
     pub(crate) ptr: *mut prisc_obs_sys::obs_sceneitem_t,
 }
 
+// SAFETY: scene items are reference-counted with atomic operations, and their
+// transform and visibility setters lock the owning scene, which is how OBS's
+// own frontend moves items from its UI thread while the graphics thread
+// renders them.
+unsafe impl Send for ObsSceneItem {}
+unsafe impl Sync for ObsSceneItem {}
+
+/// How a scene item is fitted into its bounds box (`enum obs_bounds_type`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoundsType {
+    /// Scale to fit inside the box, keeping the aspect ratio.
+    ScaleInner,
+    /// Shown 1:1 when it fits, scaled down to fit when larger.
+    MaxOnly,
+}
+
+impl BoundsType {
+    fn as_raw(self) -> prisc_obs_sys::obs_bounds_type {
+        match self {
+            BoundsType::ScaleInner => prisc_obs_sys::obs_bounds_type_OBS_BOUNDS_SCALE_INNER,
+            BoundsType::MaxOnly => prisc_obs_sys::obs_bounds_type_OBS_BOUNDS_MAX_ONLY,
+        }
+    }
+}
+
 impl ObsScene {
     pub fn create(name: &str) -> Result<Self, ObsError> {
         let name_c = CString::new(name).unwrap();
@@ -84,8 +109,8 @@ impl ObsSceneItem {
         };
     }
 
-    pub fn set_bounds_type(&self, bounds_type: prisc_obs_sys::obs_bounds_type) {
-        unsafe { prisc_obs_sys::obs_sceneitem_set_bounds_type(self.ptr, bounds_type) };
+    pub fn set_bounds_type(&self, bounds_type: BoundsType) {
+        unsafe { prisc_obs_sys::obs_sceneitem_set_bounds_type(self.ptr, bounds_type.as_raw()) };
     }
 
     /// `alignment` is an OBS_ALIGN_* bitmask; 0 = centered inside the bounds.
@@ -125,7 +150,7 @@ impl ObsSceneItem {
     /// 1092x819. Re-applying everything here after the reset is the fix.
     pub fn place_top_left_bounded(&self, w: f32, h: f32) {
         self.set_pos(0.0, 0.0);
-        self.set_bounds_type(prisc_obs_sys::obs_bounds_type_OBS_BOUNDS_MAX_ONLY);
+        self.set_bounds_type(BoundsType::MaxOnly);
         self.set_bounds_alignment(prisc_obs_sys::OBS_ALIGN_LEFT | prisc_obs_sys::OBS_ALIGN_TOP);
         self.set_bounds(w, h);
     }

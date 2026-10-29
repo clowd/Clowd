@@ -26,13 +26,14 @@
 //! captured frame (see `drive`'s note on the viewport height).
 //!
 //! Layout:
-//! - [`drive`] — the loop, the caps, and the NDJSON conversation with the shell.
+//! - [`drive`]: the loop, the caps, and the helper-protocol conversation with the shell.
 //! - [`input`] — synthetic wheel injection, cursor parking, abort polling.
 //! - [`frame`] — one screenshot of the fixed region.
 //! - [`stitch`] — frame registration and the composite.
 //! - [`output`] — `desktop.png` / `cropped.png` / `session.json`.
 //!
-//! The protocol is documented in `crates/prisc_capture/CAPTURE_PROTOCOL.md` §2.
+//! The protocol is the `scroll` catalog of `crates/prisc_capture/HELPER_PROTOCOL.md`
+//! (§4.4); the command line is documented in `crates/prisc_capture/CAPTURE_PROTOCOL.md` §2.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -56,16 +57,20 @@ extern crate log;
 extern crate anyhow;
 
 use clap::Parser;
+use prisc_ipc::catalog::scroll;
 
-fn main() -> anyhow::Result<()> {
+fn main() {
+    // `hello` first, with stdout claimed: from here on only the protocol
+    // channel reaches the pipe, and every other print lands on stderr.
+    let out = prisc_ipc::open::<scroll::Event>("prisc_scroll_driver");
+
     let args = cli::CliArgs::parse();
 
-    // stdout is the protocol channel (`drive::emit`), so terminal logging
-    // goes to stderr only — the shell pumps it into its own diagnostics.
-    // The file mirror is the session's `scroll.log` rather than
+    // Terminal logging goes to stderr only; the shell pumps it into its own
+    // diagnostics. The file mirror is the session's `scroll.log` rather than
     // `capture.log`: the overlay already wrote the latter into this very
-    // directory, and truncating it would erase the diagnostics for the
-    // half of the capture that came first.
+    // directory, and truncating it would erase the diagnostics for the half
+    // of the capture that came first.
     let mut loggers: Vec<Box<dyn simplelog::SharedLogger>> = vec![simplelog::TermLogger::new(
         log::LevelFilter::Info,
         simplelog::Config::default(),
@@ -85,12 +90,10 @@ fn main() -> anyhow::Result<()> {
     }
     prisc_rust_core::telemetry::install_logger(simplelog::CombinedLogger::new(loggers));
 
-    // held for the rest of main: dropping the guard flushes anything still queued
+    // Every exit goes through prisc_ipc::lifetime::exit, never a drop of this
+    // guard, so the session is ended and the queue flushed by the exit hook.
     let _sentry = prisc_rust_core::telemetry::init("prisc_scroll_driver");
+    prisc_ipc::lifetime::on_exit(prisc_rust_core::telemetry::shutdown_hook);
 
-    let result = drive::run(args);
-    if let Err(err) = &result {
-        prisc_rust_core::telemetry::capture_error(err);
-    }
-    result
+    drive::run(args, out)
 }

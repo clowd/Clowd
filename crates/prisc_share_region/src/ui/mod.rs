@@ -130,12 +130,12 @@ pub trait AppEvents {
     ///
     /// `Err` means the move was REFUSED and nothing changed (the request
     /// intersects no display); its payload is the reason, which the platform
-    /// layer emits as `command_error` INSTEAD of a `region_changed` ack. One
+    /// layer emits as `error{code:"failed"}` INSTEAD of a `region_changed` ack. One
     /// line per command either way: a refusal that also echoed the unchanged
     /// region would look exactly like a successful move to that region.
     fn set_region(&mut self, region: Rect) -> Result<Rect, String>;
 
-    /// Apply a new obscure mode (an `obscure`/`unobscure` command from stdin).
+    /// Apply a new obscure mode (an `obscure` command from stdin; mode `none` clears it).
     /// Purely a preview-side effect: the region and the window are unchanged.
     fn set_obscure(&mut self, mode: crate::obscure::Mode);
 
@@ -184,7 +184,7 @@ fn clamp_span(v: i64, size: i64, lo: i64, hi: i64) -> i32 {
 }
 
 /// Commands parsed off stdin, waiting for the UI thread to pick them up —
-/// including the lines that failed to parse, which travel as `Command::Error`
+/// including the lines that failed to parse, which travel as `Command::Malformed`
 /// so that every protocol response is written by this one thread, in the order
 /// the commands arrived (see that variant's doc comment).
 ///

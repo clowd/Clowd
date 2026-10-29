@@ -4,24 +4,13 @@
 //! Simplified macOS port of `win_walker.rs`: returns whole window rects only,
 //! no child-window walking.
 
-use std::ffi::c_void;
 use std::sync::Mutex;
-
-use core_foundation::base::TCFType;
-use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
-use core_foundation::number::CFNumber;
-use core_foundation::string::CFString;
-use core_graphics::display::CGDisplay;
-use core_graphics::geometry::CGRect;
-use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
 use super::mac_corners::{self, CgBounds};
 use super::{HitTestResult, ObstructedWindow, WindowCaptureRef, WindowTarget};
 use crate::system::MonitorInfo;
+use prisc_rust_core::desktop::{self, WindowDescription, WindowFilter, MIN_WINDOW_SIZE, NORMAL_WINDOW_LAYERS};
 use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
-
-/// Minimum top-level window dimension (px) to be considered capturable.
-const MIN_WINDOW_SIZE: i32 = 25;
 
 struct WindowEntry {
     window_id: u32,
@@ -58,25 +47,16 @@ impl WindowWalker {
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
     pub fn snapshot(monitors: &[MonitorInfo], visibility_threshold: f32, rounded_corners: bool) -> Self {
-        let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
-        let window_list = match window::copy_window_info(options, kCGNullWindowID) {
-            Some(list) => list,
-            None => {
-                warn!("CGWindowListCopyWindowInfo returned null");
-                return WindowWalker {
-                    windows: Vec::new(),
-                    corner_radii: Mutex::new(Vec::new()),
-                    rounded_corners,
-                };
-            }
+        // Normal-level windows only: menus, the Dock, panels and overlays are
+        // not capture targets.
+        let filter = WindowFilter {
+            layers: NORMAL_WINDOW_LAYERS,
+            exclude_own_process: false,
+            min_size: 0.0,
         };
-
-        let ptrs = window_list.get_all_values();
         let mut windows: Vec<WindowEntry> = Vec::new();
-
-        for ptr in ptrs {
-            let dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(ptr as CFDictionaryRef) };
-            if let Some(entry) = evaluate_window(&dict, &windows, monitors, visibility_threshold) {
+        for window in desktop::window_list(&filter) {
+            if let Some(entry) = evaluate_window(window, &windows, monitors, visibility_threshold) {
                 windows.push(entry);
             }
         }
@@ -236,33 +216,18 @@ impl WindowWalker {
 // Per-window evaluation
 // ---------------------------------------------------------------------------
 
+/// The overlay's own filter on top of the shared one: convert to physical
+/// pixels, apply the size and visibility thresholds there, and record what
+/// covers the window for the peek feature.
 fn evaluate_window(
-    dict: &CFDictionary,
+    window: WindowDescription,
     accepted: &[WindowEntry],
     monitors: &[MonitorInfo],
     visibility_threshold: f32,
 ) -> Option<WindowEntry> {
-    // 0. Extract the CG window ID (needed for CGWindowListCreateImage).
-    let window_id = get_number_i64(dict, unsafe { window::kCGWindowNumber })? as u32;
+    let cg_rect = window.bounds;
 
-    // 1. Layer == 0 (normal windows only; skip menu bar, dock, overlays).
-    let layer = get_number_i64(dict, unsafe { window::kCGWindowLayer })?;
-    if layer != 0 {
-        return None;
-    }
-
-    // 2. Alpha > 0.
-    let alpha = get_number_f64(dict, unsafe { window::kCGWindowAlpha })?;
-    if alpha <= 0.0 {
-        return None;
-    }
-
-    // 3. Parse bounds from the kCGWindowBounds sub-dictionary.
-    let bounds_ptr = get_raw_value(dict, unsafe { window::kCGWindowBounds })?;
-    let bounds_dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
-    let cg_rect = CGRect::from_dict_representation(&bounds_dict)?;
-
-    // 4. Convert logical CG points → physical pixels using MonitorInfo.
+    // Convert logical CG points → physical pixels using MonitorInfo.
     let center_x = cg_rect.origin.x + cg_rect.size.width / 2.0;
     let center_y = cg_rect.origin.y + cg_rect.size.height / 2.0;
 
@@ -289,15 +254,15 @@ fn evaluate_window(
         )
     };
 
-    // 5. Size threshold.
+    // Size threshold, in physical pixels.
     if phys_w < MIN_WINDOW_SIZE || phys_h < MIN_WINDOW_SIZE {
         return None;
     }
 
     let rect = ScreenRect::from_xy_size(phys_x, phys_y, phys_w, phys_h);
 
-    // 6. Visibility threshold — drop windows with too little visible area.
-    //    Also collect obstruction rects for the peek feature.
+    // Visibility threshold: drop windows with too little visible area.
+    // Also collect obstruction rects for the peek feature.
     let mut obstruction_rects = Vec::new();
     let window_area = (phys_w as i64) * (phys_h as i64);
     if window_area > 0 {
@@ -319,16 +284,8 @@ fn evaluate_window(
     }
     let obstructed = !obstruction_rects.is_empty();
 
-    // Read the window title (kCGWindowName), defaulting to empty string.
-    let title = get_raw_value(dict, unsafe { window::kCGWindowName })
-        .map(|ptr| {
-            let cf_str: CFString = unsafe { TCFType::wrap_under_get_rule(ptr as core_foundation::string::CFStringRef) };
-            cf_str.to_string()
-        })
-        .unwrap_or_default();
-
     Some(WindowEntry {
-        window_id,
+        window_id: window.id,
         rect,
         cg_bounds: CgBounds {
             x: cg_rect.origin.x,
@@ -337,7 +294,7 @@ fn evaluate_window(
             h: cg_rect.size.height,
         },
         scale,
-        title,
+        title: window.title,
         obstructed,
         obstruction_rects,
     })
@@ -357,52 +314,18 @@ fn find_monitor_for_cg_point(x: f64, y: f64, monitors: &[MonitorInfo]) -> Option
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Get a raw `*const c_void` value from a CFDictionary by CFStringRef key.
-fn get_raw_value(dict: &CFDictionary, key: core_foundation::string::CFStringRef) -> Option<*const c_void> {
-    let key_cfstr: CFString = unsafe { TCFType::wrap_under_get_rule(key) };
-    unsafe {
-        let mut value: *const c_void = std::ptr::null();
-        if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
-            dict.as_concrete_TypeRef(),
-            key_cfstr.as_concrete_TypeRef() as *const c_void,
-            &mut value,
-        ) != 0
-        {
-            Some(value)
-        } else {
-            None
-        }
-    }
-}
-
-fn get_number_i64(dict: &CFDictionary, key: core_foundation::string::CFStringRef) -> Option<i64> {
-    let ptr = get_raw_value(dict, key)?;
-    let number: CFNumber = unsafe { TCFType::wrap_under_get_rule(ptr as core_foundation::number::CFNumberRef) };
-    number.to_i64()
-}
-
-fn get_number_f64(dict: &CFDictionary, key: core_foundation::string::CFStringRef) -> Option<f64> {
-    let ptr = get_raw_value(dict, key)?;
-    let number: CFNumber = unsafe { TCFType::wrap_under_get_rule(ptr as core_foundation::number::CFNumberRef) };
-    number.to_f64()
-}
-
 /// Find the scale factor of the display whose logical bounds contain the
 /// given CG point.
 fn display_scale_at_logical_point(x: f64, y: f64) -> f32 {
-    if let Ok(ids) = CGDisplay::active_displays() {
-        for id in ids {
-            let d = CGDisplay::new(id);
-            let b = d.bounds();
-            if x >= b.origin.x && x < b.origin.x + b.size.width && y >= b.origin.y && y < b.origin.y + b.size.height {
-                // Use CGDisplayMode::pixel_width() for the true physical
-                // pixel count. CGDisplayPixelsWide is deprecated and returns
-                // the logical resolution on modern Retina displays.
-                let logical_w = b.size.width as f32;
-                if logical_w > 0.0 {
-                    if let Some(mode) = d.display_mode() {
-                        return mode.pixel_width() as f32 / logical_w;
-                    }
+    for d in desktop::active_displays().unwrap_or_default() {
+        let b = d.bounds;
+        if x >= b.origin.x && x < b.origin.x + b.size.width && y >= b.origin.y && y < b.origin.y + b.size.height {
+            // The mode's pixel width is the true physical pixel count;
+            // CGDisplayPixelsWide reports points on Retina displays.
+            let logical_w = b.size.width as f32;
+            if logical_w > 0.0 {
+                if let Some(mode) = d.mode {
+                    return mode.pixel_width as f32 / logical_w;
                 }
             }
         }

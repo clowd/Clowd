@@ -1,7 +1,8 @@
 use crate::Key;
 
 /// Why the hook could not start, or a gesture could not be registered. The Display texts are part
-/// of the capturer's protocol: it echoes them verbatim into `PRISC_SETTINGS_STATUS`.
+/// of the capturer's protocol: it echoes them verbatim into the `settings_status` event
+/// (HELPER_PROTOCOL.md §4.5).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// No backend on this OS (Linux).

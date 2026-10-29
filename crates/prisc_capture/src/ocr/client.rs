@@ -17,23 +17,15 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use prisc_rust_core::ocr::{OcrError, OcrOutcome, OcrRequest, OcrResponse, RequestHeader, RESULT_FILE_NAME};
 
-/// Binary we spawn, expected beside our own executable — which is where CI
-/// puts it (`publish/`, next to `prisc_capture`) and where `cargo build`
-/// puts it too (`target/<profile>/`), so one resolution rule covers both. It
-/// is the one AI inference binary Prisc ships (its `ocr` subcommand; the
-/// video editor spawns the same exe for matting and denoising), and it does
-/// not exist on Intel macOS, where ONNX Runtime has no binaries — there the
-/// spawn fails and OCR reports as unavailable.
-#[cfg(windows)]
-const AI_BINARY: &str = "prisc_ai.exe";
-#[cfg(not(windows))]
+/// The binary we spawn, found by `prisc_ipc::locate::sibling`: each directory
+/// of `PRISC_HELPERS_DIR`, then beside our own executable, which is where CI
+/// puts it (`publish/`, next to `prisc_capture`) and where `cargo build` puts
+/// it too (`target/<profile>/`). It is the one AI inference binary Prisc
+/// ships (its `ocr` subcommand; the video editor spawns the same exe for
+/// matting and denoising), and it does not exist on Intel macOS, where ONNX
+/// Runtime has no binaries: there the lookup fails and OCR reports as
+/// unavailable.
 const AI_BINARY: &str = "prisc_ai";
-
-/// Overrides the resolved path. The C# side has the same hatch for finding
-/// the capturer (`CaptureBinaryLocator.EnvVarName`); this one exists because
-/// sibling resolution cannot work from a test binary, which cargo puts in
-/// `target/<profile>/deps/` rather than beside the recognizer.
-const BINARY_OVERRIDE_VAR: &str = "PRISC_AI_BINARY";
 
 /// How often the wait loop wakes to poll the cancel flag. Small enough that
 /// BACK feels immediate and that the result is picked up the moment the child
@@ -123,13 +115,12 @@ impl ResponsePaths {
 }
 
 fn spawn(paths: &ResponsePaths) -> std::io::Result<Child> {
-    let binary = match std::env::var_os(BINARY_OVERRIDE_VAR) {
-        Some(path) => PathBuf::from(path),
-        None => std::env::current_exe()?
-            .parent()
-            .ok_or_else(|| std::io::Error::other("our own executable has no parent directory"))?
-            .join(AI_BINARY),
-    };
+    let binary = prisc_ipc::locate::sibling(AI_BINARY).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "not found beside prisc_capture or in PRISC_HELPERS_DIR",
+        )
+    })?;
 
     let mut command = Command::new(&binary);
     command
@@ -317,14 +308,16 @@ mod tests {
     }
 
     /// Opt-in round trip through the REAL recognizer: point
-    /// `PRISC_AI_BINARY` at a built `prisc_ai` and run. Exercises the half
+    /// `PRISC_HELPERS_DIR` at the directory of a built `prisc_ai` and run
+    /// (sibling resolution cannot work from a test binary, which cargo puts in
+    /// `target/<profile>/deps/` rather than beside the recognizer). Exercises the half
     /// of this module that unit tests cannot reach — header framing, the
     /// pixel upload, the wait, and parsing the response file — against the
     /// actual child rather than a stand-in.
     #[test]
     fn env_round_trip_through_the_real_recognizer() {
-        if std::env::var_os(BINARY_OVERRIDE_VAR).is_none() {
-            eprintln!("SKIP {}: {BINARY_OVERRIDE_VAR} not set", module_path!());
+        if std::env::var_os(prisc_ipc::locate::HELPERS_DIR_VAR).is_none() {
+            eprintln!("SKIP {}: {} not set", module_path!(), prisc_ipc::locate::HELPERS_DIR_VAR);
             return;
         }
         let blank = |w: u32, h: u32| OcrRequest {

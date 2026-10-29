@@ -11,6 +11,7 @@ using Prisc.VideoSDK.Composition;
 using Prisc.VideoSDK.Media;
 using Prisc.VideoSDK.Model;
 using Prisc.VideoSDK.Playback;
+using Prisc.Ipc;
 
 namespace Prisc.VideoSDK.Render
 {
@@ -82,7 +83,7 @@ namespace Prisc.VideoSDK.Render
         /// on and the frame source reads matte sidecars for items with a segmented
         /// <see cref="Model.VideoEffect"/>. Sidecars that are needed but missing/stale are
         /// generated here before the render loop when a <c>prisc_ai</c> binary resolves
-        /// (see <see cref="Prisc.VideoSDK.Ai.AiLoader"/>). Null renders every stream raw
+        /// (see <see cref="HelperLocator"/>). Null renders every stream raw
         /// and the segmented effects degrade to plain draws.</summary>
         public string SidecarCacheDir { get; init; }
     }
@@ -936,7 +937,7 @@ namespace Prisc.VideoSDK.Render
             if (jobs.Count == 0)
                 return 0;
 
-            if (AiLoader.TryGetPath() == null)
+            if (HelperLocator.Find("prisc_ai") == null)
             {
                 options.DiagnosticLog?.Invoke(
                     $"RenderJob: {jobs.Count} AI sidecar(s) needed but no prisc_ai binary resolves — rendering without them.");

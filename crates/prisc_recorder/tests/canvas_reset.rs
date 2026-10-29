@@ -38,7 +38,7 @@ fn video(w: u32, h: u32) -> VideoInfo {
 #[test]
 #[ignore]
 fn placement_after_canvas_reset_is_exact() {
-    prisc_obs_platform::init_process();
+    prisc_obs_platform::init_process().expect("platform init");
     let context = ObsContext::new("en-US").expect("obs_startup");
     // The test binary lives in target/<profile>/deps; the staged runtime
     // (data/libobs) is one level up, next to prisc_recorder.

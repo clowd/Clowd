@@ -5,33 +5,17 @@
 
 #![allow(dead_code)]
 
-use std::mem;
-
-use windows::{
-    core::PCWSTR,
-    Win32::{
-        Foundation::{HWND, LPARAM, POINT, RECT, TRUE},
-        Graphics::{
-            Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS},
-            Gdi::{ClientToScreen, GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
-        },
-        System::Com::{CoCreateInstance, CLSCTX_ALL},
-        UI::{
-            Shell::{IVirtualDesktopManager, VirtualDesktopManager},
-            WindowsAndMessaging::{
-                EnumWindows, FindWindowExW, GetClassNameW, GetClientRect, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
-                GetWindowTextW, IsIconic, IsWindowVisible, IsZoomed, RealChildWindowFromPoint, GWL_EXSTYLE, GWL_STYLE, WS_CAPTION,
-                WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_VISIBLE,
-            },
-        },
+use windows::Win32::{
+    Foundation::{HWND, POINT, RECT},
+    Graphics::Gdi::ClientToScreen,
+    UI::WindowsAndMessaging::{
+        GetClientRect, GetForegroundWindow, GetWindowLongPtrW, RealChildWindowFromPoint, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
     },
 };
 
 use super::{HitTestResult, MonitorInfo, ObstructedWindow, WindowCaptureRef, WindowTarget};
+use prisc_rust_core::desktop::{self, WindowFilter};
 use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
-
-/// Minimum top-level window dimension (px) to be considered capturable.
-const MIN_WINDOW_SIZE: i32 = 25;
 
 /// Minimum child window dimension (px) during hit-test child walk.
 const MIN_WINDOW_CHILD_SIZE: i32 = 200;
@@ -42,30 +26,6 @@ const MERGE_WITH_PARENT_THRESHOLD: i32 = 60;
 
 /// Maximum child-hierarchy depth to walk in `hit_test`.
 const MAX_CHILD_DEPTH: usize = 10;
-
-/// Window classes that are never valid capture targets. Sorted for binary
-/// search (ASCII case-sensitive).
-const BLACKLISTED_CLASSES: &[&str] = &[
-    "ApplicationManager_ImmersiveShellWindow",
-    "EdgeUiInputWndClass",
-    "Immersive Chrome Container",
-    "ImmersiveBackgroundWindow",
-    "ImmersiveLauncher",
-    "LauncherTipWndClass",
-    "MetroGhostWindow",
-    "ModeInputWnd",
-    "NativeHWNDHost",
-    "Progman",
-    "SearchPane",
-    "Shell_Dim",
-    "Shell_Dialog",
-    "Shell_TrayWnd",
-    "Snapped Desktop",
-    "TaskListThumbnailWnd",
-    "Touch Tooltip Window",
-    "Windows.UI.Core.CoreWindow",
-    "WorkerW",
-];
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -122,37 +82,14 @@ impl WindowWalker {
         // below; a foreground window that fails the filters yields None.
         let foreground_hwnd = unsafe { GetForegroundWindow() };
 
-        // COM is per-thread; this may run on a background thread.
-        unsafe {
-            use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        }
-
-        let vdm: Option<IVirtualDesktopManager> = unsafe {
-            match CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL) {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    warn!(
-                        "Could not create IVirtualDesktopManager (0x{:08X}: {}) \
-                         — virtual-desktop filtering disabled",
-                        e.code().0,
-                        e
-                    );
-                    None
-                }
-            }
+        // Only the current virtual desktop: the overlay covers it alone.
+        let filter = WindowFilter {
+            current_virtual_desktop_only: true,
+            exclude_own_process: false,
         };
-
-        // Collect raw HWNDs via EnumWindows (front-to-back Z-order).
-        let mut hwnds: Vec<HWND> = Vec::new();
-        unsafe {
-            let _ = EnumWindows(Some(enum_windows_cb), LPARAM(&mut hwnds as *mut Vec<HWND> as isize));
-        }
-
         let mut windows: Vec<WindowEntry> = Vec::new();
-
-        for hwnd in hwnds {
-            if let Some(entry) = evaluate_window(hwnd, &vdm, &windows, visibility_threshold, rounded_corners) {
+        for window in desktop::top_level_windows(&filter) {
+            if let Some(entry) = evaluate_window(window, &windows, visibility_threshold, rounded_corners) {
                 windows.push(entry);
             }
         }
@@ -431,214 +368,63 @@ impl WindowWalker {
 }
 
 // ---------------------------------------------------------------------------
-// EnumWindows callback
+// Per-window evaluation
 // ---------------------------------------------------------------------------
 
-extern "system" fn enum_windows_cb(hwnd: HWND, lparam: LPARAM) -> windows::core::BOOL {
-    unsafe {
-        let hwnds = &mut *(lparam.0 as *mut Vec<HWND>);
-        hwnds.push(hwnd);
-    }
-    TRUE
-}
-
-// ---------------------------------------------------------------------------
-// Per-window evaluation (the filter pipeline)
-// ---------------------------------------------------------------------------
-
-/// Run the full filter pipeline on a single HWND. Returns `Some(WindowEntry)`
-/// if the window passes all checks, `None` otherwise.
+/// The overlay's own filter on top of the shared one: drop windows whose
+/// visible area falls below the threshold, and record what covers the rest
+/// for the peek feature. `accepted` is every window above this one in
+/// Z-order that survived.
 fn evaluate_window(
-    hwnd: HWND,
-    vdm: &Option<IVirtualDesktopManager>,
+    window: desktop::TopLevelWindow,
     accepted: &[WindowEntry],
     visibility_threshold: f32,
     rounded_corners: bool,
 ) -> Option<WindowEntry> {
-    unsafe {
-        // 1. Basic visibility.
-        if !IsWindowVisible(hwnd).as_bool() {
-            return None;
-        }
-
-        // 2. Minimized.
-        if IsIconic(hwnd).as_bool() {
-            return None;
-        }
-
-        // 3. Style checks.
-        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
-        let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
-
-        if (style & WS_VISIBLE.0) == 0 {
-            return None;
-        }
-        // Transparent overlay: layered without caption.
-        if (style & WS_CAPTION.0) == 0 && (ex_style & WS_EX_LAYERED.0) != 0 {
-            return None;
-        }
-
-        // 4. Zero-size.
-        let mut rc = RECT::default();
-        GetWindowRect(hwnd, &mut rc).ok()?;
-        if rc.right <= rc.left || rc.bottom <= rc.top {
-            return None;
-        }
-        let raw_rect = ScreenRect::from_exact(rc.left, rc.top, rc.right, rc.bottom);
-
-        // 5. Virtual desktop.
-        if let Some(ref vdm) = vdm {
-            match vdm.IsWindowOnCurrentVirtualDesktop(hwnd) {
-                Ok(on_current) if !on_current.as_bool() => return None,
-                Err(_) => {} // Assume current desktop on error.
-                _ => {}
-            }
-        }
-
-        // 6. DWM cloaked.
-        if is_cloaked(hwnd) {
-            return None;
-        }
-
-        // 7. True bounds.
-        let rect = get_true_bounds(hwnd)?;
-
-        // 8. Size threshold.
-        if rect.width() < MIN_WINDOW_SIZE || rect.height() < MIN_WINDOW_SIZE {
-            return None;
-        }
-
-        // 9. Class blacklist.
-        let class_name = get_class_name(hwnd);
-        if BLACKLISTED_CLASSES
-            .binary_search(&class_name.as_str())
-            .is_ok()
-        {
-            return None;
-        }
-
-        // 10. Empty title.
-        if get_window_text(hwnd).is_empty() {
-            return None;
-        }
-
-        // 11. Phantom ApplicationFrameWindow.
-        if class_name == "ApplicationFrameWindow" && !has_core_window_child(hwnd) {
-            return None;
-        }
-
-        // 12–13. Compute obstruction rects and visible fraction.
-        // Drop windows whose visible area falls below the threshold.
-        let mut obstruction_rects = Vec::new();
-        let window_area = (rect.width() as i64) * (rect.height() as i64);
-        let mut obstructed_area: i64 = 0;
-        for w in accepted.iter() {
-            if let Some(isect) = w.rect.intersection(&rect) {
-                if isect.width() > 0 && isect.height() > 0 {
-                    obstructed_area += (isect.width() as i64) * (isect.height() as i64);
-                    if obstruction_rects.len() < 16 {
-                        obstruction_rects.push(isect);
-                    }
+    let rect = window.rect;
+    let mut obstruction_rects = Vec::new();
+    let window_area = (rect.width() as i64) * (rect.height() as i64);
+    let mut obstructed_area: i64 = 0;
+    for w in accepted.iter() {
+        if let Some(isect) = w.rect.intersection(&rect) {
+            if isect.width() > 0 && isect.height() > 0 {
+                obstructed_area += (isect.width() as i64) * (isect.height() as i64);
+                if obstruction_rects.len() < 16 {
+                    obstruction_rects.push(isect);
                 }
             }
         }
-        if window_area > 0 {
-            let obstructed_frac = obstructed_area as f64 / window_area as f64;
-            if obstructed_frac > visibility_threshold as f64 {
-                return None;
-            }
-        }
-        let obstructed = !obstruction_rects.is_empty();
-
-        let title = get_window_text(hwnd);
-        // Last, once the window is known to be a capture target: a few more
-        // user32/DWM round-trips per window, skipped entirely when the
-        // feature is off.
-        let corner_radius = if rounded_corners {
-            super::win_corners::window_corner_radius(hwnd, style)
-        } else {
-            0.0
-        };
-        Some(WindowEntry {
-            hwnd,
-            rect,
-            raw_rect,
-            title,
-            obstructed,
-            obstruction_rects,
-            corner_radius,
-        })
     }
+    if window_area > 0 {
+        let obstructed_frac = obstructed_area as f64 / window_area as f64;
+        if obstructed_frac > visibility_threshold as f64 {
+            return None;
+        }
+    }
+    let obstructed = !obstruction_rects.is_empty();
+
+    // Last, once the window is known to be a capture target: a few more
+    // user32/DWM round-trips per window, skipped entirely when the feature
+    // is off.
+    let corner_radius = if rounded_corners {
+        super::win_corners::window_corner_radius(window.hwnd, window.style)
+    } else {
+        0.0
+    };
+    Some(WindowEntry {
+        hwnd: window.hwnd,
+        rect,
+        raw_rect: window.raw_rect,
+        title: window.title,
+        obstructed,
+        obstruction_rects,
+        corner_radius,
+    })
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn get_class_name(hwnd: HWND) -> String {
-    let mut buf = [0u16; 256];
-    let len = unsafe { GetClassNameW(hwnd, &mut buf) };
-    String::from_utf16_lossy(&buf[..len as usize])
-}
-
-fn get_window_text(hwnd: HWND) -> String {
-    let mut buf = [0u16; 512];
-    let len = unsafe { GetWindowTextW(hwnd, &mut buf) };
-    String::from_utf16_lossy(&buf[..len as usize])
-}
-
-fn is_cloaked(hwnd: HWND) -> bool {
-    let mut cloaked: u32 = 0;
-    let hr = unsafe {
-        DwmGetWindowAttribute(
-            hwnd,
-            DWMWA_CLOAKED,
-            &mut cloaked as *mut u32 as *mut _,
-            mem::size_of::<u32>() as u32,
-        )
-    };
-    hr.is_ok() && cloaked != 0
-}
-
-/// Compute the actual visible bounds for a window. Maximized windows get the
-/// monitor's work area; others get the DWM extended frame bounds (which
-/// exclude the invisible resize border / drop shadow), falling back to
-/// `GetWindowRect`.
-fn get_true_bounds(hwnd: HWND) -> Option<ScreenRect> {
-    unsafe {
-        if IsZoomed(hwnd).as_bool() {
-            let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            let mut mi = MONITORINFO {
-                cbSize: mem::size_of::<MONITORINFO>() as u32,
-                ..Default::default()
-            };
-            if GetMonitorInfoW(hmon, &mut mi).as_bool() {
-                let rc = mi.rcWork;
-                return Some(ScreenRect::from_exact(rc.left, rc.top, rc.right, rc.bottom));
-            }
-        }
-
-        // Try DWM extended frame bounds first.
-        let mut rc = RECT::default();
-        let hr = DwmGetWindowAttribute(
-            hwnd,
-            DWMWA_EXTENDED_FRAME_BOUNDS,
-            &mut rc as *mut RECT as *mut _,
-            mem::size_of::<RECT>() as u32,
-        );
-        if hr.is_err() {
-            // Fallback to regular window rect.
-            GetWindowRect(hwnd, &mut rc).ok()?;
-        }
-
-        let sr = ScreenRect::from_exact(rc.left, rc.top, rc.right, rc.bottom);
-        if sr.width() > 0 && sr.height() > 0 {
-            Some(sr)
-        } else {
-            None
-        }
-    }
-}
 
 /// Get a child window's client rect in screen coordinates.
 fn child_screen_rect(hwnd: HWND) -> Option<ScreenRect> {
@@ -664,19 +450,5 @@ fn child_screen_rect(hwnd: HWND) -> Option<ScreenRect> {
         } else {
             None
         }
-    }
-}
-
-/// Check whether an `ApplicationFrameWindow` has a real `CoreWindow` child
-/// (meaning it's a live UWP app, not a phantom frame).
-fn has_core_window_child(hwnd: HWND) -> bool {
-    unsafe {
-        FindWindowExW(
-            Some(hwnd),
-            None,
-            PCWSTR::from_raw(windows::core::w!("Windows.UI.Core.CoreWindow").as_ptr()),
-            PCWSTR::null(),
-        )
-        .is_ok()
     }
 }

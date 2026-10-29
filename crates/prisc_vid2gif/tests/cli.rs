@@ -4,7 +4,7 @@
 //! as Y4M, and outputs are validated by parsing the GIF byte stream — no
 //! external tools involved.
 
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -56,57 +56,84 @@ fn write_y4m(path: &Path, w: usize, h: usize, fps: u32, seconds: u32) {
     }
 }
 
-/// Runs prisc_vid2gif and returns (success, parsed stdout protocol messages).
-fn run_vid2gif(args: &[&std::ffi::OsStr]) -> (bool, Vec<Msg>) {
-    let out = Command::new(env!("CARGO_BIN_EXE_prisc_vid2gif"))
+/// Runs prisc_vid2gif to completion and returns (exit code, parsed stdout
+/// protocol messages). stdin stays open until the process exits: closing it
+/// is a cancel.
+fn run_vid2gif(args: &[&std::ffi::OsStr]) -> (Option<i32>, Vec<Msg>) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_prisc_vid2gif"))
         .args(args)
-        .output()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
         .expect("spawn prisc_vid2gif");
-    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-    (out.status.success(), parse_protocol(&stdout))
+    let stdin = child.stdin.take();
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .expect("read stdout");
+    let status = child.wait().expect("wait for prisc_vid2gif");
+    drop(stdin);
+    (status.code(), parse_protocol(&stdout))
 }
 
 #[derive(Debug)]
 enum Msg {
     Progress(u32),
     Done(PathBuf, u64),
-    Error(String),
+    Error { code: String, message: String, fatal: bool },
     Cancelled,
 }
 
-/// Parses the stdout protocol strictly: any unrecognized non-empty line is a
-/// protocol violation and fails the test.
+/// Parses the stdout protocol strictly: the first line must be the `job`
+/// catalog's `hello`, and any line that is not a known protocol message is a
+/// violation that fails the test.
 fn parse_protocol(stdout: &str) -> Vec<Msg> {
+    let mut lines = stdout.lines();
+    let hello: serde_json::Value = serde_json::from_str(lines.next().expect("no hello")).expect("hello is JSON");
+    assert_eq!(hello["type"], "hello", "{hello}");
+    assert_eq!(hello["catalog"], "job", "{hello}");
+    assert_eq!(hello["helper"], "prisc_vid2gif", "{hello}");
     let mut msgs = Vec::new();
-    for line in stdout.lines().map(str::trim).filter(|l| !l.is_empty()) {
-        if let Some(v) = line.strip_prefix("progress ") {
-            msgs.push(Msg::Progress(
-                v.parse()
-                    .unwrap_or_else(|_| panic!("bad progress line: {line:?}")),
-            ));
-        } else if let Some(v) = line.strip_prefix("done ") {
-            // Format is `done <path> <bytes>`; the path may contain spaces.
-            let (path, bytes) = v.rsplit_once(' ').expect("done line needs bytes");
-            msgs.push(Msg::Done(
-                PathBuf::from(path),
-                bytes
-                    .parse()
-                    .unwrap_or_else(|_| panic!("bad done line: {line:?}")),
-            ));
-        } else if let Some(v) = line.strip_prefix("error ") {
-            msgs.push(Msg::Error(v.to_string()));
-        } else if line == "cancelled" {
-            msgs.push(Msg::Cancelled);
-        } else {
-            panic!("protocol violation on stdout: {line:?}");
-        }
+    for line in lines {
+        let v: serde_json::Value = serde_json::from_str(line)
+            .unwrap_or_else(|_| panic!("protocol violation on stdout: {line:?}"));
+        msgs.push(match v["type"].as_str() {
+            Some("progress") => Msg::Progress(v["percent"].as_u64().expect("percent") as u32),
+            Some("done") if v["result"] == "ok" => Msg::Done(
+                PathBuf::from(v["path"].as_str().expect("path")),
+                v["bytes"].as_u64().expect("bytes"),
+            ),
+            Some("done") if v["result"] == "cancelled" => Msg::Cancelled,
+            Some("error") => Msg::Error {
+                code: v["code"].as_str().expect("code").to_owned(),
+                message: v["message"].as_str().expect("message").to_owned(),
+                fatal: v["fatal"].as_bool().expect("fatal"),
+            },
+            _ => panic!("protocol violation on stdout: {line:?}"),
+        });
     }
     msgs
 }
 
+/// Asserts a run ended with exactly one fatal error of `code` and returns
+/// its message.
+fn expect_fatal(code: Option<i32>, msgs: &[Msg], expected_code: &str, expected_exit: i32) -> String {
+    assert_eq!(code, Some(expected_exit), "exit code: {msgs:?}");
+    match msgs {
+        [Msg::Error { code, message, fatal: true }] => {
+            assert_eq!(code, expected_code, "{message}");
+            message.clone()
+        }
+        other => panic!("expected a single fatal error, got {other:?}"),
+    }
+}
+
 /// Asserts the happy-path protocol shape and returns the `done` payload:
 /// progress lines strictly increasing from 0 to exactly 100, then one final
-/// `done`, and no `error`/`cancelled` lines anywhere.
+/// `done{ok}`, and no `error`/cancelled lines anywhere.
 fn expect_success(msgs: &[Msg]) -> (PathBuf, u64) {
     let mut progress = Vec::new();
     for (i, m) in msgs.iter().enumerate() {
@@ -116,7 +143,7 @@ fn expect_success(msgs: &[Msg]) -> (PathBuf, u64) {
                 progress.push(*p);
             }
             Msg::Done(..) => assert_eq!(i, msgs.len() - 1, "done must be last: {msgs:?}"),
-            Msg::Error(e) => panic!("unexpected error message: {e}"),
+            Msg::Error { message, .. } => panic!("unexpected error message: {message}"),
             Msg::Cancelled => panic!("unexpected cancelled message: {msgs:?}"),
         }
     }
@@ -208,8 +235,8 @@ fn converts_mp4_with_valid_protocol_and_output() {
     let clip = dir.join("clip.mp4");
     std::fs::copy(fixture("clip.mp4"), &clip).unwrap();
 
-    let (ok, msgs) = run_vid2gif(&[clip.as_os_str(), "--quality".as_ref(), "fair".as_ref()]);
-    assert!(ok, "prisc_vid2gif failed: {msgs:?}");
+    let (code, msgs) = run_vid2gif(&[clip.as_os_str(), "--quality".as_ref(), "fair".as_ref()]);
+    assert_eq!(code, Some(0), "prisc_vid2gif failed: {msgs:?}");
     let (path, bytes) = expect_success(&msgs);
 
     // Default output path: input with .gif extension.
@@ -237,13 +264,13 @@ fn mkv_input_explicit_output_with_spaces_best_quality() {
     // Exercise the done-line parsing with a space in the output path.
     let out = dir.join("my clips").join("out put.gif");
     let input = fixture("clip.mkv");
-    let (ok, msgs) = run_vid2gif(&[
+    let (code, msgs) = run_vid2gif(&[
         input.as_os_str(),
         out.as_os_str(),
         "--quality".as_ref(),
         "best".as_ref(),
     ]);
-    assert!(ok, "prisc_vid2gif failed: {msgs:?}");
+    assert_eq!(code, Some(0), "prisc_vid2gif failed: {msgs:?}");
     let (path, bytes) = expect_success(&msgs);
     assert_eq!(path, out);
     assert_eq!(bytes, std::fs::metadata(&out).unwrap().len());
@@ -267,8 +294,8 @@ fn max_width_and_height_clamp_most_restrictive() {
         let out_path = dir.join(out);
         let mut args: Vec<&std::ffi::OsStr> = vec![clip.as_os_str(), out_path.as_os_str()];
         args.extend(extra.iter().map(|s| -> &std::ffi::OsStr { s.as_ref() }));
-        let (ok, msgs) = run_vid2gif(&args);
-        assert!(ok, "prisc_vid2gif failed: {msgs:?}");
+        let (code, msgs) = run_vid2gif(&args);
+        assert_eq!(code, Some(0), "prisc_vid2gif failed: {msgs:?}");
         let (path, _) = expect_success(&msgs);
         gif_dims(&std::fs::read(path).unwrap())
     };
@@ -294,13 +321,13 @@ fn fps_override_changes_frame_count() {
     let dir = test_dir("fps");
     let out = dir.join("out.gif");
     let input = fixture("clip.mp4");
-    let (ok, msgs) = run_vid2gif(&[
+    let (code, msgs) = run_vid2gif(&[
         input.as_os_str(),
         out.as_os_str(),
         "--fps".as_ref(),
         "5".as_ref(),
     ]);
-    assert!(ok, "prisc_vid2gif failed: {msgs:?}");
+    assert_eq!(code, Some(0), "prisc_vid2gif failed: {msgs:?}");
     expect_success(&msgs);
     let frames = gif_frame_count(&std::fs::read(&out).unwrap());
     assert!(
@@ -310,51 +337,51 @@ fn fps_override_changes_frame_count() {
 }
 
 #[test]
-fn missing_input_prints_error_line_and_fails() {
-    let (ok, msgs) = run_vid2gif(&["C:/definitely/not/here.mp4".as_ref()]);
-    assert!(!ok, "must exit non-zero");
-    match msgs.as_slice() {
-        [Msg::Error(e)] => assert!(e.contains("not found"), "unexpected message: {e}"),
-        other => panic!("expected a single error message, got {other:?}"),
-    }
+fn missing_input_is_a_fatal_io_error() {
+    let (code, msgs) = run_vid2gif(&["C:/definitely/not/here.mp4".as_ref()]);
+    let message = expect_fatal(code, &msgs, "io_failed", 1);
+    assert!(message.contains("not found"), "unexpected message: {message}");
 }
 
 #[test]
-fn corrupt_input_prints_error_line_and_fails() {
+fn corrupt_input_is_a_fatal_init_error() {
     let dir = test_dir("corrupt");
     let clip = dir.join("clip.mp4");
     std::fs::write(&clip, b"this is not a video file").unwrap();
 
-    let (ok, msgs) = run_vid2gif(&[clip.as_os_str()]);
-    assert!(!ok, "must exit non-zero");
-    match msgs.as_slice() {
-        [Msg::Error(e)] => assert!(e.contains("could not read"), "unexpected message: {e}"),
-        other => panic!("expected a single error message, got {other:?}"),
-    }
+    let (code, msgs) = run_vid2gif(&[clip.as_os_str()]);
+    let message = expect_fatal(code, &msgs, "init_failed", 1);
+    assert!(message.contains("could not read"), "unexpected message: {message}");
 }
 
 #[test]
-fn gif_input_without_explicit_output_is_rejected() {
+fn gif_input_without_explicit_output_is_a_usage_error() {
     let dir = test_dir("gifin");
     let input = dir.join("clip.gif");
     std::fs::write(&input, b"GIF89a").unwrap();
 
-    let (ok, msgs) = run_vid2gif(&[input.as_os_str()]);
-    assert!(!ok, "must exit non-zero");
-    match msgs.as_slice() {
-        [Msg::Error(e)] => assert!(e.contains("equals input"), "unexpected message: {e}"),
-        other => panic!("expected a single error message, got {other:?}"),
-    }
+    let (code, msgs) = run_vid2gif(&[input.as_os_str()]);
+    let message = expect_fatal(code, &msgs, "usage", 2);
+    assert!(message.contains("equals input"), "unexpected message: {message}");
+    // Nothing was written, so nothing is cleaned up: the input survives.
+    assert!(input.exists());
 }
 
-#[test]
-fn quit_mid_conversion_cancels_promptly_and_cleans_up() {
+/// How a mid-conversion cancel is delivered.
+enum CancelBy {
+    Quit,
+    Eof,
+}
+
+/// Starts a conversion long enough that it cannot finish first, waits until it
+/// is demonstrably in flight, sends `bad` (if any) and then cancels; requires a
+/// prompt `done{cancelled}`, exit 0, and no partial output.
+fn cancel_mid_conversion(name: &str, by: CancelBy, bad: Option<&[u8]>) -> Vec<Msg> {
     use std::io::{BufRead, BufReader};
     use std::time::Instant;
 
-    let dir = test_dir("cancel");
+    let dir = test_dir(name);
     let clip = dir.join("clip.y4m");
-    // Long enough that the conversion cannot finish before `quit` lands.
     write_y4m(&clip, 320, 240, 15, 90);
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_prisc_vid2gif"))
@@ -363,23 +390,30 @@ fn quit_mid_conversion_cancels_promptly_and_cleans_up() {
         .stdout(Stdio::piped())
         .spawn()
         .expect("spawn prisc_vid2gif");
-    let mut stdin = child.stdin.take().unwrap();
+    let mut stdin = Some(child.stdin.take().unwrap());
     let stdout = BufReader::new(child.stdout.take().unwrap());
 
-    // Wait until the conversion is demonstrably in flight (progress strictly
-    // between 0 and 100), then cancel and require a prompt exit.
     let mut lines = Vec::new();
     let mut sent_at = None;
     for line in stdout.lines() {
         let line = line.expect("read stdout");
         if sent_at.is_none() {
-            if let Some(p) = line.strip_prefix("progress ") {
-                let p: u32 = p.parse().unwrap();
-                if p > 0 && p < 100 {
-                    stdin.write_all(b"quit\n").expect("write quit");
-                    stdin.flush().unwrap();
-                    sent_at = Some(Instant::now());
+            let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+            let percent = v["percent"].as_u64().unwrap_or(0);
+            if v["type"] == "progress" && percent > 0 && percent < 100 {
+                let mut pipe = stdin.take().unwrap();
+                if let Some(bad) = bad {
+                    pipe.write_all(bad).unwrap();
                 }
+                match by {
+                    CancelBy::Quit => {
+                        pipe.write_all(b"{\"type\":\"quit\"}\n").expect("write quit");
+                        pipe.flush().unwrap();
+                        stdin = Some(pipe);
+                    }
+                    CancelBy::Eof => drop(pipe),
+                }
+                sent_at = Some(Instant::now());
             }
         }
         lines.push(line);
@@ -389,17 +423,16 @@ fn quit_mid_conversion_cancels_promptly_and_cleans_up() {
         .elapsed();
 
     let status = child.wait().expect("wait for prisc_vid2gif");
+    drop(stdin);
     assert!(status.success(), "cancellation must exit 0");
     let msgs = parse_protocol(&lines.join("\n"));
     assert!(
         matches!(msgs.last(), Some(Msg::Cancelled)),
-        "cancelled must be the final message: {msgs:?}"
+        "done{{cancelled}} must be the final message: {msgs:?}"
     );
     assert!(
-        !msgs
-            .iter()
-            .any(|m| matches!(m, Msg::Done(..) | Msg::Error(_))),
-        "no done/error after cancellation: {msgs:?}"
+        !msgs.iter().any(|m| matches!(m, Msg::Done(..) | Msg::Error { fatal: true, .. })),
+        "no done{{ok}}/fatal error after cancellation: {msgs:?}"
     );
     assert!(
         latency.as_secs() < 5,
@@ -409,4 +442,30 @@ fn quit_mid_conversion_cancels_promptly_and_cleans_up() {
         !dir.join("clip.gif").exists(),
         "partial output must be removed"
     );
+    msgs
+}
+
+#[test]
+fn quit_mid_conversion_cancels_promptly_and_cleans_up() {
+    cancel_mid_conversion("cancel", CancelBy::Quit, None);
+}
+
+#[test]
+fn stdin_eof_mid_conversion_cancels_like_quit() {
+    cancel_mid_conversion("cancel-eof", CancelBy::Eof, None);
+}
+
+#[test]
+fn a_bad_command_is_reported_and_never_fatal() {
+    let msgs = cancel_mid_conversion("bad-command", CancelBy::Quit, Some(b"{\"type\":\"pause\"}\nnot json\n"));
+    let errors: Vec<(&str, &str)> = msgs
+        .iter()
+        .filter_map(|m| match m {
+            Msg::Error { code, message, fatal: false } => Some((code.as_str(), message.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(errors.len(), 2, "{msgs:?}");
+    assert_eq!(errors[0], ("bad_command", "unknown command 'pause'"));
+    assert_eq!(errors[1].0, "bad_command");
 }

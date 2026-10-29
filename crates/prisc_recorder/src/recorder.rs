@@ -1,18 +1,16 @@
 //! Pipeline construction and the command run loop (DESIGN §2.4).
 //!
-//! Failure policy: any error during construction prints to stderr and exits
-//! via `platform::exit_process(1)` directly — the error paths never unwind, so
-//! no destructors of partial OBS state run (libobs teardown is intentionally
-//! skipped, §1.4). Runtime `configure` failures never exit: they ack with
-//! `configure_error` and let the parent decide.
+//! Failure policy: any error during construction emits a fatal `error` and
+//! exits through `prisc_ipc::lifetime::exit` directly. The error paths never
+//! unwind, so no destructors of partial OBS state run (libobs teardown is
+//! intentionally skipped, §1.4). Runtime `configure` failures never exit: they
+//! ack with `configure_error` and let the parent decide.
 
 use std::collections::VecDeque;
-use std::ffi::CString;
 use std::fmt::Display;
-use std::io::BufRead;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{mpsc, Arc, Mutex, Once};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use prisc_obs::audio::AudioInfo;
@@ -22,15 +20,17 @@ use prisc_obs::encoder::ObsEncoder;
 use prisc_obs::output::ObsOutput;
 use prisc_obs::scene::{ObsScene, ObsSceneItem};
 use prisc_obs::signal::SignalConnection;
-use prisc_obs::source::ObsSource;
+use prisc_obs::source::{self, ObsSource};
 use prisc_obs::video::VideoInfo;
 use prisc_obs::volmeter::ObsVolmeter;
+use prisc_ipc::catalog::{recorder as wire, ErrorCode};
 
 use crate::cli::{Cli, MAX_AUDIO_SOURCES};
-use crate::commands::{self, Command};
+use crate::commands::Command;
 use crate::encoder_config::{self, EncoderConfig, AUDIO_SAMPLE_RATE};
 use crate::frame_clock::{FrameClock, FrameClockCallback};
 use crate::input_capture::InputCapture;
+use crate::pause_gate::{PauseGate, PAUSE_RETRY_INTERVAL};
 use crate::platform::{self, DisplayCaptureMode};
 use crate::region::{self, Rect, RegionPlan};
 use crate::settings::Settings;
@@ -48,6 +48,13 @@ const STOP_WARN_INTERVAL: Duration = Duration::from_secs(10);
 /// [`Recorder::wait_for_flush`]). Generous: mp4_output's buffered serializer
 /// can hold up to 256 MiB that still needs to reach a possibly slow disk.
 const FLUSH_DEADLINE: Duration = Duration::from_secs(30);
+
+// The parent waits the catalog's QUIT_GRACE between `quit` and a kill, so it
+// must cover this process's own longest legitimate stop path: the stop signal,
+// then the mp4 flush, plus 5 s (HELPER_PROTOCOL.md §4.1).
+const _: () = assert!(
+    wire::QUIT_GRACE.as_millis() >= STOP_DEADLINE.as_millis() + FLUSH_DEADLINE.as_millis() + 5000
+);
 
 /// How long [`DisplayCaptureMode::Picker`] waits for the user to choose a
 /// screen or window in the desktop portal's dialog. The portal itself never
@@ -70,16 +77,18 @@ const PICKER_PLACEHOLDER_CANVAS: (u32, u32) = (1280, 720);
 /// retrieving pipewire fd").
 const PORTAL_FAILURE_LINES: &[&str] = &["denied or cancelled by user", "[pipewire] Error"];
 
+/// `done.message` for a recording cancelled before its output started.
+const CANCELLED_MESSAGE: &str = "Cancelled before recording started";
+
+/// A setup failure: fatal `error{code:"init_failed"}`, exit 1.
 fn fail(msg: impl Display) -> ! {
-    eprintln!("Fatal: {msg}");
-    platform::exit_process(1)
+    status::out().fatal(ErrorCode::InitFailed, msg)
 }
 
-/// §1.1 argument validations exit 2 (§1.4), distinguishing caller bugs from
-/// recording/init failures for clients that key off the exit code.
+/// §1.1 argument validations: fatal `error{code:"usage"}`, exit 2, so the
+/// parent can tell its own bad arguments apart from a recording failure.
 fn fail_args(msg: impl Display) -> ! {
-    eprintln!("Fatal: {msg}");
-    platform::exit_process(2)
+    status::out().fatal(ErrorCode::Usage, msg)
 }
 
 /// Creates a volmeter on `source` whose callback stores the latest
@@ -236,7 +245,7 @@ pub struct Recorder {
     // is by name), so this placement costs nothing.
     /// `--input-capture`: JSONL sidecar of cursor/mouse/key state (hooks +
     /// tick sampler + writer thread). Session-fixed; `configure` never touches
-    /// it. Every exit path must `close()` it before `emit_stopped_recording`.
+    /// it. Every exit path must `close()` it before the final `done`.
     input_capture: Option<InputCapture>,
     /// `--window-capture`: JSONL sidecar of per-window geometry relative to
     /// the capture region (tick clock + poll thread). Session-fixed like
@@ -314,7 +323,12 @@ impl Recorder {
     /// be registered before `obs_reset_video` (graphics init loads
     /// `default.effect` etc. through `obs_find_data_file`, whose built-in
     /// fallback is CWD-relative and resolves nowhere in our layout).
-    pub fn new(cli: &Cli, mut settings: Settings) -> Recorder {
+    pub fn new(
+        cli: &Cli,
+        mut settings: Settings,
+        cmd_tx: mpsc::Sender<Command>,
+        cmd_rx: mpsc::Receiver<Command>,
+    ) -> Recorder {
         // Effective webcam device: --webcam wins (and pins it for the process
         // lifetime); otherwise the settings file's `webcam_device` ("" = none).
         let multi_track = cli.multi_track;
@@ -359,7 +373,9 @@ impl Recorder {
 
         // 1. Log/crash handlers were installed first thing in main (stdout must
         //    stay protocol-only from the first libobs line).
-        platform::init_process();
+        if let Err(e) = platform::init_process() {
+            fail(e);
+        }
         let context = match ObsContext::new("en-US") {
             Ok(c) => c,
             Err(e) => fail(format_args!("Failed to initialize OBS: {e}")),
@@ -485,12 +501,8 @@ impl Recorder {
                                bin:  {}\n  module data: {}",
                               paths.module_bin, paths.module_data));
         }
-        // NOT obs_source_create != null: libobs creates a placeholder source for
-        // unknown ids; get_display_name returns null exactly when unregistered.
-        let display_capture_c = CString::new(platform::display_capture_id()).unwrap();
-        let display_name =
-            unsafe { prisc_obs_sys::obs_source_get_display_name(display_capture_c.as_ptr()) };
-        if display_name.is_null() && picker {
+        let display_capture_registered = source::is_registered(platform::display_capture_id());
+        if !display_capture_registered && picker {
             // linux-pipewire registers the portal source only after asking
             // xdg-desktop-portal which capture types it offers; no answer (no
             // session bus, no portal, no ScreenCast backend) means no source.
@@ -505,7 +517,7 @@ impl Recorder {
                 paths.module_data
             ));
         }
-        if display_name.is_null() {
+        if !display_capture_registered {
             fail(format_args!(
                 "Display capture source '{}' is not registered — the capture plugin failed to \
                                load.\n  module bin:  {}\n  module data: {}",
@@ -516,17 +528,16 @@ impl Recorder {
         }
         // Same registration check for the webcam source, only when requested
         // (the "test" pseudo-device uses color_source from image-source).
-        if matches!(webcam_device.as_deref(), Some(id) if id != webcam::TEST_DEVICE_ID) {
-            let webcam_c = CString::new(platform::WEBCAM_SOURCE_ID).unwrap();
-            if unsafe { prisc_obs_sys::obs_source_get_display_name(webcam_c.as_ptr()) }.is_null() {
-                fail(format_args!(
-                    "Webcam source '{}' is not registered — the camera capture plugin failed \
-                     to load.\n  module bin:  {}\n  module data: {}",
-                    platform::WEBCAM_SOURCE_ID,
-                    paths.module_bin,
-                    paths.module_data
-                ));
-            }
+        if matches!(webcam_device.as_deref(), Some(id) if id != webcam::TEST_DEVICE_ID)
+            && !source::is_registered(platform::WEBCAM_SOURCE_ID)
+        {
+            fail(format_args!(
+                "Webcam source '{}' is not registered: the camera capture plugin failed \
+                 to load.\n  module bin:  {}\n  module data: {}",
+                platform::WEBCAM_SOURCE_ID,
+                paths.module_bin,
+                paths.module_data
+            ));
         }
 
         // 7. Scene: one display-capture item per intersected monitor, offset
@@ -559,9 +570,6 @@ impl Recorder {
             scene_items.push(scene_item);
         }
 
-        // The command channel exists before the pipeline is complete because
-        // picker mode has to honour `quit` while it waits for the user.
-        let (cmd_tx, cmd_rx) = mpsc::channel::<Command>();
         // Commands that arrived during the picker wait, replayed by `run`
         // ahead of anything newer so their order is preserved.
         let mut early_commands = VecDeque::new();
@@ -589,11 +597,8 @@ impl Recorder {
             // Active while negotiating, the same as in the finished pipeline.
             context.set_output_source_raw(0, scene.get_source());
 
-            // `quit` / Ctrl+C must work while the dialog is open, so the
-            // stdin reader and signal handler start here rather than in
-            // `run` (both are once-per-process; `run`'s calls become no-ops).
-            spawn_stdin_thread(cmd_tx.clone());
-            install_signal_handler(cmd_tx.clone());
+            // `quit` / Ctrl+C work while the dialog is open: `main` started
+            // the stdin reader and the quit path before construction.
             let (w, h) = wait_for_picker(&source, &portal_failure, &cmd_rx, &mut early_commands);
             drop(portal_failure);
 
@@ -792,7 +797,10 @@ impl Recorder {
                     &monitors,
                     plan.canvas_scale,
                     plan.canvas,
-                    output.as_ptr(),
+                    // SAFETY: `Recorder` declares `input_capture` above
+                    // `output`, so the sidecar (and its tick callback and
+                    // writer, which hold this handle) drops first.
+                    unsafe { output.handle() },
                     frame_clock.clone(),
                 ) {
                     Ok(ic) => Some(ic),
@@ -812,7 +820,10 @@ impl Recorder {
                     capture_region,
                     plan.canvas_scale,
                     plan.canvas,
-                    output.as_ptr(),
+                    // SAFETY: as for the input capture: `window_capture` is
+                    // declared above `output` and joins its poll thread on
+                    // drop.
+                    unsafe { output.handle() },
                     frame_clock.clone(),
                 ) {
                     Ok(wc) => Some(wc),
@@ -877,17 +888,21 @@ impl Recorder {
         }
     }
 
-    /// The command loop. Never returns — every path ends in
-    /// `platform::exit_process` (§1.4).
+    /// The command loop. Never returns: every path ends in
+    /// `prisc_ipc::lifetime::exit` (§1.4).
+    ///
+    /// Every `start` and `pause` gets exactly one reply (HELPER_PROTOCOL.md
+    /// §4.1): the state it put the recording in (re-emitted when it was there
+    /// already), `rejected` when it cannot apply yet, `failed` when libobs
+    /// refuses. The one exception is a `start` while the first start is still
+    /// pending, which the pending `started_recording` answers.
     pub fn run(&mut self, pause: bool) -> ! {
-        status::emit_simple("initialized");
-
-        spawn_stdin_thread(self.cmd_tx.clone());
-        install_signal_handler(self.cmd_tx.clone());
+        status::out().emit(&wire::Event::Initialized {});
 
         let mut start_requested = false;
         let mut started = false;
         let mut paused = false;
+        let mut pause_gate = PauseGate::default();
         let mut clock: Option<Arc<RecordingClock>> = None;
         let status_stop = Arc::new(AtomicBool::new(false));
         let mut status_handle: Option<std::thread::JoinHandle<()>> = None;
@@ -917,57 +932,56 @@ impl Recorder {
             let cmd = match next {
                 Ok(c) => c,
                 // Unreachable in practice (self holds a sender), but never spin.
-                Err(_) => fail("Command channel closed unexpectedly"),
+                Err(_) => status::out().fatal(ErrorCode::Failed, "Command channel closed unexpectedly"),
             };
             match cmd {
                 Command::Start => {
                     if !start_requested {
                         self.start_output(&status_stop, &mut levels_handle);
                         start_requested = true;
-                    } else if started && paused {
-                        if self.output.pause(false) {
-                            paused = false;
-                            if let Some(ref c) = clock {
-                                c.resume();
-                            }
-                            status::emit_simple("recording_resumed");
-                        } else {
-                            eprintln!("Failed to unpause output");
+                    } else if !started {
+                        // The first start is still pending: the coming
+                        // `started_recording` answers this one too.
+                    } else if !paused {
+                        status::out().emit(&wire::Event::RecordingResumed {});
+                    } else if unpause_output(&self.output, &mut pause_gate) {
+                        paused = false;
+                        if let Some(ref c) = clock {
+                            c.resume();
                         }
+                        status::out().emit(&wire::Event::RecordingResumed {});
+                    } else {
+                        status::out().error(ErrorCode::Failed, "libobs refused to unpause the output", false);
                     }
-                    // Otherwise (already started / start pending): ignored.
                 }
                 Command::Pause => {
-                    if started && !paused {
-                        if self.output.pause(true) {
-                            paused = true;
-                            if let Some(ref c) = clock {
-                                c.pause();
-                            }
-                            status::emit_simple("recording_paused");
-                        } else {
-                            eprintln!("Failed to pause output");
+                    if !started {
+                        status::out().error(ErrorCode::Rejected, "the recording has not started yet", false);
+                    } else if paused {
+                        status::out().emit(&wire::Event::RecordingPaused {});
+                    } else if pause_output(&self.output, &mut pause_gate) {
+                        paused = true;
+                        if let Some(ref c) = clock {
+                            c.pause();
                         }
+                        status::out().emit(&wire::Event::RecordingPaused {});
+                    } else {
+                        status::out().error(ErrorCode::Failed, "libobs refused to pause the output", false);
                     }
+                }
+                Command::Malformed(reason) => {
+                    status::out().error(ErrorCode::BadCommand, reason, false)
                 }
                 Command::OutputStarted => {
                     if !started {
                         started = true;
                         // Sidecars were armed before output.start(), so their
                         // startup observations already cover encoder activation.
-                        let mut started_msg = serde_json::json!({
-                            "type": "started_recording",
-                            "tracks": self.tracks_json(),
+                        status::out().emit(&wire::Event::StartedRecording {
+                            tracks: self.tracks(),
+                            input_capture: self.input_capture_path(),
+                            window_capture: self.window_capture_path(),
                         });
-                        if let Some(ref ic) = self.input_capture {
-                            started_msg["input_capture"] =
-                                serde_json::json!(ic.path().to_string_lossy());
-                        }
-                        if let Some(ref wc) = self.window_capture {
-                            started_msg["window_capture"] =
-                                serde_json::json!(wc.path().to_string_lossy());
-                        }
-                        status::emit_json(started_msg);
                         let c = Arc::new(RecordingClock::new());
                         status_handle = Some(status::start_status_thread(
                             self.output.as_ptr(),
@@ -1003,10 +1017,11 @@ impl Recorder {
                 Command::OutputDeactivated => {}
                 Command::OutputStopped(code) => {
                     // Spontaneous stop (disk full, encoder error, …): surface it
-                    // immediately and exit — do not wait for `quit` (§1.3).
+                    // immediately and exit; do not wait for `quit` (§1.3).
                     self.finish(
                         code,
                         true,
+                        started,
                         &status_stop,
                         status_handle.take(),
                         levels_handle.take(),
@@ -1015,7 +1030,7 @@ impl Recorder {
                 Command::Quit => {
                     if !start_requested {
                         // Cancelled before recording started (§1.2). Stop the
-                        // levels thread first so stopped_recording stays last.
+                        // levels thread first so `done` stays last.
                         status_stop.store(true, Ordering::Relaxed);
                         if let Some(handle) = levels_handle.take() {
                             let _ = handle.join();
@@ -1028,23 +1043,22 @@ impl Recorder {
                         if let Some(ref wc) = self.window_capture {
                             wc.close();
                         }
-                        let mut stopped_msg = serde_json::json!({
-                            "type": "stopped_recording",
-                            "code": 0,
-                            "message": "Cancelled before recording started",
-                            "error": null,
+                        status::out().emit(&wire::Event::Done {
+                            result: wire::RecorderResult::Cancelled,
+                            code: 0,
+                            message: CANCELLED_MESSAGE.to_string(),
+                            detail: None,
+                            tracks: None,
+                            input_capture: self.input_capture_path(),
+                            window_capture: self.window_capture_path(),
                         });
-                        if let Some(ref ic) = self.input_capture {
-                            stopped_msg["input_capture"] =
-                                serde_json::json!(ic.path().to_string_lossy());
-                        }
-                        if let Some(ref wc) = self.window_capture {
-                            stopped_msg["window_capture"] =
-                                serde_json::json!(wc.path().to_string_lossy());
-                        }
-                        status::emit_json(stopped_msg);
-                        platform::exit_process(0);
+                        prisc_ipc::lifetime::exit(prisc_ipc::exit::OK);
                     }
+                    // obs_output_stop unpauses first: space it from the pause
+                    // like a resume (see pause_gate).
+                    std::thread::sleep(
+                        pause_gate.unpause_delay(prisc_obs::time::now_ns(), prisc_obs::time::frame_interval_ns()),
+                    );
                     self.output.stop();
                     let deadline = Instant::now() + STOP_DEADLINE;
                     loop {
@@ -1054,6 +1068,7 @@ impl Recorder {
                             self.finish(
                                 -99,
                                 false,
+                                started,
                                 &status_stop,
                                 status_handle.take(),
                                 levels_handle.take(),
@@ -1064,19 +1079,15 @@ impl Recorder {
                                 self.finish(
                                     code,
                                     true,
+                                    started,
                                     &status_stop,
                                     status_handle.take(),
                                     levels_handle.take(),
                                 );
                             }
-                            // An accepted configure still needs its ack (§2.3);
-                            // nothing is applied while tearing down, so the
-                            // pipeline is untouched (fatal:false).
-                            Ok(Command::Configure(_)) => status::emit_configure_error(
-                                "recorder is stopping, configure not applied",
-                                false,
-                            ),
-                            Ok(_) => {} // ignore anything else while stopping
+                            // An output that comes up only now was still
+                            // stopped before it started: `done` says cancelled.
+                            Ok(other) => answer_while_stopping(other),
                             Err(mpsc::RecvTimeoutError::Timeout) => {
                                 eprintln!("Warning: still waiting for the recording to stop...");
                             }
@@ -1084,6 +1095,7 @@ impl Recorder {
                                 self.finish(
                                     -99,
                                     false,
+                                    started,
                                     &status_stop,
                                     status_handle.take(),
                                     levels_handle.take(),
@@ -1102,7 +1114,7 @@ impl Recorder {
     fn handle_configure(&mut self, path: &str, live_only: bool) {
         let new = match Settings::load(Path::new(path)) {
             Ok(s) => s,
-            Err(e) => return status::emit_configure_error(&e, false),
+            Err(e) => return status::configure_error(&e, false),
         };
         if live_only {
             self.configure_live(new);
@@ -1134,14 +1146,14 @@ impl Recorder {
         // The output type is session-fixed, so the two multi-track-only
         // capabilities are rejected up front rather than half-applied.
         if new_webcam_device.is_some() && !self.multi_track {
-            return status::emit_configure_error(
+            return status::configure_error(
                 "`webcam_device` requires --multi-track; the recorder was started without it",
                 false,
             );
         }
         let new_audio_sources = new.speakers.len() + new.microphones.len();
         if self.multi_track && new_audio_sources > MAX_AUDIO_TRACKS {
-            return status::emit_configure_error(
+            return status::configure_error(
                 &format!(
                     "--multi-track records one audio track per device and supports at most \
                      {MAX_AUDIO_TRACKS} (got {new_audio_sources})"
@@ -1155,7 +1167,7 @@ impl Recorder {
             match build_speaker_sources(&new.speakers) {
                 Ok(b) => Some(b),
                 Err(AudioBuildError::Args(e)) | Err(AudioBuildError::Create(e)) => {
-                    return status::emit_configure_error(&e, false)
+                    return status::configure_error(&e, false)
                 }
             }
         } else {
@@ -1165,7 +1177,7 @@ impl Recorder {
             match build_mic_sources(&new.microphones) {
                 Ok(b) => Some(b),
                 Err(AudioBuildError::Args(e)) | Err(AudioBuildError::Create(e)) => {
-                    return status::emit_configure_error(&e, false)
+                    return status::configure_error(&e, false)
                 }
             }
         } else {
@@ -1180,7 +1192,7 @@ impl Recorder {
                 let plan = tracks::plan_audio_tracks(&new.speakers, &new.microphones, true);
                 match create_audio_encoders(&self.encoder_types, &plan, self.context.get_audio()) {
                     Ok(encoders) => Some((plan, encoders)),
-                    Err(e) => return status::emit_configure_error(&e, false),
+                    Err(e) => return status::configure_error(&e, false),
                 }
             } else {
                 None
@@ -1213,7 +1225,7 @@ impl Recorder {
             ) {
                 Ok(e) => Some(e),
                 Err(e) => {
-                    return status::emit_configure_error(
+                    return status::configure_error(
                         &format!("Failed to create video encoder: {e}"),
                         false,
                     )
@@ -1228,7 +1240,7 @@ impl Recorder {
         let new_tracker = if new.tracker && self.tracker.is_none() {
             match self.create_tracker(&new.tracker_color) {
                 Ok(t) => Some(t),
-                Err(e) => return status::emit_configure_error(&e, false),
+                Err(e) => return status::configure_error(&e, false),
             }
         } else {
             None
@@ -1261,7 +1273,7 @@ impl Recorder {
                 adapter: self.adapter,
             };
             if let Err(e) = self.context.reset_video(&video_info) {
-                return status::emit_configure_error(
+                return status::configure_error(
                     &format!("Failed to reset OBS video: {e}; the pipeline may be unusable"),
                     true,
                 );
@@ -1282,7 +1294,7 @@ impl Recorder {
                         // requested config, so the parent should respawn.
                         self.webcam_device = None;
                         self.settings.webcam_device = String::new();
-                        return status::emit_configure_error(
+                        return status::configure_error(
                             &format!("Failed to rebuild the webcam chain: {e}"),
                             true,
                         );
@@ -1308,7 +1320,7 @@ impl Recorder {
                         // match the requested config — parent should respawn.
                         self.webcam_device = None;
                         self.settings.webcam_device = String::new();
-                        return status::emit_configure_error(
+                        return status::configure_error(
                             &format!("Failed to build the webcam chain: {e}"),
                             true,
                         );
@@ -1346,7 +1358,7 @@ impl Recorder {
         self.webcam_device = new_webcam_device;
         new.webcam_device = self.webcam_device.clone().unwrap_or_default();
         self.settings = new;
-        status::emit_configure_applied(&[]);
+        status::configure_applied(&[]);
     }
 
     /// Post-start configure: apply only the always-live keys and report every
@@ -1358,7 +1370,7 @@ impl Recorder {
         if new.tracker && self.tracker.is_none() {
             match self.create_tracker(&new.tracker_color) {
                 Ok(t) => self.tracker = Some(t),
-                Err(e) => return status::emit_configure_error(&e, false),
+                Err(e) => return status::configure_error(&e, false),
             }
         }
         self.apply_live_keys(&new);
@@ -1402,7 +1414,7 @@ impl Recorder {
         self.settings.tracker = new.tracker;
         self.settings.tracker_color = new.tracker_color;
         self.settings.speaker_volume_compensation = new.speaker_volume_compensation;
-        status::emit_configure_applied(&ignored);
+        status::configure_applied(&ignored);
     }
 
     /// Applies the always-live keys (cursor, tracker off, tracker color,
@@ -1437,48 +1449,56 @@ impl Recorder {
         }
     }
 
-    /// Per-track stream map for `started_recording` / `stopped_recording`:
-    /// `{"screen":{"index":0,..},"webcam":{..},"audio":[..]}`.
+    /// Per-track stream map for `started_recording` / `done`.
     ///
-    /// The `webcam` entry is ABSENT (not null) without a webcam track —
-    /// consumers treat a missing key as "no such track". Screen dims are the
-    /// encoded output size (canvas after the max_width / max_height downscale
-    /// — the same computation `reset_video` was given); webcam dims are its
-    /// track-1 mix canvas. `index` is per media type (video / audio),
-    /// matching the container's per-type stream numbering.
+    /// `webcam` is absent without a webcam track. Screen dims are the encoded
+    /// output size (canvas after the max_width / max_height downscale, the
+    /// same computation `reset_video` was given); webcam dims are its track-1
+    /// mix canvas. `index` is per media type (video / audio), matching the
+    /// container's per-type stream numbering.
     ///
     /// `audio` always has at least one entry: single-track recordings report
     /// their one `"mixed"` track, multi-track ones a `"speaker"` /
     /// `"microphone"` entry per device.
-    fn tracks_json(&self) -> serde_json::Value {
+    fn tracks(&self) -> wire::Tracks {
         let (out_w, out_h) = region::compute_output_size(
             self.canvas,
             self.settings.max_width,
             self.settings.max_height,
         );
-        let audio: Vec<serde_json::Value> = self
-            .audio_tracks
-            .iter()
-            .enumerate()
-            .map(|(idx, track)| {
-                serde_json::json!({
-                    "index": idx,
-                    "kind": track.kind.as_str(),
-                    "device": track.device,
-                    "name": track.name,
+        wire::Tracks {
+            screen: wire::VideoTrack { index: 0, width: out_w, height: out_h },
+            webcam: self.webcam.as_ref().map(|w| wire::VideoTrack {
+                index: 1,
+                width: w.canvas.0,
+                height: w.canvas.1,
+            }),
+            audio: self
+                .audio_tracks
+                .iter()
+                .enumerate()
+                .map(|(idx, track)| wire::AudioTrack {
+                    index: idx as u32,
+                    kind: track.kind,
+                    device: track.device.clone(),
+                    name: track.name.clone(),
                 })
-            })
-            .collect();
-        let mut tracks = serde_json::json!({
-            "screen": { "index": 0, "width": out_w, "height": out_h },
-            "audio": audio,
-        });
-        if let Some(ref w) = self.webcam {
-            tracks["webcam"] = serde_json::json!({
-                "index": 1, "width": w.canvas.0, "height": w.canvas.1,
-            });
+                .collect(),
         }
-        tracks
+    }
+
+    /// The `--input-capture` sidecar's path, for `started_recording` / `done`.
+    fn input_capture_path(&self) -> Option<String> {
+        self.input_capture
+            .as_ref()
+            .map(|ic| ic.path().to_string_lossy().into_owned())
+    }
+
+    /// The `--window-capture` sidecar's path, for `started_recording` / `done`.
+    fn window_capture_path(&self) -> Option<String> {
+        self.window_capture
+            .as_ref()
+            .map(|wc| wc.path().to_string_lossy().into_owned())
     }
 
     /// Creates the click tracker. Adding it to the scene now — with the
@@ -1554,9 +1574,9 @@ impl Recorder {
         self.audio_tracks = plan;
     }
 
-    /// Starts the output; on failure emits `stopped_recording` code -4 with the
+    /// Starts the output; on failure emits `done{failed}` code -4 with the
     /// output's last error and exits 1 (joining the levels thread first so
-    /// stopped_recording stays the last JSON line).
+    /// `done` stays the last protocol line).
     fn start_output(
         &self,
         status_stop: &Arc<AtomicBool>,
@@ -1583,15 +1603,17 @@ impl Recorder {
                 wc.close();
             }
             // No tracks object: nothing was ever recorded. The sidecar paths
-            // still report (the files exist — the parent may want them gone).
-            status::emit_stopped_recording(
-                -4,
-                self.output.get_last_error(),
-                None,
-                self.input_capture.as_ref().map(|ic| ic.path()),
-                self.window_capture.as_ref().map(|wc| wc.path()),
-            );
-            platform::exit_process(1);
+            // still report (the files exist, and the parent may want them gone).
+            status::out().emit(&wire::Event::Done {
+                result: wire::RecorderResult::Failed,
+                code: -4,
+                message: status::stop_code_message(-4),
+                detail: self.output.get_last_error(),
+                tracks: None,
+                input_capture: self.input_capture_path(),
+                window_capture: self.window_capture_path(),
+            });
+            prisc_ipc::lifetime::exit(prisc_ipc::exit::FAILED);
         }
     }
 
@@ -1602,8 +1624,10 @@ impl Recorder {
         }
     }
 
-    /// Emits the final `stopped_recording` line and exits (code 0 → exit 0,
-    /// anything else → exit 1). Always the last JSON line before exit.
+    /// Emits the final `done` line and exits. Always the last protocol line.
+    ///
+    /// `result` is `failed` for any non-zero stop code (exit 1), otherwise
+    /// `stopped`, or `cancelled` when the output never started (exit 0).
     ///
     /// `wait_flush` is true when the output's "stop" signal was actually
     /// received: the file is not necessarily flushed yet at that point, so
@@ -1614,6 +1638,7 @@ impl Recorder {
         &self,
         code: i64,
         wait_flush: bool,
+        started: bool,
         status_stop: &Arc<AtomicBool>,
         status_handle: Option<std::thread::JoinHandle<()>>,
         levels_handle: Option<std::thread::JoinHandle<()>>,
@@ -1624,32 +1649,35 @@ impl Recorder {
         status_stop.store(true, Ordering::Relaxed);
         for handle in [status_handle, levels_handle].into_iter().flatten() {
             // ≤1 s: guarantees no status/levels line can print after
-            // stopped_recording.
+            // `done`.
             let _ = handle.join();
         }
         // Exit paths skip Drop: disarm the sidecar (ticks and hooks outlive
-        // the output — no rows may land after the final flush) and get its
-        // tail on disk before the parent reads stopped_recording and opens
-        // the file.
+        // the output, so no rows may land after the final flush) and get its
+        // tail on disk before the parent reads `done` and opens the file.
         if let Some(ref ic) = self.input_capture {
             ic.close();
         }
         if let Some(ref wc) = self.window_capture {
             wc.close();
         }
-        let error = if code == 0 {
-            None
+        let (result, detail, exit) = if code != 0 {
+            (wire::RecorderResult::Failed, self.output.get_last_error(), prisc_ipc::exit::FAILED)
+        } else if started {
+            (wire::RecorderResult::Stopped, None, prisc_ipc::exit::OK)
         } else {
-            self.output.get_last_error()
+            (wire::RecorderResult::Cancelled, None, prisc_ipc::exit::OK)
         };
-        status::emit_stopped_recording(
+        status::out().emit(&wire::Event::Done {
+            result,
             code,
-            error,
-            Some(self.tracks_json()),
-            self.input_capture.as_ref().map(|ic| ic.path()),
-            self.window_capture.as_ref().map(|wc| wc.path()),
-        );
-        platform::exit_process(if code == 0 { 0 } else { 1 })
+            message: status::stop_code_message(code),
+            detail,
+            tracks: Some(self.tracks()),
+            input_capture: self.input_capture_path(),
+            window_capture: self.window_capture_path(),
+        });
+        prisc_ipc::lifetime::exit(exit)
     }
 
     /// Blocks (bounded by [`FLUSH_DEADLINE`]) until the output's "deactivate"
@@ -1675,13 +1703,7 @@ impl Recorder {
             }
             match self.cmd_rx.recv_timeout(remaining.min(STOP_WARN_INTERVAL)) {
                 Ok(Command::OutputDeactivated) => return,
-                // An accepted configure still needs its ack (§2.3); nothing is
-                // applied while tearing down (fatal:false).
-                Ok(Command::Configure(_)) => status::emit_configure_error(
-                    "recorder is stopping, configure not applied",
-                    false,
-                ),
-                Ok(_) => {} // ignore anything else while flushing
+                Ok(other) => answer_while_stopping(other),
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     eprintln!("Warning: still waiting for the recording file to be finalized...");
                 }
@@ -1698,11 +1720,10 @@ impl Recorder {
 ///
 /// Ends the process instead of returning when the dialog was cancelled or the
 /// portal failed (seen through `portal_failure`, since the plugin reports
-/// that only as a log line), on [`PICKER_TIMEOUT`], or on `quit` — which is
-/// answered exactly like a `quit` before `start` in `run`: a
-/// `stopped_recording` "Cancelled before recording started", exit 0. Any
-/// other command is kept in `early` for `run` to handle once the pipeline
-/// exists.
+/// that only as a log line), on [`PICKER_TIMEOUT`], or on `quit`, which is
+/// answered exactly like a `quit` before `start` in `run`: `done{cancelled}`,
+/// exit 0. Any other command is kept in `early` for `run` to handle once the
+/// pipeline exists.
 fn wait_for_picker(
     source: &ObsSource,
     portal_failure: &prisc_obs::log::LogWatch,
@@ -1733,123 +1754,63 @@ fn wait_for_picker(
         }
         match cmd_rx.recv_timeout(PICKER_POLL_INTERVAL) {
             Ok(Command::Quit) => {
-                status::emit_json(serde_json::json!({
-                    "type": "stopped_recording",
-                    "code": 0,
-                    "message": "Cancelled before recording started",
-                    "error": null,
-                }));
-                platform::exit_process(0);
+                status::out().emit(&wire::Event::Done {
+                    result: wire::RecorderResult::Cancelled,
+                    code: 0,
+                    message: CANCELLED_MESSAGE.to_string(),
+                    detail: None,
+                    tracks: None,
+                    input_capture: None,
+                    window_capture: None,
+                });
+                prisc_ipc::lifetime::exit(prisc_ipc::exit::OK);
             }
             Ok(other) => early.push_back(other),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             // Unreachable in practice (the caller holds a sender).
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                fail("Command channel closed unexpectedly")
+                status::out().fatal(ErrorCode::Failed, "Command channel closed unexpectedly")
             }
         }
     }
 }
 
-/// stdin reader: line-oriented commands; EOF is equivalent to `quit` (the
-/// orphan-safety mechanism — a dead parent closes the pipe).
-///
-/// Once per process: picker mode starts it during construction, and `run`'s
-/// call is then a no-op — two readers would split stdin lines between them.
-fn spawn_stdin_thread(tx: mpsc::Sender<Command>) {
-    static STARTED: Once = Once::new();
-    STARTED.call_once(move || {
-        std::thread::spawn(move || {
-            let stdin = std::io::stdin();
-            let mut lines = stdin.lock().lines();
-            loop {
-                match lines.next() {
-                    Some(Ok(line)) => {
-                        if line.trim().is_empty() {
-                            continue;
-                        }
-                        match commands::parse_command(&line) {
-                            Some(cmd) => {
-                                if tx.send(cmd).is_err() {
-                                    break;
-                                }
-                            }
-                            None => eprintln!("Ignoring unknown command: {}", line.trim()),
-                        }
-                    }
-                    // EOF or read error == quit.
-                    _ => {
-                        let _ = tx.send(Command::Quit);
-                        break;
-                    }
-                }
-            }
-        });
-    });
-}
-
-/// CTRL_C/CTRL_BREAK/CTRL_CLOSE (Windows) / SIGINT+SIGTERM (POSIX) behave
-/// exactly like stdin `quit` (§1.5). Once per process, like
-/// [`spawn_stdin_thread`].
-///
-/// Windows uses a directly-registered `SetConsoleCtrlHandler` routine, NOT
-/// the ctrlc crate: for CTRL_CLOSE/LOGOFF/SHUTDOWN the OS grace period
-/// lasts only while the HandlerRoutine itself is executing — returning
-/// from it terminates the process immediately. ctrlc's registered routine
-/// returns in microseconds (it only signals a worker thread), which would
-/// forfeit the grace window and leave the mp4 unflushed. Our routine sends
-/// `quit` and then blocks; the stop sequence terminates the process via
-/// `exit_process` underneath it.
-#[cfg(windows)]
-fn install_signal_handler(tx: mpsc::Sender<Command>) {
-    static INSTALLED: Once = Once::new();
-    INSTALLED.call_once(move || console_ctrl::install(tx));
-}
-
-#[cfg(not(windows))]
-fn install_signal_handler(tx: mpsc::Sender<Command>) {
-    static INSTALLED: Once = Once::new();
-    INSTALLED.call_once(move || {
-        let result = ctrlc::set_handler(move || {
-            let _ = tx.send(Command::Quit);
-            loop {
-                std::thread::sleep(Duration::from_secs(60));
-            }
-        });
-        if let Err(e) = result {
-            eprintln!("Warning: failed to install console signal handler: {e}");
+/// Pause the output, retrying while libobs refuses because it has not yet
+/// consumed a recent unpause (see [`crate::pause_gate`]).
+fn pause_output(output: &ObsOutput, gate: &mut PauseGate) -> bool {
+    loop {
+        if output.pause(true) {
+            gate.paused(prisc_obs::time::now_ns());
+            return true;
         }
-    });
-}
-
-#[cfg(windows)]
-mod console_ctrl {
-    use std::sync::{mpsc, OnceLock};
-    use std::time::Duration;
-
-    use windows::core::BOOL;
-    use windows::Win32::System::Console::SetConsoleCtrlHandler;
-
-    use crate::commands::Command;
-
-    static QUIT_TX: OnceLock<mpsc::Sender<Command>> = OnceLock::new();
-
-    /// Runs on an OS-injected thread. Never returns: for CTRL_CLOSE the grace
-    /// period (~5 s) ends the moment this routine returns, so it blocks while
-    /// the command loop stops the output and exits the process (§1.5).
-    unsafe extern "system" fn handler(_ctrl_type: u32) -> BOOL {
-        if let Some(tx) = QUIT_TX.get() {
-            let _ = tx.send(Command::Quit);
+        if !gate.retry_refused_pause(prisc_obs::time::now_ns()) {
+            return false;
         }
-        loop {
-            std::thread::sleep(Duration::from_secs(60));
-        }
+        std::thread::sleep(PAUSE_RETRY_INTERVAL);
     }
+}
 
-    pub fn install(tx: mpsc::Sender<Command>) {
-        let _ = QUIT_TX.set(tx);
-        if unsafe { SetConsoleCtrlHandler(Some(handler), true) }.is_err() {
-            eprintln!("Warning: failed to install console signal handler");
-        }
+/// Unpause the output, first waiting out the minimum span after the pause so
+/// libobs's audio pause state clears (see [`crate::pause_gate`]).
+fn unpause_output(output: &ObsOutput, gate: &mut PauseGate) -> bool {
+    std::thread::sleep(gate.unpause_delay(prisc_obs::time::now_ns(), prisc_obs::time::frame_interval_ns()));
+    if !output.pause(false) {
+        return false;
+    }
+    gate.unpaused(prisc_obs::time::now_ns());
+    true
+}
+
+/// Answers a command that arrived while the recorder is stopping or flushing:
+/// nothing is applied any more, but every command that promises a reply still
+/// gets one (§4.1), in arrival order.
+fn answer_while_stopping(cmd: Command) {
+    const STOPPING: &str = "the recorder is stopping";
+    match cmd {
+        Command::Start | Command::Pause => status::out().error(ErrorCode::Rejected, STOPPING, false),
+        // The pipeline is untouched, so no restart is needed.
+        Command::Configure(_) => status::configure_error("recorder is stopping, configure not applied", false),
+        Command::Malformed(reason) => status::out().error(ErrorCode::BadCommand, reason, false),
+        _ => {}
     }
 }

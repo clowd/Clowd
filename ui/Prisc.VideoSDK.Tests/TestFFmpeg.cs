@@ -1,6 +1,4 @@
-using System;
-using System.IO;
-using Prisc.UI;
+using Prisc.Ipc;
 using Prisc.VideoSDK;
 
 namespace Prisc.VideoSDK.Tests
@@ -9,48 +7,21 @@ namespace Prisc.VideoSDK.Tests
     /// Finds the FFmpeg natives for the suites that need real decoding, encoding or probing, and
     /// is the single place that decides whether those tests run or skip.
     ///
-    /// It asks <see cref="ObsBinaryLocator.ResolveFFmpegDirectory"/> — the app's own resolver — so
-    /// a checkout where the editor runs is a checkout where these tests run. That matters more
-    /// than it sounds: this is the gate on roughly a hundred of them (every encoder, render,
-    /// composition-player, filmstrip, waveform and AI-sidecar test), and when the probe and the
-    /// app disagree the whole lot skips green while nobody notices. A probe that only knew the
-    /// Windows and Linux library names is exactly how they came to skip on macOS.
+    /// It asks <see cref="FFmpegLoader.FindBesideRecorder"/>, the app's own resolver, so a checkout
+    /// where the editor runs is a checkout where these tests run. That matters more than it sounds:
+    /// this is the gate on roughly a hundred of them (every encoder, render, composition-player,
+    /// filmstrip, waveform and AI-sidecar test), and when the probe and the app disagree the whole
+    /// lot skips green while nobody notices.
     /// </summary>
     internal static class TestFFmpeg
     {
-        /// <summary>True when the natives were found and the bindings initialized. Idempotent —
+        /// <summary>True when the natives were found and the bindings initialized. Idempotent:
         /// FFmpegLoader caches the first outcome for the process.</summary>
-        public static bool Available => FFmpegLoader.TryInitialize(FindDirectory);
-
-        private static string FindDirectory()
-        {
-            // the dev layout: the Prisc repository's own cargo target tree (built by `cargo rec`).
-            int major = FFmpeg.AutoGen.Abstractions.ffmpeg.LIBAVCODEC_VERSION_MAJOR;
-            string probe = OperatingSystem.IsWindows() ? $"avcodec-{major}.dll"
-                : OperatingSystem.IsMacOS() ? $"libavcodec.{major}.dylib"
-                : $"libavcodec.so.{major}";
-
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir != null)
-            {
-                if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
-                {
-                    foreach (var cfg in new[] { "release", "debug" })
-                    {
-                        var candidate = Path.Combine(dir.FullName, "target", cfg);
-                        if (File.Exists(Path.Combine(candidate, probe)))
-                            return candidate;
-                    }
-                }
-                dir = dir.Parent;
-            }
-
-            return ObsBinaryLocator.ResolveFFmpegDirectory();
-        }
+        public static bool Available => FFmpegLoader.TryInitialize(FFmpegLoader.FindBesideRecorder);
 
         /// <summary>The message a skipped test explains itself with.</summary>
         public static string SkipReason =>
-            $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or " +
-            $"{ObsBinaryLocator.EnvVarName}, or run `cargo rec` in the Prisc repository): {FFmpegLoader.FailureReason}";
+            $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or {HelperLocator.EnvVarName}, " +
+            $"or run `cargo rec` in the Prisc repository): {FFmpegLoader.FailureReason}";
     }
 }

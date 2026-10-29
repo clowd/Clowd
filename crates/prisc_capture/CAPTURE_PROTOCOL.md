@@ -4,7 +4,15 @@ The contract between the Prisc.Ui shell and the Rust capture processes.
 
 The capture overlay `prisc_capture` runs **one-shot**: the shell spawns one
 process per capture with CLI flags; the process shows the overlay, writes its
-result into `--session-dir`, and exits. Completion signal = process exit.
+result into `--session-dir`, emits `done`, and exits. Completion signal = the
+terminal `done`, then process exit.
+
+**Stdio is not specified here.** Every process in this document speaks Prisc's
+helper protocol, [`HELPER_PROTOCOL.md`](HELPER_PROTOCOL.md): `hello`, JSON-lines
+events and commands, `quit`, the error and exit codes (§4.5 for the capturer,
+§4.4 for the scrolling driver, §4.6 for `prisc_ai`). This document covers
+everything that is not stdio: CLI flags, the session-directory files,
+`session.json`, the OCR request and response, and what the events mean.
 
 A **separate binary**, `prisc_scroll_driver` (§2), carries out the second half
 of a scrolling capture the overlay already set up. It is not a capture overlay
@@ -23,11 +31,12 @@ documented here because it is the third process in the same family and shares
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
 files), `crates/prisc_scroll_driver/src/drive.rs` (scrolling-capture driver),
 `src/ocr/client.rs` + `crates/prisc_ai/src/ocr.rs` (recognizer), and
-`prisc_rust_core` for what the binaries must agree on — the `session.json`
-shape (`session.rs`), the recognition contract (`ocr.rs`), the coordinate space
-(`geometry.rs`) and the exit codes (`exit.rs`). C# counterparts:
+`prisc_rust_core` for what the binaries must agree on: the `session.json`
+shape (`session.rs`), the recognition contract (`ocr.rs`) and the coordinate
+space (`geometry.rs`). The protocol messages and exit codes are
+`crates/prisc_ipc`. C# counterparts:
 `ScreenCaptureService.cs` (spawn + session dispatch), `Scroll/ScrollDriver.cs`
-+ `Scroll/ScrollDriverProtocol.cs` (driver). There is no C# counterpart for
+(driver; messages in `crates/prisc_ipc`). There is no C# counterpart for
 §3 by design.
 
 ## 1. The capture overlay
@@ -71,21 +80,18 @@ Standby mode intentionally reverses creation ownership. With
 repeatable, one occurrence per gesture in the action's list order (less any
 combination the OS reserves for itself, which the shell never binds), and zero
 occurrences means that action has no hotkey (hotkeys take effect when the
-first settings snapshot arrives — see below). The capturer prints
-`PRISC_STANDBY_READY` and waits event-driven without initializing capture/GPU
+first settings snapshot arrives; see below). The capturer emits `ready` and
+waits event-driven without initializing capture/GPU
 resources (the main loop is fully blocked, and so is the Windows hook thread
 between key events; on macOS the hook thread and a permission watcher wake
 about once a second for tap-health and Accessibility checks, and a hook that
 is down is retried every 2 s while a gesture needs it — see below), then
-creates a unique child directory and prints `PRISC_SESSION <absolute-path>` when a hotkey fires, followed by one
-ordinary capture cycle. stdout carries ONLY protocol lines — the log goes to
-stderr (and the session's `capture.log`), because a log record spliced into
-the protocol stream could corrupt a line the shell must not miss. Both pipes
-and stdin are UTF-8: session paths round-trip through them, and the shell pins
-the encodings explicitly because .NET would otherwise default them to the OEM
-codepage. Redirected stdin is a lifetime lease: EOF means the shell is gone
-and the waiting capturer exits without starting a capture (mid-capture, it
-exits immediately).
+creates a unique child directory and emits `session` with its absolute path
+when a hotkey fires, followed by one ordinary capture cycle. The log goes to
+stderr and the session's `capture.log`. Stdin is a lifetime lease (the quit
+path of HELPER_PROTOCOL.md §3.3): a quit while waiting ends with
+`done{result:"stopped"}` without starting a capture, and a quit mid-capture
+closes the overlay without writing the session and ends the same way.
 
 The capturer owns the screenshot hotkeys, via a low-level keyboard hook
 (the prisc_hotkeys crate: WH_KEYBOARD_LL on Windows, a CGEventTap on macOS —
@@ -105,8 +111,9 @@ and a key with no code on this OS surfaces as an explicit per-hotkey error.
 A hook that cannot start, or dies later, is fatal only on Windows, where the
 failure (`HookFailed`, the hook's message loop failing, or a silently
 removed hook that could not be re-installed) is specific to
-this process: it exits with code 1 — a death noticed under an open overlay
-waits until that capture has finished — so the shell's crash accounting
+this process: it ends with a fatal `error` (`init_failed` at startup,
+`failed` later) and exit 1 (a death noticed under an open overlay waits
+until that capture has finished), so the shell's crash accounting
 restarts it or falls back. Everywhere else the process stays up for tray
 captures and reports the error on every gesture. On macOS the ways the tap
 fails — `PermissionDenied`, a NULL tap (`HookFailed`), a running tap ended by
@@ -120,7 +127,7 @@ reason rather than per try and a death as an error only the first time per
 run (a revoked grant never), and announces each change (the
 hook coming up, going down, failing differently, or dying and coming straight
 back with its gestures registered again) with an unsolicited
-`PRISC_SETTINGS_STATUS`; granting
+`settings_status`; granting
 Accessibility later makes the hotkeys work without restarting anything. The
 capturer never prompts for the permission — the shell does, keyed off
 `error_code` (below). `Unsupported` (Linux) is reported and never retried.
@@ -131,29 +138,29 @@ spawns for the rest of its process lifetime when standby proves unusable —
 no permission or binary, exit code 3 (permission revoked), or repeated
 crashes.
 
-While waiting, stdin is also a newline-delimited JSON control channel. A
-`{"type":"settings","args":[...]}` message replaces the complete standby CLI
-snapshot (including hotkeys) after parsing it through `CliArgs`; every
-snapshot is answered with `PRISC_SETTINGS_STATUS <json>` (statuses cannot
-arrive out of order: one pipe, one sequential reader), and one may also arrive
-unasked when the hook comes up or goes down. Its `hotkeys` object
+While waiting, stdin carries the catalog's commands. A `settings` command
+replaces the complete standby CLI snapshot (including hotkeys) after parsing
+its `args` through `CliArgs`; every snapshot is answered with
+`settings_status` (statuses cannot arrive out of order: one pipe, one
+sequential reader), and one may also arrive unasked when the hook comes up or
+goes down. Its `hotkeys` object
 maps each of `main`, `window`, and `monitor` to an array with one entry per
 gesture received for that action, in the order received; `gesture` echoes
 the received string verbatim, which is what the shell matches back to
 `HotkeyGesture.ToSerializedString()` of its own gestures:
 
 ```json
-{"hotkeys":{
-  "main":[{"gesture":"PrintScreen","active":true,"error":null,"error_code":null},
-          {"gesture":"Control+Shift+1","active":true,"error":null,"error_code":null}],
+{"type":"settings_status","hotkeys":{
+  "main":[{"gesture":"PrintScreen","active":true},
+          {"gesture":"Control+Shift+1","active":true}],
   "window":[{"gesture":"Shift+Control+1","active":false,
              "error":"duplicate gesture","error_code":"duplicate"}],
-  "monitor":[{"gesture":"Control+PrintScreen","active":true,"error":null,"error_code":null}]}}
+  "monitor":[{"gesture":"Control+PrintScreen","active":true}]}}
 ```
 
 `error` is display text (prisc_hotkeys' error text, echoed verbatim) and may
 change; `error_code` is its stable, machine-readable twin, and the one to
-branch on. Both are null exactly when `active` is true. Codes: `permission`
+branch on. Both are absent exactly when `active` is true. Codes: `permission`
 (macOS Accessibility not granted, or a stale grant: listed and trusted, but
 the tap gets no key events — the shell tells the two apart with
 `AXIsProcessTrusted`, prompting and showing its grant instructions in place
@@ -173,41 +180,43 @@ applied. The shell gives each gesture to at most one action; as
 defense in depth, a gesture repeated anywhere in the snapshot (compared after
 parsing) registers at its first occurrence and every later one reports
 `"active":false,"error":"duplicate gesture"`. A snapshot that fails to parse
-changes nothing and is answered with the surviving hotkeys' real state. A
-`{"type":"pause","paused":true|false}` message pauses or resumes the hotkeys
+changes nothing and is answered with `error{code:"rejected"}`, then the
+surviving hotkeys' real state. A `pause` command (`paused` true or false) pauses or resumes the hotkeys
 (paused: registered gestures neither fire nor are suppressed) while the shell
 records a gesture in its settings UI, so the recorded press reaches the
 shell. It is applied immediately, even mid-capture, gets no reply, and the
-shell re-sends it after every `PRISC_STANDBY_READY`. A
-`{"type":"capture","mode":"region|screen|window"}` message starts the same
+shell re-sends it after every `ready`. A `capture` command (`mode` `region`,
+`screen` or `window`; `monitor` is accepted for `screen`) starts the same
 single capture cycle as a native hotkey. This is how shell and tray capture
 buttons reuse the waiting process instead of spawning a second one; the shell
 sends one only when no overlay is open or requested — nothing is ever queued
-on either side. `PRISC_IPC_ERROR <text>` (always a single line) reports a
-rejected message or a failed session-dir creation; the shell treats it as a
-NACK and clears its overlay-pending state. Overlay exclusion is per-side:
+on either side. A non-fatal `error` is the NACK: `rejected` for a refused
+snapshot or a capture request that arrived while one was open, `io_failed`
+for a failed session-dir creation, `bad_command` for a malformed line; the
+shell clears its overlay-pending state on it. Overlay exclusion is per-side:
 during the brief windows where the shell falls back to a one-shot spawn, a
 native hotkey can still race a second overlay from the standby process —
 accepted as rare and harmless rather than adding cross-process locking.
 
 Normal completion does not exit the standby process. After all overlay windows,
 render workers and GPU objects have been dropped, the capturer closes that
-session's `capture.log`, prints `PRISC_CAPTURE_FINISHED <absolute-path>` —
-the shell dispatches that directory immediately — and prints
-`PRISC_STANDBY_READY` again. Process exit is therefore reserved for parent EOF
-or a fatal error, after which the shell restarts the standby process (with
+session's `capture.log`, emits `capture_finished` with the directory (the
+shell dispatches it immediately) and emits `ready` again. Process exit is
+therefore reserved for the quit path (`done{stopped}`) or a fatal `error`,
+after which the shell restarts the standby process (with
 backoff) or falls back as above.
 
 The keyboard hook stays installed while an overlay is active, so the
 gestures remain suppressed system-wide for the overlay's duration (the
 dedicated hook thread keeps pumping regardless of what the capture cycle is
-doing). Everything received during that interval — hotkey presses and stdin
-messages alike — is stale and discarded before the next
-`PRISC_STANDBY_READY` (best effort: an event in flight between hook and
+doing). Everything received during that interval, hotkey presses and stdin
+commands alike, is stale and discarded before the next `ready` (a `capture`
+request is still answered with `error{rejected}` and a malformed line with
+`bad_command`, in arrival order; best effort: an event in flight between hook and
 channel during the final microseconds of teardown can survive the drain and
 start a capture, which is what the press asked for). The shell re-sends its
 full settings snapshot in
-response to every READY, so dropped settings cannot be lost, and that
+response to every `ready`, so dropped settings cannot be lost, and that
 snapshot is also the only thing that changes the hooked gesture set —
 configuration has exactly one path.
 
@@ -334,17 +343,14 @@ Rects serialize as `{ "X": …, "Y": …, "Width": …, "Height": … }`
 
 ### 1.4 Exit codes
 
-Constants in `src/system/mod.rs`; keep in sync with
-`ScreenCaptureService.cs`.
-
-| Code | Meaning |
-|---|---|
-| 0 | Every normal outcome — edit, upload, color, video, share, copy, save, OCR copy/search/upload, **and cancel**. The shell distinguishes them by the session files, not the code. |
-| 3 | `EXIT_NO_SCREEN_PERMISSION` — the OS has not granted screen capture (macOS Screen Recording). The shell shows the permission dialog instead of a crash report. |
-| 4 | `EXIT_CAPTURE_FAILED` — the desktop screenshot itself failed. The reason is in stderr/`capture.log`, not a stack trace. |
-
-Any other non-zero exit is a crash; the shell reports it with the stderr and
-`capture.log` tails.
+The codes, and the terminal line that precedes every exit the capturer
+controls, are HELPER_PROTOCOL.md §4.5 and §5 (`prisc_ipc::exit`, mirrored in C#
+as the generated `HelperExit`). In short: 0 after `done` for every normal
+outcome, cancel included (the shell tells them apart by `done.result` and the
+session files); 3 (macOS Screen Recording not granted) and 4 (the desktop
+screenshot failed) after a best-effort fatal `error` (`permission` / `failed`);
+1 after any other fatal `error`. Any other exit is a crash; the shell reports
+it with the stderr and `capture.log` tails.
 
 ## 2. Scrolling-capture driver (`prisc_scroll_driver`)
 
@@ -359,13 +365,13 @@ It is a **separate binary**, not a mode of the capturer. Nothing it does needs
 a window, an event loop, a GPU or the screen-recording permission dance, and
 bringing any of that up would put pixels on screen in front of the content it
 is about to photograph. It ships beside `prisc_capture`, which is where
-`CaptureBinaryLocator.ResolveScrollDriver` looks for it.
+`HelperLocator` looks for it.
 
 **Windows and macOS.** The loop, the caps, the stitcher, this protocol and the
 session output are one implementation; the OS half — injecting a wheel,
 parking the cursor, resolving and raising the target, photographing the region
 — has a Win32 and a Core Graphics backend. macOS needs **two permissions** and
-refuses without them (`fatal_error`): Screen Recording to photograph the
+refuses without them (a fatal `error{code:"permission"}`): Screen Recording to photograph the
 region, and Accessibility, because the window server silently discards
 synthetic events from a process it does not trust. TCC records both against
 `Prisc.app`, which is what makes the shell's own grants cover this executable
@@ -388,8 +394,9 @@ prisc_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N 
 | `--hwnd N` | no (default 0) | Decimal window handle from the marker: **the window the user's selection snapped to**, not whatever is topmost at the scroll point. An `HWND` on Windows, a `CGWindowID` on macOS — one flag name for both, because it is the same field of the same marker. Re-validated at drive time (still a window, still covering the point); `0` or a stale handle falls back to whatever is topmost at the point. Whichever wins is then raised over the scroll point and *verified* there before the first frame — see §2.5. |
 
 The shell must redirect **all three** stdio streams. Stdin in particular: the
-driver reads a closed stdin as "the shell is gone" and cancels, which is what
-keeps a crashed Prisc.Ui from leaving something scrolling the user's window.
+driver reads a closed stdin as "the shell is gone" and quits (cancels), which
+is what keeps a crashed Prisc.Ui from leaving something scrolling the user's
+window.
 On Windows the shell also calls `AllowSetForegroundWindow(driver pid)` right
 after spawn — without it `SetForegroundWindow` in the driver is refused and the
 run relies on Win10+ scroll-inactive-windows routing alone. macOS has no
@@ -397,51 +404,45 @@ equivalent grant to pass on.
 
 ### 2.2 Events (driver → shell)
 
-One JSON object per line on stdout, and **only** protocol lines: the terminal
-logger is routed to stderr for exactly that reason, so the shell may treat any
-line starting `{` and ending `}` as an event.
+The messages are the `scroll` catalog of HELPER_PROTOCOL.md §4.4. What they
+mean:
 
-| Event | Fields | Semantics |
-|---|---|---|
-| `ready` | — | The target is resolved and focused; scrolling is about to start. |
-| `status` | `frames` (u32), `height_px` (u32), `state`, `resume_in_s` (u64, optional) | Progress. Emitted at each phase change of every step, so up to three per step. `state` ∈ `rewinding` \| `paused` \| `resuming` \| `scrolling` \| `settling` \| `stitching`. `rewinding` appears only before the first frame and only when the rewind is enabled; its `frames` and `height_px` are both 0. `paused` means the user has the mouse (§2.5) — nothing advances until they put it down. `resuming` carries `resume_in_s`, the whole seconds left before the run takes the cursor back, and is the only state on which that field is present. |
-| `done` | `result`, `frames` (u32), `height_px` (u32) | The run ended. Unless `result` is `failed`, `session.json` is already on disk. |
-| `fatal_error` | `message` (string) | Setup or output failed and there is no session. The shell deletes the directory and reports it. |
+- `ready`: the target is resolved and focused; scrolling is about to start.
+- `status`: progress, at each phase change of every step, so up to three per
+  step. `rewinding` appears only before the first frame and only when the
+  rewind is enabled; its `frames` and `height_px` are both 0. `paused` means
+  the user has the mouse (§2.5) and nothing advances until they put it down.
+  `resuming` carries `resume_in_s`, the whole seconds left before the run
+  takes the cursor back, and is the only state on which that field is present.
+- `done`: the run ended. `session.json` is already on disk for every `result`
+  but `cancelled`.
 
-```json
-{"type":"ready"}
-{"type":"status","frames":12,"height_px":4180,"state":"scrolling"}
-{"type":"done","result":"complete","frames":31,"height_px":9800}
-{"type":"fatal_error","message":"no window at scroll point ScreenPoint { x: 400, y: 300 }"}
-```
-
-`done.result`:
-
-| Result | Meaning | Session written |
+| `done.result` | Meaning | Session written |
 |---|---|---|
 | `complete` | Two consecutive steps produced no new content: the document ended. | yes |
 | `stopped` | Esc, a `stop` command, the target window closing/moving, the stitcher giving up, or a pause the user never came back from (§2.5). The partial capture is kept. | yes |
-| `max_reached` | A hard cap: 120 frames, 20,000 px of composite, or 120 s wall clock — the clock excludes time spent paused. | yes |
-| `no_movement` | Nothing the driver could inject ever moved the target — most often an elevated Windows target whose UIPI eats `SendInput`, or a surface that ignores a synthetic wheel. Reported whatever else ended the run, and a single-screen session is still written. | yes |
-| `failed` | Defined for completeness; the driver has no failure it can recognize *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
+| `max_reached` | A hard cap: 120 frames, 20,000 px of composite, or 120 s wall clock (the clock excludes time spent paused). | yes |
+| `no_movement` | Nothing the driver could inject ever moved the target, most often an elevated Windows target whose UIPI eats `SendInput`, or a surface that ignores a synthetic wheel. Reported whatever else ended the run, and a single-screen session is still written. | yes |
+| `cancelled` | The run was abandoned (`quit`, stdin EOF, a signal). `frames` and `height_px` are what was captured and discarded; the directory is empty for the shell to delete. | no |
+
+A failure (missing permission, no window at the scroll point, the target
+cannot be raised, the session cannot be written) is a fatal `error` and exit
+1; arguments that parsed but cannot be used are `error{code:"usage"}` and
+exit 2. There is no session.
 
 ### 2.3 Commands (shell → driver)
 
-| Command | Effect |
-|---|---|
-| `{"type":"stop"}` | Finish now and keep everything captured so far — the HUD's FINISH button. Ends as `stopped`. |
-| `{"type":"cancel"}` | Abandon the run. **Nothing is written**: no `done`, no session, an empty directory for the shell to delete. |
-
-Both are polled between steps, never inside one, so a command that lands
-mid-settle takes effect up to a settle cycle (~800 ms) later. Unparseable
-lines are logged and ignored — garbage on the command channel must not take
-down a capture that is going fine. Stdin EOF is treated as `cancel`; stdin
-that is unusable rather than closed (no console, not redirected) is tolerated
-and the run continues without a command channel.
+`{"type":"stop"}` finishes now and keeps everything captured so far (the
+HUD's FINISH button), ending as `stopped`. `{"type":"quit"}` (or stdin EOF)
+abandons the run and writes nothing, ending as `cancelled`. Both are polled
+between steps, never inside one, so a command that lands mid-settle takes
+effect up to a settle cycle (~800 ms) later. A malformed line is answered with
+a non-fatal `bad_command` and otherwise ignored: garbage on the command
+channel must not take down a capture that is going fine.
 
 ### 2.4 Output and exit
 
-On any result but `failed` the driver writes, in this order: `desktop.png`
+On any result but `cancelled` the driver writes, in this order: `desktop.png`
 (the stitched composite), `cropped.png` (a byte copy of it — `cropped.png` is
 what `SessionInfo.UploadSourcePath` shares from Recents, so it must not be a
 downscaled preview), then **`session.json` strictly last**, per §1.2's
@@ -451,9 +452,9 @@ desktop, and empty bounds make the editor center its window instead of trying
 to open one taller than every monitor stacked. `Name` is `"Screenshot"` like
 every other session; the shell renames it to "Scrolling Capture".
 
-The process **exits 0 for every outcome the shell can act on**, `fatal_error`
-included — the shell reads the event, not the code. A non-zero exit therefore
-means a crash, and the shell reports it with the stderr tail attached.
+The process exits 0 after every `done` and 1 (2 for usage) after a fatal
+`error`. Any other exit, or one without a terminal line, is a crash, and the
+shell reports it with the stderr tail attached.
 
 ### 2.5 The target window and the user's mouse
 
@@ -465,7 +466,7 @@ region of the screen.
 So before frame 0 the driver raises the target over the scroll point and then
 checks that it worked — the window at the point must be the target or another
 window of the same application (an owned popup on Windows, a sheet or panel on
-macOS). Failing the check is a `fatal_error`, not a warning: a run against a
+macOS). Failing the check is a fatal `error`, not a warning: a run against a
 covered window produces a tall, entirely plausible picture of the wrong thing,
 and there is no way for the user to tell.
 
@@ -509,7 +510,7 @@ scroll point and resumes; the frame captured across the disturbance is
 discarded and retaken without an extra wheel burst. After 1 s of stillness
 the state switches to `resuming` and ticks `resume_in_s` down each second, so
 the cursor is never taken back without warning — any movement drops straight
-back to `paused`. `stop`, `cancel`, Esc and
+back to `paused`. `stop`, `quit`, Esc and
 the target window going away are all honored while paused. Paused time is
 excluded from the wall-clock cap. One pause may last 60 s — reachable only by
 a cursor that keeps *moving* that whole time — after which the run finalizes
@@ -543,10 +544,10 @@ therefore pays for its own size in start-up latency.
 It ships beside `prisc_capture` on every platform that has an ONNX
 Runtime build — Windows x64/arm64 and Apple Silicon, **not** Intel macOS,
 where the spawn fails and the overlay shows OCR as unavailable — which is
-where `src/ocr/client.rs` looks for it (sibling of `current_exe()`; the
-`PRISC_AI_BINARY` environment variable overrides that, for tests and local
-development). It needs no window, no event loop, no GPU, and — because it is
-handed pixels rather than taking them — no screen-recording permission.
+where `src/ocr/client.rs` looks for it, through `prisc_ipc::locate::sibling`
+(each directory of `PRISC_HELPERS_DIR` first, for tests and local development,
+then beside `current_exe()`). It needs no window, no event loop, no GPU, and (because it is
+handed pixels rather than taking them) no screen-recording permission.
 
 ### 3.1 Spawn
 
@@ -564,7 +565,7 @@ Stdio, all three of which the capturer sets deliberately:
 | Stream | Setting | Why |
 |---|---|---|
 | stdin | pipe | Carries the request (§3.2). |
-| stdout | **null** | The `ocr` subcommand writes nothing to stdout — the answer is the `--out` file, which doubles as the session's `ocr.json` artifact, and a native runtime that printed to stdout (the original MNN engine did) could never corrupt a file. The overlay's own stdout is the NDJSON protocol of §1, so the child's is nulled rather than inherited; a pipe would work but one nobody drains can eventually block the child. |
+| stdout | **null** | The `ocr` subcommand writes nothing to stdout: the answer is the `--out` file, which doubles as the session's `ocr.json` artifact, and a native runtime that printed to stdout (the original MNN engine did) could never corrupt a file. The overlay's own stdout is its helper protocol channel, so the child's is nulled rather than inherited; a pipe would work but one nobody drains can eventually block the child. |
 | stderr | inherited | Log chatter, by the same convention §2.2 follows. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
 
 On Windows the child is spawned with `CREATE_NO_WINDOW` — the overlay is a

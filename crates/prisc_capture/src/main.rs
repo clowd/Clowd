@@ -10,6 +10,7 @@ mod gxi;
 mod image_extract;
 mod interaction;
 mod ocr;
+mod protocol;
 mod render;
 mod selection;
 mod session_output;
@@ -31,51 +32,58 @@ extern crate log;
 #[macro_use]
 extern crate anyhow;
 
+use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::time::Instant;
 
 use clap::Parser;
+use prisc_ipc::catalog::capture::{self as wire, CaptureResult, Event};
+use prisc_ipc::catalog::ErrorCode;
+use prisc_ipc::Inbound;
 
+use app::CycleAction;
 use telemetry::startup::Prologue;
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     // The very first statement of the process: every offset in the startup
     // report is measured from here, so clap, the logger, sentry and the
     // permission check are inside the measurement instead of hidden in front
     // of it. Anything moved above this line becomes invisible to the
     // benchmark.
     let process_start = Instant::now();
+    // `hello` before anything else, with stdout claimed: from here on only the
+    // protocol channel reaches the pipe.
+    protocol::init(prisc_ipc::open::<Event>("prisc_capture"));
     // This is a process-lifetime scheduling posture. Standby spends its idle
     // time blocked in the event loop, so retaining it does not consume CPU and
     // avoids changing priority around every capture cycle.
     system::raise_process_priority_class();
     let mut args = settings::CliArgs::parse();
     let logger = cycle_logger::CycleLogger::install();
+    // Every exit goes through prisc_ipc::lifetime::exit, never a drop of this
+    // guard, so the session is ended and the queue flushed by the exit hook.
     let _sentry = prisc_rust_core::telemetry::init("prisc_capture");
+    prisc_ipc::lifetime::on_exit(prisc_rust_core::telemetry::shutdown_hook);
     system::SystemInterop::init();
-    let mut event_loop = build_event_loop()?;
+    let mut event_loop = match build_event_loop() {
+        Ok(event_loop) => event_loop,
+        Err(err) => fatal(ErrorCode::InitFailed, err),
+    };
 
     if !args.standby {
-        if let Some(dir) = &args.session_dir {
-            logger.begin_session(dir);
-        }
-        let mut prologue = Prologue {
-            logging_ready: process_start.elapsed(),
-            ..Prologue::default()
-        };
-        prologue.sentry_ready = process_start.elapsed();
-        let result = run_cycle(args, process_start, prologue, &mut event_loop);
-        if let Err(err) = &result {
-            prisc_rust_core::telemetry::capture_error(err);
-        }
-        logger.end_session();
-        return result;
+        one_shot(args, process_start, logger, &mut event_loop);
     }
 
-    let mut standby = standby::Standby::new(event_loop.create_proxy())?;
+    let mut standby = match standby::Standby::new(event_loop.create_proxy()) {
+        Ok(standby) => standby,
+        Err(err) => fatal(ErrorCode::InitFailed, err),
+    };
     loop {
-        if !standby.wait(&mut args, &mut event_loop)? {
-            return Ok(());
+        match standby.wait(&mut args, &mut event_loop) {
+            Ok(true) => {}
+            // The quit path fired between captures.
+            Ok(false) => finish(CaptureResult::Stopped, None),
+            Err(err) => fatal(ErrorCode::Failed, err),
         }
         let t_start = Instant::now();
         let session_dir = args
@@ -84,13 +92,13 @@ fn main() -> anyhow::Result<()> {
             .expect("standby creates a session");
         logger.begin_session(&session_dir);
         let result = run_cycle(args.clone(), t_start, Prologue::default(), &mut event_loop);
-        if let Err(err) = result {
-            prisc_rust_core::telemetry::capture_error(&err);
-            logger.end_session();
-            return Err(err);
-        }
         logger.end_session();
-        standby::emit!("PRISC_CAPTURE_FINISHED {}", session_dir.display());
+        if let Err(err) = result {
+            fatal(ErrorCode::Failed, err);
+        }
+        protocol::out().emit(&Event::CaptureFinished {
+            dir: session_dir.to_string_lossy().into_owned(),
+        });
         args.session_dir = None;
         args.capture_mode = settings::CaptureMode::Region;
         args.video = false;
@@ -98,12 +106,85 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
+/// One capture, then exit. The outputs are the session directory's files, as
+/// always; the protocol adds the terminal `done`, and stdin is a lease: a dead
+/// parent (EOF) or a `quit` ends the overlay instead of orphaning it.
+fn one_shot(
+    args: settings::CliArgs,
+    process_start: Instant,
+    logger: Arc<cycle_logger::CycleLogger>,
+    event_loop: &mut winit::event_loop::EventLoop<()>,
+) -> ! {
+    // The overlay owns the main thread, so the quit path cannot wait for it:
+    // it ends the process from a thread of its own, with the session unwritten
+    // (an overlay closed underneath the user is a cancel).
+    prisc_ipc::lifetime::install(
+        |reason| {
+            let spawned = std::thread::Builder::new()
+                .name("capture-quit".into())
+                .spawn(move || {
+                    info!("quit ({reason:?}) during a one-shot capture; closing the overlay");
+                    finish(CaptureResult::Cancelled, None)
+                });
+            if spawned.is_err() {
+                prisc_ipc::lifetime::exit(prisc_ipc::exit::OK);
+            }
+        },
+        wire::QUIT_GRACE + prisc_ipc::SELF_EXIT_MARGIN,
+    );
+    // A one-shot run takes no commands; it only answers a malformed line.
+    prisc_ipc::read_commands::<wire::Command>(|inbound| {
+        match inbound {
+            Inbound::Command(command) => warn!("ignoring {command:?}: a one-shot capture takes no commands"),
+            Inbound::Malformed {
+                reason,
+            } => protocol::out().error(ErrorCode::BadCommand, reason, false),
+        }
+        ControlFlow::Continue(())
+    });
+
+    if let Some(dir) = &args.session_dir {
+        logger.begin_session(dir);
+    }
+    let session_dir = args.session_dir.clone();
+    let mut prologue = Prologue {
+        logging_ready: process_start.elapsed(),
+        ..Prologue::default()
+    };
+    prologue.sentry_ready = process_start.elapsed();
+    let result = run_cycle(args, process_start, prologue, event_loop);
+    logger.end_session();
+    match result {
+        Ok(CycleAction::Canceled) => finish(CaptureResult::Cancelled, None),
+        Ok(_) => finish(CaptureResult::Finished, session_dir.map(|dir| dir.to_string_lossy().into_owned())),
+        Err(err) => fatal(ErrorCode::Failed, err),
+    }
+}
+
+/// The terminal `done`, then exit 0. Also called from the quit path's own
+/// thread (see `one_shot` and `Standby::new`), racing the main thread.
+pub(crate) fn finish(result: CaptureResult, dir: Option<String>) -> ! {
+    protocol::claim_terminal();
+    protocol::out().emit(&Event::Done {
+        result,
+        dir,
+    });
+    prisc_ipc::lifetime::exit(prisc_ipc::exit::OK)
+}
+
+/// A fatal `error` (reported to Sentry first), then exit 1.
+fn fatal(code: ErrorCode, err: anyhow::Error) -> ! {
+    protocol::claim_terminal();
+    prisc_rust_core::telemetry::capture_error(&err);
+    protocol::out().fatal(code, format!("{err:#}"))
+}
+
 fn run_cycle(
     args: settings::CliArgs,
     t_start: Instant,
     mut prologue: Prologue,
     event_loop: &mut winit::event_loop::EventLoop<()>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<CycleAction> {
     // Before any window exists, so the cycle cannot end without knowing who to
     // hand foreground rights back to.
     system::SystemInterop::set_shell_pid(args.shell_pid);
@@ -116,7 +197,11 @@ fn run_cycle(
     // shell's check and now.
     if !system::SystemInterop::has_screen_recording_permission() {
         error!("Screen Recording permission has not been granted; refusing to capture");
-        std::process::exit(system::EXIT_NO_SCREEN_PERMISSION);
+        protocol::fail_exit(
+            ErrorCode::Permission,
+            "Screen Recording permission has not been granted",
+            system::EXIT_NO_SCREEN_PERMISSION,
+        );
     }
     prologue.permission_checked = t_start.elapsed();
 
@@ -150,8 +235,9 @@ fn run_cycle(
     // shell still sees a non-zero exit, as it did when the wait was a
     // blocking `?` in CaptureSession::new.
     let fatal = app.fatal_result();
+    let finished = app.finished();
     drop(app);
-    fatal
+    fatal.map(|()| finished)
 }
 
 fn build_event_loop() -> anyhow::Result<winit::event_loop::EventLoop<()>> {

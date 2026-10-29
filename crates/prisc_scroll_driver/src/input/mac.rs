@@ -20,22 +20,16 @@
 //! executable (the shell documents the chain in `MacPermissions`), so the
 //! grant the app already asks for covers the driver.
 
-use std::ffi::c_void;
 use std::time::Instant;
 
-use core_foundation::base::TCFType;
-use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
-use core_foundation::number::{CFNumber, CFNumberRef};
-use core_foundation::string::{CFString, CFStringRef};
-use core_graphics::access::ScreenCaptureAccess;
-use core_graphics::display::CGDisplay;
-use core_graphics::event::{CGEvent, CGEventTapLocation, ScrollEventUnit};
-use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-use core_graphics::geometry::{CGPoint, CGRect};
-use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly, CGWindowID};
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+use objc2_core_foundation::CFRetained;
+use objc2_core_graphics::{
+    CGEvent, CGEventSource, CGEventSourceStateID, CGEventTapLocation, CGPreflightScreenCaptureAccess, CGScrollEventUnit, CGWindowID,
+};
 
 use super::{WheelDir, RAISE_POLL, RAISE_TIMEOUT};
+use prisc_rust_core::desktop::{self, CGPoint, WindowFilter, NORMAL_WINDOW_LAYERS};
 use prisc_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Lines of scrolling per notch, and *line* units rather than pixel ones.
@@ -100,10 +94,10 @@ impl WindowEntry {
 /// there is nothing to retry and no prompt worth showing from a background
 /// helper: the honest move is to say which permission is missing and stop.
 /// Screen Recording takes a Prisc restart; an Accessibility grant reads true
-/// live, so the next run picks it up. The message travels to the user as the `fatal_error`
-/// event's text, so it is written for them and not for a log.
+/// live, so the next run picks it up. The message travels to the user as the fatal `error`
+/// event's message, so it is written for them and not for a log.
 pub fn preflight() -> anyhow::Result<()> {
-    if !ScreenCaptureAccess.preflight() {
+    if !CGPreflightScreenCaptureAccess() {
         bail!(
             "Prisc needs Screen Recording permission to photograph the page while it scrolls. Enable Prisc under Privacy & \
              Security → Screen & System Audio Recording, then restart Prisc."
@@ -292,28 +286,22 @@ pub fn window_rect(target: Target) -> Option<ScreenRect> {
 /// question about what the *user* is doing, and re-parking it would erase the
 /// answer.
 pub fn park_cursor(point: ScreenPoint) {
-    if let Err(e) = CGDisplay::warp_mouse_cursor_position(as_cg_point(point)) {
+    // The warp re-couples the hardware mouse to the cursor: the user's next
+    // physical movement continues from the parked point instead of snapping
+    // back to where their hand left it, which the driver would then read as
+    // drift and pause over.
+    if let Err(e) = desktop::warp_cursor(as_cg_point(point)) {
         warn!(
             "CGWarpMouseCursorPosition({}, {}) failed: {e:?}; wheel events may land elsewhere",
             point.x, point.y
         );
-    }
-    // A warp moves the cursor without moving the mouse, and the two can be
-    // left uncoupled: re-associating is what makes the user's next physical
-    // movement continue from where the cursor now is instead of snapping back
-    // to where their hand left it — which the driver would then read as drift
-    // and pause over. Same call, same reason, as the overlay's own
-    // `mac_mouse::set_position`.
-    unsafe {
-        CGAssociateMouseAndMouseCursorPosition(1);
     }
 }
 
 /// Where the cursor is now, or `None` if the window server will not say.
 /// Callers treat that as "no news", never as "it moved".
 pub fn cursor_pos() -> Option<ScreenPoint> {
-    let event = CGEvent::new(event_source()?).ok()?;
-    let pt = event.location();
+    let pt = desktop::cursor_location()?;
     Some(ScreenPoint::new(pt.x.round() as i32, pt.y.round() as i32))
 }
 
@@ -326,7 +314,7 @@ pub fn cursor_pos() -> Option<ScreenPoint> {
 /// reading — the HUD's FINISH button and the automatic end detection both
 /// still end the run.
 pub fn escape_pressed() -> bool {
-    unsafe { CGEventSourceKeyState(CGEventSourceStateID::CombinedSessionState as i32, KEY_CODE_ESCAPE) }
+    CGEventSource::key_state(CGEventSourceStateID::CombinedSessionState, KEY_CODE_ESCAPE)
 }
 
 /// Inject `ticks` wheel notches at `point`.
@@ -364,17 +352,14 @@ fn post_notches(point: ScreenPoint, ticks: u32, dir: WheelDir, to_pid: Option<i3
 
     for _ in 0..ticks.max(1) {
         // wheel1 is the vertical axis; the other two (horizontal, Z) stay 0.
-        let event = match CGEvent::new_scroll_event(source.clone(), ScrollEventUnit::LINE, 1, lines, 0, 0) {
-            Ok(event) => event,
-            Err(()) => {
-                warn!("CGEventCreateScrollWheelEvent2 failed; the target will not have moved");
-                return false;
-            }
+        let Some(event) = CGEvent::new_scroll_wheel_event2(Some(&source), CGScrollEventUnit::Line, 1, lines, 0, 0) else {
+            warn!("CGEventCreateScrollWheelEvent2 failed; the target will not have moved");
+            return false;
         };
-        event.set_location(location);
+        CGEvent::set_location(Some(&event), location);
         match to_pid {
-            Some(pid) => event.post_to_pid(pid),
-            None => event.post(CGEventTapLocation::HID),
+            Some(pid) => CGEvent::post_to_pid(pid, Some(&event)),
+            None => CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&event)),
         }
     }
     true
@@ -383,8 +368,8 @@ fn post_notches(point: ScreenPoint, ticks: u32, dir: WheelDir, to_pid: Option<i3
 /// An event source for the events we create and the state we read. Failure
 /// is only plausible under resource exhaustion, and every caller degrades
 /// rather than dying.
-fn event_source() -> Option<CGEventSource> {
-    CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()
+fn event_source() -> Option<CFRetained<CGEventSource>> {
+    CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
 }
 
 /// Every visible, normal, on-screen window in front-to-back Z-order.
@@ -394,48 +379,24 @@ fn event_source() -> Option<CGEventSource> {
 /// since the last step. It costs a millisecond or so beside a settle loop
 /// that photographs the region twenty times a second.
 ///
-/// The filter is the overlay walker's (`mac_walker::evaluate_window`): layer
-/// 0 and non-zero alpha, desktop elements excluded. Agreeing with it matters
-/// — the marker id this module validates was resolved by exactly that walk,
-/// so a window it considers real and this one does not would look to the
-/// driver like a window that had closed.
+/// The layer filter is the overlay walker's ([`NORMAL_WINDOW_LAYERS`]).
+/// Agreeing with it matters: the marker id this module validates was resolved
+/// by exactly that walk, so a window it considers real and this one does not
+/// would look to the driver like a window that had closed.
 fn on_screen_windows() -> Vec<WindowEntry> {
-    let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
-    let Some(list) = window::copy_window_info(options, kCGNullWindowID) else {
-        warn!("CGWindowListCopyWindowInfo returned null");
-        return Vec::new();
+    let filter = WindowFilter {
+        layers: NORMAL_WINDOW_LAYERS,
+        exclude_own_process: false,
+        min_size: 0.0,
     };
-
-    list.get_all_values()
+    desktop::window_list(&filter)
         .into_iter()
-        .filter_map(|ptr| {
-            let dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(ptr as CFDictionaryRef) };
-            window_entry(&dict)
+        .map(|w| WindowEntry {
+            id: w.id,
+            pid: w.pid,
+            rect: rect_from_cg(w.bounds),
         })
         .collect()
-}
-
-/// One `CGWindowListCopyWindowInfo` dictionary as a [`WindowEntry`], or
-/// `None` for anything that is not a normal visible window.
-fn window_entry(dict: &CFDictionary) -> Option<WindowEntry> {
-    let id = number_i64(dict, unsafe { window::kCGWindowNumber })? as CGWindowID;
-    if number_i64(dict, unsafe { window::kCGWindowLayer })? != 0 {
-        return None;
-    }
-    if number_f64(dict, unsafe { window::kCGWindowAlpha })? <= 0.0 {
-        return None;
-    }
-    let pid = number_i64(dict, unsafe { window::kCGWindowOwnerPID })? as i32;
-
-    let bounds_ptr = raw_value(dict, unsafe { window::kCGWindowBounds })?;
-    let bounds_dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
-    let cg_rect = CGRect::from_dict_representation(&bounds_dict)?;
-
-    Some(WindowEntry {
-        id,
-        pid,
-        rect: rect_from_cg(cg_rect),
-    })
 }
 
 /// A `CGRect` of CG points as the integer rect the rest of the driver uses.
@@ -443,7 +404,7 @@ fn window_entry(dict: &CFDictionary) -> Option<WindowEntry> {
 /// window at a fractional position keeps both of its edges where they are —
 /// this rect is compared for equality on every step to detect a window that
 /// moved.
-fn rect_from_cg(rect: CGRect) -> ScreenRect {
+fn rect_from_cg(rect: desktop::CGRect) -> ScreenRect {
     ScreenRect::from_exact(
         rect.origin.x.round() as i32,
         rect.origin.y.round() as i32,
@@ -456,54 +417,11 @@ fn as_cg_point(point: ScreenPoint) -> CGPoint {
     CGPoint::new(point.x as f64, point.y as f64)
 }
 
-/// Get a raw value out of a CFDictionary by `CFStringRef` key. Same helper as
-/// `mac_walker`'s; the window list is a dictionary-of-anything and there is
-/// no typed accessor for it.
-fn raw_value(dict: &CFDictionary, key: CFStringRef) -> Option<*const c_void> {
-    let key_cfstr: CFString = unsafe { TCFType::wrap_under_get_rule(key) };
-    unsafe {
-        let mut value: *const c_void = std::ptr::null();
-        if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
-            dict.as_concrete_TypeRef(),
-            key_cfstr.as_concrete_TypeRef() as *const c_void,
-            &mut value,
-        ) != 0
-        {
-            Some(value)
-        } else {
-            None
-        }
-    }
-}
-
-fn number_i64(dict: &CFDictionary, key: CFStringRef) -> Option<i64> {
-    let ptr = raw_value(dict, key)?;
-    let number: CFNumber = unsafe { TCFType::wrap_under_get_rule(ptr as CFNumberRef) };
-    number.to_i64()
-}
-
-fn number_f64(dict: &CFDictionary, key: CFStringRef) -> Option<f64> {
-    let ptr = raw_value(dict, key)?;
-    let number: CFNumber = unsafe { TCFType::wrap_under_get_rule(ptr as CFNumberRef) };
-    number.to_f64()
-}
-
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     /// Whether this process may drive other applications — the Accessibility
     /// permission. Without it `CGEventPost` is a no-op (see [`preflight`]).
     fn AXIsProcessTrusted() -> bool;
-}
-
-#[link(name = "CoreGraphics", kind = "framework")]
-extern "C" {
-    /// Level-read of one key's state. Not bound by the `core-graphics` crate.
-    fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
-
-    /// Re-couples the hardware mouse to the cursor after a warp. Declared
-    /// here for the same reason the overlay's `mac_mouse` declares it: the
-    /// crate binds the warp but not its companion.
-    fn CGAssociateMouseAndMouseCursorPosition(connected: i32) -> i32;
 }
 
 #[cfg(test)]
@@ -573,9 +491,9 @@ mod tests {
         // A window at a fractional origin must not lose or gain a point of
         // width, or `stop_requested` reads it as having been resized on the
         // very first step.
-        let rect = rect_from_cg(CGRect::new(
-            &CGPoint::new(10.5, 20.4),
-            &core_graphics::geometry::CGSize::new(100.0, 200.0),
+        let rect = rect_from_cg(desktop::CGRect::new(
+            desktop::CGPoint::new(10.5, 20.4),
+            desktop::CGSize::new(100.0, 200.0),
         ));
         assert_eq!(rect, ScreenRect::from_xy_size(11, 20, 100, 200));
     }

@@ -1,18 +1,12 @@
 name: Build recorder (Linux)
 
-# Reusable build of the recorder stack (crates/prisc_recorder, prisc_share_region,
-# prisc_vid2gif and libobs from the obs-studio submodule, built by prisc_obs_sys
-# via CMake) for recorder-linux-x64 and recorder-linux-arm64, plus portability
-# checks. ci.yml calls it; build-recorder.yml builds the Windows and macOS legs.
-# It is a separate workflow so that ci.yml's package job, which needs
-# build-recorder.yml as a whole, never waits on Linux.
+# Linux twin of build-recorder.yml (see there for why they are separate):
+# recorder-linux-x64 and recorder-linux-arm64 plus the portability checks. Linux
+# has no app package yet, so this is a check only and nothing consumes it.
 #
-# The Linux bundle is a check only: nothing consumes it yet.
-#
-# These are the only CI jobs that check out the submodules. libobs is 20-40 min
-# cold, so the OBS build tree is cached per OS and arch, keyed by the submodule
-# SHA and the build inputs (no restore-keys: a partial match would be a stale
-# CMake tree).
+# These jobs and build-recorder.yml's are the only CI jobs that check out the
+# submodules; the shared OBS cache and checkout steps live in
+# .github/actions/setup-obs-build.
 on:
   workflow_call:
 
@@ -37,9 +31,10 @@ jobs:
   # the same path), so actions/cache and the artifact actions work on the host
   # as in the Windows and macOS builds. cargo is the image's own toolchain,
   # so no dtolnay/rust-toolchain here. Staging and the end-to-end checks live
-  # in scripts (stage-bundle.sh, verify-bundle.sh) that also run by hand in
-  # the image, and the linux-portability job re-runs verify-bundle.sh on stock
-  # Ubuntu runners with only runtime packages installed.
+  # in scripts (stage-recorder.sh, which runs stage-bundle.sh, and
+  # verify-bundle.sh) that also run by hand in the image, and the
+  # linux-portability job re-runs verify-bundle.sh on stock Ubuntu runners
+  # with only runtime packages installed.
   # ---------------------------------------------------------------------------
   linux:
     name: recorder (linux-${{ matrix.arch }})
@@ -67,23 +62,8 @@ jobs:
       - name: Checkout (recursive submodules)
         uses: actions/checkout@v7
         with:
-          # See build-recorder.yml's Windows job: disabled plugin submodule dirs
-          # must exist.
+          # See the Windows job: disabled plugin submodule dirs must exist.
           submodules: recursive
-
-      - name: Record OBS submodule SHA
-        id: obs
-        run: |
-          sha=$(git -C crates/obs-studio rev-parse HEAD)
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "OBS submodule SHA: $sha"
-
-      # See build-recorder.yml's Windows job: give the tagless CI submodule a
-      # lightweight tag on HEAD (the 32.2.2 release commit) so OBS's
-      # `git describe --tags` version discovery resolves to a valid
-      # MAJOR.MINOR.PATCH.
-      - name: Tag OBS submodule for versioning
-        run: git -C crates/obs-studio tag -f 32.2.2
 
       # The image is rebuilt from the Dockerfile every run, with its layers
       # cached in the GitHub Actions cache, so a Dockerfile edit takes effect
@@ -144,28 +124,22 @@ jobs:
           echo "SIMDe:   $simde"
           echo "Image:   $image"
 
-      - name: Cache cargo registry
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
-
       # As on Windows, the OBS build (target/obs-<arch>, prisc_obs_sys's default
       # build dir) and .deps (FFmpeg bundle, x264 / Mbed TLS prefixes, SIMDe)
-      # are cached together under one key so they can never evict
-      # independently. The build runs as root in the image; the cache step
-      # runs on the host and only needs to read those files.
-      - name: Cache OBS native build + FFmpeg/x264/Mbed TLS deps
-        uses: actions/cache@v6
+      # are cached together. The build runs as root in the image; the cache
+      # steps run on the host and only need to read those files.
+      # rust-cache (in setup-obs-build) keys on and prunes with the host's
+      # cargo, which nothing else in this job uses, so install it explicitly
+      # rather than rely on the runner image shipping one.
+      - name: Install host Rust toolchain (for the cargo cache)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up the OBS build caches
+        uses: ./.github/actions/setup-obs-build
         with:
-          path: |
-            target/obs-${{ matrix.arch }}
-            crates/obs-studio/.deps
-          key: ${{ runner.os }}-${{ matrix.arch }}-manylinux-obs-${{ steps.obs.outputs.sha }}-${{ hashFiles('crates/prisc_obs_sys/build.rs', 'crates/prisc_obs_sys/cmake/**', 'crates/prisc_build_support/src/**') }}-${{ steps.pins.outputs.key }}
+          arch: ${{ matrix.arch }}
+          obs-build-path: target/obs-${{ matrix.arch }}
+          key-suffix: -manylinux-${{ steps.pins.outputs.key }}
 
       # prisc_share_region is not built on Linux at all (no Linux UI; see its
       # README), and the app crates are not part of this job (prisc_scroll_driver
@@ -195,9 +169,9 @@ jobs:
 
       # Copies the runtime tree out of target/release, strips the build-tree
       # RUNPATH entries, and enforces the relocation, glibc-ceiling and
-      # no-forbidden-library rules (see the script header).
+      # no-forbidden-library rules (see tools/linux-build/stage-bundle.sh).
       - name: Stage artifact (self-contained bundle)
-        run: tools/linux-build/run-in-image.sh tools/linux-build/stage-bundle.sh target/release "dist/recorder-linux-${{ matrix.arch }}"
+        run: tools/linux-build/run-in-image.sh tools/staging/stage-recorder.sh "linux-${{ matrix.arch }}" target/release "dist/recorder-linux-${{ matrix.arch }}"
 
       # ldd -r of every ELF file, real X11 recordings under Xvfb through xshm
       # capture, x264, AAC and both muxers, prisc_vid2gif on a recording, and
@@ -250,6 +224,13 @@ jobs:
           path: dist/test-tools/ffprobe
           if-no-files-found: error
           retention-days: 7
+
+      # cargo wrote the mounted ~/.cargo/registry and git as root in the image.
+      # rust-cache's post step prunes them with host-side cargo, so hand them
+      # back to the runner user first or its cleanup and save can fail.
+      - name: Return the cargo caches to the runner user
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$HOME/.cargo/registry" "$HOME/.cargo/git"
 
   # ---------------------------------------------------------------------------
   # Linux portability: the bundle tarball, unpacked on stock Ubuntu runners

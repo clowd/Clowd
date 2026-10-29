@@ -531,9 +531,9 @@ namespace Prisc.UI.VideoEditor
 
             var dir = Path.GetDirectoryName(videoPath);
             primary.InputCapturePath = Relocate(primary.InputCapturePath,
-                ObsArguments.GetInputCapturePath(dir));
+                RecorderArguments.GetInputCapturePath(dir));
             primary.WindowCapturePath = Relocate(primary.WindowCapturePath,
-                ObsArguments.GetWindowCapturePath(dir));
+                RecorderArguments.GetWindowCapturePath(dir));
         }
 
         /// <summary>A stored sidecar path, or the one beside the video when the stored one no

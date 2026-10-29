@@ -60,7 +60,7 @@
 //! through `ui::post_command` and are drained by the repeating timer below.
 //!
 //! Retention / pointer validity: the process NEVER returns from `run` — every
-//! exit path goes through `AppEvents::quit` → `prisc_obs_platform::exit_process`. The
+//! exit path goes through `AppEvents::quit` → `prisc_ipc::lifetime::exit`. The
 //! window (and thus its contentView, whose raw pointer we hand to
 //! `AppEvents::mirror_ready` for `obs_display_create`) is retained in the
 //! process-global `APP` cell below and deliberately never dropped, so that
@@ -908,7 +908,8 @@ pub(super) fn wake() {}
 fn on_command_tick() {
     for cmd in super::take_commands() {
         match cmd {
-            // `quit`, or EOF on stdin (the parent died). Never returns.
+            // The quit path: `quit`, EOF on stdin (the parent died), a signal
+            // or a dead stdout. Never returns.
             Command::Quit => with_app(|app| app.events.quit()),
             Command::Move(region) => apply_move(region),
             Command::Obscure(mode) => {
@@ -918,12 +919,14 @@ fn on_command_tick() {
                 // claim a mode the renderer is not in. Obscure state lives in
                 // atomics read by the graphics thread, so there is nothing to
                 // wait for and nothing that can partially apply.
-                crate::status::emit_obscure(crate::obscure::mode());
+                crate::status::out().emit(&crate::status::obscure_event(crate::obscure::mode()));
             }
             // A line the parser refused. Answered here, in the position it
-            // arrived in, rather than from the reader thread — see
-            // `Command::Error` for why the ordering is load-bearing.
-            Command::Error(reason) => crate::status::emit_command_error(&reason),
+            // arrived in, rather than from the reader thread: see
+            // `Command::Malformed` for why the ordering is load-bearing.
+            Command::Malformed(reason) => {
+                crate::status::out().error(prisc_ipc::catalog::ErrorCode::BadCommand, reason, false)
+            }
         }
     }
 }
@@ -952,12 +955,12 @@ fn apply_move(request: Rect) {
 
     let applied = match result {
         Ok(applied) => applied,
-        // Refused: no window change, and a `command_error` INSTEAD of the ack —
+        // Refused: no window change, and an `error{failed}` INSTEAD of the ack:
         // echoing the unchanged region as `region_changed` would be
         // indistinguishable from a successful move to that rect, and Prisc would
         // snap its border back with no explanation.
         Err(reason) => {
-            crate::status::emit_command_error(&reason);
+            crate::status::out().error(prisc_ipc::catalog::ErrorCode::Failed, reason, false);
             return;
         }
     };
@@ -970,7 +973,9 @@ fn apply_move(request: Rect) {
     // Acked last, after the window has actually taken the new size — the move
     // is not fully applied until then, and this line is what Prisc resizes its
     // border to.
-    crate::status::emit_region_changed(applied);
+    crate::status::out().emit(&prisc_ipc::catalog::share_region::Event::RegionChanged {
+        region: crate::status::wire_rect(applied),
+    });
 }
 
 /// `NSApplicationDidChangeScreenParametersNotification`: a display was
@@ -1088,7 +1093,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
     // race the shell's out-of-band reactions — looking the window up by title to
     // point the user at it, for instance — against a window that does not exist
     // yet. It cannot be emitted after `run` returns, because `run` never does.
-    crate::status::emit_initialized();
+    crate::status::out().emit(&prisc_ipc::catalog::share_region::Event::Initialized {});
 
     *APP.0.borrow_mut() = Some(App {
         mtm,
@@ -1135,8 +1140,9 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
     nsapp.run();
     // run() only returns if something stops the app (nothing here does — all
     // exit paths go through events.quit()); treat a stop as a clean quit and
-    // keep the "never shut libobs down" invariant via exit_process.
-    prisc_obs_platform::exit_process(0)
+    // end through the same `done` + exit as every other quit.
+    with_app(|app| app.events.quit());
+    unreachable!("AppEvents::quit never returns")
 }
 
 // ---------------------------------------------------------------------------
