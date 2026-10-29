@@ -16,8 +16,9 @@
 # Timeout, Aborted, ...) counts as Failed.
 #
 # Errors (exit 1): a test the baseline records as Passed that now fails, skips
-# or is missing; a failing test the baseline does not list (a new test must
-# pass or skip); an unreadable trx with no results; a malformed baseline line.
+# or is missing; a test the baseline records as Skipped that now fails; a
+# failing test the baseline does not list (a new test must pass or skip); an
+# unreadable trx with no results; a malformed baseline line.
 # Warnings: a test that still fails as it did on BASE.
 # Notices: a test that passes now but did not on BASE, a new skipped test, and
 # a baseline test that no longer runs (renamed or removed); update the
@@ -33,7 +34,7 @@
 set -euo pipefail
 
 if [ $# -ne 3 ]; then
-  sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 fi
 trx=$1 baseline=$2 observed=$3
@@ -114,6 +115,9 @@ for my $name (sort keys %base) {
     $errors++;
   } elsif ($was ne "Passed" && $is eq "Passed") {
     print "::notice::WARP: $name passes now ($was on BASE); update the baseline\n";
+  } elsif ($was eq "Skipped" && $is eq "Failed") {
+    print "::error::WARP: $name skipped on BASE and now fails\n";
+    $errors++;
   } elsif ($was eq "Failed" && $is eq "Failed") {
     print "::warning::WARP: $name still fails, as it did on BASE\n";
   } elsif ($is eq "missing") {
