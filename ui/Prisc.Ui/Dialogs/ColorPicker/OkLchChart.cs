@@ -174,7 +174,10 @@ namespace Prisc.UI.Dialogs.ColorPicker
             if (_bitmap == null || _bitmap.PixelSize != pixelSize)
             {
                 _bitmap?.Dispose();
-                _bitmap = new WriteableBitmap(pixelSize, new Vector(96 * scale, 96 * scale), PixelFormat.Bgra8888, AlphaFormat.Premul);
+                // at 96 dpi, so the bitmap's Size is its pixel size: DrawImage reads the source
+                // rect in pixels, and a 192 dpi bitmap's Size (half its pixels) drew only its top
+                // left quarter, stretched over the chart, on a Retina screen (as ColorWheel does)
+                _bitmap = new WriteableBitmap(pixelSize, new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
                 _pixels = new int[pixelSize.Width * pixelSize.Height];
                 _sliceDirty = true;
             }
