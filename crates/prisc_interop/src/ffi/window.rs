@@ -6,7 +6,8 @@
 //! refused first, in the platform-independent prologue, so it is `PRISC_E_INVALID_ARG` on every OS
 //! and every thread; the macOS main-thread gate runs second, still before the pointer is touched,
 //! so a non-zero handle on a worker thread is `PRISC_E_STATE` and is never dereferenced. The
-//! `_windows` / `_macos` exports answer `PRISC_E_UNSUPPORTED` off their OS before checking anything.
+//! `_windows` / `_macos` exports answer `PRISC_E_UNSUPPORTED` off their OS before checking anything
+//! else (destroying a null watch is `PRISC_OK` everywhere, README C1).
 
 use std::ffi::c_void;
 
