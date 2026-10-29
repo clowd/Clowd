@@ -1,0 +1,8 @@
+# WP-WINDOW: hand-written natives of the window chrome and cursor area on b43359d6a. Format: tools/check-native-interop.sh.
+# WP-WINDOW deletes this file once every line below is gone (prisc_window_*, prisc_cursor_*).
+ui/Prisc.Ui/Helpers/WindowNativeExtensions.cs  DllImport  user32, dwmapi and libobjc window chrome calls until prisc_window_*.
+ui/Prisc.Ui/Helpers/WindowNativeExtensions.cs  extern     The extern declarations of those window chrome calls.
+ui/Prisc.Ui/Helpers/WindowNativeExtensions.cs  objc       objc_msgSend, objc_getClass and sel_registerName for NSWindow level, collection behaviour and buttons.
+ui/Prisc.Ui/Helpers/CursorPosition.cs          DllImport  GetCursorPos until prisc_cursor_position.
+ui/Prisc.Ui/Helpers/CursorPosition.cs          extern     The extern declaration of GetCursorPos.
+ui/Prisc.Ui/Helpers/CursorPosition.cs          objc       NSEvent mouseLocation through the objc helpers of WindowNativeExtensions.

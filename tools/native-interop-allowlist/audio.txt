@@ -1,0 +1,22 @@
+# WP-AUDIO: hand-written natives of the devices and audio area on b43359d6a. Format: tools/check-native-interop.sh.
+# WP-AUDIO deletes this file once every line below is gone (prisc_devices_*, prisc_audio_output_*, prisc_audio_input_*).
+ui/Prisc.Ui/Services/AvCaptureInterop.cs        DllImport                 AVFoundation device enumeration through libobjc until prisc_devices_enumerate.
+ui/Prisc.Ui/Services/AvCaptureInterop.cs        extern                    The extern declarations of that enumeration.
+ui/Prisc.Ui/Services/AvCaptureInterop.cs        NativeLibrary             Loading AVFoundation and resolving its media type constants.
+ui/Prisc.Ui/Services/AvCaptureInterop.cs        objc                      objc_msgSend, objc_getClass and sel_registerName on AVCaptureDevice.
+ui/Prisc.Ui/Services/DirectShowInterop.cs       DllImport                 CoCreateInstance (ole32) for the DirectShow video device enumeration until prisc_devices_enumerate.
+ui/Prisc.Ui/Services/DirectShowInterop.cs       extern                    The extern declaration of that ole32 call.
+ui/Prisc.Ui/Services/DirectShowInterop.cs       ComImport                 The DirectShow enumeration and property bag COM interfaces.
+ui/Prisc.Ui/Services/DirectShowInterop.cs       Marshal                   ReleaseComObject on the DirectShow enumerators and monikers.
+ui/Prisc.Ui/Services/CoreAudioInterop.cs        DllImport                 CoreAudio HAL device queries until prisc_devices_enumerate.
+ui/Prisc.Ui/Services/CoreAudioInterop.cs        extern                    The extern declarations of those HAL queries.
+ui/Prisc.Ui/Services/CoreAudioMicCapture.cs     DllImport                 AudioQueue microphone capture until prisc_audio_input_*.
+ui/Prisc.Ui/Services/CoreAudioMicCapture.cs     extern                    The extern declarations of that capture.
+ui/Prisc.Ui/Services/CoreAudioMicCapture.cs     NativeLibrary             Resolving AVMediaTypeAudio from AVFoundation for the permission check.
+ui/Prisc.Ui/Services/CoreAudioMicCapture.cs     UnmanagedFunctionPointer  The AudioQueue input callback and HAL alive listener delegate types.
+ui/Prisc.Ui/Services/CoreAudioMicCapture.cs     Marshal                   GetFunctionPointerForDelegate for those two callbacks.
+ui/Prisc.Ui/Services/CoreAudioMicCapture.cs     objc                      objc_msgSend on AVCaptureDevice for the microphone authorization.
+ui/Prisc.VideoSDK/Audio/CoreAudioOutput.cs      DllImport                 AudioUnit output for playback until prisc_audio_output_*.
+ui/Prisc.VideoSDK/Audio/CoreAudioOutput.cs      extern                    The extern declarations of that output.
+ui/Prisc.VideoSDK/Audio/CoreAudioOutput.cs      UnmanagedFunctionPointer  The AudioUnit render callback delegate type.
+ui/Prisc.VideoSDK/Audio/CoreAudioOutput.cs      Marshal                   GetFunctionPointerForDelegate for the render callback.
