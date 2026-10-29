@@ -199,6 +199,53 @@ mod tests {
         }
     }
 
+    /// The child for the retry test: a claim made while fd 1 is closed fails with EBADF and
+    /// leaves the latch open, so the claim after fd 1 is back succeeds.
+    #[cfg(unix)]
+    #[test]
+    fn guard_retry_child_role() {
+        if std::env::var(ROLE_VAR).as_deref() != Ok("retry") {
+            return;
+        }
+        // SAFETY: descriptor-table edits on this process's own fd 1, restored before any use.
+        let saved = unsafe { libc::dup(1) };
+        assert!(saved >= 0, "dup(1): {}", std::io::Error::last_os_error());
+        assert_eq!(unsafe { libc::close(1) }, 0);
+        let first = super::claim()
+            .map(drop)
+            .map_err(|e| (e.kind(), e.raw_os_error()));
+        // SAFETY: as above; fd 1 is free, so dup2 puts the pipe back there.
+        assert_eq!(unsafe { libc::dup2(saved, 1) }, 1);
+        unsafe { libc::close(saved) };
+        let mut private = super::claim()
+            .expect("the claim after a failed duplicate")
+            .file;
+        private.write_all(b"PROTOCOL\n").unwrap();
+        let first = match first {
+            Err((_, Some(code))) if code == libc::EBADF => "EBADF".to_string(),
+            other => format!("{other:?}"),
+        };
+        writeln!(private, "FIRST {first}").unwrap();
+        std::process::exit(0);
+    }
+
+    /// A failed duplicate must not latch the claim: a transient EBADF would otherwise turn every
+    /// later claim (and `prisc_ipc::open`) into AlreadyExists.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_claim_can_be_retried() {
+        let output = self_command("guard::tests::guard_retry_child_role", "retry")
+            .stdin(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "status {:?}; stderr: {stderr}", output.status);
+        assert!(stdout.contains("FIRST EBADF\n"), "stdout: {stdout:?}; stderr: {stderr}");
+        assert!(stdout.contains("PROTOCOL\n"), "stdout: {stdout:?}");
+    }
+
     /// The private handle must not be inherited: if the grandchild held it, the pipe would stay
     /// open until the grandchild exits, and the read below would take its whole lifetime.
     #[test]

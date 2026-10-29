@@ -45,6 +45,30 @@ namespace Prisc.Ipc.Tests
                     Environment.Exit(0);
                     break;
                 }
+                case "late-signal":
+                case "late-trigger":
+                {
+                    IpcChild.Open("prisc_ipc_test_child", HelperSpecs.Job);
+                    // the quit fires between Open and the subscription, as a signal can in
+                    // Prisc.VideoRender's Main
+                    if (Environment.GetEnvironmentVariable(RoleVariable) == "late-signal")
+                    {
+                        using var kill = Process.Start(new ProcessStartInfo("/bin/kill", $"-TERM {Environment.ProcessId}") { UseShellExecute = false });
+                        kill.WaitForExit();
+                    }
+                    else
+                    {
+                        IpcChild.TriggerQuit();
+                    }
+                    var deadline = DateTime.UtcNow + Generous;
+                    while (!IpcChild.QuitTriggered && DateTime.UtcNow < deadline)
+                        Thread.Sleep(10);
+                    bool ran = false;
+                    IpcChild.OnQuit += () => ran = true;
+                    // the late handler runs at once, on this thread
+                    Environment.Exit(IpcChild.QuitTriggered && ran ? HelperExit.Ok : HelperExit.Failed);
+                    break;
+                }
                 case "quit":
                 {
                     var events = IpcChild.Open("prisc_ipc_test_child", HelperSpecs.Job);
@@ -173,6 +197,19 @@ namespace Prisc.Ipc.Tests
                 process.StandardInput.Flush();
             });
             AssertQuitLikeEnding(run);
+        }
+
+        [Theory]
+        [InlineData("late-trigger")]
+        [InlineData("late-signal")]
+        public void A_quit_handler_added_after_the_quit_fired_still_runs(string role)
+        {
+            Assert.SkipWhen(role == "late-signal" && OperatingSystem.IsWindows(), "no POSIX signals to send on Windows");
+            InteropTestGate.Require();
+            var run = RunChild(role);
+            Assert.True(run.ExitCode == HelperExit.Ok, $"exit {run.ExitCode}; stderr: {run.Stderr}");
+            if (role == "late-signal")
+                Assert.Contains("ipc: quitting (SIGTERM)", run.Stderr, StringComparison.Ordinal);
         }
 
         [Theory]

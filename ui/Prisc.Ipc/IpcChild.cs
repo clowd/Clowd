@@ -31,12 +31,38 @@ namespace Prisc.Ipc
         private static bool _hardExitArmed;
         /// <summary>Held for the process lifetime: a collected registration unregisters itself.</summary>
         private static List<PosixSignalRegistration> _signals;
+        private static Action _onQuit;
 
         /// <summary>Raised once, on whichever thread noticed: a <c>quit</c> command, stdin EOF, a
-        /// termination signal (SIGTERM, SIGINT, SIGHUP; their console-event equivalents on Windows), or
-        /// the first failed write to stdout. Handlers must only flag or cancel; they must not block or
+        /// termination signal (SIGTERM, SIGINT, SIGHUP; on Windows every console control event,
+        /// CTRL_BREAK included, as the Rust helpers' console handler does), or the first failed write
+        /// to stdout. A handler added after the quit already fired runs at once, on the adding thread
+        /// (prisc_ipc lifetime.rs does the same), so a signal that lands between <see cref="Open"/> and
+        /// the subscription is not lost. Handlers must only flag or cancel; they must not block or
         /// emit.</summary>
-        public static event Action OnQuit;
+        public static event Action OnQuit
+        {
+            add
+            {
+                if (value == null)
+                    return;
+                lock (Sync)
+                {
+                    if (_quit == 0)
+                    {
+                        _onQuit += value;
+                        return;
+                    }
+                }
+
+                RunQuitHandlers(value);
+            }
+            remove
+            {
+                lock (Sync)
+                    _onQuit -= value;
+            }
+        }
 
         /// <summary>
         /// Claims stdout and writes <c>hello</c>. Call first thing in <c>Main</c>, before any native
@@ -115,21 +141,36 @@ namespace Prisc.Ipc
                 StartHardExitTimer();
         }
 
+        /// <summary>Whether the quit path has fired (tests).</summary>
+        internal static bool QuitTriggered => Volatile.Read(ref _quit) != 0;
+
         internal static void TriggerQuit()
         {
-            if (Interlocked.Exchange(ref _quit, 1) != 0)
-                return;
+            Action handlers;
+            lock (Sync)
+            {
+                // under the lock, so a handler is either in this snapshot or sees _quit set and runs
+                // itself (the add accessor)
+                if (_quit != 0)
+                    return;
+                Volatile.Write(ref _quit, 1);
+                handlers = _onQuit;
+            }
 
+            RunQuitHandlers(handlers);
+            StartHardExitTimer();
+        }
+
+        private static void RunQuitHandlers(Action handlers)
+        {
             try
             {
-                OnQuit?.Invoke();
+                handlers?.Invoke();
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine("ipc: a quit handler failed: " + ex.Message);
             }
-
-            StartHardExitTimer();
         }
 
         private static void StartHardExitTimer()
@@ -157,8 +198,11 @@ namespace Prisc.Ipc
         }
 
         /// <summary>SIGTERM, SIGINT and SIGHUP become the quit path instead of the runtime's default
-        /// shutdown, so a signalled helper ends the way a <c>quit</c> command ends it. A signal this
-        /// platform cannot register is skipped.</summary>
+        /// shutdown, so a signalled helper ends the way a <c>quit</c> command ends it. On Windows the
+        /// runtime maps the console control events onto these, except CTRL_BREAK, which it reports as
+        /// SIGQUIT; that is routed too there, because the Rust helpers' console handler quits on every
+        /// event. On Unix SIGQUIT keeps its default, as it does for the Rust helpers (ctrlc's
+        /// termination set). A signal this platform cannot register is skipped.</summary>
         private static void RouteSignals()
         {
             lock (Sync)
@@ -168,7 +212,10 @@ namespace Prisc.Ipc
             }
 
             var registrations = new List<PosixSignalRegistration>();
-            foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT, PosixSignal.SIGHUP })
+            var signals = OperatingSystem.IsWindows()
+                ? new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT, PosixSignal.SIGHUP, PosixSignal.SIGQUIT }
+                : new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT, PosixSignal.SIGHUP };
+            foreach (var signal in signals)
             {
                 try
                 {
