@@ -224,6 +224,7 @@ fn idle_seconds_are_plausible() {
     match unsafe { prisc_idle_seconds(&mut seconds) } {
         OK => assert!((0.0..31_536_000.0).contains(&seconds), "{seconds}"),
         NONE => eprintln!("skipping: the OS gave no idle time"),
+        other if !cfg!(any(windows, target_os = "macos")) => assert_eq!(other, S::Unsupported as i32),
         other => panic!("prisc_idle_seconds answered {other}"),
     }
 }
