@@ -35,15 +35,7 @@ namespace Prisc.Interop
         RequeueFailed = 2,
     }
 
-    /// <summary>The plane <c>prisc_oklch_paint_slice</c> paints.</summary>
-    public enum OkLchPlane : int
-    {
-        LightnessChroma = 0,
-        LightnessHue = 1,
-        ChromaHue = 2,
-    }
-
-    /// <summary>The channel <c>prisc_oklch_paint_track</c> paints.</summary>
+    /// <summary>One of the three OKLCH channels: the one a gamut chart holds fixed (<c>prisc_oklch_paint_slice</c>), or the one a slider track sweeps (<c>prisc_oklch_paint_track</c>).</summary>
     public enum OkLchChannel : int
     {
         Lightness = 0,
@@ -217,7 +209,7 @@ namespace Prisc.Interop
         Nested = 13,
     }
 
-    /// <summary>Which part of the region a drag moves.</summary>
+    /// <summary>Which part of the region a drag moves: the corners, the edge midpoints, or the body (a move).</summary>
     public enum ShareRegionHandle : int
     {
         TopLeft = 0,

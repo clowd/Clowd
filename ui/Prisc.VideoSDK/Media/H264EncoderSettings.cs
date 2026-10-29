@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using FFmpeg.AutoGen.Abstractions;
+using Prisc.Interop;
 
 namespace Prisc.VideoSDK.Media
 {
@@ -16,7 +17,8 @@ namespace Prisc.VideoSDK.Media
     /// <c>crf</c> (0 best – 51 worst, x264's scale) is the single quality knob the caller sees;
     /// each encoder maps it onto its own scale so a given crf lands on comparable bytes and
     /// quality whichever encoder ends up selected. The mapping is the one measured for the
-    /// recorder (crates/prisc_recorder <c>encoder_config.rs</c>):
+    /// recorder, and the recorder's own (<c>prisc_rust_core::encoding</c>, through
+    /// <see cref="H264Quality"/>; its bounds are generated into this class):
     /// </para>
     /// <list type="bullet">
     /// <item><b>x264</b>: <c>crf</c> passthrough, preset <c>fast</c> (the project owner's choice,
@@ -33,9 +35,10 @@ namespace Prisc.VideoSDK.Media
     /// <item><b>AMF</b>: constant QP at <c>crf</c> for I, P and B (what OBS's own recording
     /// presets use), quality preset.</item>
     /// <item><b>VideoToolbox</b>: its inverted 0–100 quality slider on Apple Silicon
-    /// (<see cref="VideoToolboxQuality"/>); Intel Macs have no quality mode, and the encoder
-    /// refuses <c>q:v</c> there, so <see cref="BitrateFallback"/> carries the average-bitrate
-    /// variant (<see cref="VideoToolboxBitrateKbps"/>) to open instead.</item>
+    /// (<see cref="H264Quality.VideoToolboxQuality"/>); Intel Macs have no quality mode, and the
+    /// encoder refuses <c>q:v</c> there, so <see cref="BitrateFallback"/> carries the
+    /// average-bitrate variant (<see cref="H264Quality.VideoToolboxBitrateKbps"/>) to open
+    /// instead.</item>
     /// </list>
     /// Uniform across all of them: a 10-second GOP (<see cref="GopFrames"/>, see
     /// <see cref="GopSeconds"/> for the size measurements) and profile high. B-frames are
@@ -43,7 +46,7 @@ namespace Prisc.VideoSDK.Media
     /// reordering (<see cref="VideoToolboxBFrames"/>, and see the VideoToolbox case of
     /// <see cref="For"/> for why); AMF drops to whatever B-frame support the hardware has.
     /// </summary>
-    public sealed class H264EncoderSettings
+    public sealed partial class H264EncoderSettings
     {
         /// <summary>The x264 preset, fixed by the project owner (not configurable). Measured on
         /// the 3863-frame benchmark job (i7-14700K): 1.95 ms/frame at 1240x1166, 9.6 ms at
@@ -66,26 +69,10 @@ namespace Prisc.VideoSDK.Media
         /// <see cref="For"/> for why this is not <see cref="BFrames"/>.</summary>
         public const int VideoToolboxBFrames = 0;
 
-        /// <summary>The worst quality x264's crf and NVENC's cq accept.</summary>
-        public const int MaxCrf = 51;
-
         /// <summary>x264's lossless crf. The hardware encoders have no lossless mode on this
         /// scale (NVENC's cq 0 means "automatic", AMF's qp 0 is merely its best step), so only
         /// the x264 mapping treats it specially.</summary>
         public const int LosslessCrf = 0;
-
-        /// <summary>NVENC's CQ scale sits about this far below x264's CRF scale (measured:
-        /// bytes at cq=crf+4 match x264 at crf).</summary>
-        public const int NvencCqOffset = 4;
-
-        /// <summary>VideoToolbox quality slider bounds. Past ~70 each point buys a fraction of a
-        /// VMAF for a multiple of the bytes (q70 ≈ 17.5 Mbps, q80 ≈ 38 Mbps at 1080p30), and
-        /// below 15 the output is unusable; crf 15 and better all land on 70.</summary>
-        public const int VideoToolboxQualityMin = 15, VideoToolboxQualityMax = 70;
-
-        /// <summary>Intel-Mac average-bitrate bounds (kbps): enough for a screen recording at the
-        /// common sizes, and a hard ceiling so a 4K60 render cannot balloon.</summary>
-        public const int VideoToolboxBitrateMinKbps = 1500, VideoToolboxBitrateMaxKbps = 6000;
 
         private H264EncoderSettings(VideoEncoder encoder, string codecName,
             IReadOnlyList<KeyValuePair<string, string>> privateOptions, int gopSize, int maxBFrames,
@@ -168,14 +155,10 @@ namespace Prisc.VideoSDK.Media
         /// </summary>
         public static H264EncoderSettings For(VideoEncoder encoder, int crf, int width, int height, int fpsNum, int fpsDen)
         {
-            if (crf < 0 || crf > MaxCrf)
-                throw new ArgumentOutOfRangeException(nameof(crf), crf, $"crf must be 0-{MaxCrf}.");
-            if (width <= 0 || height <= 0)
-                throw new ArgumentOutOfRangeException(nameof(width), $"Output size {width}x{height} is not positive.");
-            if (fpsNum <= 0 || fpsDen <= 0)
-                throw new ArgumentOutOfRangeException(nameof(fpsNum), $"Frame rate {fpsNum}/{fpsDen} components must be positive.");
-
             string codec = CodecNameOf(encoder);
+            // the crf mapped onto every encoder in one call; it refuses a crf outside 0-51 and a
+            // size or rate that is not positive (ArgumentOutOfRangeException)
+            var quality = H264Quality.For(crf, width, height, fpsNum, fpsDen);
             int gop = GopFrames(fpsNum, fpsDen);
             string common = $"profile=high bf={BFrames} gop={gop}";
             switch (encoder)
@@ -197,7 +180,7 @@ namespace Prisc.VideoSDK.Media
 
                 case VideoEncoder.Nvenc:
                 {
-                    int cq = NvencCq(crf);
+                    int cq = quality.NvencCq;
                     return new H264EncoderSettings(encoder, codec,
                         Options(("rc", "vbr"), ("cq", I(cq)), ("preset", "p6"), ("tune", "hq"),
                             ("multipass", "qres"), ("rc-lookahead", "8"), ("spatial-aq", "1"), ("profile", "high")),
@@ -246,11 +229,11 @@ namespace Prisc.VideoSDK.Media
                     // session would be slower than x264 fast.
                     var options = Options(("profile", "high"), ("allow_sw", "0"));
                     string vtCommon = $"profile=high bf={VideoToolboxBFrames} gop={gop}";
-                    int kbps = VideoToolboxBitrateKbps(width, height, fpsNum, fpsDen);
+                    int kbps = quality.VideoToolboxBitrateKbps;
                     var fallback = new H264EncoderSettings(encoder, codec, options,
                         gop, VideoToolboxBFrames, kbps * 1000L, 0, false, 0,
                         $"VideoToolbox b:v={kbps}k (average bitrate: no quality mode on this Mac) {vtCommon}", null);
-                    int q = VideoToolboxQuality(crf);
+                    int q = quality.VideoToolboxQuality;
                     return new H264EncoderSettings(encoder, codec, options,
                         gop, VideoToolboxBFrames, 0, 0, true, q * ffmpeg.FF_QP2LAMBDA,
                         $"VideoToolbox q:v={q} {vtCommon}", fallback);
@@ -268,38 +251,6 @@ namespace Prisc.VideoSDK.Media
             if (fpsNum <= 0 || fpsDen <= 0)
                 throw new ArgumentOutOfRangeException(nameof(fpsNum), $"Frame rate {fpsNum}/{fpsDen} components must be positive.");
             return Math.Max(1, (int)Math.Round(GopSeconds * (double)fpsNum / fpsDen));
-        }
-
-        /// <summary>NVENC's constant-quality target for an x264-style crf: <c>crf + 4</c>, clamped
-        /// to 1–51 (0 would mean "automatic" to NVENC, not lossless).</summary>
-        public static int NvencCq(int crf) => Math.Clamp(crf + NvencCqOffset, 1, MaxCrf);
-
-        /// <summary>
-        /// VideoToolbox's quality slider (0 worst – 100 best) for an x264-style crf:
-        /// <c>(51 - crf) * 100 / 51</c> rounded, then clamped to
-        /// <see cref="VideoToolboxQualityMin"/>–<see cref="VideoToolboxQualityMax"/>. The linear
-        /// slope tracked x264 veryfast at the same crf to within ~0.6 VMAF across crf 16–24 on an
-        /// M2 Pro; the clamp is because the slider has no sane top end.
-        /// </summary>
-        public static int VideoToolboxQuality(int crf)
-        {
-            int q = (int)Math.Round(Math.Max(0, MaxCrf - crf) * 100.0 / MaxCrf, MidpointRounding.AwayFromZero);
-            return Math.Clamp(q, VideoToolboxQualityMin, VideoToolboxQualityMax);
-        }
-
-        /// <summary>
-        /// Intel-Mac VideoToolbox has no quality mode, so it encodes at an average bitrate: a
-        /// 4 Mbps-at-3440x1440@30 budget scaled by pixel rate and clamped to
-        /// <see cref="VideoToolboxBitrateMinKbps"/>–<see cref="VideoToolboxBitrateMaxKbps"/>.
-        /// A size compromise by design, not an equivalent of the crf tiers.
-        /// </summary>
-        public static int VideoToolboxBitrateKbps(int width, int height, int fpsNum, int fpsDen)
-        {
-            const double referencePixels = 3440.0 * 1440.0;
-            double fps = fpsDen > 0 ? (double)fpsNum / fpsDen : 30.0;
-            double pixelRate = (width * (double)height / referencePixels) * (Math.Max(1.0, fps) / 30.0);
-            double kbps = Math.Round(4000.0 * pixelRate, MidpointRounding.AwayFromZero);
-            return (int)Math.Clamp(kbps, VideoToolboxBitrateMinKbps, VideoToolboxBitrateMaxKbps);
         }
 
         private static string I(int value) => value.ToString(CultureInfo.InvariantCulture);

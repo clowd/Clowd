@@ -18,8 +18,6 @@ namespace Prisc.UI
     /// </summary>
     public static class RecordingOutputPath
     {
-        public const string DefaultFilenamePattern = "yyyy-MM-dd HH-mm-ss";
-
         /// <summary>
         /// The configured output folder as a full path, created if it does not exist yet. Falls
         /// back to the Videos folder when the configured one is blank or cannot be created (an
@@ -55,7 +53,7 @@ namespace Prisc.UI
             // the name and doubled by the extension appended below — the WPF version stripped it too.
             var pattern = settings?.FilenamePattern;
             if (String.IsNullOrWhiteSpace(pattern))
-                pattern = DefaultFilenamePattern;
+                pattern = SharedDefaults.DefaultFilenamePattern;
             pattern = Path.GetFileNameWithoutExtension(pattern);
 
             string name;

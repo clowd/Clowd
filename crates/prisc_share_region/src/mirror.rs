@@ -26,44 +26,17 @@ use prisc_obs::video::VideoInfo;
 use prisc_obs_platform::region::{self, Rect, RegionPlan};
 use prisc_obs_platform::{CaptureMethod, MonitorInfo};
 
-/// Floor on the region width/height accepted by `bootstrap` and `set_region`.
-/// A degenerate or one-pixel region would produce a canvas the swapchain and
-/// the scene math cannot meaningfully represent (and, on the Windows side, a
-/// mirror window smaller than its own minimum tracking size), so both the
-/// `--region` flag and the shell's `move` command are clamped rather than
-/// trusted. 64 px is the same floor the deleted interactive resize used, kept
-/// so the clamp behaviour does not change.
-const MIN_REGION: u32 = 64;
-
 /// The one place a requested region is turned into a region this process can
-/// actually mirror. Everything that reaches the wire as `sharing_started` or
-/// `region_changed`, and everything the platform layer sizes the window from,
-/// has been through here.
-///
-/// Two adjustments, both of which the caller learns about because the adjusted
-/// rect is what gets acked:
-///
-/// * The size is floored at [`MIN_REGION`], for the reasons on that constant.
-/// * The size is rounded DOWN to even, because `plan_region` forces the canvas
-///   even (`region.w * canvas_scale` masked with `& !1`) and the mirror window
-///   is sized from the region. An odd 801-px region would otherwise present an
-///   800-px-wide swapchain into an 801-px-wide window, and DXGI would stretch
-///   the mirror by 801/800 — a resampled, slightly soft picture — while the
-///   `region_changed` ack told Prisc to draw its border at 801. Rounding the
-///   region itself keeps the window, the canvas and the ack in one value
-///   domain, which is the property `AppEvents::set_region` is built on. (Odd
-///   sizes are easy to produce: Prisc computes the region from a border the
-///   user drags by hand.) Rounding down rather than up keeps a region that was
-///   just inside a display from being pushed a pixel past its edge.
-///
-/// Order matters: the floor is applied first and [`MIN_REGION`] is itself even,
-/// so the rounding can never take a size back below the floor.
+/// actually mirror: `prisc_rust_core::share_region::normalize` (size floored at
+/// `MIN_REGION`, then rounded down to even, origin untouched; see its docs for
+/// why), the same function Prisc.Ui's resize drag applies. Everything that
+/// reaches the wire as `sharing_started` or `region_changed`, and everything
+/// the platform layer sizes the window from, has been through here. Rounding
+/// the region itself keeps the window, the canvas (`plan_region` forces it
+/// even) and the ack in one value domain, which is the property
+/// `AppEvents::set_region` is built on.
 fn normalize_region(region: Rect) -> Rect {
-    Rect {
-        w: region.w.max(MIN_REGION) & !1,
-        h: region.h.max(MIN_REGION) & !1,
-        ..region
-    }
+    prisc_rust_core::share_region::normalize(region.into()).into()
 }
 
 /// Setup failures: fatal `error{code:"init_failed"}`, exit 1. Never unwind:
@@ -408,49 +381,4 @@ fn build_scene_items(
         items.push(item);
     }
     (sources, items)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn rect(w: u32, h: u32) -> Rect {
-        Rect {
-            x: 10,
-            y: -20,
-            w,
-            h,
-        }
-    }
-
-    /// Every rect that leaves `normalize_region` must be one the mirror can
-    /// actually present: at least `MIN_REGION` on both axes, and even, so that
-    /// the canvas `plan_region` computes (which is masked even) is the same
-    /// size as the window the platform layer builds from the region.
-    #[test]
-    fn normalize_region_is_a_fixed_point_of_the_canvas_math() {
-        for w in [1u32, 2, 63, 64, 65, 800, 801, 1919, 3840] {
-            for h in [1u32, 2, 63, 64, 65, 600, 601, 1081, 2160] {
-                let n = normalize_region(rect(w, h));
-                assert!(n.w >= MIN_REGION && n.h >= MIN_REGION, "{w}x{h} -> {n:?}");
-                assert_eq!((n.w % 2, n.h % 2), (0, 0), "{w}x{h} -> {n:?}");
-                // What `plan_region` would make of it at canvas_scale 1.0.
-                assert_eq!(((n.w & !1).max(2), (n.h & !1).max(2)), (n.w, n.h));
-                // Idempotent: re-sending an acked region must not move it again,
-                // or Prisc's border would creep by a pixel per round trip.
-                assert_eq!(normalize_region(n), n);
-                // Position is never touched — only a display change can move
-                // the region, and that is the shell's business, not ours.
-                assert_eq!((n.x, n.y), (10, -20));
-            }
-        }
-    }
-
-    /// The floor is applied before the rounding, so it cannot be rounded away.
-    #[test]
-    fn normalize_region_floor_survives_the_even_rounding() {
-        assert_eq!(normalize_region(rect(1, 1)).w, MIN_REGION);
-        assert_eq!(normalize_region(rect(MIN_REGION + 1, 1)).w, MIN_REGION);
-        assert_eq!(normalize_region(rect(2, 2)).h, MIN_REGION);
-    }
 }

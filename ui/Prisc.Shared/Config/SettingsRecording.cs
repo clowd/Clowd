@@ -494,7 +494,7 @@ namespace Prisc.Config
         private string _webcamDeviceId = "";
         private bool _renderWhenFinished = false;
         private string _outputDirectory = DefaultOutputDirectory;
-        private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
+        private string _filenamePattern = SharedDefaults.DefaultFilenamePattern;
         private VideoContainer _container = VideoContainer.Mp4;
         private RecordingFinishAction _openWhenFinished = RecordingFinishAction.VideoEditor;
         private GifQuality _gifQuality = GifQuality.Good;

@@ -94,20 +94,9 @@ namespace Prisc.UI.Controls.Tray
             var radius = diameter / 2;
             context.DrawEllipse(new ImmutableSolidColorBrush(color), null, center, radius, radius);
 
-            if ((alwaysEdged || RelativeLuminance(color) < DarkLuminance) && radius > 1)
+            if ((alwaysEdged || AccentColors.RelativeLuminance(color) < DarkLuminance) && radius > 1)
                 context.DrawEllipse(null, new Pen(TrayTokens.DotHairline, 1), center, radius - 0.5, radius - 0.5);
         }
 
-        /// <summary>WCAG 2 relative luminance of the colour's RGB, ignoring alpha.</summary>
-        public static double RelativeLuminance(Color color)
-        {
-            return 0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B);
-
-            static double Linear(byte channel)
-            {
-                var c = channel / 255.0;
-                return c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
-            }
-        }
     }
 }

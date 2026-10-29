@@ -14,9 +14,11 @@
 //! full-shape zero states) and fed back from each frame's `r1o..r4o`. That
 //! is why frames must arrive in presentation order and why one process
 //! handles one clip. `downsample_ratio` is the model's own internal-scale
-//! hint: 270 ÷ the short side (capped at 1) — the C# side scales its input
-//! so the short side is ≤ 540, where inference measured 27 ms/frame on the
-//! dev box (51 ms at 1080p).
+//! hint: `MODEL_SHORT_SIDE` (270) over the short side, capped at 1. The C#
+//! side scales its input so the short side is at most `MAX_ANALYSIS_SIDE`
+//! (540), where inference measured 27 ms/frame on the dev box (51 ms at
+//! 1080p); both sizes are `prisc_rust_core::contract::matte`, which C#'s
+//! `MatteGenerator` is generated from.
 
 use std::io::Write;
 use std::time::Instant;
@@ -24,6 +26,8 @@ use std::time::Instant;
 use anyhow::{ensure, Context};
 use ort::session::Session;
 use ort::value::Tensor;
+
+use prisc_rust_core::contract::matte::MODEL_SHORT_SIDE;
 
 use crate::{read_frame, FrameRead};
 
@@ -43,9 +47,10 @@ pub enum MatteFormat {
     Rgba,
 }
 
-/// The model's internal-scale hint: clamp(270 / short side, ≤ 1).
+/// The model's internal-scale hint: `MODEL_SHORT_SIDE` over the short side,
+/// capped at 1.
 fn downsample_ratio(width: u32, height: u32) -> f32 {
-    (270.0 / width.min(height) as f32).min(1.0)
+    (MODEL_SHORT_SIDE as f32 / width.min(height) as f32).min(1.0)
 }
 
 /// 0–1 float to the byte the sidecar stores. `round`, not truncate: a matte
@@ -201,6 +206,8 @@ mod tests {
     /// proportionally, and inputs already at or below 270 run unscaled.
     #[test]
     fn downsample_ratio_matches_contract() {
+        use prisc_rust_core::contract::matte::MAX_ANALYSIS_SIDE;
+        assert_eq!(downsample_ratio(960, MAX_ANALYSIS_SIDE as u32), 0.5);
         assert_eq!(downsample_ratio(960, 540), 0.5);
         assert_eq!(downsample_ratio(1920, 1080), 0.25);
         assert_eq!(downsample_ratio(270, 480), 1.0);

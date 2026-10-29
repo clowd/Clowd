@@ -2,9 +2,10 @@
 //! classes. Each output file renders one or more contract modules into one class; the values come
 //! from each module's `items()`, so a `computed` entry reaches C# as a literal.
 //!
-//! The class names are chosen so they cannot collide with the hand-written classes beside them
-//! (`TrayTokens`, `ClickHighlight` are not partial today); the pure-logic work package may rename a
-//! target to the hand-written class once it makes that class `partial`.
+//! Where a hand-written C# class already owns the constants' names (`TrayTokens`, `ClickHighlight`,
+//! `MatteGenerator`, `ShareRegionGeometry`, `H264EncoderSettings`), the output is another part of
+//! that `partial` class, so callers keep reading `ClickHighlight.DurationMs` and the value has one
+//! home, in Rust. Such a part carries no class summary: the hand-written part documents the class.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -22,15 +23,22 @@ struct Target {
     class: &'static str,
     /// `public` or `internal`.
     access: &'static str,
+    /// What follows the access modifier: `static partial class`, or `sealed partial class` for a
+    /// hand-written class that is not static.
+    kind: &'static str,
+    /// The class summary; empty for a part of a hand-written class.
     summary: &'static str,
     /// `(module path for the docs, items)`.
     modules: &'static [(&'static str, ItemsFn)],
 }
 
+const STATIC: &str = "static partial class";
+
 const DEFAULTS: Target = Target {
     namespace: "Prisc",
     class: "SharedDefaults",
     access: "public",
+    kind: STATIC,
     summary: "Defaults and accent constants the Rust helpers and Prisc.Ui share.",
     modules: &[("defaults", contract::defaults::items), ("accent", contract::accent::items)],
 };
@@ -38,42 +46,48 @@ const TELEMETRY: Target = Target {
     namespace: "Prisc",
     class: "TelemetryContract",
     access: "internal",
+    kind: STATIC,
     summary: "The crash and error reporting contract every process shares.",
     modules: &[("telemetry", contract::telemetry::items)],
 };
 const TRAY: Target = Target {
     namespace: "Prisc.UI.Controls.Tray",
-    class: "TrayContract",
-    access: "internal",
-    summary: "The capture tray's design tokens as raw numbers, shared with the egui tray.",
+    class: "TrayTokens",
+    access: "public",
+    kind: STATIC,
+    summary: "",
     modules: &[("tray", contract::tray::items)],
 };
 const CLICK_HIGHLIGHT: Target = Target {
     namespace: "Prisc.VideoSDK.Composition",
-    class: "ClickHighlightContract",
+    class: "ClickHighlight",
     access: "public",
-    summary: "The recorded click highlight's animation, shared with the recorder.",
+    kind: STATIC,
+    summary: "",
     modules: &[("click_highlight", contract::click_highlight::items)],
 };
 const MATTE: Target = Target {
     namespace: "Prisc.VideoSDK.Ai",
-    class: "MatteContract",
+    class: "MatteGenerator",
     access: "public",
-    summary: "The background matte analysis sizes, shared with prisc_ai.",
+    kind: STATIC,
+    summary: "",
     modules: &[("matte", contract::matte::items)],
 };
 const SHARE_REGION: Target = Target {
     namespace: "Prisc.UI",
-    class: "ShareRegionContract",
-    access: "internal",
-    summary: "The share-region size rules, shared with prisc_share_region.",
+    class: "ShareRegionGeometry",
+    access: "public",
+    kind: STATIC,
+    summary: "",
     modules: &[("share_region", contract::share_region::items)],
 };
 const H264: Target = Target {
     namespace: "Prisc.VideoSDK.Media",
-    class: "H264Contract",
+    class: "H264EncoderSettings",
     access: "public",
-    summary: "The H.264 encoder ranges, shared with the recorder.",
+    kind: "sealed partial class",
+    summary: "",
     modules: &[("encoding", contract::encoding::items)],
 };
 
@@ -122,19 +136,19 @@ pub static OUTPUTS: &[Output] = &[
     },
     Output {
         name: "contract-matte",
-        path: "ui/Prisc.VideoSDK/Ai/MatteContract.g.cs",
+        path: "ui/Prisc.VideoSDK/Ai/MatteGenerator.g.cs",
         source: SOURCE,
         render: render_matte,
     },
     Output {
         name: "contract-share-region",
-        path: "ui/Prisc.Ui/Video/ShareRegionContract.g.cs",
+        path: "ui/Prisc.Ui/Video/ShareRegionGeometry.g.cs",
         source: SOURCE,
         render: render_share_region,
     },
     Output {
         name: "contract-h264",
-        path: "ui/Prisc.VideoSDK/Media/H264Contract.g.cs",
+        path: "ui/Prisc.VideoSDK/Media/H264EncoderSettings.g.cs",
         source: SOURCE,
         render: render_h264,
     },
@@ -166,7 +180,7 @@ fn render(target: &Target) -> anyhow::Result<String> {
     let mut out = cs::header("contracts", SOURCE);
     let _ = writeln!(out, "namespace {}\n{{", target.namespace);
     out.push_str(&cs::summary(target.summary, "    "));
-    let _ = writeln!(out, "    {} static partial class {}\n    {{", target.access, target.class);
+    let _ = writeln!(out, "    {} {} {}\n    {{", target.access, target.kind, target.class);
     let mut first = true;
     for (module, items) in target.modules {
         for item in items() {
@@ -218,7 +232,7 @@ mod tests {
     fn every_target_renders_a_partial_class() {
         for output in OUTPUTS {
             let text = (output.render)(Path::new(".")).unwrap();
-            assert!(text.contains(" static partial class "), "{}", output.path);
+            assert!(text.contains(" partial class "), "{}", output.path);
         }
     }
 }

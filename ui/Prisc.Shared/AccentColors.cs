@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using Avalonia.Media;
 using Microsoft.Win32;
+using Prisc.Interop;
 
 namespace Prisc
 {
@@ -14,21 +15,21 @@ namespace Prisc
     /// It paints the capture surfaces directly, and the rest of the app through
     /// <c>AccentTheme</c>, which writes it over the Semi theme's blue ramp — so
     /// <c>AppStyles.AccentColor</c>, reading the theme, hands back this same color.
+    ///
+    /// The maths is <c>prisc_rust_core::color</c> (through <see cref="ColorMath"/>), the code the
+    /// capture overlay paints with, so the two cannot drift; the constants are generated
+    /// (<see cref="SharedDefaults"/>), so reading them never needs the native library.
     /// </summary>
     public static class AccentColors
     {
         /// <summary>The legacy "prisc blue" the capturer has always been drawn in.</summary>
-        public static readonly Color PriscBlue = Color.FromRgb(0x3B, 0x97, 0xD2);
+        public static readonly Color PriscBlue = FromRgb(SharedDefaults.PriscBlue);
 
-        /// <summary>WCAG AA for normal text (4.5:1), measured against the white glyphs the overlay
-        /// draws on top of the accent.</summary>
-        public const double MinimumContrastWithWhite = 4.5;
-
-        /// <summary>Prisc blue taken down to <see cref="MinimumContrastWithWhite"/> (#2F7CAE): the
-        /// corrected default accent, and what the capturer lands on from its own
-        /// <c>--accent-color</c> default (the raw <see cref="PriscBlue"/>, corrected by
-        /// crates/prisc_capture/src/accent.rs).</summary>
-        public static readonly Color Default = EnsureContrastWithWhite(PriscBlue);
+        /// <summary>Prisc blue taken down to <see cref="SharedDefaults.MinimumContrastWithWhite"/>
+        /// (#2F7CAE): the corrected default accent, and what the capturer lands on from its own
+        /// <c>--accent-color</c> default. Computed in Rust when the constants are generated, so type
+        /// initialisation makes no native call.</summary>
+        public static readonly Color Default = FromRgb(SharedDefaults.DefaultAccent);
 
         /// <summary>Whether this OS exposes an accent color we can follow. Windows only: macOS has
         /// no equivalent we can read without AppKit interop, so the "use system accent" option is
@@ -75,139 +76,67 @@ namespace Prisc
         }
 
         /// <summary>WCAG relative luminance (0 = black, 1 = white), ignoring alpha.</summary>
-        public static double RelativeLuminance(Color color)
-        {
-            return 0.2126 * ToLinear(color.R) + 0.7152 * ToLinear(color.G) + 0.0722 * ToLinear(color.B);
-        }
-
-        /// <summary>WCAG contrast ratio between this color and white: 1 for white itself, 21 for
-        /// black.</summary>
-        public static double ContrastWithWhite(Color color)
-        {
-            return 1.05 / (RelativeLuminance(color) + 0.05);
-        }
+        public static double RelativeLuminance(Color color) => ColorMath.RelativeLuminance(Rgb(color));
 
         /// <summary>
         /// Returns <paramref name="color"/> darkened just enough to reach
-        /// <paramref name="minimumContrast"/> against white, or unchanged when it is dark enough
-        /// already. Hue and saturation are preserved: only the brightness moves.
+        /// <see cref="SharedDefaults.MinimumContrastWithWhite"/> against white, or unchanged when it
+        /// is dark enough already. Hue and saturation are preserved, only the brightness moves, and
+        /// so is alpha.
         /// </summary>
-        public static Color EnsureContrastWithWhite(Color color, double minimumContrast = MinimumContrastWithWhite)
-        {
-            var targetLuminance = Math.Max(1.05 / Math.Max(minimumContrast, 1.0) - 0.05, 0.0);
-            var luminance = RelativeLuminance(color);
-            if (luminance <= targetLuminance)
-                return color;
-
-            // Luminance is a linear combination of the linear-light channels, so scaling all three
-            // by the same factor scales the luminance by exactly that factor — no search needed,
-            // and the ratios between the channels (the hue) are untouched.
-            var scale = targetLuminance / luminance;
-            return Color.FromArgb(color.A,
-                                  Encode(ToLinear(color.R) * scale),
-                                  Encode(ToLinear(color.G) * scale),
-                                  Encode(ToLinear(color.B) * scale));
-        }
-
-        /// <summary>OKLab lightness the comet's body is held between. The band straddles the graphite
-        /// tray (L ≈ 0.27) and its dark shadow, so a body below the floor sinks into them; above the
-        /// ceiling there is too little room left for chroma and it washes out to a pastel.</summary>
-        public const double CometMinLightness = 0.62, CometMaxLightness = 0.72;
+        public static Color EnsureContrastWithWhite(Color color)
+            => WithAlpha(color.A, ColorMath.Palette(Rgb(color), maintainContrast: true).Effective);
 
         /// <summary>
-        /// The two colours of the capture overlay's hint comet (prisc_capture mirrors this in
-        /// <c>hints::trail::comet_colors</c>), derived from the accent as the user
-        /// picked it (not the contrast-darkened fill, which reads as muddy once it glows): the body, and
-        /// the hot tint its head burns towards.
-        /// <para>
-        /// Worked in OKLCH so that "lighter" moves only perceived lightness and keeps the hue the user
-        /// chose — HSL lightening drifts blues toward purple and greys out yellows. The body keeps the
-        /// pick's hue and as much of its chroma as sRGB can hold at the clamped lightness; the head is
-        /// the same hue, lighter, with chroma eased off so it reads as a white-hot core of that colour.
-        /// </para>
+        /// The two colours of the capture overlay's hint comet (the overlay derives its own from the
+        /// same pick through the same Rust code), from the accent as the user picked it (not the
+        /// contrast-darkened fill, which reads as muddy once it glows): the body, and the hot tint its
+        /// head burns towards. Worked in OKLCH, so the body keeps the pick's hue and as much of its
+        /// chroma as sRGB holds at a glowing lightness, and the head is the same hue, lighter, with
+        /// chroma eased off.
         /// </summary>
         public static (Color Body, Color Head) CometColors(Color picked)
         {
-            var (l, c, h) = ToOkLch(picked);
-            var bodyL = Math.Clamp(l, CometMinLightness, CometMaxLightness);
-            var body = FromOkLch(bodyL, c, h);
-            var head = FromOkLch(Math.Min(bodyL + 0.1, 0.95), c * 0.6, h);
-            return (body, head);
+            var palette = ColorMath.Palette(Rgb(picked), maintainContrast: true);
+            return (FromRgb(palette.CometBody), FromRgb(palette.CometHead));
         }
 
-        /// <summary>OKLCH (lightness 0..1, chroma, hue in radians) of an sRGB colour, ignoring alpha.</summary>
-        public static (double L, double C, double H) ToOkLch(Color color)
+        /// <summary>Everything the accent drives, in one native call: the effective accent, the
+        /// comet, and the light, dark and dark-text ramps <c>AccentTheme</c> repaints the theme
+        /// with.</summary>
+        /// <remarks>
+        /// The maths is opaque, and the pick's alpha is laid back on where the accent itself comes
+        /// through: <see cref="AccentColorPalette.Effective"/> (so it equals
+        /// <see cref="EnsureContrastWithWhite"/> and <c>SettingsGeneral.GetEffectiveAccentColor</c>),
+        /// and step 5 of any ramp that holds it unchanged, i.e. not lifted for the dark ground. The
+        /// tints and shades around it, and a lifted step 5, are mixes and stay opaque, as is the
+        /// comet.
+        /// </remarks>
+        public static AccentColorPalette Palette(Color picked, bool maintainContrast)
         {
-            var (r, g, b) = (ToLinear(color.R), ToLinear(color.G), ToLinear(color.B));
-            var l = Math.Cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-            var m = Math.Cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-            var s = Math.Cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-            var L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
-            var A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
-            var B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
-            return (L, Math.Sqrt(A * A + B * B), Math.Atan2(B, A));
-        }
+            var p = ColorMath.Palette(Rgb(picked), maintainContrast);
+            return new AccentColorPalette(WithAlpha(picked.A, p.Effective), FromRgb(p.CometBody), FromRgb(p.CometHead),
+                Ramp(p.Light), Ramp(p.Dark), Ramp(p.DarkText));
 
-        /// <summary>
-        /// The opaque sRGB colour at OKLCH (<paramref name="l"/>, <paramref name="c"/>, <paramref name="h"/>).
-        /// Out of gamut, the chroma is reduced — never the lightness or the hue — until it fits, so the
-        /// result is the most saturated colour sRGB has at that lightness and hue.
-        /// </summary>
-        public static Color FromOkLch(double l, double c, double h)
-        {
-            if (!TryOkLchToLinear(l, c, h, out var rgb))
+            Color[] Ramp(ReadOnlyMemory<uint> ramp)
             {
-                double lo = 0, hi = c;
-                for (var i = 0; i < 24; i++)
-                {
-                    var mid = (lo + hi) / 2;
-                    if (TryOkLchToLinear(l, mid, h, out _))
-                        lo = mid;
-                    else
-                        hi = mid;
-                }
-                TryOkLchToLinear(l, lo, h, out rgb);
+                var colors = new Color[ramp.Length];
+                for (var i = 0; i < colors.Length; i++)
+                    colors[i] = FromRgb(ramp.Span[i]);
+                if (colors.Length > 5 && ramp.Span[5] == p.Effective)
+                    colors[5] = WithAlpha(picked.A, p.Effective);
+                return colors;
             }
-
-            return Color.FromRgb(EncodeRounded(rgb.R), EncodeRounded(rgb.G), EncodeRounded(rgb.B));
         }
 
-        private static bool TryOkLchToLinear(double l, double c, double h, out (double R, double G, double B) rgb)
-        {
-            var a = c * Math.Cos(h);
-            var b = c * Math.Sin(h);
-            var l_ = l + 0.3963377774 * a + 0.2158037573 * b;
-            var m_ = l - 0.1055613458 * a - 0.0638541728 * b;
-            var s_ = l - 0.0894841775 * a - 1.2914855480 * b;
-            var (L, M, S) = (l_ * l_ * l_, m_ * m_ * m_, s_ * s_ * s_);
-            rgb = (4.0767416621 * L - 3.3077115913 * M + 0.2309699292 * S,
-                   -1.2684380046 * L + 2.6097574011 * M - 0.3413193965 * S,
-                   -0.0041960863 * L - 0.7034186147 * M + 1.7076147010 * S);
-            const double eps = 1e-4;
-            return rgb.R >= -eps && rgb.R <= 1 + eps && rgb.G >= -eps && rgb.G <= 1 + eps && rgb.B >= -eps && rgb.B <= 1 + eps;
-        }
+        private static uint Rgb(Color color) => (uint)(color.R << 16 | color.G << 8 | color.B);
 
-        // Unlike Encode, rounds to the nearest channel value: nothing here is a threshold to stay under.
-        private static byte EncodeRounded(double linear)
-        {
-            linear = Math.Clamp(linear, 0, 1);
-            var v = linear <= 0.0031308 ? linear * 12.92 : 1.055 * Math.Pow(linear, 1 / 2.4) - 0.055;
-            return (byte)Math.Clamp(Math.Round(v * 255.0), 0, 255);
-        }
+        private static Color FromRgb(uint rgb) => WithAlpha(0xFF, rgb);
 
-        private static double ToLinear(byte channel)
-        {
-            var v = channel / 255.0;
-            return v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
-        }
-
-        // Rounds *down* to the nearest 8-bit channel: quantization must never push the result back
-        // above the target luminance, or a color "fixed" for contrast could still fail the check
-        // it was just adjusted for.
-        private static byte Encode(double linear)
-        {
-            var v = linear <= 0.0031308 ? linear * 12.92 : 1.055 * Math.Pow(linear, 1 / 2.4) - 0.055;
-            return (byte)Math.Clamp(Math.Floor(v * 255.0), 0, 255);
-        }
+        private static Color WithAlpha(byte alpha, uint rgb) => Color.FromArgb(alpha, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
     }
+
+    /// <summary>One accent's palette as Avalonia colours (see <see cref="AccentColors.Palette"/>).
+    /// Each ramp has ten steps with the base at step 5.</summary>
+    public sealed record AccentColorPalette(Color Effective, Color CometBody, Color CometHead, Color[] Light, Color[] Dark, Color[] DarkText);
 }

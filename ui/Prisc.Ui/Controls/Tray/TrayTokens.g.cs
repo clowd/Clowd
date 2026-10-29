@@ -4,8 +4,75 @@
 // </auto-generated>
 namespace Prisc.UI.Controls.Tray
 {
-    /// <summary>The capture tray's design tokens as raw numbers, shared with the egui tray.</summary>
-    internal static partial class TrayContract
+    public static partial class TrayTokens
     {
+        /// <summary>The chassis fill.</summary>
+        public const uint TrayFill = 0x25272Bu;
+
+        /// <summary>The secondary group (segment) fill.</summary>
+        public const uint SegFill = 0x3A3E44u;
+
+        /// <summary>The 1 px highlight ring inside the tray edge as Avalonia draws it: the tray fill plus 10 % white, baked opaque so the ring never shows the desktop through it, on a pixel row of its own.</summary>
+        public const uint RingAvalonia = 0x3B3D40u;
+
+        /// <summary>The same ring as egui draws it. egui feathers a 1 pt stroke across two half-covered rows, so the Avalonia colour read as half the step there; the tray fill plus 20 % white lands the same visible edge.</summary>
+        public const uint RingEgui = 0x515255u;
+
+        /// <summary>The corner radius of the tray and of every button in it.</summary>
+        public const double Radius = 8.0;
+
+        /// <summary>The tray's padding: the inset from its edge to its first item, the 1 px ring included.</summary>
+        public const double TrayPad = 4.0;
+
+        /// <summary>The gap between items inside the tray.</summary>
+        public const double Gap = 4.0;
+
+        /// <summary>A button's height in a row (the row height of the tray's button lane).</summary>
+        public const double ButtonHeight = 40.0;
+
+        /// <summary>A button is never shorter than this along a row.</summary>
+        public const double ButtonMinWidth = 40.0;
+
+        /// <summary>A button's icon cell.</summary>
+        public const double IconSize = 20.0;
+
+        /// <summary>The app mark's slot along the strip.</summary>
+        public const double EmblemLength = 40.0;
+
+        /// <summary>The hover veil over a segment: white at this alpha.</summary>
+        public const double HoverVeilAlpha = 0.12;
+
+        /// <summary>The hover veil over a button sitting straight on the darker chassis: white at this alpha, a step heavier so the button still reads as lit.</summary>
+        public const double HoverVeilBareAlpha = 0.18;
+
+        /// <summary>How long a hover or state fill takes to fade, in and out.</summary>
+        public const int FillTransitionMs = 180;
+
+        /// <summary>The accelerator letter's font size.</summary>
+        public const double KeyHintFontSize = 9.0;
+
+        /// <summary>The tooltip fill's colour.</summary>
+        public const uint TipFillRgb = 0x141619u;
+
+        /// <summary>The tooltip fill's alpha (0..255).</summary>
+        public const uint TipFillAlpha = 242u;
+
+        /// <summary>The tooltip's clearance below the strip.</summary>
+        public const double ToolTipGapBottom = 7.0;
+
+        /// <summary>The tooltip's clearance beside a column.</summary>
+        public const double ToolTipGapRight = 8.0;
+
+        /// <summary>How long the pointer rests on an item before its tooltip shows.</summary>
+        public const int ToolTipShowDelayMs = 350;
+
+        /// <summary>The shipped (compact) drop shadow's vertical offset. Every transparent pixel of a window eats clicks, so the spec's larger shadow left a dead band under the strip.</summary>
+        public const double ShadowOffsetY = 3.0;
+
+        /// <summary>The shipped drop shadow's blur.</summary>
+        public const double ShadowBlur = 10.0;
+
+        /// <summary>The shipped drop shadow's black alpha (0..255).</summary>
+        public const uint ShadowAlpha = 89u;
     }
 }

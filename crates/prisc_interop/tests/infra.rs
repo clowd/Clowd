@@ -19,13 +19,8 @@ fn last_message() -> String {
 
 #[test]
 fn stub_exports_of_three_areas_answer_unsupported() {
-    // (the desktop area's stubs, prisc_screens_list and prisc_idle_seconds, are implemented)
-    let mut quality = prisc_interop::ffi::encoding::PriscH264Quality::default();
-    assert_eq!(
-        unsafe { prisc_interop::ffi::encoding::prisc_encoding_h264_quality(23, 1920, 1080, 30, 1, &mut quality) },
-        S::Unsupported as i32
-    );
-    assert!(last_message().contains("prisc_encoding_h264_quality"));
+    // (the desktop area's prisc_screens_list and prisc_idle_seconds and the pure area's
+    // prisc_encoding_h264_quality are implemented)
     // WP-GPU implemented this one: on Windows a pointer the crate never handed out is S_NONE.
     let release = unsafe { prisc_interop::ffi::gpu::prisc_gpu_nv12_texture_release_windows(std::ptr::null_mut()) };
     let expected = if cfg!(windows) { S::None } else { S::Unsupported };

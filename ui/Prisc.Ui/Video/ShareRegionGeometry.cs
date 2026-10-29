@@ -1,4 +1,5 @@
 using System;
+using Prisc.Interop;
 using Prisc.PlatformUtil;
 
 namespace Prisc.UI
@@ -10,96 +11,61 @@ namespace Prisc.UI
     /// rectangle nobody notices is wrong, so it must be testable without a screen. Public rather
     /// than internal-plus-InternalsVisibleTo, per the repo's standing preference.</para>
     /// </summary>
-    public static class ShareRegionGeometry
+    public static partial class ShareRegionGeometry
     {
-        /// <summary>The helper's own floor (prisc_share_region <c>mirror.rs</c> MIN_REGION).</summary>
-        public const int MinSide = 64;
+        // MinRegion, the helper's own floor, is generated (ShareRegionGeometry.g.cs) from
+        // prisc_rust_core::contract::share_region.
 
         // Handle indices, the video editor gizmo's numbering (TransformGizmoControl): 0-3 corners
         // in z-order TL,TR,BL,BR; 4-7 edge midpoints L,T,R,B. 8 is the body (move), which the
-        // gizmo spends on its rotate handle — a shared region cannot rotate, so there is none.
-        public const int HandleTopLeft = 0;
-        public const int HandleTopRight = 1;
-        public const int HandleBottomLeft = 2;
-        public const int HandleBottomRight = 3;
-        public const int HandleLeft = 4;
-        public const int HandleTop = 5;
-        public const int HandleRight = 6;
-        public const int HandleBottom = 7;
-        public const int HandleBody = 8;
+        // gizmo spends on its rotate handle; a shared region cannot rotate, so there is none.
+        public const int HandleTopLeft = (int)ShareRegionHandle.TopLeft;
+        public const int HandleTopRight = (int)ShareRegionHandle.TopRight;
+        public const int HandleBottomLeft = (int)ShareRegionHandle.BottomLeft;
+        public const int HandleBottomRight = (int)ShareRegionHandle.BottomRight;
+        public const int HandleLeft = (int)ShareRegionHandle.Left;
+        public const int HandleTop = (int)ShareRegionHandle.Top;
+        public const int HandleRight = (int)ShareRegionHandle.Right;
+        public const int HandleBottom = (int)ShareRegionHandle.Bottom;
+        public const int HandleBody = (int)ShareRegionHandle.Body;
 
         /// <summary>
-        /// The client-side twin of the helper's <c>normalize_region</c>: each side floored at
-        /// <see cref="MinSide"/> and THEN rounded DOWN to even, in that order, with X/Y untouched
-        /// (the helper never clamps the origin and never clips to the desktop). Idempotent, so
-        /// echoing an acked region back through it is safe. Applying it during the drag is what
-        /// makes the <c>region_changed</c> ack equal the request in the ordinary case, so the
-        /// frame does not visibly snap after the move commits.
+        /// The helper's own <c>normalize</c> (<c>prisc_rust_core::share_region</c>, the same code):
+        /// each side floored at <see cref="MinRegion"/> and THEN rounded DOWN to even, in that order,
+        /// with X/Y untouched (the helper never clamps the origin and never clips to the desktop).
+        /// Idempotent, so echoing an acked region back through it is safe. Applying it during the
+        /// drag is what makes the <c>region_changed</c> ack equal the request in the ordinary case,
+        /// so the frame does not visibly snap after the move commits.
         /// </summary>
         public static ScreenRect Clamp(ScreenRect rect)
         {
             if (rect == null)
                 throw new ArgumentNullException(nameof(rect));
 
-            var w = Math.Max(rect.Width, MinSide) & ~1;
-            var h = Math.Max(rect.Height, MinSide) & ~1;
-            return new ScreenRect(rect.X, rect.Y, w, h);
+            var (x, y, w, h) = ShareRegion.Normalize(rect.X, rect.Y, rect.Width, rect.Height);
+            return new ScreenRect(x, y, w, h);
         }
 
         /// <summary>
         /// Applies a drag delta to the press-time rectangle. ALWAYS computed from the press-time
-        /// anchor, never accumulated frame to frame — that is what makes the gesture immune to a
+        /// anchor, never accumulated frame to frame: that is what makes the gesture immune to a
         /// dropped pointer-move event and to the window being repositioned under the pointer on
         /// every step.
         /// <para><paramref name="handle"/> = <see cref="HandleBody"/> translates without resizing.
-        /// Any other value moves only the edges that handle owns.</para>
-        /// <para>Crossing an edge is handled by swapping the two edge VALUES <b>and</b> the
-        /// which-edge-is-moving flags together. Doing only the first is the bug: after a swap the
-        /// moving and anchored edges have exchanged roles, so pinning by the original handle id
-        /// makes the rect jump. Note also that <see cref="ScreenRect.FromLTRB"/> performs no
-        /// normalization and <see cref="ScreenRect.IsEmpty"/> is false for a negative-extent rect,
-        /// so an unnormalized result passes every downstream guard and breaks every consumer.</para>
-        /// <para>The result is always <see cref="Clamp"/>ed, and the clamp pushes back the MOVING
-        /// edge so the anchored one stays pinned.</para>
+        /// Any other handle moves only the edges it owns.</para>
+        /// <para>Crossing an edge swaps the two edge VALUES <b>and</b> which edge is moving; the
+        /// result is always normalized (<see cref="Clamp"/>'s rule), and the normalization pushes
+        /// back the MOVING edge so the anchored one stays pinned. The rule is
+        /// <c>prisc_rust_core::share_region::apply_drag</c>, one native call.</para>
         /// </summary>
         public static ScreenRect ApplyDrag(ScreenRect anchor, int handle, int dx, int dy)
         {
             if (anchor == null)
                 throw new ArgumentNullException(nameof(anchor));
+            if (handle < HandleTopLeft || handle > HandleBody)
+                throw new ArgumentOutOfRangeException(nameof(handle), handle, "Not a share-region handle.");
 
-            if (handle == HandleBody)
-                return anchor.Translate(dx, dy);
-
-            int l = anchor.Left, t = anchor.Top, r = anchor.Right, b = anchor.Bottom;
-
-            var movingLeft = handle is HandleTopLeft or HandleBottomLeft or HandleLeft;
-            var movingRight = handle is HandleTopRight or HandleBottomRight or HandleRight;
-            var movingTop = handle is HandleTopLeft or HandleTopRight or HandleTop;
-            var movingBottom = handle is HandleBottomLeft or HandleBottomRight or HandleBottom;
-
-            if (movingLeft) l += dx;
-            if (movingRight) r += dx;
-            if (movingTop) t += dy;
-            if (movingBottom) b += dy;
-
-            if (l > r)
-            {
-                (l, r) = (r, l);
-                (movingLeft, movingRight) = (movingRight, movingLeft);
-            }
-
-            if (t > b)
-            {
-                (t, b) = (b, t);
-                (movingTop, movingBottom) = (movingBottom, movingTop);
-            }
-
-            var w = Math.Max(r - l, MinSide) & ~1;
-            var h = Math.Max(b - t, MinSide) & ~1;
-
-            var x = movingLeft ? r - w : l;
-            var y = movingTop ? b - h : t;
-
+            var (x, y, w, h) = ShareRegion.ApplyDrag(anchor.X, anchor.Y, anchor.Width, anchor.Height, (ShareRegionHandle)handle, dx, dy);
             return new ScreenRect(x, y, w, h);
         }
     }
