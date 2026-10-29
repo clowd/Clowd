@@ -13,7 +13,8 @@ namespace Prisc.UI.Helpers
     /// <see cref="WindowChrome"/>'s (prisc_interop); this class maps an Avalonia window to the raw
     /// platform window it takes, and keeps the parts that are Avalonia's own (the Win32 style and
     /// window procedure callbacks). Every member is safe to call on any OS: what does not apply on
-    /// one is a no-op there, so callers need no OS checks.
+    /// one is a no-op there, so callers need no OS checks. Every member is also a no-op when
+    /// prisc_interop is not loaded, so the dialog that reports that can still open.
     /// </summary>
     internal static class WindowNativeExtensions
     {
@@ -38,6 +39,15 @@ namespace Prisc.UI.Helpers
             { } handle => handle.Handle,
             null => 0,
         };
+
+        /// <summary>
+        /// <see cref="NativeWindow"/> for the <see cref="WindowChrome"/> calls below, or 0 when
+        /// prisc_interop is not loaded. Every one of them is best-effort chrome, and the dialog that
+        /// reports a missing or stale library is itself a window that goes through them (its Opened
+        /// handler takes the foreground), so they must stay no-ops then instead of throwing
+        /// <see cref="InteropUnavailableException"/> out of that handler.
+        /// </summary>
+        private static nint ChromeWindow(TopLevel topLevel) => InteropLibrary.IsAvailable ? NativeWindow(topLevel) : 0;
 
         /// <summary>
         /// Injects extra Win32 extended styles into the window at style-application time via
@@ -82,7 +92,7 @@ namespace Prisc.UI.Helpers
         /// </summary>
         public static void PrepareOverlay(Window window, OverlayFlags flags)
         {
-            var handle = NativeWindow(window);
+            var handle = ChromeWindow(window);
             if (handle != 0)
                 WindowChrome.PrepareOverlay(handle, flags);
         }
@@ -96,7 +106,7 @@ namespace Prisc.UI.Helpers
         /// </summary>
         public static void SetClickThrough(Window window, bool on)
         {
-            var handle = NativeWindow(window);
+            var handle = ChromeWindow(window);
             if (handle != 0)
                 WindowChrome.SetClickThrough(handle, on);
         }
@@ -146,7 +156,8 @@ namespace Prisc.UI.Helpers
 
         private static IntPtr SystemMenuKeyHook(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            if (msg == WM_SYSCOMMAND && ((long)wParam & 0xFFF0) == SC_KEYMENU && (long)lParam == ' ')
+            // without prisc_interop (the missing-library dialog) Avalonia keeps the message
+            if (msg == WM_SYSCOMMAND && ((long)wParam & 0xFFF0) == SC_KEYMENU && (long)lParam == ' ' && InteropLibrary.IsAvailable)
             {
                 handled = true;
                 return WindowChrome.DefaultWindowProc(hWnd, msg, (nuint)(nint)wParam, lParam);
@@ -177,7 +188,7 @@ namespace Prisc.UI.Helpers
         /// </remarks>
         public static void RaiseTopmostNoActivate(Window window)
         {
-            var handle = NativeWindow(window);
+            var handle = ChromeWindow(window);
             if (handle != 0)
                 WindowChrome.RaiseTopmostNoActivate(handle);
         }
@@ -215,7 +226,7 @@ namespace Prisc.UI.Helpers
             var logicalWidth = physicalWidth / scaling;
             var logicalHeight = physicalHeight / scaling;
 
-            var handle = NativeWindow(window);
+            var handle = ChromeWindow(window);
             if (handle != 0)
             {
                 // Avalonia.Win32 WindowImpl.Resize: (int)(value.Width * RenderScaling). Match it.
@@ -250,7 +261,7 @@ namespace Prisc.UI.Helpers
         /// </remarks>
         public static void SetExcludedFromScreenCapture(TopLevel topLevel, bool excluded)
         {
-            var handle = NativeWindow(topLevel);
+            var handle = ChromeWindow(topLevel);
             if (handle != 0)
                 WindowChrome.SetExcludedFromCapture(handle, excluded);
         }
@@ -273,7 +284,7 @@ namespace Prisc.UI.Helpers
         /// </remarks>
         public static void SetTrafficLightPosition(Window window, double leftInset, double topInset)
         {
-            var handle = NativeWindow(window);
+            var handle = ChromeWindow(window);
             if (handle != 0)
                 WindowChrome.SetTrafficLightPosition(handle, leftInset, topInset);
         }
@@ -285,7 +296,7 @@ namespace Prisc.UI.Helpers
         /// active while every key goes to the app in front. False before the window has a handle.</summary>
         public static bool IsForeground(Window window)
         {
-            var handle = NativeWindow(window);
+            var handle = ChromeWindow(window);
             return handle != 0 && WindowChrome.IsForeground(handle);
         }
 
@@ -299,7 +310,7 @@ namespace Prisc.UI.Helpers
         /// </summary>
         public static bool ForceForeground(Window window)
         {
-            var handle = NativeWindow(window);
+            var handle = ChromeWindow(window);
             return handle != 0 && WindowChrome.TakeForeground(handle);
         }
 

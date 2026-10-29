@@ -370,10 +370,21 @@ namespace Prisc
             {
                 Debug.WriteLine("prisc_interop is not available: " + ex.Reason);
                 SentryConfig.CaptureHandled(ex, "interop.load");
-                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.Reason,
-                    "Prisc cannot start: its native library (prisc_interop) is missing or does not match this build. Reinstalling Prisc fixes this.");
-                // nothing has started yet (no mutex, settings or helpers), so there is nothing to wind down
-                Environment.Exit(1);
+                try
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.Reason,
+                        "Prisc cannot start: its native library (prisc_interop) is missing or does not match this build. Reinstalling Prisc fixes this.");
+                }
+                catch (Exception dialogEx)
+                {
+                    // the exit below must happen whatever the dialog does
+                    Debug.WriteLine("The missing-library dialog failed: " + dialogEx);
+                }
+                finally
+                {
+                    // nothing has started yet (no mutex, settings or helpers), so there is nothing to wind down
+                    Environment.Exit(1);
+                }
                 return false;
             }
         }
