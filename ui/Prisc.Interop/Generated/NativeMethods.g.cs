@@ -671,7 +671,8 @@ namespace Prisc.Interop
         ///  OS cannot answer for (out of its range, or every code on an OS without a backend: Linux) reads
         ///  as down, the reading that never releases a key without evidence. `count` 0 writes 0.
         ///
-        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for more than 64 codes or a null pointer.
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for more than 64 codes or a null pointer. A count
+        ///  above 64 is refused before `codes` is read, whatever the buffer's length.
         ///
         ///  Thread: any thread.
         /// </summary>

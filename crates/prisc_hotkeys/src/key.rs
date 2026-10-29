@@ -4,6 +4,7 @@
 //! `cargo codegen`), and the backends map OS codes through it. The keystroke overlay's keycap
 //! legends per OS key code are generated from it too (`KeycapLegends.g.cs`).
 
+use crate::modifiers::Modifiers;
 use crate::reserved::Os;
 
 /// `Some(first code)` or `None` for an empty code list.
@@ -374,9 +375,14 @@ pub const KEYCAP_EXTRA_WINDOWS: &[(u16, &str)] = &[
 /// macOS CGKeyCodes whose keycap legend is not their row's `cap`, or that have no row: Fn, the
 /// keypad's own Enter (a separate key from Return, which shares its hotkey row), and the JIS Yen
 /// and Ro (underscore) keys, which share `OemPipe` and `OemBackslash` with the ANSI and ISO keys.
-pub const KEYCAP_EXTRA_MACOS: &[(u16, &str)] = &[(0x3F, "Fn"), (0x4C, "Enter"), (0x5D, "¥"), (0x5E, "_")];
+pub const KEYCAP_EXTRA_MACOS: &[(u16, &str)] = &[(Key::MAC_FN_KEYCODE, "Fn"), (0x4C, "Enter"), (0x5D, "¥"), (0x5E, "_")];
 
 impl Key {
+    /// macOS's Fn (Globe) key, kVK_Function. It has no row (Windows never reports it, and a hotkey
+    /// cannot name it), but the macOS hook reports it as a modifier edge of its own, so the
+    /// keystroke overlay treats it as a modifier role beside [`Modifiers`]' four.
+    pub const MAC_FN_KEYCODE: u16 = 0x3F;
+
     /// The keycap legend for a raw key code off `os`'s keyboard (a Windows virtual-key code or a
     /// macOS CGKeyCode, the numbering the hook reports as `raw_code` and a recording stores), or
     /// `None` for a code with no key. Linux has no code numbering of its own here, so `None`.
@@ -391,6 +397,18 @@ impl Key {
             .find(|&&(extra_code, _)| extra_code == code)
             .map(|&(_, legend)| legend)
             .or_else(|| key.map(|key| key.keycap(os)))
+    }
+
+    /// The modifier a raw key code off `os`'s keyboard adds when held (either side's key), or
+    /// `Modifiers::NONE` for a code that is not a modifier key. Fn is not one of `Modifiers`, so
+    /// `MAC_FN_KEYCODE` answers `NONE`; Linux has no code numbering here, so `NONE`.
+    pub fn modifier_for_code(code: u16, os: Os) -> Modifiers {
+        let key = match os {
+            Os::Windows => Key::from_vk(code),
+            Os::MacOS => Key::from_mac(code),
+            Os::Linux => None,
+        };
+        key.map_or(Modifiers::NONE, Key::modifier)
     }
 
     /// The key with this canonical name, alias or label: trimmed, ASCII case-insensitive. Numbers
@@ -473,10 +491,19 @@ impl Key {
 
     /// A modifier key (either side): these combine into `Modifiers` and are never a hotkey's key.
     pub fn is_modifier(self) -> bool {
-        matches!(
-            self,
-            Key::LWin | Key::RWin | Key::LeftShift | Key::RightShift | Key::LeftCtrl | Key::RightCtrl | Key::LeftAlt | Key::RightAlt
-        )
+        self.modifier() != Modifiers::NONE
+    }
+
+    /// The side-agnostic modifier this key adds when held (either side's key: Shift for LeftShift
+    /// and RightShift, Meta for LWin and RWin), or `Modifiers::NONE` for a key that is not one.
+    pub fn modifier(self) -> Modifiers {
+        match self {
+            Key::LWin | Key::RWin => Modifiers::META,
+            Key::LeftShift | Key::RightShift => Modifiers::SHIFT,
+            Key::LeftCtrl | Key::RightCtrl => Modifiers::CONTROL,
+            Key::LeftAlt | Key::RightAlt => Modifiers::ALT,
+            _ => Modifiers::NONE,
+        }
     }
 }
 
@@ -641,6 +668,16 @@ mod tests {
         );
         assert!(!Key::CapsLock.is_modifier());
         assert_eq!(Key::Oem3.to_string(), "Oem3");
+        assert_eq!(Key::RWin.modifier(), Modifiers::META);
+        assert_eq!(Key::RightShift.modifier(), Modifiers::SHIFT);
+        assert_eq!(Key::LeftCtrl.modifier(), Modifiers::CONTROL);
+        assert_eq!(Key::RightAlt.modifier(), Modifiers::ALT);
+        assert_eq!(Key::CapsLock.modifier(), Modifiers::NONE);
+        assert_eq!(Key::modifier_for_code(0x10, Os::Windows), Modifiers::SHIFT);
+        assert_eq!(Key::modifier_for_code(0x5C, Os::Windows), Modifiers::META);
+        assert_eq!(Key::modifier_for_code(0x3D, Os::MacOS), Modifiers::ALT);
+        assert_eq!(Key::modifier_for_code(Key::MAC_FN_KEYCODE, Os::MacOS), Modifiers::NONE);
+        assert_eq!(Key::modifier_for_code(0x10, Os::Linux), Modifiers::NONE);
     }
 
     /// The legends the keystroke overlay drew from its hand tables before they moved here

@@ -320,5 +320,63 @@ namespace Prisc.VideoSDK.Composition
             126 => "Up",
             _ => null,
         };
+
+        /// <summary>The modifier roles <see cref="WindowsModifier"/> and <see cref="MacOSModifier"/> answer with:
+        /// prisc_hotkeys' side-agnostic modifier bits (Meta is the Win key or Command) and Fn, which only
+        /// a macOS keyboard reports.</summary>
+        internal const int ModAlt = 1, ModControl = 2, ModShift = 4, ModMeta = 8, ModFn = 16;
+
+        /// <summary>The modifier role of a Windows virtual-key code (either side's key); 0 for a key that is not a modifier.</summary>
+        internal static int WindowsModifier(int code) => code switch
+        {
+            16 => ModShift,
+            17 => ModControl,
+            18 => ModAlt,
+            91 => ModMeta,
+            92 => ModMeta,
+            160 => ModShift,
+            161 => ModShift,
+            162 => ModControl,
+            163 => ModControl,
+            164 => ModAlt,
+            165 => ModAlt,
+            _ => 0,
+        };
+
+        /// <summary>The modifier role of a macOS CGKeyCode (either side's key); 0 for a key that is not a modifier.</summary>
+        internal static int MacOSModifier(int code) => code switch
+        {
+            54 => ModMeta,
+            55 => ModMeta,
+            56 => ModShift,
+            58 => ModAlt,
+            59 => ModControl,
+            60 => ModShift,
+            61 => ModAlt,
+            62 => ModControl,
+            63 => ModFn,
+            _ => 0,
+        };
+
+        /// <summary>The keycap legend of a modifier role on a Windows keyboard; null for a role it has no key for.</summary>
+        internal static string WindowsModifierLegend(int role) => role switch
+        {
+            ModAlt => "Alt",
+            ModControl => "Ctrl",
+            ModShift => "Shift",
+            ModMeta => "Win",
+            _ => null,
+        };
+
+        /// <summary>The keycap legend of a modifier role on a macOS keyboard; null for a role it has no key for.</summary>
+        internal static string MacOSModifierLegend(int role) => role switch
+        {
+            ModAlt => "Option",
+            ModControl => "Ctrl",
+            ModShift => "Shift",
+            ModMeta => "Cmd",
+            ModFn => "Fn",
+            _ => null,
+        };
     }
 }

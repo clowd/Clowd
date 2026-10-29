@@ -202,6 +202,12 @@ fn keys_down_masks_the_codes_asked_and_caps_them_at_64() {
     let many = [0u32; 65];
     assert_eq!(unsafe { prisc_keyboard_keys_down(many.as_ptr(), 65, &mut mask) }, INVALID_ARG);
     assert_eq!(last_message(), "65 codes asked at once; at most 64");
+    // The count is refused before the buffer is read, so a count far beyond a short buffer is a
+    // plain refusal, never a slice past its end (from_raw_parts would abort on usize::MAX).
+    let short = [0u32; 4];
+    for count in [65, 1000, usize::MAX] {
+        assert_eq!(unsafe { prisc_keyboard_keys_down(short.as_ptr(), count, &mut mask) }, INVALID_ARG);
+    }
     assert_eq!(unsafe { prisc_keyboard_keys_down(ptr::null(), 1, &mut mask) }, INVALID_ARG);
     assert_eq!(unsafe { prisc_keyboard_keys_down(many.as_ptr(), 1, ptr::null_mut()) }, INVALID_ARG);
 }

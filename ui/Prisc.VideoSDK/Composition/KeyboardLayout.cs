@@ -170,7 +170,11 @@ namespace Prisc.VideoSDK.Composition
         // of roles wearing two sets of legends; only the naming (ModifierNames) differs. ModFn has
         // no Windows counterpart at all — Windows' Fn is handled in the keyboard's firmware and
         // never reaches a hook.
-        private const int ModCtrl = 1, ModAlt = 2, ModShift = 4, ModSuper = 8, ModFn = 16;
+        // The role bits, the roles each raw code plays and their legends come from the prisc_hotkeys
+        // key table (KeycapLegends, generated), so a modifier keycap and the same modifier in a
+        // chord read alike.
+        private const int ModCtrl = KeycapLegends.ModControl, ModAlt = KeycapLegends.ModAlt,
+            ModShift = KeycapLegends.ModShift, ModSuper = KeycapLegends.ModMeta, ModFn = KeycapLegends.ModFn;
 
         // The modifiers whose presence turns a keystroke into a chord. Shift is out because it is
         // already folded into the translated character ("A", not "Shift+A"), and Fn is out for the
@@ -297,31 +301,14 @@ namespace Prisc.VideoSDK.Composition
             return runs;
         }
 
-        private static int ModifierBit(int code, KeyboardPlatform platform) => platform switch
-        {
-            KeyboardPlatform.MacOS => code switch
-            {
-                56 or 60 => ModShift,
-                59 or 62 => ModCtrl,
-                58 or 61 => ModAlt,     // option
-                54 or 55 => ModSuper,   // command
-                63 => ModFn,
-                // Caps Lock is deliberately NOT a modifier here even though macOS reports it as a
-                // flag: the tap holds the flag set for as long as the lock is engaged, so treating
-                // it as one would staple "Caps" onto the front of every chord typed for the next
-                // ten minutes. As a plain key it draws one ⇪ cap at the moment the lock toggles,
-                // which is what Windows' own kd/ku pair produces and what the user did.
-                _ => 0,
-            },
-            _ => code switch
-            {
-                16 or 160 or 161 => ModShift,
-                17 or 162 or 163 => ModCtrl,
-                18 or 164 or 165 => ModAlt,
-                91 or 92 => ModSuper,
-                _ => 0,
-            },
-        };
+        // Caps Lock is deliberately NOT a modifier here even though macOS reports it as a flag: the
+        // tap holds the flag set for as long as the lock is engaged, so treating it as one would
+        // staple "Caps" onto the front of every chord typed for the next ten minutes. As a plain
+        // key it draws one ⇪ cap at the moment the lock toggles, which is what Windows' own kd/ku
+        // pair produces and what the user did. The key table has no modifier role for it.
+        private static int ModifierBit(int code, KeyboardPlatform platform) => platform == KeyboardPlatform.MacOS
+            ? KeycapLegends.MacOSModifier(code)
+            : KeycapLegends.WindowsModifier(code);
 
         /// <summary>
         /// The chord's leading keycaps. One order serves both boards: Windows writes
@@ -329,14 +316,19 @@ namespace Prisc.VideoSDK.Composition
         /// — which is the same four roles in the same sequence. Fn brings up the rear because it
         /// never opens a chord, it only tags along in one.
         /// </summary>
+        private static readonly int[] ModifierOrder = { ModCtrl, ModAlt, ModShift, ModSuper, ModFn };
+
         private static IEnumerable<string> ModifierNames(int modifiers, KeyboardPlatform platform)
         {
             bool mac = platform == KeyboardPlatform.MacOS;
-            if ((modifiers & ModCtrl) != 0) yield return "Ctrl";
-            if ((modifiers & ModAlt) != 0) yield return mac ? "Option" : "Alt";
-            if ((modifiers & ModShift) != 0) yield return "Shift";
-            if ((modifiers & ModSuper) != 0) yield return mac ? "Cmd" : "Win";
-            if (mac && (modifiers & ModFn) != 0) yield return "Fn";
+            foreach (int role in ModifierOrder)
+            {
+                if ((modifiers & role) == 0)
+                    continue;
+                string legend = mac ? KeycapLegends.MacOSModifierLegend(role) : KeycapLegends.WindowsModifierLegend(role);
+                if (legend != null) // Fn has no Windows key
+                    yield return legend;
+            }
         }
 
         /// <summary>Whether the key ends its run with itself included — the "I have finished this

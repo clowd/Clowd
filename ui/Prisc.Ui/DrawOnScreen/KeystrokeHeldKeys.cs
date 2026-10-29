@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Prisc.Interop;
 
 namespace Prisc.UI.DrawOnScreen
 {
@@ -33,7 +34,7 @@ namespace Prisc.UI.DrawOnScreen
 
         /// <summary>The most stale keys one press asks the OS about (one bit each in the answer);
         /// any beyond it are asked about on a later press.</summary>
-        public const int MaxQueried = 64;
+        public const int MaxQueried = NativeKeyboard.MaxCodes;
 
         /// <summary>A press or auto-repeat of <paramref name="code"/>, with the hook's modifiers at
         /// it. Returns the held keys to release before it, in no particular order.
