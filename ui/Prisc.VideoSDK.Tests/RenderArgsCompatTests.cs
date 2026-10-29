@@ -712,7 +712,7 @@ namespace Prisc.VideoSDK.Tests
             if (argsPath != null)
                 psi.ArgumentList.Add(argsPath);
             if (ffmpegDirectory != null)
-                psi.Environment[FFmpegLoader.EnvVarName] = ffmpegDirectory;
+                psi.Environment[Prisc.Interop.EnvVars.FfmpegPath] = ffmpegDirectory;
             foreach (var (name, value) in environment ?? new Dictionary<string, string>())
                 psi.Environment[name] = value;
 
@@ -869,8 +869,8 @@ namespace Prisc.VideoSDK.Tests
                     WorkingDirectory = Path.GetDirectoryName(dll),
                     Environment = new Dictionary<string, string>
                     {
-                        [FFmpegLoader.EnvVarName] = FFmpegLoader.LibrariesDirectory,
-                        ["PRISC_RENDER_TEST_HOLD_FOR_QUIT"] = "1",
+                        [Prisc.Interop.EnvVars.FfmpegPath] = FFmpegLoader.LibrariesDirectory,
+                        [Prisc.Interop.EnvVars.RenderTestHoldForQuit] = "1",
                     },
                 });
             await using (client)

@@ -46,12 +46,6 @@ namespace Prisc.VideoRender
         /// only ends an orphan. prisc_ipc's <c>SELF_EXIT_MARGIN</c>, the Rust helpers' margin.</summary>
         private static readonly TimeSpan SelfExitMargin = TimeSpan.FromMilliseconds(IpcProtocol.SelfExitMarginMs);
 
-        /// <summary>Tests only: with this set to <c>1</c> the render waits after its first encoded
-        /// frame until it is told to quit (bounded by <see cref="HoldForQuitBound"/>), so a cancel
-        /// test always lands its quit mid-render. A short fixture renders in a second or two, which
-        /// a loaded test host can take just to turn <c>hello</c> around into the quit.</summary>
-        internal const string HoldForQuitVariable = "PRISC_RENDER_TEST_HOLD_FOR_QUIT";
-
         /// <summary>Long past the catalog's quit grace: a quit that never arrives shows up as a
         /// parent-side kill, not as a hold that quietly gave up first.</summary>
         private static readonly TimeSpan HoldForQuitBound = TimeSpan.FromSeconds(30);
@@ -73,7 +67,11 @@ namespace Prisc.VideoRender
                 reason => events.Emit(new JobEvent.Error(IpcErrorCodes.BadCommand, reason, false)));
 
             var emitter = new ProgressEmitter(events);
-            bool holdForQuit = Environment.GetEnvironmentVariable(HoldForQuitVariable) == "1";
+            // Tests only (EnvVars.RenderTestHoldForQuit): the render waits after its first encoded
+            // frame until it is told to quit (bounded by HoldForQuitBound), so a cancel test always
+            // lands its quit mid-render. A short fixture renders in a second or two, which a loaded
+            // test host can take just to turn hello around into the quit.
+            bool holdForQuit = Environment.GetEnvironmentVariable(Prisc.Interop.EnvVars.RenderTestHoldForQuit) == "1";
 
             // remembered as soon as the args parse, so the error path can remove a partial output
             // that RenderJob did not get to clean up itself.
@@ -115,7 +113,7 @@ namespace Prisc.VideoRender
                         // anything is missing): the A/B knob for benchmarking the two, in the
                         // same spirit as PRISC_RENDER_BACKEND.
                         ZeroCopyEncode = !String.Equals(
-                            Environment.GetEnvironmentVariable("PRISC_RENDER_ZEROCOPY"), "0",
+                            Environment.GetEnvironmentVariable(Prisc.Interop.EnvVars.RenderZeroCopy), "0",
                             StringComparison.Ordinal),
                         // the job file sits beside the project's videoedit.json, which is where
                         // the AI sidecars live (AiSidecars): matte/denoise consumption and any

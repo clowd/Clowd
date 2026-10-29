@@ -210,12 +210,12 @@ namespace Prisc.UI
                 ActiveInstance = this;
                 _region = region;
 
-                var binary = Prisc.Ipc.HelperLocator.Find("prisc_share_region");
+                var binary = Prisc.Ipc.HelperLocator.Find(HelperNames.ShareRegion);
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The region sharing binary ({Prisc.Ipc.Platform.ExeName("prisc_share_region")}) could not be found. " +
-                        $"Run 'cargo rec' in the Prisc repository, or set the {Prisc.Ipc.HelperLocator.EnvVarName} " +
+                        $"The region sharing binary ({Prisc.Interop.NativeProbe.ExeName(HelperNames.ShareRegion)}) could not be found. " +
+                        $"Run 'cargo rec' in the Prisc repository, or set the {Prisc.Interop.EnvVars.HelpersDir} " +
                         "environment variable to the folder holding it.",
                         "Region sharing unavailable");
                     Close();

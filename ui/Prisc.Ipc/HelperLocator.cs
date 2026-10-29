@@ -6,15 +6,15 @@ using Prisc.Interop;
 namespace Prisc.Ipc
 {
     /// <summary>
-    /// Finds every helper Prisc spawns or loads (HELPER_PROTOCOL.md §7.1): the Rust helpers, the
-    /// native libraries and Prisc.VideoRender. The probe itself is <see cref="NativeProbe"/>, shared
-    /// with the prisc_interop loader. One probe order for all of them, first existing
+    /// Finds every helper Prisc spawns (HELPER_PROTOCOL.md §7.1): the Rust helpers and
+    /// Prisc.VideoRender. The probe itself is <see cref="NativeProbe"/>, shared with the
+    /// prisc_interop loader. One probe order for all of them, first existing
     /// file wins:
     /// <list type="number">
     /// <item>each directory of <c>PRISC_HELPERS_DIR</c> (a <see cref="Path.PathSeparator"/>-separated
     /// list), then its <c>recorder/</c> subdirectory;</item>
     /// <item><see cref="AppContext.BaseDirectory"/>, then its <c>recorder/</c> subdirectory (the release
-    /// layout: capture, scroll driver, ai, VideoRender and the hotkeys library beside Prisc.Ui;
+    /// layout: capture, scroll driver, ai, VideoRender and prisc_interop beside Prisc.Ui;
     /// recorder, share_region and vid2gif in <c>recorder/</c>);</item>
     /// <item>the dev walk-up: at each ancestor holding <c>Cargo.toml</c>, the newer of
     /// <c>target/debug</c> and <c>target/release</c> (debug wins a tie). Prisc.VideoRender instead
@@ -29,8 +29,6 @@ namespace Prisc.Ipc
     /// </summary>
     public static class HelperLocator
     {
-        public const string EnvVarName = EnvVars.HelpersDir;
-
         /// <summary>Test seam (DenoiseGeneratorTests, MatteGeneratorTests): when set, it is asked first,
         /// by stem. A non-null answer is final (the path if it exists, otherwise "not found"); null
         /// falls through to the normal probe, so a seam for one helper leaves the others alone. Null
@@ -41,15 +39,11 @@ namespace Prisc.Ipc
         /// when it cannot be found.</summary>
         public static string Find(string stem)
         {
-            var path = Lookup(stem, Platform.ExeName(stem), library: false);
+            var path = Lookup(stem, NativeProbe.ExeName(stem));
             return EnsureExecutable(path);
         }
 
-        /// <summary>The native library for <paramref name="stem"/> (<c>prisc_hotkeys</c>); null when it
-        /// cannot be found.</summary>
-        public static string FindLibrary(string stem) => Lookup(stem, Platform.LibName(stem), library: true);
-
-        private static string Lookup(string stem, string fileName, bool library)
+        private static string Lookup(string stem, string fileName)
         {
             var seam = Override;
             if (seam != null)
@@ -61,18 +55,13 @@ namespace Prisc.Ipc
                     return !String.IsNullOrWhiteSpace(overridden) && File.Exists(overridden) ? Path.GetFullPath(overridden) : null;
             }
 
-            return Find(fileName, Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory, library);
+            return Find(fileName, Environment.GetEnvironmentVariable(EnvVars.HelpersDir), AppContext.BaseDirectory);
         }
 
-        /// <summary>The pure probe behind <see cref="Find(string)"/>, for tests.</summary>
+        /// <summary>The pure probe behind <see cref="Find(string)"/> (<see cref="NativeProbe.Find"/>, the one
+        /// implementation shared with the prisc_interop loader), for tests.</summary>
         internal static string Find(string fileName, string envDirs, string baseDirectory) =>
-            Find(fileName, envDirs, baseDirectory, library: false);
-
-        /// <summary>The pure probe (<see cref="NativeProbe.Find"/>, the one implementation shared with
-        /// the prisc_interop loader). <paramref name="library"/> adds <c>target/&lt;profile&gt;/deps/</c> to
-        /// the dev walk-up.</summary>
-        internal static string Find(string fileName, string envDirs, string baseDirectory, bool library) =>
-            NativeProbe.Find(fileName, envDirs, baseDirectory, library);
+            NativeProbe.Find(fileName, envDirs, baseDirectory, library: false);
 
         /// <summary>
         /// Makes sure <paramref name="path"/> can actually be executed, and returns it unchanged. No-op

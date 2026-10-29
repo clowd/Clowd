@@ -24,5 +24,14 @@ namespace Prisc.Interop
 
         /// <summary>cpu forces the video renderer onto the raster (CPU) composition path.</summary>
         public const string RenderBackend = "PRISC_RENDER_BACKEND";
+
+        /// <summary>The directory holding the FFmpeg shared libraries, tried before the recorder payload's. The shell sets it for the video renderer it starts.</summary>
+        public const string FfmpegPath = "PRISC_FFMPEG_PATH";
+
+        /// <summary>0 makes the video renderer copy hardware-encoder frames back through system memory instead of handing them to NVENC or AMF on the GPU (for A/B comparisons).</summary>
+        public const string RenderZeroCopy = "PRISC_RENDER_ZEROCOPY";
+
+        /// <summary>1 makes the video renderer wait after its first encoded frame until it is told to quit, so a cancel lands mid-render; tests only.</summary>
+        public const string RenderTestHoldForQuit = "PRISC_RENDER_TEST_HOLD_FOR_QUIT";
     }
 }

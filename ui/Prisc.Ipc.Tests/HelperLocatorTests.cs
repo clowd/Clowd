@@ -25,10 +25,9 @@ namespace Prisc.Ipc.Tests
             catch { }
         }
 
-        private static readonly string Recorder = Platform.ExeName("prisc_recorder");
-        private static readonly string Capture = Platform.ExeName("prisc_capture");
-        private static readonly string VideoRender = Platform.ExeName("Prisc.VideoRender");
-        private static readonly string Hotkeys = Platform.LibName("prisc_hotkeys");
+        private static readonly string Recorder = Prisc.Interop.NativeProbe.ExeName(HelperNames.Recorder);
+        private static readonly string Capture = Prisc.Interop.NativeProbe.ExeName(HelperNames.Capture);
+        private static readonly string VideoRender = Prisc.Interop.NativeProbe.ExeName(HelperNames.VideoRender);
 
         private string Touch(params string[] parts)
         {
@@ -55,8 +54,6 @@ namespace Prisc.Ipc.Tests
         public void File_names_match_the_shipped_payload()
         {
             Assert.Equal(OperatingSystem.IsWindows() ? "prisc_recorder.exe" : "prisc_recorder", Recorder);
-            Assert.Equal(OperatingSystem.IsWindows() ? "prisc_hotkeys.dll"
-                : OperatingSystem.IsMacOS() ? "libprisc_hotkeys.dylib" : "libprisc_hotkeys.so", Hotkeys);
         }
 
         [Fact]
@@ -113,15 +110,11 @@ namespace Prisc.Ipc.Tests
         }
 
         [Fact]
-        public void The_hotkeys_library_is_also_found_in_deps()
+        public void An_executable_is_never_looked_for_in_deps()
         {
             Touch("repo", "Cargo.toml");
-            Stamp(Touch("repo", "target", "debug", Hotkeys), 30);
-            var fresh = Stamp(Touch("repo", "target", "debug", "deps", Hotkeys), 1);
             var app = Dir("repo", "ui", "bin");
 
-            Assert.Equal(fresh, HelperLocator.Find(Hotkeys, null, app, library: true));
-            // an executable is never looked for in deps/
             Touch("repo", "target", "debug", "deps", Recorder);
             Assert.Null(HelperLocator.Find(Recorder, null, app));
         }

@@ -56,7 +56,7 @@ namespace Prisc.VideoSDK.Ai
             if (String.IsNullOrEmpty(cacheDir))
                 return false;
 
-            var exe = HelperLocator.Find("prisc_ai");
+            var exe = HelperLocator.Find(HelperNames.Ai);
             if (exe == null)
                 return false;
 

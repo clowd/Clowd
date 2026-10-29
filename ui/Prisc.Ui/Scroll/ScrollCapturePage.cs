@@ -71,12 +71,12 @@ namespace Prisc.UI
                     return;
                 }
 
-                var binary = Prisc.Ipc.HelperLocator.Find("prisc_scroll_driver");
+                var binary = Prisc.Ipc.HelperLocator.Find(HelperNames.ScrollDriver);
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The scrolling capture binary ({Prisc.Ipc.Platform.ExeName("prisc_scroll_driver")}) could not be found. " +
-                        $"Run 'cargo build' in the Prisc repository, or set the {Prisc.Ipc.HelperLocator.EnvVarName} " +
+                        $"The scrolling capture binary ({Prisc.Interop.NativeProbe.ExeName(HelperNames.ScrollDriver)}) could not be found. " +
+                        $"Run 'cargo build' in the Prisc repository, or set the {Prisc.Interop.EnvVars.HelpersDir} " +
                         "environment variable to the folder holding it.",
                         "Scrolling capture unavailable");
                     CaptureSessionDispatcher.DeleteSessionDir(_sessionDir);

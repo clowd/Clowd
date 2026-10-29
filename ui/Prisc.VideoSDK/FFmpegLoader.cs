@@ -15,8 +15,6 @@ namespace Prisc.VideoSDK
     /// </summary>
     public static class FFmpegLoader
     {
-        public const string EnvVarName = "PRISC_FFMPEG_PATH";
-
         private static readonly object _sync = new object();
         private static bool _attempted;
         private static bool _available;
@@ -66,7 +64,7 @@ namespace Prisc.VideoSDK
 
                 try
                 {
-                    var dir = Environment.GetEnvironmentVariable(EnvVarName);
+                    var dir = Environment.GetEnvironmentVariable(EnvVars.FfmpegPath);
                     if (String.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
                     {
                         try { dir = fallbackDirectoryResolver?.Invoke(); }
@@ -75,7 +73,7 @@ namespace Prisc.VideoSDK
 
                     if (String.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
                     {
-                        _failureReason = $"No FFmpeg directory found (set {EnvVarName} or install the recorder).";
+                        _failureReason = $"No FFmpeg directory found (set {EnvVars.FfmpegPath} or install the recorder).";
                         return false;
                     }
 

@@ -2,11 +2,8 @@
 //!
 //! prisc_ipc is the lowest crate every reader shares, and the C# side gets the same names
 //! generated into `ui/Prisc.Interop/Generated/EnvVars.g.cs` (`cargo codegen`), so a reader in
-//! either language takes the name from here. prisc_ipc's helper lookup (`locate.rs`) and
-//! prisc_rust_core's telemetry already do. Still spelled out by hand, each until the work package
-//! that owns the file switches it: `PRISC_DISABLE_TELEMETRY` in `ui/Prisc.Ui/Util/SentryConfig.cs`
-//! (WP-PURE, through the generated telemetry contract) and `PRISC_RENDER_BACKEND` in
-//! `ui/Prisc.VideoRender/Program.cs` (WP-IPC).
+//! either language takes the name from here: prisc_ipc's helper lookup (`locate.rs`),
+//! prisc_rust_core's telemetry, and every C# reader and test through `EnvVars`.
 //!
 //! Each variable is declared once through `env_vars!`: its doc comment is both the constant's
 //! rustdoc and the `doc` the generated C# carries, so the two cannot drift. Write the doc as plain
@@ -60,6 +57,18 @@ env_vars! {
 
     /// cpu forces the video renderer onto the raster (CPU) composition path.
     RENDER_BACKEND = "PRISC_RENDER_BACKEND" as "RenderBackend";
+
+    /// The directory holding the FFmpeg shared libraries, tried before the recorder payload's. The
+    /// shell sets it for the video renderer it starts.
+    FFMPEG_PATH = "PRISC_FFMPEG_PATH" as "FfmpegPath";
+
+    /// 0 makes the video renderer copy hardware-encoder frames back through system memory instead of
+    /// handing them to NVENC or AMF on the GPU (for A/B comparisons).
+    RENDER_ZEROCOPY = "PRISC_RENDER_ZEROCOPY" as "RenderZeroCopy";
+
+    /// 1 makes the video renderer wait after its first encoded frame until it is told to quit, so a
+    /// cancel lands mid-render; tests only.
+    RENDER_TEST_HOLD_FOR_QUIT = "PRISC_RENDER_TEST_HOLD_FOR_QUIT" as "RenderTestHoldForQuit";
 }
 
 #[cfg(test)]

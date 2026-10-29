@@ -124,7 +124,7 @@ namespace Prisc.UI
         {
             var empty = new List<CameraDeviceInfo>();
 
-            var exePath = HelperLocator.Find("prisc_recorder");
+            var exePath = HelperLocator.Find(HelperNames.Recorder);
             if (String.IsNullOrEmpty(exePath))
             {
                 Debug.WriteLine("Cannot enumerate cameras: prisc_recorder was not found.");

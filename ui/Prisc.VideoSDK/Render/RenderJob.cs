@@ -937,7 +937,7 @@ namespace Prisc.VideoSDK.Render
             if (jobs.Count == 0)
                 return 0;
 
-            if (HelperLocator.Find("prisc_ai") == null)
+            if (HelperLocator.Find(HelperNames.Ai) == null)
             {
                 options.DiagnosticLog?.Invoke(
                     $"RenderJob: {jobs.Count} AI sidecar(s) needed but no prisc_ai binary resolves — rendering without them.");

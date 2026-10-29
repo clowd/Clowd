@@ -21,7 +21,7 @@ namespace Prisc.VideoSDK.Tests
 
         /// <summary>The message a skipped test explains itself with.</summary>
         public static string SkipReason =>
-            $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or {HelperLocator.EnvVarName}, " +
+            $"FFmpeg natives not found (set {Prisc.Interop.EnvVars.FfmpegPath} or {Prisc.Interop.EnvVars.HelpersDir}, " +
             $"or run `cargo rec` in the Prisc repository): {FFmpegLoader.FailureReason}";
     }
 }
