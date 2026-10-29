@@ -59,10 +59,6 @@ namespace Prisc.Interop
         /// <summary>Bytes per row (always <see cref="Width"/> * 4).</summary>
         public int Stride => (int)_image.stride;
 
-        /// <summary>Image pixels per DIP: the backing scale on macOS, the monitor's effective DPI /
-        /// 96 on Windows. A bitmap of <c>96 * DipScale</c> DPI has the rectangle's DIP size.</summary>
-        public double DipScale => _image.dip_scale;
-
         /// <summary>The pixels, valid until <see cref="Dispose"/>.</summary>
         public ReadOnlySpan<byte> Pixels
         {

@@ -733,8 +733,7 @@ namespace Prisc.Interop
         /// <summary>
         ///  Grabs `rect` of the screen (layered windows included, alpha forced to 255) into an owned image;
         ///  free it with `prisc_screen_image_free`. On macOS the image has the display's backing pixels (a
-        ///  16x16 point rect is 32x32 on a Retina display); `dip_scale` is always the image's pixels per
-        ///  DIP: image pixels per point on macOS, the effective DPI / 96 of the rect's monitor on Windows.
+        ///  16x16 point rect is 32x32 on a Retina display); on Windows it is the rect's physical pixels.
         ///  `out_image` is written only on `PRISC_OK`.
         ///
         ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `rect` or `out_image` or a rect without
@@ -1332,7 +1331,7 @@ namespace Prisc.Interop
     }
 
     /// <summary>
-    ///  A grabbed screen image (40 bytes). The pixels are mode 2: owned by this struct and freed by
+    ///  A grabbed screen image (32 bytes). The pixels are mode 2: owned by this struct and freed by
     ///  `prisc_screen_image_free`.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -1347,10 +1346,6 @@ namespace Prisc.Interop
         public uint height;
         public uint stride;
         public uint _reserved;
-        /// <summary>
-        ///  Image pixels per DIP for this rect.
-        /// </summary>
-        public double dip_scale;
     }
 
     /// <summary>

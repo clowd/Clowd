@@ -27,14 +27,13 @@ namespace Prisc.Interop.Tests
 
             PriscScreenImage i = default;
             byte* c = (byte*)&i;
-            Assert.Equal(40, sizeof(PriscScreenImage));
+            Assert.Equal(32, sizeof(PriscScreenImage));
             Assert.Equal(0, (byte*)&i.pixels - c);
             Assert.Equal(8, (byte*)&i.len - c);
             Assert.Equal(16, (byte*)&i.width - c);
             Assert.Equal(20, (byte*)&i.height - c);
             Assert.Equal(24, (byte*)&i.stride - c);
             Assert.Equal(28, (byte*)&i._reserved - c);
-            Assert.Equal(32, (byte*)&i.dip_scale - c);
         }
 
         [Fact]
@@ -126,7 +125,6 @@ namespace Prisc.Interop.Tests
                 Assert.Equal(16 * perUnit, image.Width);
                 Assert.Equal(16 * perUnit, image.Height);
                 Assert.Equal(image.Width * 4, image.Stride);
-                Assert.Equal(primary.Scale, image.DipScale);
                 var pixels = image.Pixels;
                 Assert.Equal(image.Stride * image.Height, pixels.Length);
                 for (int i = 3; i < pixels.Length; i += 4)

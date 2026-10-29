@@ -14,7 +14,7 @@ use crate::ffi::status::{PRISC_OK, PRISC_S_NONE};
 use crate::ffi::types::PriscRect;
 use crate::{panic, util};
 
-/// A grabbed screen image (40 bytes). The pixels are mode 2: owned by this struct and freed by
+/// A grabbed screen image (32 bytes). The pixels are mode 2: owned by this struct and freed by
 /// `prisc_screen_image_free`.
 #[repr(C)]
 #[derive(Debug)]
@@ -26,8 +26,6 @@ pub struct PriscScreenImage {
     pub height: u32,
     pub stride: u32,
     pub _reserved: u32,
-    /// Image pixels per DIP for this rect.
-    pub dip_scale: f64,
 }
 
 /// The colour of one screen pixel as `0x00RRGGBB` (the pixel under the point; on a Retina display
@@ -57,8 +55,7 @@ unsafe fn read_pixel(x: i32, y: i32, out_rgb: *mut u32) -> Result {
 
 /// Grabs `rect` of the screen (layered windows included, alpha forced to 255) into an owned image;
 /// free it with `prisc_screen_image_free`. On macOS the image has the display's backing pixels (a
-/// 16x16 point rect is 32x32 on a Retina display); `dip_scale` is always the image's pixels per
-/// DIP: image pixels per point on macOS, the effective DPI / 96 of the rect's monitor on Windows.
+/// 16x16 point rect is 32x32 on a Retina display); on Windows it is the rect's physical pixels.
 /// `out_image` is written only on `PRISC_OK`.
 ///
 /// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `rect` or `out_image` or a rect without
@@ -88,18 +85,6 @@ unsafe fn grab_rect(rect: *const PriscRect, out_image: *mut PriscScreenImage) ->
     )
     .map_err(grab_error)?;
 
-    // Image pixels per rect unit: the backing scale on macOS, 1 on Windows, where the rect is in
-    // physical pixels already and a DIP is the monitor's effective DPI / 96.
-    #[allow(unused_mut)]
-    let mut dip_scale = f64::from(image.width) / f64::from(rect.size.width);
-    #[cfg(windows)]
-    {
-        use prisc_rust_core::desktop::screens::{self, Fallback};
-        if let Ok(Some(screen)) = screens::at_rect(rect, Fallback::Nearest) {
-            dip_scale *= screen.scale;
-        }
-    }
-
     let (width, height, stride) = (image.width, image.height, image.stride() as u32);
     let pixels = Box::into_raw(image.bgra.into_boxed_slice());
     *out_image = PriscScreenImage {
@@ -109,7 +94,6 @@ unsafe fn grab_rect(rect: *const PriscRect, out_image: *mut PriscScreenImage) ->
         height,
         stride,
         _reserved: 0,
-        dip_scale,
     };
     Ok(PRISC_OK)
 }
@@ -145,7 +129,6 @@ impl PriscScreenImage {
             height: 0,
             stride: 0,
             _reserved: 0,
-            dip_scale: 0.0,
         }
     }
 }
@@ -181,14 +164,13 @@ mod tests {
 
     #[test]
     fn layouts_are_pinned() {
-        assert_eq!(size_of::<PriscScreenImage>(), 40);
+        assert_eq!(size_of::<PriscScreenImage>(), 32);
         assert_eq!(offset_of!(PriscScreenImage, pixels), 0);
         assert_eq!(offset_of!(PriscScreenImage, len), 8);
         assert_eq!(offset_of!(PriscScreenImage, width), 16);
         assert_eq!(offset_of!(PriscScreenImage, height), 20);
         assert_eq!(offset_of!(PriscScreenImage, stride), 24);
         assert_eq!(offset_of!(PriscScreenImage, _reserved), 28);
-        assert_eq!(offset_of!(PriscScreenImage, dip_scale), 32);
     }
 
     #[test]
@@ -219,7 +201,6 @@ mod tests {
             height: 2,
             stride: 8,
             _reserved: 0,
-            dip_scale: 1.0,
         };
         assert_eq!(unsafe { prisc_screen_image_free(&mut image) }, 0);
         assert!(image.pixels.is_null());

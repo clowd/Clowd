@@ -54,7 +54,6 @@ namespace Prisc.UI.Harness
                 {
                     ["size"] = $"{image.Width}x{image.Height}",
                     ["stride"] = image.Stride,
-                    ["dip_scale"] = image.DipScale,
                     ["opaque"] = opaque,
                 };
             }, anyThread: true);

@@ -48,7 +48,6 @@ fn empty_image() -> PriscScreenImage {
         height: 0,
         stride: 0,
         _reserved: 0,
-        dip_scale: 0.0,
     }
 }
 
@@ -186,8 +185,6 @@ fn a_64_point_grab_is_opaque_bgra_of_the_right_shape() {
     assert_eq!((image.width, image.height), (64 * per_point, 64 * per_point));
     assert_eq!(image.stride, image.width * 4);
     assert_eq!(image.len, image.stride as usize * image.height as usize);
-    // image pixels per DIP: the backing scale on macOS, the monitor's DPI scale on Windows
-    assert_eq!(image.dip_scale, p.scale);
     let pixels = unsafe { std::slice::from_raw_parts(image.pixels, image.len) };
     assert!(
         pixels
