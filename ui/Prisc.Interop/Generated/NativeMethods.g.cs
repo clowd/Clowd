@@ -18,6 +18,14 @@ namespace Prisc.Interop
     {
         const string __DllName = "prisc_interop";
 
+        /// <summary>
+        ///  The most channels `prisc_audio_output_create` accepts (it bounds the stream-format arithmetic).
+        /// </summary>
+        internal const uint PRISC_AUDIO_OUTPUT_MAX_CHANNELS = 4096;
+        /// <summary>
+        ///  The most codes one `prisc_keyboard_keys_down` call answers: one bit each in a u64.
+        /// </summary>
+        internal const nuint PRISC_KEYBOARD_MAX_CODES = 64;
 
 
 

@@ -6,21 +6,23 @@ use crate::ffi::status::PRISC_OK;
 use crate::{panic, util};
 
 /// The most codes one `prisc_keyboard_keys_down` call answers: one bit each in a u64.
-const MAX_CODES: usize = 64;
+pub const PRISC_KEYBOARD_MAX_CODES: usize = 64;
 
-/// Refuses a `count` above [`MAX_CODES`]. The export checks it before it builds the slice, so a
+/// Refuses a `count` above [`PRISC_KEYBOARD_MAX_CODES`]. The export checks it before it builds the slice, so a
 /// caller's oversized count never becomes a slice longer than its buffer.
 fn check_count(count: usize) -> Result<()> {
-    if count > MAX_CODES {
-        return Err(Error::invalid_arg(format!("{count} codes asked at once; at most {MAX_CODES}")));
+    if count > PRISC_KEYBOARD_MAX_CODES {
+        return Err(Error::invalid_arg(format!(
+            "{count} codes asked at once; at most {PRISC_KEYBOARD_MAX_CODES}"
+        )));
     }
     Ok(())
 }
 
-/// The down mask for `codes` (at most [`MAX_CODES`], checked by the caller): bit i is set when
+/// The down mask for `codes` (at most [`PRISC_KEYBOARD_MAX_CODES`], checked by the caller): bit i is set when
 /// `codes[i]` is down, or when the OS cannot say.
 fn keys_down(codes: &[u32]) -> u64 {
-    debug_assert!(codes.len() <= MAX_CODES);
+    debug_assert!(codes.len() <= PRISC_KEYBOARD_MAX_CODES);
     codes
         .iter()
         .enumerate()

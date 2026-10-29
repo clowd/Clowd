@@ -199,6 +199,17 @@ fn lint_rejects_negative_consts_and_implicit_discriminants() {
 }
 
 #[test]
+fn lint_keeps_the_generated_consts_exactly_the_pub_prisc_literals() {
+    let text = format!(
+        "{GOOD}\npub const PRISC_THING_MAX: u32 = 4;\npub const LIMIT: u32 = 4;\nconst PRISC_HIDDEN: u32 = 1;\nconst PRISC_DERIVED: \
+         i32 = PriscKind::A as i32;\nconst LOCAL: u32 = 2;\n"
+    );
+    let found: Vec<(&str, usize)> = rules(&[file("thing.rs", &text)]);
+    let base = GOOD.lines().count();
+    assert_eq!(found, [("6-const-literal", base + 3), ("6-const-literal", base + 4)]);
+}
+
+#[test]
 fn lint_keeps_ffi_enum_lists_in_step_with_the_enums() {
     let added_variant = GOOD.replace("pub enum PriscKind { A = 0, B = 1 }", "pub enum PriscKind { A = 0, B = 1, C = 2 }");
     let found = lint::lint_ffi(&[file("thing.rs", &added_variant)]);

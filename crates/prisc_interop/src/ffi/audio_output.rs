@@ -35,7 +35,7 @@ pub struct PriscAudioOutputInfo {
 pub type PriscAudioRenderCallback = Option<unsafe extern "C" fn(user: *mut c_void, samples: *mut f32, frames: u32, channels: u32)>;
 
 /// The most channels `prisc_audio_output_create` accepts (it bounds the stream-format arithmetic).
-const MAX_CHANNELS: u32 = 4096;
+pub const PRISC_AUDIO_OUTPUT_MAX_CHANNELS: u32 = 4096;
 
 /// Opens the default output (float32 interleaved at `sample_rate_hz`, `channels` in 1..=4096) and
 /// installs `render` (with `user`, opaque, handed back unchanged), initialised but not started:
@@ -63,8 +63,10 @@ pub unsafe extern "C" fn prisc_audio_output_create(
         if sample_rate_hz == 0 {
             return Err(Error::invalid_arg("sample_rate_hz was zero"));
         }
-        if channels == 0 || channels > MAX_CHANNELS {
-            return Err(Error::invalid_arg(format!("channels {channels} is not in 1..={MAX_CHANNELS}")));
+        if channels == 0 || channels > PRISC_AUDIO_OUTPUT_MAX_CHANNELS {
+            return Err(Error::invalid_arg(format!(
+                "channels {channels} is not in 1..={PRISC_AUDIO_OUTPUT_MAX_CHANNELS}"
+            )));
         }
         let render = render.ok_or_else(|| Error::null("render"))?;
         #[cfg(target_os = "macos")]

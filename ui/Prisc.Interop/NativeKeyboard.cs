@@ -7,8 +7,9 @@ namespace Prisc.Interop
     /// and macOS Secure Event Input. Any thread.</summary>
     public static unsafe class NativeKeyboard
     {
-        /// <summary>The most codes one <see cref="KeysDown"/> call answers.</summary>
-        public const int MaxCodes = 64;
+        /// <summary>The most codes one <see cref="KeysDown"/> call answers (the crate's
+        /// <c>PRISC_KEYBOARD_MAX_CODES</c>, generated).</summary>
+        public const int MaxCodes = (int)NativeMethods.PRISC_KEYBOARD_MAX_CODES;
 
         /// <summary>
         /// Which of <paramref name="codes"/> are physically down right now, in one call: bit i is set

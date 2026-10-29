@@ -101,7 +101,9 @@ fn render_native(root: &Path) -> anyhow::Result<String> {
         .csharp_use_function_pointer(true)
         .csharp_use_nint_types(true)
         .always_included_types(structs)
-        .csharp_generate_const_filter(|_| false)
+        // The `pub const PRISC_*` limits C# checks before it calls (README D6). csbindgen reads
+        // every const whatever its visibility, so the lint keeps that name for the pub ones.
+        .csharp_generate_const_filter(|name| name.starts_with("PRISC_"))
         .csharp_file_header(cs::header("abi", NATIVE_SOURCE).trim_end())
         .generate_csharp_file(&staged)
         .map_err(|e| anyhow::anyhow!("csbindgen: {e}"))?;

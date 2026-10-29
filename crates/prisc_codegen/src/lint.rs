@@ -9,7 +9,8 @@
 //! 3. no enum type in a signature or field (B2);
 //! 4. no `bool` (B3);
 //! 5. no struct by value in a parameter (B8);
-//! 6. every `pub const` is a non-negative literal (D6);
+//! 6. every `pub const` is a non-negative literal named `PRISC_*`, and no other const is a
+//!    `PRISC_*` literal: those are exactly the consts generated into C# (D6);
 //! 7. every export starts with `prisc_`, is unique, is `unsafe extern "C"`, returns `i32` (the two
 //!    last-error readers excepted), has exactly one `Thread:` line from the vocabulary (D5), and
 //!    its body's first statement is `panic::guard("<its own name>", ...)` (A6);
@@ -385,18 +386,31 @@ impl FfiLint<'_> {
             }
             syn::Item::Const(c) => {
                 self.check_cfg(&c.attrs, &format!("const {}", c.ident), false);
-                if matches!(c.vis, syn::Visibility::Public(_)) {
-                    let literal = matches!(&*c.expr, syn::Expr::Lit(_));
-                    if !literal {
-                        self.push(
-                            c.ident.span(),
-                            "6-const-literal",
-                            format!(
-                                "pub const {} must be a non-negative literal (csbindgen drops anything else)",
-                                c.ident
-                            ),
-                        );
-                    }
+                let public = matches!(c.vis, syn::Visibility::Public(_));
+                let literal = matches!(&*c.expr, syn::Expr::Lit(_));
+                let generated_name = c.ident.to_string().starts_with("PRISC_");
+                if public && !literal {
+                    self.push(
+                        c.ident.span(),
+                        "6-const-literal",
+                        format!(
+                            "pub const {} must be a non-negative literal (csbindgen drops anything else)",
+                            c.ident
+                        ),
+                    );
+                }
+                // C# gets exactly the `pub const PRISC_*` literals (abi.rs filters csbindgen by name,
+                // since csbindgen reads every const whatever its visibility)
+                if public != generated_name && (public || literal) {
+                    self.push(
+                        c.ident.span(),
+                        "6-const-literal",
+                        format!(
+                            "const {}: a pub const is named PRISC_* (it is generated into C#), and only a pub const may \
+                             be a PRISC_* literal",
+                            c.ident
+                        ),
+                    );
                 }
             }
             syn::Item::Type(t) => {
@@ -430,9 +444,12 @@ impl FfiLint<'_> {
                 syn::Item::Struct(s) if repr_of(&s.attrs).is_some_and(|r| r.contains('C')) => {
                     self.push(s.ident.span(), "1-no-cfg", "a #[cfg(test)] module may not hold a #[repr(C)] struct")
                 }
-                syn::Item::Const(c) if matches!(c.vis, syn::Visibility::Public(_)) => {
-                    self.push(c.ident.span(), "1-no-cfg", "a #[cfg(test)] module may not hold a pub const")
-                }
+                syn::Item::Const(c) if matches!(c.vis, syn::Visibility::Public(_)) || c.ident.to_string().starts_with("PRISC_") => self
+                    .push(
+                        c.ident.span(),
+                        "1-no-cfg",
+                        "a #[cfg(test)] module may not hold a pub or PRISC_* const",
+                    ),
                 syn::Item::Enum(e) => self.push(e.ident.span(), "1-no-cfg", "a #[cfg(test)] module may not hold an enum"),
                 syn::Item::Mod(m) => {
                     if let Some((_, items)) = &m.content {

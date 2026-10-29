@@ -166,7 +166,7 @@ namespace Prisc.Interop.Tests
             Assert.Throws<ArgumentNullException>(() => CoreAudioOutputDevice.Open(48000, 2, null!));
         }
 
-        /// <summary>The C# <see cref="CoreAudioOutputDevice.MaxChannels"/> is the crate's MAX_CHANNELS:
+        /// <summary>The C# <see cref="CoreAudioOutputDevice.MaxChannels"/> is the crate's PRISC_AUDIO_OUTPUT_MAX_CHANNELS:
         /// one more is refused for its channel count, and the limit itself passes the channel check and
         /// is refused only for the null callback checked after it (on every OS, before any device).</summary>
         [Fact]

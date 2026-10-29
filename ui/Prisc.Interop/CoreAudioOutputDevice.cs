@@ -49,9 +49,10 @@ namespace Prisc.Interop
         /// <summary>The rate <see cref="LatencyFrames"/> counts in: the device side of the unit.</summary>
         public int DeviceSampleRateHz { get; }
 
-        /// <summary>The most channels <see cref="Open"/> accepts. Mirrors <c>MAX_CHANNELS</c> in
-        /// crates/prisc_interop/src/ffi/audio_output.rs, which refuses more with InvalidArg.</summary>
-        public const int MaxChannels = 4096;
+        /// <summary>The most channels <see cref="Open"/> accepts: the crate's
+        /// <c>PRISC_AUDIO_OUTPUT_MAX_CHANNELS</c> (generated), which it refuses more than with
+        /// InvalidArg.</summary>
+        public const int MaxChannels = (int)NativeMethods.PRISC_AUDIO_OUTPUT_MAX_CHANNELS;
 
         /// <summary>How many exceptions the handler threw (each buffer played silence). Zero in a
         /// healthy run.</summary>
