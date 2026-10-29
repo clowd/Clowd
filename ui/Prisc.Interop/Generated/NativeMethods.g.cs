@@ -523,8 +523,9 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_readback_ring_release_shared_windows(PriscGpuReadbackRing* ring, uint slot, uint timeout_ms);
 
         /// <summary>
-        ///  Windows: the ordered end of the ring, called once before its destroy: no slot begins again
-        ///  (`begin` answers `PRISC_E_STATE`), then waits (at most `timeout_ms`) for everything queued on
+        ///  Windows: the ordered end of the ring, called once before its destroy: no slot begins or is
+        ///  submitted again (`begin` and both submits answer `PRISC_E_STATE`, a slot begun before the drain
+        ///  included), then waits (at most `timeout_ms`) for everything queued on
         ///  the copy queue. Destroy then skips its own drain, which is bounded at 2 s for a destroy that
         ///  comes from a finalizer. A second call returns `PRISC_OK` at once.
         ///

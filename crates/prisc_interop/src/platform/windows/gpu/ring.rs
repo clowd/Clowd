@@ -171,8 +171,8 @@ pub(crate) struct RingInner {
     timeline: Mutex<()>,
     /// The event every consumed-fence wait uses; `None` once teardown closed it.
     wait: Mutex<Option<Event>>,
-    /// Set by the ordered drain ([`finish`](Self::finish)) or teardown: no slot begins again, and
-    /// teardown does not drain a second time.
+    /// Set by the ordered drain ([`finish`](Self::finish)) or teardown: no slot begins or is
+    /// submitted again, and teardown does not drain a second time.
     finished: AtomicBool,
     clear: Mutex<ClearList>,
 }
@@ -224,12 +224,22 @@ impl RingInner {
 
     /// `Idle -> Composing`, lending the slot's `ID3D12Resource*`.
     pub(crate) fn begin(&self, index: u32) -> Result<*mut c_void> {
-        if self.finished.load(Ordering::Acquire) {
-            return Err(Error::state("the readback ring was drained for its destroy; no slot begins again"));
-        }
+        self.check_not_finished()?;
         let slot = self.slot(index)?;
         transition(slot, index, SLOT_IDLE, SLOT_COMPOSING)?;
         Ok(slot.texture.as_raw())
+    }
+
+    /// `PRISC_E_STATE` once the ring is drained for its destroy. A submit checks it under
+    /// `timeline`, which the drain holds while it sets its own value, so no submission shares the
+    /// drain's value or follows it (a slot begun before the drain is refused at its submit).
+    fn check_not_finished(&self) -> Result<()> {
+        if self.finished.load(Ordering::Acquire) {
+            return Err(Error::state(
+                "the readback ring was drained for its destroy; no slot begins or is submitted again",
+            ));
+        }
+        Ok(())
     }
 
     /// `Composing -> Idle`, for the path where wrapping the texture for Skia failed.
@@ -241,12 +251,12 @@ impl RingInner {
     /// for it on the GPU, execute the recorded copy, signal the consumed fence.
     pub(crate) fn submit(&self, index: u32) -> Result<u64> {
         let slot = self.slot(index)?;
-        begin_submission(slot, index, false)?;
-
         let _timeline = self
             .timeline
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
+        self.check_not_finished()?;
+        begin_submission(slot, index, false)?;
         let value = self.last_signaled.load(Ordering::Acquire) + 1;
         unsafe {
             self.device
@@ -273,12 +283,12 @@ impl RingInner {
     /// value on its own timeline and signals the consumed fence with exactly it, in order.
     pub(crate) fn submit_shared(&self, index: u32) -> Result<u64> {
         let slot = self.slot(index)?;
-        begin_submission(slot, index, true)?;
-
         let _timeline = self
             .timeline
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
+        self.check_not_finished()?;
+        begin_submission(slot, index, true)?;
         let value = self.last_signaled.load(Ordering::Acquire) + 1;
         unsafe {
             self.device
@@ -513,14 +523,28 @@ impl RingInner {
     /// Waits (at most `timeout_ms`) for everything queued on the copy queue. Only at the end of
     /// the ring's life: the fresh signal it queues would run ahead of a shared slot's consumer.
     fn drain(&self, timeout_ms: u32) -> Result<i32> {
-        let last = self.last_signaled.load(Ordering::Acquire);
-        // A fresh signal behind everything on the copy queue covers a copy that executed but
-        // whose own Signal was refused.
-        let queued = unsafe {
-            self.copy_queue
-                .Signal(self.consumed_fence.get(), last + 1)
+        // `finished` is already set, so once this holds `timeline` no submit can take a value:
+        // the drain's own value is reserved like a submission's, and every earlier one is queued.
+        let (last, queued) = {
+            let _timeline = self
+                .timeline
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let last = self.last_signaled.load(Ordering::Acquire);
+            // A fresh signal behind everything on the copy queue covers a copy that executed but
+            // whose own Signal was refused.
+            let queued = unsafe {
+                self.copy_queue
+                    .Signal(self.consumed_fence.get(), last + 1)
+            }
+            .is_ok();
+            if queued {
+                self.last_signaled
+                    .store(last + 1, Ordering::Release);
+            }
+            (last, queued)
         };
-        if queued.is_ok() {
+        if queued {
             self.wait_consumed(last + 1, timeout_ms)
         } else if last > 0 {
             self.wait_consumed(last, timeout_ms)
@@ -1041,15 +1065,21 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_finished_ring_begins_no_slot_and_drains_once() {
-        let Some((_device, ring)) = ring_or_skip("a_finished_ring_begins_no_slot_and_drains_once", 32, 32, 2) else {
+    fn a_finished_ring_begins_or_submits_no_slot_and_drains_once() {
+        let Some((_device, ring)) = ring_or_skip("a_finished_ring_begins_or_submits_no_slot_and_drains_once", 32, 32, 2) else {
             return;
         };
         ring.begin(0).expect("slot 0 is idle");
         ring.submit(0)
             .expect("the readback submit is accepted");
+        ring.begin(1).expect("slot 1 is idle");
+        let before = ring.last_signaled();
         assert_eq!(ring.finish(30_000).expect("finish"), PRISC_OK);
-        assert_eq!(status(ring.begin(1).unwrap_err()), PriscInteropStatus::State);
+        assert_eq!(ring.last_signaled(), before + 1, "the drain reserves its own value");
+        assert_eq!(status(ring.begin(0).unwrap_err()), PriscInteropStatus::State);
+        // slot 1 was begun before the drain; its submit would share or follow the drain's value
+        assert_eq!(status(ring.submit(1).unwrap_err()), PriscInteropStatus::State);
+        assert_eq!(status(ring.submit_shared(1).unwrap_err()), PriscInteropStatus::State);
         assert_eq!(ring.finish(0).expect("a second finish"), PRISC_OK);
         ring.teardown();
     }
