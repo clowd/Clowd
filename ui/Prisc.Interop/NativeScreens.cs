@@ -24,12 +24,7 @@ namespace Prisc.Interop
         double Scale,
         double RefreshHz,
         ulong DisplayId,
-        bool IsPrimary)
-    {
-        /// <summary>Whether the point lies inside the bounds (right and bottom edges excluded).</summary>
-        public bool Contains(double x, double y) =>
-            x >= BoundsX && x < BoundsX + (double)BoundsWidth && y >= BoundsY && y < BoundsY + (double)BoundsHeight;
-    }
+        bool IsPrimary);
 
     /// <summary>
     /// The screens, asked of the OS on every call and never cached: the list Prisc.Ui, the capture
@@ -116,7 +111,7 @@ namespace Prisc.Interop
             s.work_area.x, s.work_area.y, s.work_area.width, s.work_area.height,
             s.work_area_known != 0,
             s.scale,
-            Double.IsFinite(s.refresh_hz) && s.refresh_hz > 0 ? s.refresh_hz : 0,
+            s.refresh_hz,
             s.display_id,
             s.is_primary != 0);
     }

@@ -76,7 +76,7 @@ namespace Prisc.Interop.Tests
             }
 
             Assert.True(primary.IsPrimary);
-            Assert.True(primary.Contains(0, 0), primary.ToString());
+            Assert.Equal((0, 0), (primary.BoundsX, primary.BoundsY));
 
             var byPoint = NativeScreens.AtPoint(primary.BoundsX + 1, primary.BoundsY + 1);
             var byRect = NativeScreens.AtRect(primary.BoundsX + 1, primary.BoundsY + 1, 1, 1);

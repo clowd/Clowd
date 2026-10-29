@@ -40,7 +40,8 @@ namespace Prisc.UI.Helpers
     /// area and scaling: libAvaloniaNative refreshes it from applicationDidChangeScreenParameters:,
     /// an app-level notification that needs no window, so the Windows failure mode does not exist
     /// there, and only AppKit knows the work area. Avalonia has no refresh rate, so that one value
-    /// comes from <see cref="NativeScreens"/>' CoreGraphics list, matched by position.
+    /// comes from <see cref="NativeScreens.AtPoint"/>: the CoreGraphics screen under the Avalonia
+    /// screen's centre, chosen by the native lookup (both are in CG points).
     /// </summary>
     internal static class DesktopScreens
     {
@@ -83,18 +84,27 @@ namespace Prisc.UI.Helpers
                 var screens = window?.Screens?.All;
                 if (screens == null)
                     return Array.Empty<DesktopScreen>();
-                var native = NativeList();
                 var mapped = new List<DesktopScreen>(screens.Count);
                 foreach (var s in screens)
                 {
-                    var m = FromAvalonia(s, native);
+                    var m = FromAvalonia(s);
                     if (m != null)
                         mapped.Add(m);
                 }
                 return mapped;
             }
 
-            var list = NativeList();
+            ScreenInfo[] list;
+            try
+            {
+                list = NativeScreens.List();
+            }
+            catch (InteropException ex)
+            {
+                // empty rather than null when enumeration fails
+                Report(ex, nameof(All));
+                return Array.Empty<DesktopScreen>();
+            }
             var result = new List<DesktopScreen>(list.Length);
             foreach (var screen in list)
                 result.Add(FromNative(screen));
@@ -116,55 +126,43 @@ namespace Prisc.UI.Helpers
             }
         }
 
-        /// <summary>The native list, or empty when the OS enumeration failed (reported).</summary>
-        private static ScreenInfo[] NativeList()
-        {
-            try
-            {
-                return NativeScreens.List();
-            }
-            catch (InteropException ex)
-            {
-                Report(ex, nameof(All));
-                return Array.Empty<ScreenInfo>();
-            }
-        }
-
         private static void Report(InteropException ex, string what)
         {
             Debug.WriteLine($"DesktopScreens.{what}: {ex.Message}");
             SentryConfig.CaptureHandled(ex, "screens." + what);
         }
 
-        private static DesktopScreen FromAvalonia(Avalonia.Platform.Screen screen, ScreenInfo[] native = null)
+        private static DesktopScreen FromAvalonia(Avalonia.Platform.Screen screen)
         {
             if (screen == null)
                 return null;
-            native ??= NativeList();
             return new DesktopScreen
             {
                 Bounds = screen.Bounds,
                 WorkingArea = screen.WorkingArea,
                 Scaling = screen.Scaling,
                 IsPrimary = screen.IsPrimary,
-                RefreshRate = RefreshRateAt(native, screen.Bounds),
+                RefreshRate = RefreshRateAt(screen.Bounds),
             };
         }
 
         /// <summary>
         /// The refresh rate of the native screen under the centre of <paramref name="bounds"/> (CG
         /// points on macOS, the space both Avalonia's screen bounds and the CoreGraphics list are
-        /// in). 0 when no native screen is there or it reports none.
+        /// in), one native lookup. 0 when no native screen is there, it reports none, or the lookup
+        /// failed (reported).
         /// </summary>
-        private static double RefreshRateAt(ScreenInfo[] native, PixelRect bounds)
+        private static double RefreshRateAt(PixelRect bounds)
         {
-            double x = bounds.X + bounds.Width / 2.0, y = bounds.Y + bounds.Height / 2.0;
-            foreach (var screen in native)
+            try
             {
-                if (screen.Contains(x, y))
-                    return screen.RefreshHz;
+                return NativeScreens.AtPoint(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2)?.RefreshHz ?? 0;
             }
-            return 0;
+            catch (InteropException ex)
+            {
+                Report(ex, nameof(RefreshRateAt));
+                return 0;
+            }
         }
 
         private static DesktopScreen FromNative(ScreenInfo s) => new()
