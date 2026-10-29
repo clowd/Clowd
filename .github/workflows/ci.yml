@@ -416,6 +416,24 @@ jobs:
           cargo test -p prisc_interop --lib platform::windows::gpu
         shell: bash
 
+      # The FFmpeg dylib closure prisc_interop loads ahead of FFmpeg.AutoGen, against the real
+      # payload: the closure test and the Mach-O reader's otool parity over every shipped dylib.
+      # The test job runs them too, but without a payload, so there they only cover fixtures.
+      - name: FFmpeg closure over the payload (macOS)
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        run: |
+          if [ -z "${PRISC_HELPERS_DIR:-}" ]; then
+            echo "::warning::no recorder payload, so the FFmpeg closure tests cannot run against it"
+            exit 0
+          fi
+          cargo test -p prisc_interop --test ipc_process preparing_the_payload -- --nocapture 2>&1 | tee closure.log
+          if grep -q "skipping:" closure.log; then
+            echo "::error::the payload closure test skipped although PRISC_HELPERS_DIR is set"
+            exit 1
+          fi
+          cargo test -p prisc_interop --lib platform::macos::dylib
+        shell: bash
+
   # Merges the three builds for one rid: the UI publish is the package directory, the Rust
   # binaries go beside Prisc.Ui, and the recorder goes in recorder/. Pure file shuffling, so it
   # runs on Linux for every rid; Info-ZIP's unzip and zip there keep the macOS execute bits
