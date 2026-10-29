@@ -11,10 +11,9 @@ use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT, TRUE};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DWMWINDOWATTRIBUTE};
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, EnumDisplayDevicesW, EnumDisplayMonitors, EnumDisplaySettingsW, GdiFlush,
-    GetDC, GetDIBits, GetMonitorInfoW, GetObjectW, MonitorFromPoint, MonitorFromWindow, ReleaseDC, SelectObject, BITMAP, BITMAPINFO,
-    BITMAPINFOHEADER, BI_RGB, DEVMODEW, DIB_RGB_COLORS, DISPLAY_DEVICEW, DMDO_180, DMDO_270, DMDO_90, ENUM_CURRENT_SETTINGS, HBITMAP, HDC,
-    HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, RGBQUAD,
+    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, EnumDisplayDevicesW, EnumDisplayMonitors, GdiFlush, GetDC, GetDIBits,
+    GetMonitorInfoW, GetObjectW, MonitorFromPoint, MonitorFromWindow, ReleaseDC, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER,
+    BI_RGB, DIB_RGB_COLORS, DISPLAY_DEVICEW, HBITMAP, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, RGBQUAD,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::Threading::{
@@ -335,31 +334,19 @@ pub fn process_image_name(pid: u32) -> String {
 // ---------------------------------------------------------------------------
 
 /// One display, as `EnumDisplayMonitors` + `GetMonitorInfoW` report it. The
-/// costlier lookups (device path, display mode, DPI) are methods, so callers
+/// costlier lookups (device path, DPI) are methods, so callers
 /// pay only for what they use.
 #[derive(Debug, Clone)]
 pub struct Monitor {
     pub handle: HMONITOR,
     /// GDI device name, e.g. `\\.\DISPLAY1`: the key DXGI outputs and
-    /// `EnumDisplaySettingsW` are matched on.
+    /// `EnumDisplaySettingsW` (the refresh rate, `screens`) are matched on.
     pub device_name: String,
     /// `rcMonitor`.
     pub bounds: ScreenRect,
     /// `rcWork`: the monitor minus the taskbar and docked app bars.
     pub work_area: ScreenRect,
     pub is_primary: bool,
-}
-
-/// `EnumDisplaySettingsW`'s current mode for a monitor.
-#[derive(Debug, Clone, Copy)]
-pub struct DisplayMode {
-    /// `dmPosition`: the monitor's origin in the virtual desktop.
-    pub origin: ScreenPoint,
-    pub width: u32,
-    pub height: u32,
-    /// `dmDisplayOrientation` in degrees (0, 90, 180 or 270).
-    pub rotation: f32,
-    pub refresh_hz: f32,
 }
 
 impl Monitor {
@@ -378,36 +365,6 @@ impl Monitor {
         let ok = unsafe { EnumDisplayDevicesW(PCWSTR(name.as_ptr()), 0, &mut dd, EDD_GET_DEVICE_INTERFACE_NAME) };
         let path = wide_to_string(&dd.DeviceID);
         (ok.as_bool() && !path.is_empty()).then_some(path)
-    }
-
-    /// The monitor's current display mode, or `None` if Windows will not say.
-    pub fn display_mode(&self) -> Option<DisplayMode> {
-        let name: Vec<u16> = self
-            .device_name
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
-        let mut dm = DEVMODEW {
-            dmSize: mem::size_of::<DEVMODEW>() as u16,
-            ..Default::default()
-        };
-        if !unsafe { EnumDisplaySettingsW(PCWSTR(name.as_ptr()), ENUM_CURRENT_SETTINGS, &mut dm) }.as_bool() {
-            return None;
-        }
-        let (position, orientation) = unsafe { (dm.Anonymous1.Anonymous2.dmPosition, dm.Anonymous1.Anonymous2.dmDisplayOrientation) };
-        let rotation = match orientation {
-            DMDO_90 => 90.0,
-            DMDO_180 => 180.0,
-            DMDO_270 => 270.0,
-            _ => 0.0,
-        };
-        Some(DisplayMode {
-            origin: ScreenPoint::new(position.x, position.y),
-            width: dm.dmPelsWidth,
-            height: dm.dmPelsHeight,
-            rotation,
-            refresh_hz: dm.dmDisplayFrequency as f32,
-        })
     }
 
     /// The monitor's effective DPI (96 = 100%), or `None` if
