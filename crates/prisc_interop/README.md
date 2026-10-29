@@ -20,7 +20,11 @@ own cargo invocation so no feature of another package (prisc_capture's `telemetr
 
 A1. Every export is `#[no_mangle] pub unsafe extern "C" fn prisc_<area>_<verb>[_<noun>]` declared
 in a file under `src/ffi/`, and returns `i32` status. The only exceptions:
-`prisc_last_error_message -> usize` and `prisc_last_error_code -> i64`.
+`prisc_last_error_message -> usize` and `prisc_last_error_code -> i64`. The library exports
+nothing else: no `#[export_name]` item and no objc2 `define_class!` (whose class statics a cdylib
+would export) anywhere in the crate or its path dependencies (lint rules 12 and 14; an Objective-C
+class is built at run time with `ClassBuilder`), and CI fails the macOS build on any exported
+symbol other than `_prisc_*` (`nm -gU`).
 
 A2. One logical C# operation is one export. A C# wrapper never chains exports to complete one
 operation (lifecycle verbs on a handle, and per-frame ring verbs with Skia/FFmpeg work between
@@ -105,7 +109,9 @@ returned. A wrapper whose handle can be inside a blocking call (`next_event`, au
 its `_stop`/`_request_stop` before `Dispose` so the blocked call returns promptly. Finalizable
 handles: hotkeys, GPU device/ring/converter, audio output/input. Not finalizable (plain
 `IDisposable`, no SafeHandle, destroy on the owning thread only): the Windows foreground watch
-(`UnhookWinEvent` is thread-affine) and the macOS services registration.
+(`UnhookWinEvent` is thread-affine). The macOS Services registration has no handle at all: AppKit
+holds the provider unretained, so it lasts for the process (there is no unregister export), and a
+second registration answers `PRISC_E_STATE`.
 
 C2. Raw OS pointers handed out (ID3D12Device*, id<MTLDevice>, ID3D12Resource*) are borrowed from
 the owning handle. Exactly two exports transfer ownership: `prisc_gpu_d3d11_device_acquire_windows`
@@ -122,23 +128,27 @@ export. Rust releases every registry lock before invoking a host callback, so a 
 the callback cannot deadlock. WINEVENTPROC has no user parameter, so Rust keeps a
 hook-to-(callback, user) registry. C# implements every callback as a static
 `[UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]` thunk plus a `GCHandle` passed as
-`user`; the thunk body is `try { ... } catch (Exception e) { /* log once, no rethrow */ }`,
-because an exception escaping an unmanaged-callers-only method is a fail-fast.
+`user`; a process-global callback (the log sink, the NSServices delivery) is instead a static
+delegate with a null `user` and no `GCHandle`. The thunk body is
+`try { ... } catch (Exception e) { /* log once, no rethrow */ }`, because an exception escaping an
+unmanaged-callers-only method is a fail-fast.
 
 C4. COM (Windows): `platform/windows/com.rs` `ScopedApartment::multithreaded()`, tri-state
 (S_OK/S_FALSE owns the balance, RPC_E_CHANGED_MODE proceeds without uninit). Exports that return
 COM objects take no apartment.
 
 C5. Every `extern "C"` (or `"C-unwind"`, `"system"`) fn under `src/platform/**` that the OS calls
-(CoreAudio render proc, AudioQueue input callback, HAL property listener, WinEvent proc, every
-`define_class!` method) is a trampoline whose body is
+(CoreAudio render proc, AudioQueue input callback, HAL property listener, WinEvent proc, the
+NSServices method) is a trampoline whose body is
 `panic::callback_guard(<slot>, <benign value>, || ...)`: it catches a panic, records it on `<slot>`
 and returns the benign value (it logs nothing, so audio paths stay silent). `<slot>` is the
 `panic::CallbackPanic` that the handle's state owns, reached through the trampoline's user pointer
 (or the hook registry); each export on that handle drains it first (`slot.check()?`) and so reports
-the panic as `PRISC_E_PANIC`, while other handles never see it. Only a trampoline with no handle to
-reach (an NSServices method) uses `CallbackPanic::process()`. Otherwise a panic aborts the process (abort-on-unwind out of `extern "C"`)
-or unwinds into Objective-C frames (critique-risk F13).
+the panic as `PRISC_E_PANIC`, while other handles never see it. A trampoline that has no handle to
+reach yet (a registry lookup before the handle is known) uses `CallbackPanic::process()`. The
+NSServices method has no later export that would drain a slot, so it owns a static one and
+reports a caught panic to the log sink at once. Without the guard a panic would abort the process
+(abort-on-unwind out of `extern "C"`) or unwind into Objective-C frames.
 
 ## D. Crate rules (enforced by prisc_codegen's lint, one gate: `cargo test -p prisc_codegen`)
 
@@ -177,10 +187,16 @@ D5. Exactly one `Thread:` line in every export's doc comment, one of:
 The lint enforces exactly one line with the `Thread:` prefix; the README lists this vocabulary.
 
 D6. Every enum crossing to C# has an explicit `#[repr]`; every `pub const` in `src/ffi` is a
-non-negative literal (csbindgen silently drops anything else).
+non-negative literal (csbindgen silently drops anything else) named `PRISC_*`, and no other const
+is a `PRISC_*` literal. Those consts are exactly the ones generated into `NativeMethods` (limits C#
+checks before it calls, such as `PRISC_KEYBOARD_MAX_CODES`), so a wrapper never copies a number.
 
 D7. No em-dash (U+2014) in any source, doc or generated file of prisc_interop, prisc_platform,
 prisc_codegen or ui/Prisc.Interop.
+
+D8. No `#[no_mangle]` or `#[export_name]` item and no `define_class!` in any path dependency of
+prisc_interop (lint rule 12: ld64 keeps one of two duplicate symbols silently), and none of the
+latter two in prisc_interop itself (rule 14, see A1).
 
 ## E. ABI hash and loading
 
@@ -207,6 +223,23 @@ C#) gives "stale bindings: run cargo codegen" at load instead of undefined behav
 2. `cargo codegen` (regenerates NativeMethods, InteropTypes and InteropAbi).
 3. Write the C# wrapper in the area's `ui/Prisc.Interop/<Area>.cs` (lease every handle call, R19).
 4. Rust tests (null args, unsupported off-OS, layout), a C# smoke test, `cargo test -p prisc_codegen`.
+
+## Exports by area
+
+90 exports. Each area's C# wrapper is `ui/Prisc.Interop/<Area>.cs`.
+
+| Area (`src/ffi/`) | Exports | |
+|---|---|---|
+| infra: `version`, `error`, `string`, `log`, `selftest` | 7 | version and ABI hash, last error, string free, log sink, the boundary self-test |
+| `screens`, `pixels`, `idle`, `system`, `cursor` | 10 | the monitor list, screen grab and pixel read, idle time, animation preference, cursor position (screens and grab: prisc_rust_core::desktop) |
+| `window` | 11 | overlay setup, click-through, capture exclusion, foreground, bounds, the foreground watch |
+| `ipc`, `process` | 5 | the stdout guard, the kill-on-close job, the foreground grant, FFmpeg preparation, package identity |
+| `app`, `services`, `permissions` | 4 | activation policy, the NSServices provider, permission state and request (prisc_platform) |
+| `devices`, `audio_output`, `audio_input` | 10 | camera and audio device lists, CoreAudio output and microphone input |
+| `gpu` | 20 | the D3D12 or Metal device, the readback ring, the NV12 converter and its textures |
+| `hotkeys` | 9 | the supervised keyboard hook (prisc_hotkeys) |
+| `gesture`, `keyboard` | 5 | gesture parse, format and check, physical key state, Secure Event Input |
+| `color`, `share_region`, `encoding` | 9 | the accent palette, OKLCH conversion and painting, share-region geometry, H.264 quality (prisc_rust_core) |
 
 ## Threads the library owns
 

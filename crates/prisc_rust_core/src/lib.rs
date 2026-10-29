@@ -1,7 +1,8 @@
-//! Code shared by Prisc's Rust binaries — the capture overlay
-//! (`prisc_capture`), the scrolling-capture driver
-//! (`prisc_scroll_driver`), the AI inference binary (`prisc_ai`) and, through
-//! `prisc_obs_platform`, the recorder stack.
+//! Code shared by Prisc's Rust binaries (the capture overlay
+//! `prisc_capture`, the scrolling-capture driver `prisc_scroll_driver`, the AI
+//! inference binary `prisc_ai` and, through `prisc_obs_platform`, the recorder
+//! stack) and by Prisc.Ui and Prisc.VideoRender through `prisc_interop`, which
+//! links it without the `telemetry` feature.
 //!
 //! The bar for living here is that **two processes must agree**, so a change
 //! made in one place and not the other would be a bug:
@@ -15,9 +16,10 @@
 //! - [`exit`] — the process exit codes the shell distinguishes.
 //! - [`telemetry`] — one Sentry project, one release name, one opt-out
 //!   variable across every process.
-//! - [`desktop`]: the window list, monitors and cursor, which the overlay,
-//!   the scrolling driver and the recorder must all read the same way, plus
-//!   the macOS overlay window level and collection behaviour.
+//! - [`desktop`]: the window list, monitors (`screens`), screen grab
+//!   (`grab`) and cursor, which the overlay, the scrolling driver, the
+//!   recorder and Prisc.Ui must all read the same way, plus the macOS overlay
+//!   window level and collection behaviour (`overlay`).
 //! - [`color`], [`share_region`], [`encoding`]: pure logic that a Rust
 //!   helper and Prisc.Ui (through prisc_interop) must compute identically.
 //! - [`contract`]: typed constant tables both sides read; prisc_codegen
