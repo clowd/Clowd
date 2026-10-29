@@ -374,3 +374,39 @@ fn fingerprint_of_the_tree_matches_the_generated_bindings() {
         "InteropAbi.g.cs is stale, run `cargo codegen`"
     );
 }
+
+#[test]
+fn lint_finds_an_em_dash_and_skips_build_output() {
+    let dir = std::env::temp_dir().join(format!("prisc_codegen_em_dash_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("obj")).unwrap();
+    std::fs::write(dir.join("src/lib.rs"), "// fine\n// not \u{2014} fine\n").unwrap();
+    std::fs::write(dir.join("obj/skipped.cs"), "\u{2014}\n").unwrap();
+    let found: Vec<(String, usize, &str)> = lint::lint_em_dash(&dir, &dir)
+        .expect("scan")
+        .into_iter()
+        .map(|v| (v.file.display().to_string(), v.line, v.rule))
+        .collect();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(found, [("src/lib.rs".to_string(), 2, "9-no-em-dash")]);
+}
+
+/// Rule 12 checks what this walk returns, so an empty walk would pass vacuously.
+#[test]
+fn the_dependency_walk_reaches_the_path_crates_and_not_the_crate_itself() {
+    let files = lint::dependency_sources(&repo_root()).expect("cargo metadata");
+    let under = |prefix: &str| {
+        files
+            .iter()
+            .any(|(path, _)| path.starts_with(prefix))
+    };
+    for dependency in [
+        "crates/prisc_platform/src",
+        "crates/prisc_rust_core/src",
+        "crates/prisc_hotkeys/src",
+    ] {
+        assert!(under(dependency), "no file under {dependency}");
+    }
+    assert!(!under("crates/prisc_interop/src"), "the walk includes prisc_interop itself");
+}
