@@ -1,7 +1,8 @@
-//! Colour maths (README section 4.10): the accent palette, relative luminance, OKLCH in both
-//! directions and the colour picker's gamut charts, all over `prisc_rust_core::color`, the one
-//! implementation the capture overlay uses too. All rgb values are `0x00RRGGBB`; a set top byte is
-//! `PRISC_E_INVALID_ARG`, so an ARGB value passed by mistake is refused rather than misread.
+//! Colour maths (README section 4.10): the accent palette, relative luminance, a sticky note's
+//! ink, OKLCH in both directions and the colour picker's gamut charts, all over
+//! `prisc_rust_core::color`, the one implementation the capture overlay uses too. All rgb values
+//! are `0x00RRGGBB`; a set top byte is `PRISC_E_INVALID_ARG`, so an ARGB value passed by mistake is
+//! refused rather than misread. The note ink's paper is the one ARGB parameter, and says so.
 
 use crate::error::{Error, Result};
 use crate::ffi::status::PRISC_OK;
@@ -92,6 +93,24 @@ pub unsafe extern "C" fn prisc_color_relative_luminance(rgb: u32, out: *mut f64)
     panic::guard("prisc_color_relative_luminance", || {
         let out = util::out(out, "out")?;
         *out = color::relative_luminance(self::rgb(rgb, "rgb")?);
+        Ok(PRISC_OK)
+    })
+}
+
+/// The ink a sticky note's text is drawn in on `paper_argb` (`0xAARRGGBB`, straight alpha; a
+/// translucent paper is judged as it shows over white): a deep shade of the paper's hue that reaches
+/// the note ink contrast against it, a pale tint on a dark paper, black or white when no shade
+/// does. One call per paper; `out_rgb` (`0x00RRGGBB`) is written only on `PRISC_OK`. Unlike the
+/// other colour exports this one takes the alpha byte.
+///
+/// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out_rgb`.
+///
+/// Thread: any thread.
+#[no_mangle]
+pub unsafe extern "C" fn prisc_color_note_ink(paper_argb: u32, out_rgb: *mut u32) -> i32 {
+    panic::guard("prisc_color_note_ink", || {
+        let out_rgb = util::out(out_rgb, "out_rgb")?;
+        *out_rgb = color::to_u32(color::ink::note_ink(paper_argb));
         Ok(PRISC_OK)
     })
 }

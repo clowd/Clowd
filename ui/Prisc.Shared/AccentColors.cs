@@ -79,9 +79,9 @@ namespace Prisc
         public static double RelativeLuminance(Color color) => ColorMath.RelativeLuminance(Rgb(color));
 
         /// <summary>Whether <paramref name="color"/> is light enough to want dark ink on it: WCAG
-        /// relative luminance over 0.18, the point where dark and white ink have about equal
-        /// contrast. Ignores alpha.</summary>
-        public static bool IsLight(Color color) => RelativeLuminance(color) > 0.18;
+        /// relative luminance over <see cref="SharedDefaults.LightLuminance"/>, the point where dark
+        /// and white ink have about equal contrast. Ignores alpha.</summary>
+        public static bool IsLight(Color color) => RelativeLuminance(color) > SharedDefaults.LightLuminance;
 
         /// <summary>
         /// Returns <paramref name="color"/> darkened just enough to reach

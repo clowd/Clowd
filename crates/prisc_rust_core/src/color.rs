@@ -19,6 +19,7 @@
 //! colours through as near-black.
 
 pub mod chart;
+pub mod ink;
 pub mod palette;
 
 use std::f64::consts::PI;

@@ -185,6 +185,20 @@ namespace Prisc.Interop
         internal static extern int prisc_color_relative_luminance(uint rgb, double* @out);
 
         /// <summary>
+        ///  The ink a sticky note's text is drawn in on `paper_argb` (`0xAARRGGBB`, straight alpha; a
+        ///  translucent paper is judged as it shows over white): a deep shade of the paper's hue that reaches
+        ///  the note ink contrast against it, a pale tint on a dark paper, black or white when no shade
+        ///  does. One call per paper; `out_rgb` (`0x00RRGGBB`) is written only on `PRISC_OK`. Unlike the
+        ///  other colour exports this one takes the alpha byte.
+        ///
+        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out_rgb`.
+        ///
+        ///  Thread: any thread.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "prisc_color_note_ink", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int prisc_color_note_ink(uint paper_argb, uint* out_rgb);
+
+        /// <summary>
         ///  Converts an sRGB colour to OKLCH. A grey (no chroma 8-bit sRGB can tell) comes back with hue 0.
         ///
         ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` for a null `out` or an `rgb` past `0xFFFFFF`.

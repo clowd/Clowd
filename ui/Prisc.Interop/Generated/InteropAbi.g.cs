@@ -8,6 +8,6 @@ namespace Prisc.Interop
     /// The loader refuses a library whose <c>prisc_interop_abi_hash</c> differs.</summary>
     internal static class InteropAbi
     {
-        public const ulong Hash = 0x5D8840EB80216A9CUL;
+        public const ulong Hash = 0x285297585C8645E9UL;
     }
 }

@@ -68,5 +68,16 @@ namespace Prisc.Interop
             Native.Check(NativeMethods.prisc_color_relative_luminance(rgb & 0xFFFFFF, &luminance), "prisc_color_relative_luminance");
             return luminance;
         }
+
+        /// <summary>The ink a sticky note's text is drawn in on <paramref name="paperArgb"/>
+        /// (<c>0xAARRGGBB</c>; translucent paper is judged over white), as <c>0x00RRGGBB</c>: a deep
+        /// shade of the paper's hue at the note ink contrast, a pale tint on a dark paper.</summary>
+        public static uint NoteInk(uint paperArgb)
+        {
+            InteropLibrary.Require();
+            uint ink;
+            Native.Check(NativeMethods.prisc_color_note_ink(paperArgb, &ink), "prisc_color_note_ink");
+            return ink;
+        }
     }
 }

@@ -1,4 +1,4 @@
-//! The shipped accent, the contrast rule and the OKLCH limits both sides read (C#: `SharedDefaults`).
+//! The shipped accent, the contrast rules and the OKLCH limits both sides read (C#: `SharedDefaults`).
 
 use super::Rgb;
 
@@ -11,6 +11,11 @@ crate::contract! {
     /// The shipped accent after the contrast rule (sRGB 0x00RRGGBB): prisc blue taken down to the
     /// minimum contrast with white.
     computed DEFAULT_ACCENT: Rgb = Rgb(crate::color::to_u32(crate::color::ensure_contrast_with_white(crate::color::PRISC_BLUE)));
+    /// The WCAG relative luminance above which a colour wants dark ink rather than white: about
+    /// where the two have equal contrast on it.
+    pub const LIGHT_LUMINANCE: f64 = 0.18;
+    /// The contrast a sticky note's ink reaches against its paper (WCAG AAA for body text).
+    pub const NOTE_INK_CONTRAST: f64 = 7.0;
     /// The lowest OKLab lightness of the hint comet's body. The band straddles the graphite tray
     /// (L about 0.27) and its dark shadow, so a body below the floor sinks into them.
     pub const COMET_MIN_LIGHTNESS: f64 = 0.62;

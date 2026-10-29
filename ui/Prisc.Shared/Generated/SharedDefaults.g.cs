@@ -19,6 +19,12 @@ namespace Prisc
         /// <summary>The shipped accent after the contrast rule (sRGB 0x00RRGGBB): prisc blue taken down to the minimum contrast with white.</summary>
         public const uint DefaultAccent = 0x2F7CAEu;
 
+        /// <summary>The WCAG relative luminance above which a colour wants dark ink rather than white: about where the two have equal contrast on it.</summary>
+        public const double LightLuminance = 0.18;
+
+        /// <summary>The contrast a sticky note's ink reaches against its paper (WCAG AAA for body text).</summary>
+        public const double NoteInkContrast = 7.0;
+
         /// <summary>The lowest OKLab lightness of the hint comet's body. The band straddles the graphite tray (L about 0.27) and its dark shadow, so a body below the floor sinks into them.</summary>
         public const double CometMinLightness = 0.62;
 

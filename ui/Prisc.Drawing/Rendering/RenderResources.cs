@@ -82,25 +82,6 @@ namespace Prisc.Drawing.Rendering
             return _pens.GetOrAdd(key, static k => new ImmutablePen(GetBrush(Color.FromUInt32(k.Color)), k.Thickness, k.Dash, k.Cap, k.Join));
         }
 
-        /// <summary>WCAG relative luminance (0 black – 1 white); translucent colors are judged
-        /// as if over white. The luminance itself is the shared one (<see cref="AccentColors.RelativeLuminance"/>).</summary>
-        public static double GetLuminance(Color color) => AccentColors.RelativeLuminance(OverWhite(color));
-
-        /// <summary><paramref name="color"/> composited over white, to the nearest 8-bit colour.</summary>
-        public static Color OverWhite(Color color)
-        {
-            static byte Channel(byte v, byte a) => (byte)Math.Round((v * a + 255 * (255 - a)) / 255.0);
-            return Color.FromRgb(Channel(color.R, color.A), Channel(color.G, color.A), Channel(color.B, color.A));
-        }
-
-        /// <summary>WCAG contrast ratio between two colors, 1 (none) to 21 (black on white).</summary>
-        public static double GetContrastRatio(Color a, Color b)
-        {
-            var la = GetLuminance(a);
-            var lb = GetLuminance(b);
-            return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
-        }
-
         private readonly record struct PenKey(uint Color, double Thickness, ImmutableDashStyle Dash, PenLineCap Cap, PenLineJoin Join);
     }
 }

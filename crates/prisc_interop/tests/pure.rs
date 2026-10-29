@@ -6,8 +6,8 @@
 use std::ptr;
 
 use prisc_interop::ffi::color::{
-    prisc_color_accent_palette, prisc_color_relative_luminance, prisc_oklch_from_srgb, prisc_oklch_paint_slice, prisc_oklch_paint_track,
-    prisc_oklch_to_srgb, PriscAccentPalette, PriscOkLch, PriscOkLchChannel as Channel,
+    prisc_color_accent_palette, prisc_color_note_ink, prisc_color_relative_luminance, prisc_oklch_from_srgb, prisc_oklch_paint_slice,
+    prisc_oklch_paint_track, prisc_oklch_to_srgb, PriscAccentPalette, PriscOkLch, PriscOkLchChannel as Channel,
 };
 use prisc_interop::ffi::encoding::{prisc_encoding_h264_quality, PriscH264Quality};
 use prisc_interop::ffi::error::prisc_last_error_message;
@@ -71,6 +71,18 @@ fn colour_exports_refuse_bad_arguments() {
         h_deg: 0.0,
     };
     assert_eq!(unsafe { prisc_oklch_to_srgb(&nan, &mut rgb, ptr::null_mut()) }, INVALID);
+}
+
+#[test]
+fn note_ink_is_one_call_per_paper() {
+    // butter, and the same paper at half alpha (judged over white); the vectors live in prisc_rust_core
+    let mut ink = 0u32;
+    assert_eq!(unsafe { prisc_color_note_ink(0xFFFFF1B8, &mut ink) }, OK);
+    assert_eq!(ink, 0x594A0D);
+    assert_eq!(unsafe { prisc_color_note_ink(0x80FFF1B8, &mut ink) }, OK);
+    assert_eq!(ink, 0x62520E);
+    assert_eq!(unsafe { prisc_color_note_ink(0xFFFFF1B8, ptr::null_mut()) }, INVALID);
+    assert_eq!(last_error(), "out_rgb was null");
 }
 
 #[test]
