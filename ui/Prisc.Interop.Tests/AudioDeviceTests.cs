@@ -219,10 +219,13 @@ namespace Prisc.Interop.Tests
         public void Input_delivers_data_and_request_stop_ends_it_once()
         {
             InteropTestGate.Require();
-            int buffers = 0, stops = 0;
+            // Nothing is asserted inside the handler: CoreAudioInput swallows a handler's exception
+            // (it only ends delivery), so a failed assertion there would read as "no data".
+            int buffers = 0, stops = 0, unaligned = 0;
             using var input = OpenInput(data =>
             {
-                Assert.Equal(0, data.Length % 4);
+                if (data.Length % 4 != 0)
+                    Interlocked.Increment(ref unaligned);
                 Interlocked.Increment(ref buffers);
                 return true;
             }, (_, _) => Interlocked.Increment(ref stops));
@@ -239,6 +242,7 @@ namespace Prisc.Interop.Tests
                 Assert.Fail("no microphone data within 3 s");
             }
 
+            Assert.Equal(0, Volatile.Read(ref unaligned));
             Assert.True(input.RequestStop());
             Assert.False(input.RequestStop());
             Thread.Sleep(150);
@@ -328,15 +332,28 @@ namespace Prisc.Interop.Tests
             InteropTestGate.Require();
             CoreAudioInput input = null!;
             int buffers = 0;
+            bool? stopFromCallback = null;
+            Exception? handlerError = null;
             var disposed = new ManualResetEventSlim();
             input = OpenInput(_ =>
             {
                 if (Interlocked.Increment(ref buffers) == 1)
                 {
-                    // Neither may call into the library from here (C3); both still work.
-                    Assert.True(input.RequestStop());
-                    input.Dispose();
-                    disposed.Set();
+                    // Neither may call into the library from here (C3); both still work. Recorded,
+                    // not asserted: a handler's exception would be swallowed and read as "no data".
+                    try
+                    {
+                        stopFromCallback = input.RequestStop();
+                        input.Dispose();
+                    }
+                    catch (Exception e)
+                    {
+                        handlerError = e;
+                    }
+                    finally
+                    {
+                        disposed.Set();
+                    }
                 }
 
                 return true;
@@ -350,6 +367,8 @@ namespace Prisc.Interop.Tests
                 Assert.Fail("no microphone data within 3 s");
             }
 
+            Assert.Null(handlerError);
+            Assert.True(stopFromCallback);
             Thread.Sleep(300);
             Assert.Equal(1, Volatile.Read(ref buffers));
             Assert.Throws<ObjectDisposedException>(() => input.Start());

@@ -150,6 +150,19 @@ namespace Prisc.Shared.Tests
         }
 
         [Fact]
+        public void EffectiveAccentColor_IsAlwaysLegibleByDefault()
+        {
+            InteropTestGate.Require();
+            // default settings follow the system accent where there is one (the Windows registry
+            // accent): whatever the platform hands back, the overlay never receives something white
+            // text cannot sit on, and the palette agrees with it.
+            var settings = new SettingsGeneral();
+
+            Assert.True(ContrastWithWhite(settings.GetEffectiveAccentColor()) >= SharedDefaults.MinimumContrastWithWhite);
+            Assert.Equal(settings.GetEffectiveAccentColor(), settings.GetAccentPalette().Effective);
+        }
+
+        [Fact]
         public void DefaultAccent_IsPriscBlueCorrectedToTheDocumentedValue()
         {
             InteropTestGate.Require();

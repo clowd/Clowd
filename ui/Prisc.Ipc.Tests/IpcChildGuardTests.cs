@@ -82,6 +82,27 @@ namespace Prisc.Ipc.Tests
                     Environment.Exit(HelperExit.Ok);
                     break;
                 }
+                case "quit-count":
+                {
+                    // the real ReadLoop and TriggerQuit (FramingTests drives Pump alone): how many
+                    // times OnQuit ran for whatever ended the input, reported as a progress value
+                    var events = IpcChild.Open("prisc_ipc_test_child", HelperSpecs.Job);
+                    int runs = 0;
+                    using var quit = new ManualResetEventSlim();
+                    IpcChild.OnQuit += () =>
+                    {
+                        Interlocked.Increment(ref runs);
+                        quit.Set();
+                    };
+                    IpcChild.ReadCommands(JobCodec.DecodeCommand, _ => { }, _ => { });
+                    events.Emit(new JobEvent.Progress(1));
+                    quit.Wait(Generous); // a quit that never comes reports 0 instead of hanging
+                    // room for a second quit (another quit line, then EOF) to run the handler again
+                    Thread.Sleep(500);
+                    events.Emit(new JobEvent.Progress((uint)Volatile.Read(ref runs)));
+                    Environment.Exit(HelperExit.Ok);
+                    break;
+                }
             }
         }
 
@@ -197,6 +218,27 @@ namespace Prisc.Ipc.Tests
                 process.StandardInput.Flush();
             });
             AssertQuitLikeEnding(run);
+        }
+
+        [Theory]
+        [InlineData(2)]
+        [InlineData(0)]
+        public void On_quit_runs_once_for_repeated_quit_lines_and_for_end_of_input(int quitLines)
+        {
+            InteropTestGate.Require();
+            var run = RunChild("quit-count", (process, next) =>
+            {
+                Assert.NotNull(next()); // hello
+                Assert.NotNull(next()); // ready
+                for (int i = 0; i < quitLines; i++)
+                    process.StandardInput.WriteLine(IpcCodec.QuitLine);
+                process.StandardInput.Flush();
+                process.StandardInput.Close(); // EOF: the read loop's own quit
+            });
+            Assert.True(run.ExitCode == HelperExit.Ok, $"exit {run.ExitCode}; stderr: {run.Stderr}");
+            var events = run.Stdout.Skip(1).Where(l => l.StartsWith('{')).Select(JobCodec.DecodeEvent).ToList();
+            Assert.True(events.Count == 2, "events: " + String.Join(" | ", events) + "\nstderr: " + run.Stderr);
+            Assert.Equal(new JobEvent.Progress(1), events[1]);
         }
 
         [Theory]

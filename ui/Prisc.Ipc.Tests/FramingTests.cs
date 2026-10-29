@@ -52,7 +52,10 @@ namespace Prisc.Ipc.Tests
             var quit = false;
             void Quit(FramingExpectKind kind)
             {
-                // the quit path fires once, as prisc_ipc's lifetime and IpcChild.TriggerQuit do
+                // the quit path fires once, as prisc_ipc's lifetime and IpcChild.TriggerQuit do. This
+                // stands in for ReadLoop and TriggerQuit, which Pump leaves to its caller: those two
+                // (once only, the EOF quit) are tested in a real child by IpcChildGuardTests'
+                // On_quit_runs_once_for_repeated_quit_lines_and_for_end_of_input.
                 if (quit)
                     return;
                 quit = true;
