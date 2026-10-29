@@ -165,12 +165,8 @@ fn windows_exports_are_unsupported_off_windows() {
                 prisc_gpu_readback_ring_release_shared_windows(ring, 0, 0),
             ),
             (
-                "prisc_gpu_readback_ring_abandon_shared_windows",
-                prisc_gpu_readback_ring_abandon_shared_windows(ring, 0),
-            ),
-            (
-                "prisc_gpu_readback_ring_wait_consumed_windows",
-                prisc_gpu_readback_ring_wait_consumed_windows(ring, 1, 0),
+                "prisc_gpu_readback_ring_drain_windows",
+                prisc_gpu_readback_ring_drain_windows(ring, 0),
             ),
             (
                 "prisc_gpu_nv12_converter_create_windows",

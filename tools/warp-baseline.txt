@@ -1,6 +1,8 @@
 # The filtered GPU tests' outcomes on WARP (CI's Windows test-video leg), recorded from CI run
 # 40885191105, the first Windows run of the GPU code after it moved to prisc_interop (the BASE run
 # of the old C# D3D12 code was never pushed, so this is the first recording). 20 passed, 11 skipped.
+# One of those passes, the D3D12 abandon test, went with its export; the crate's ring tests
+# (cargo test --lib platform::windows::gpu, also on WARP) cover abandon and the ordered drain.
 # tools/check-warp-baseline.sh fails a later run on a test listed Passed here that no longer
 # passes, and on a failing test not listed. One test per line:
 #   <Passed|Failed|Skipped> <fully qualified test name>
@@ -27,7 +29,6 @@ Passed Prisc.VideoSDK.Tests.GpuInteropTests.Struct_layouts_match_the_rust_pins
 Skipped Prisc.VideoSDK.Tests.GpuInteropTests.Windows_only_families_answer_unsupported_elsewhere
 Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Composer_thread_creates_and_disposes_a_ring_on_thread
 Passed Prisc.VideoSDK.Tests.ReadbackRingTests.Cpu_factory_ring_is_synchronous_and_round_trips_every_slot
-Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_abandoned_shared_slot_goes_idle_and_the_fence_moves_on
 Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_ring_and_factory_surface_agree_on_sampled_images
 Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_ring_is_asynchronous_and_matches_the_cpu_raster_bit_exactly
 Passed Prisc.VideoSDK.Tests.ReadbackRingTests.D3d12_ring_matches_the_factory_surface_readback

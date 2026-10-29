@@ -417,8 +417,9 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_readback_ring_create_windows(PriscGpuDevice* device, uint width, uint height, uint slots, PriscGpuReadbackRing** out_ring, PriscGpuRingInfo* out_info);
 
         /// <summary>
-        ///  Windows: drains the copy queue (bounded at 30 s), unmaps every readback buffer and closes the
-        ///  wait event, then releases the handle; a converter built on the ring keeps its fences and
+        ///  Windows: drains the copy queue (bounded at 2 s; skipped after
+        ///  `prisc_gpu_readback_ring_drain_windows`, the ordered path), unmaps every readback buffer and
+        ///  closes the wait event, then releases the handle; a converter built on the ring keeps its fences and
         ///  textures alive. Null is `PRISC_OK`.
         ///
         ///  Status: `PRISC_OK`.
@@ -508,28 +509,18 @@ namespace Prisc.Interop
         internal static extern int prisc_gpu_readback_ring_release_shared_windows(PriscGpuReadbackRing* ring, uint slot, uint timeout_ms);
 
         /// <summary>
-        ///  Windows: gives up on a shared `slot` whose consumer failed before it could signal: the consumed
-        ///  fence is moved to the slot's value from the CPU when it is behind (never backwards) and the
-        ///  slot is idle again. Nothing is waited for; the caller vouches no GPU read is pending.
+        ///  Windows: the ordered end of the ring, called once before its destroy: no slot begins again
+        ///  (`begin` answers `PRISC_E_STATE`), then waits (at most `timeout_ms`) for everything queued on
+        ///  the copy queue. Destroy then skips its own drain, which is bounded at 2 s for a destroy that
+        ///  comes from a finalizer. A second call returns `PRISC_OK` at once.
         ///
-        ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_OS`;
+        ///  Status: `PRISC_OK`; `PRISC_S_TIMEOUT`; `PRISC_E_INVALID_ARG`; `PRISC_E_OS`;
         ///  `PRISC_E_UNSUPPORTED` off Windows.
         ///
         ///  Thread: any thread.
         /// </summary>
-        [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_abandon_shared_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern int prisc_gpu_readback_ring_abandon_shared_windows(PriscGpuReadbackRing* ring, uint slot);
-
-        /// <summary>
-        ///  Windows: waits (at most `timeout_ms`) until the consumed fence reaches `value`.
-        ///
-        ///  Status: `PRISC_OK`; `PRISC_S_TIMEOUT`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE` (the ring was
-        ///  destroyed under a converter); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
-        ///
-        ///  Thread: any thread.
-        /// </summary>
-        [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_wait_consumed_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern int prisc_gpu_readback_ring_wait_consumed_windows(PriscGpuReadbackRing* ring, ulong value, uint timeout_ms);
+        [DllImport(__DllName, EntryPoint = "prisc_gpu_readback_ring_drain_windows", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int prisc_gpu_readback_ring_drain_windows(PriscGpuReadbackRing* ring, uint timeout_ms);
 
         /// <summary>
         ///  Windows: opens the ring's shared slots and fences on the D3D11 twin, creates the BT.601
@@ -586,7 +577,8 @@ namespace Prisc.Interop
         /// <summary>
         ///  Windows: reads one of this converter's NV12 textures back through a staging copy: the tightly
         ///  packed luma plane (`width * height` bytes) into `y` and the interleaved chroma plane
-        ///  (`width * height / 2`) into `uv`. Blocks until every queued conversion completed (tests).
+        ///  (`width * height / 2`) into `uv`. Blocks until every queued conversion completed. Test-only:
+        ///  production never reads a texture back; the real-GPU C# bridge tests do (README, Exports by area).
         ///
         ///  Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null or short buffers, a foreign texture);
         ///  `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.

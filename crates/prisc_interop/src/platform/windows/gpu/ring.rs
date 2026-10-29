@@ -71,9 +71,10 @@ const EMPTY_WRITTEN_RANGE: D3D12_RANGE = D3D12_RANGE {
     End: 0,
 };
 
-/// What the ring's destroy allows its own drain: the C# ring's 30 seconds. A GPU that takes that
-/// long to finish a queued copy is hung, and device removal signals fences to `u64::MAX`.
-const DESTROY_DRAIN_TIMEOUT_MS: u32 = 30_000;
+/// What the ring's destroy allows its own drain: two seconds. The ordered C# path drains with the
+/// full fence timeout first ([`RingInner::finish`]), so this only bounds a `SafeHandle` finalizer
+/// on a hung GPU (the converter's destroy has the same bound).
+const DESTROY_DRAIN_TIMEOUT_MS: u32 = 2_000;
 
 /// The bound on each fence wait of the self-checks (ring create, converter self-check).
 pub(crate) const SELF_CHECK_TIMEOUT_MS: u32 = 30_000;
@@ -170,6 +171,9 @@ pub(crate) struct RingInner {
     timeline: Mutex<()>,
     /// The event every consumed-fence wait uses; `None` once teardown closed it.
     wait: Mutex<Option<Event>>,
+    /// Set by the ordered drain ([`finish`](Self::finish)) or teardown: no slot begins again, and
+    /// teardown does not drain a second time.
+    finished: AtomicBool,
     clear: Mutex<ClearList>,
 }
 
@@ -220,6 +224,9 @@ impl RingInner {
 
     /// `Idle -> Composing`, lending the slot's `ID3D12Resource*`.
     pub(crate) fn begin(&self, index: u32) -> Result<*mut c_void> {
+        if self.finished.load(Ordering::Acquire) {
+            return Err(Error::state("the readback ring was drained for its destroy; no slot begins again"));
+        }
         let slot = self.slot(index)?;
         transition(slot, index, SLOT_IDLE, SLOT_COMPOSING)?;
         Ok(slot.texture.as_raw())
@@ -503,7 +510,9 @@ impl RingInner {
 
     /// Waits out every copy this ring queued. Failures are swallowed: a removed device or a hung
     /// GPU leaves nothing to wait for, and teardown must still release what it holds.
-    fn drain(&self, timeout_ms: u32) {
+    /// Waits (at most `timeout_ms`) for everything queued on the copy queue. Only at the end of
+    /// the ring's life: the fresh signal it queues would run ahead of a shared slot's consumer.
+    fn drain(&self, timeout_ms: u32) -> Result<i32> {
         let last = self.last_signaled.load(Ordering::Acquire);
         // A fresh signal behind everything on the copy queue covers a copy that executed but
         // whose own Signal was refused.
@@ -512,16 +521,30 @@ impl RingInner {
                 .Signal(self.consumed_fence.get(), last + 1)
         };
         if queued.is_ok() {
-            let _ = self.wait_consumed(last + 1, timeout_ms);
+            self.wait_consumed(last + 1, timeout_ms)
         } else if last > 0 {
-            let _ = self.wait_consumed(last, timeout_ms);
+            self.wait_consumed(last, timeout_ms)
+        } else {
+            Ok(PRISC_OK)
         }
     }
 
-    /// What `_destroy` owes the caller at the call rather than at the last `Arc`: the drain, the
-    /// unmaps and the wait event.
+    /// The ordered end of the ring, before its destroy: no slot begins again, then the copy queue
+    /// is drained with the caller's (full) timeout, so destroy's own bounded drain is skipped.
+    /// `PRISC_S_TIMEOUT` when the copies did not finish in time.
+    pub(crate) fn finish(&self, timeout_ms: u32) -> Result<i32> {
+        if self.finished.swap(true, Ordering::AcqRel) {
+            return Ok(PRISC_OK);
+        }
+        self.drain(timeout_ms)
+    }
+
+    /// What `_destroy` owes the caller at the call rather than at the last `Arc`: the drain (unless
+    /// [`finish`](Self::finish) already ran it), the unmaps and the wait event.
     pub(crate) fn teardown(&self) {
-        self.drain(DESTROY_DRAIN_TIMEOUT_MS);
+        if !self.finished.swap(true, Ordering::AcqRel) {
+            let _ = self.drain(DESTROY_DRAIN_TIMEOUT_MS);
+        }
         for slot in &self.slots {
             slot.unmap();
         }
@@ -720,6 +743,7 @@ pub(crate) fn create_inner(device: &Arc<DeviceInner>, width: u32, height: u32, s
         last_signaled: AtomicU64::new(0),
         timeline: Mutex::new(()),
         wait: Mutex::new(Some(Event::new()?)),
+        finished: AtomicBool::new(false),
         clear: Mutex::new(clear),
     });
     if let Err(e) = ring.self_check() {
@@ -1007,8 +1031,22 @@ pub(crate) mod tests {
             .expect("the shared submit is accepted");
         ring.abandon_shared(0).expect("abandon");
         assert_eq!(ring.wait_consumed(value, 0).expect("wait"), PRISC_OK);
+        assert_eq!(status(ring.abandon_shared(0).unwrap_err()), PriscInteropStatus::State, "idle: nothing to abandon");
         assert_eq!(round_trip(&ring, [0x10, 0x20, 0x30]), [0x30, 0x20, 0x10, 0xFF]);
         assert_eq!(ring.last_signaled(), value + 1);
+    }
+
+    #[test]
+    fn a_finished_ring_begins_no_slot_and_drains_once() {
+        let Some((_device, ring)) = ring_or_skip("a_finished_ring_begins_no_slot_and_drains_once", 32, 32, 2) else {
+            return;
+        };
+        ring.begin(0).expect("slot 0 is idle");
+        ring.submit(0).expect("the readback submit is accepted");
+        assert_eq!(ring.finish(30_000).expect("finish"), PRISC_OK);
+        assert_eq!(status(ring.begin(1).unwrap_err()), PriscInteropStatus::State);
+        assert_eq!(ring.finish(0).expect("a second finish"), PRISC_OK);
+        ring.teardown();
     }
 
     /// Both orders of the race are correct; what must hold either way is asserted.

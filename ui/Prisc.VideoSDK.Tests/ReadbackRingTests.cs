@@ -459,47 +459,6 @@ namespace Prisc.VideoSDK.Tests
             return pixels;
         }
 
-        /// <summary>The shared protocol's escape hatch: a consumer that failed before it could
-        /// signal gives the slot up through AbandonShared — no wait, the slot is idle again, the
-        /// consumed fence is brought up to the abandoned value from the CPU so nothing that
-        /// counts on it (WaitConsumed, the ring's own teardown) can hang, and the readback
-        /// protocol carries on over the same slot with the next value.</summary>
-        [Fact]
-        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-        public void D3d12_abandoned_shared_slot_goes_idle_and_the_fence_moves_on()
-        {
-            var gpu = RequireD3D12();
-            try
-            {
-                const int w = 24, h = 16;
-                using var ring = gpu.CreateReadbackRing(w, h, 2);
-                var d3d = Assert.IsType<D3D12ReadbackRing>(ring);
-
-                DrawFrame(ring.Begin(0), 1, w, h);
-                ulong value = d3d.SubmitShared(0);
-                Assert.Throws<InvalidOperationException>(() => ring.Begin(0)); // in flight
-                d3d.AbandonShared(0);
-                d3d.WaitConsumed(value); // reached from the CPU: returns at once instead of timing out
-                Assert.Throws<InvalidOperationException>(() => d3d.AbandonShared(0)); // idle: nothing to abandon
-                Assert.Throws<InvalidOperationException>(() => d3d.ReleaseShared(0));
-
-                // readback over the same slot, with the next fence value, still comes back right
-                DrawFrame(ring.Begin(0), 2, w, h);
-                ring.Submit(0);
-                AssertFrame(Reference(2, w, h), Pack(ring.Wait(0), w, h), 2, 0);
-
-                // a slot submitted for readback is not the shared protocol's to abandon
-                DrawFrame(ring.Begin(1), 3, w, h);
-                ring.Submit(1);
-                Assert.Throws<InvalidOperationException>(() => d3d.AbandonShared(1));
-                AssertFrame(Reference(3, w, h), Pack(ring.Wait(1), w, h), 3, 1);
-            }
-            finally
-            {
-                gpu.Dispose();
-            }
-        }
-
         [Fact]
         public void D3d12_ring_survives_many_frames_and_dispose_before_factory()
         {

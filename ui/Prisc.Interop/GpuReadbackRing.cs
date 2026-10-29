@@ -11,13 +11,14 @@ namespace Prisc.Interop
     /// <para>Readback protocol: <see cref="Begin"/>, draw, <see cref="Submit"/>, <see cref="Wait"/>.
     /// Zero-copy protocol: <see cref="Begin"/>, draw, <see cref="SubmitShared"/>, the external
     /// consumer waits the returned value and signals the consumed fence with it, then
-    /// <see cref="ReleaseShared"/> (or <see cref="AbandonShared"/> when the consumer failed before
-    /// signalling). The begin and submit calls belong to the drawing thread; the waits are
+    /// <see cref="ReleaseShared"/>. The begin and submit calls belong to the drawing thread; the waits are
     /// free-threaded, so the stage that consumes the pixels pays for the fence.</para>
     /// <para>The crate self-checks the ring at creation (slot 0 cleared, read back, compared), so a
     /// driver whose copy path is broken fails <see cref="TryCreate"/> instead of a render. The ring
     /// holds its device inside the crate; disposing the <see cref="GpuDevice"/> first is untidy,
-    /// not unsafe. Dispose drains the copy queue, unmaps the buffers and closes the wait event.</para>
+    /// not unsafe. <see cref="Drain"/>, then Dispose, is the ordered end: the full wait for the copy
+    /// queue, then the unmaps and the wait event. A ring that is only disposed (or finalized) drains
+    /// for at most two seconds.</para>
     /// <para>Windows only; elsewhere <see cref="TryCreate"/> answers null with
     /// <see cref="InteropStatus.Unsupported"/>.</para>
     /// </remarks>
@@ -154,25 +155,18 @@ namespace Prisc.Interop
                 $"The consumer of slot {slot} did not signal within {timeout.TotalSeconds:F0} s.");
         }
 
-        /// <summary>Makes a shared slot idle after its consumer failed before signalling: the
-        /// consumed fence is moved to the slot's value from the CPU when it is behind, never
-        /// backwards. Nothing is waited for.</summary>
-        public void AbandonShared(int slot)
+        /// <summary>The ordered end of the ring, right before <c>Dispose</c>: no slot begins again
+        /// (<see cref="Begin"/> throws <see cref="InvalidOperationException"/>), then blocks until
+        /// everything queued on the copy queue finished, so Dispose skips its own bounded drain. A
+        /// second call returns at once.</summary>
+        /// <exception cref="TimeoutException">The copies did not finish within <paramref name="timeout"/>.</exception>
+        public void Drain(TimeSpan timeout)
         {
             using var lease = Lease();
-            GpuStatus.Check(NativeMethods.prisc_gpu_readback_ring_abandon_shared_windows((PriscGpuReadbackRing*)lease.Handle, (uint)slot),
-                "prisc_gpu_readback_ring_abandon_shared_windows");
-        }
-
-        /// <summary>Blocks until the consumed fence reached <paramref name="value"/>.</summary>
-        /// <exception cref="TimeoutException">It did not within <paramref name="timeout"/>.</exception>
-        public void WaitConsumed(ulong value, TimeSpan timeout)
-        {
-            using var lease = Lease();
-            GpuStatus.Check(NativeMethods.prisc_gpu_readback_ring_wait_consumed_windows((PriscGpuReadbackRing*)lease.Handle, value,
+            GpuStatus.Check(NativeMethods.prisc_gpu_readback_ring_drain_windows((PriscGpuReadbackRing*)lease.Handle,
                     GpuTimeout.Milliseconds(timeout)),
-                "prisc_gpu_readback_ring_wait_consumed_windows",
-                $"The consumed fence did not reach {value} within {timeout.TotalSeconds:F0} s.");
+                "prisc_gpu_readback_ring_drain_windows",
+                $"The readback ring's copies did not finish within {timeout.TotalSeconds:F0} s.");
         }
 
         protected override int Destroy(IntPtr h) => NativeMethods.prisc_gpu_readback_ring_destroy_windows((PriscGpuReadbackRing*)h);

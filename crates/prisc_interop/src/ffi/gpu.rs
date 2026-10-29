@@ -286,8 +286,9 @@ pub unsafe extern "C" fn prisc_gpu_readback_ring_create_windows(
     })
 }
 
-/// Windows: drains the copy queue (bounded at 30 s), unmaps every readback buffer and closes the
-/// wait event, then releases the handle; a converter built on the ring keeps its fences and
+/// Windows: drains the copy queue (bounded at 2 s; skipped after
+/// `prisc_gpu_readback_ring_drain_windows`, the ordered path), unmaps every readback buffer and
+/// closes the wait event, then releases the handle; a converter built on the ring keeps its fences and
 /// textures alive. Null is `PRISC_OK`.
 ///
 /// Status: `PRISC_OK`.
@@ -487,51 +488,26 @@ pub unsafe extern "C" fn prisc_gpu_readback_ring_release_shared_windows(
     })
 }
 
-/// Windows: gives up on a shared `slot` whose consumer failed before it could signal: the consumed
-/// fence is moved to the slot's value from the CPU when it is behind (never backwards) and the
-/// slot is idle again. Nothing is waited for; the caller vouches no GPU read is pending.
+/// Windows: the ordered end of the ring, called once before its destroy: no slot begins again
+/// (`begin` answers `PRISC_E_STATE`), then waits (at most `timeout_ms`) for everything queued on
+/// the copy queue. Destroy then skips its own drain, which is bounded at 2 s for a destroy that
+/// comes from a finalizer. A second call returns `PRISC_OK` at once.
 ///
-/// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE`; `PRISC_E_OS`;
+/// Status: `PRISC_OK`; `PRISC_S_TIMEOUT`; `PRISC_E_INVALID_ARG`; `PRISC_E_OS`;
 /// `PRISC_E_UNSUPPORTED` off Windows.
 ///
 /// Thread: any thread.
 #[no_mangle]
-pub unsafe extern "C" fn prisc_gpu_readback_ring_abandon_shared_windows(ring: *mut PriscGpuReadbackRing, slot: u32) -> i32 {
-    panic::guard("prisc_gpu_readback_ring_abandon_shared_windows", || {
+pub unsafe extern "C" fn prisc_gpu_readback_ring_drain_windows(ring: *mut PriscGpuReadbackRing, timeout_ms: u32) -> i32 {
+    panic::guard("prisc_gpu_readback_ring_drain_windows", || {
         #[cfg(windows)]
         {
-            live::<ring::RingInner, _>(ring, "ring")?.abandon_shared(slot)?;
-            Ok(PRISC_OK)
+            live::<ring::RingInner, _>(ring, "ring")?.finish(timeout_ms)
         }
         #[cfg(not(windows))]
         {
-            let _ = (ring, slot);
-            Err(windows_only("prisc_gpu_readback_ring_abandon_shared_windows"))
-        }
-    })
-}
-
-/// Windows: waits (at most `timeout_ms`) until the consumed fence reaches `value`.
-///
-/// Status: `PRISC_OK`; `PRISC_S_TIMEOUT`; `PRISC_E_INVALID_ARG`; `PRISC_E_STATE` (the ring was
-/// destroyed under a converter); `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.
-///
-/// Thread: any thread.
-#[no_mangle]
-pub unsafe extern "C" fn prisc_gpu_readback_ring_wait_consumed_windows(
-    ring: *mut PriscGpuReadbackRing,
-    value: u64,
-    timeout_ms: u32,
-) -> i32 {
-    panic::guard("prisc_gpu_readback_ring_wait_consumed_windows", || {
-        #[cfg(windows)]
-        {
-            live::<ring::RingInner, _>(ring, "ring")?.wait_consumed(value, timeout_ms)
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (ring, value, timeout_ms);
-            Err(windows_only("prisc_gpu_readback_ring_wait_consumed_windows"))
+            let _ = (ring, timeout_ms);
+            Err(windows_only("prisc_gpu_readback_ring_drain_windows"))
         }
     })
 }
@@ -640,7 +616,8 @@ pub unsafe extern "C" fn prisc_gpu_nv12_converter_drain_windows(converter: *mut 
 
 /// Windows: reads one of this converter's NV12 textures back through a staging copy: the tightly
 /// packed luma plane (`width * height` bytes) into `y` and the interleaved chroma plane
-/// (`width * height / 2`) into `uv`. Blocks until every queued conversion completed (tests).
+/// (`width * height / 2`) into `uv`. Blocks until every queued conversion completed. Test-only:
+/// production never reads a texture back; the real-GPU C# bridge tests do (README, Exports by area).
 ///
 /// Status: `PRISC_OK`; `PRISC_E_INVALID_ARG` (null or short buffers, a foreign texture);
 /// `PRISC_E_OS`; `PRISC_E_UNSUPPORTED` off Windows.

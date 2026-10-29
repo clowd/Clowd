@@ -229,7 +229,14 @@ C#) gives "stale bindings: run cargo codegen" at load instead of undefined behav
 
 ## Exports by area
 
-90 exports. Each area's C# wrapper is `ui/Prisc.Interop/<Area>.cs`.
+89 exports. Each area's C# wrapper is `ui/Prisc.Interop/<Area>.cs`.
+
+Every export has a production caller except two that exist for tests, kept on purpose:
+`prisc_interop_selftest` (the boundary self-test the C# and probe suites drive) and
+`prisc_gpu_nv12_converter_read_windows` (a slow staging readback of an NV12 texture, the only way
+the real-GPU C# bridge tests can see what a conversion produced; production only encodes the
+textures). Any other export without a production caller is dropped, with its coverage moved into
+the crate's own tests.
 
 | Area (`src/ffi/`) | Exports | |
 |---|---|---|
@@ -239,7 +246,7 @@ C#) gives "stale bindings: run cargo codegen" at load instead of undefined behav
 | `ipc`, `process` | 5 | the stdout guard, the kill-on-close job, the foreground grant, FFmpeg preparation, package identity |
 | `app`, `services`, `permissions` | 4 | activation policy, the NSServices provider, permission state and request (prisc_platform) |
 | `devices`, `audio_output`, `audio_input` | 10 | camera and audio device lists, CoreAudio output and microphone input |
-| `gpu` | 20 | the D3D12 or Metal device, the readback ring, the NV12 converter and its textures |
+| `gpu` | 19 | the D3D12 or Metal device, the readback ring, the NV12 converter and its textures |
 | `hotkeys` | 9 | the supervised keyboard hook (prisc_hotkeys) |
 | `gesture`, `keyboard` | 5 | gesture parse, format and check, physical key state, Secure Event Input |
 | `color`, `share_region`, `encoding` | 9 | the accent palette, OKLCH conversion and painting, share-region geometry, H.264 quality (prisc_rust_core) |

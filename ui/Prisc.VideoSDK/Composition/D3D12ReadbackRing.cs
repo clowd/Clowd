@@ -44,8 +44,7 @@ namespace Prisc.VideoSDK.Composition
     /// not valid for a shared slot.</para>
     ///
     /// <para>Lifetime: create, use and dispose on the composer thread (Skia context affinity); only
-    /// the fence waits (<see cref="Wait"/>, <see cref="ReleaseShared"/>, <see cref="WaitConsumed"/>)
-    /// are free-threaded. The device is the factory's, and the crate keeps it alive for as long as
+    /// the fence waits (<see cref="Wait"/>, <see cref="ReleaseShared"/>) are free-threaded. The device is the factory's, and the crate keeps it alive for as long as
     /// the ring, so disposal order is a tidiness question rather than a safety one.</para>
     /// </summary>
     [SupportedOSPlatform("windows")]
@@ -260,26 +259,6 @@ namespace Prisc.VideoSDK.Composition
             _ring.ReleaseShared(slot, FenceTimeout);
         }
 
-        /// <summary>
-        /// Makes a <see cref="SubmitShared"/> slot idle again when its consumer failed before it
-        /// could signal the consumed fence; the fence is brought up to the slot's value from the CPU
-        /// when it is behind, never moved backwards. Nothing is waited for: the caller vouches that
-        /// no GPU read of the slot is still pending. Any thread.
-        /// </summary>
-        internal void AbandonShared(int slot)
-        {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            ValidateSlot(slot);
-            _ring.AbandonShared(slot);
-        }
-
-        /// <summary>Blocks until the consumed fence has reached <paramref name="value"/>.</summary>
-        internal void WaitConsumed(ulong value)
-        {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            _ring.WaitConsumed(value, FenceTimeout);
-        }
-
         private Slot SlotAt(int slot)
         {
             ValidateSlot(slot);
@@ -320,7 +299,18 @@ namespace Prisc.VideoSDK.Composition
                 // a removed device or a hung GPU: nothing left to flush, release what we hold
             }
 
-            // Drains the copy queue, unmaps every readback buffer and closes the wait event.
+            // The ordered drain gets the full fence timeout; the destroy after it then only unmaps
+            // the readback buffers and closes the wait event. (A ring that reaches the crate's
+            // destroy any other way, a finalizer included, drains for at most two seconds.)
+            try
+            {
+                _ring.Drain(FenceTimeout);
+            }
+            catch (Exception)
+            {
+                // a removed device or a hung GPU: release what we hold regardless
+            }
+
             _ring.Dispose();
         }
     }

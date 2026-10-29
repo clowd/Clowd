@@ -207,8 +207,9 @@ namespace Prisc.VideoSDK.Tests
                 var (address, rowBytes) = ring.Wait(0, TimeSpan.FromSeconds(30));
                 Assert.NotEqual(IntPtr.Zero, address);
                 Assert.Equal(ring.RowPitch, rowBytes);
-                ring.WaitConsumed(value, TimeSpan.Zero);
-                Assert.Throws<TimeoutException>(() => ring.WaitConsumed(value + 10, TimeSpan.FromMilliseconds(20)));
+                ring.Drain(TimeSpan.FromSeconds(30));
+                Assert.Throws<InvalidOperationException>(() => ring.Begin(1)); // drained for destroy
+                ring.Drain(TimeSpan.Zero); // a second drain returns at once
             }
         }
 
