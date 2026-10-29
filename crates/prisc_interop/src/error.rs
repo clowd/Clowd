@@ -29,7 +29,6 @@ pub(crate) struct Error {
 /// What every export body returns. `Ok` carries a non-negative status.
 pub(crate) type Result<T = i32> = std::result::Result<T, Error>;
 
-#[allow(dead_code)] // the constructors the area exports use
 impl Error {
     pub(crate) fn new(status: PriscInteropStatus, message: impl Into<String>) -> Self {
         Self {

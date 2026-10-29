@@ -3,7 +3,7 @@
 //! 1. Windows (MSVC): `/DEPENDENTLOADFLAG:0x800` (LOAD_LIBRARY_SEARCH_SYSTEM32), so the library's
 //!    own imports (user32, gdi32, shcore, d3d12, ...) come from System32 and never from the working
 //!    directory or PATH. It replaces the `[DefaultDllImportSearchPaths(System32)]` attributes of the
-//!    P/Invokes this crate retires. A plain rustc-link-arg so a test binary that links the crate
+//!    P/Invokes this crate replaced. A plain rustc-link-arg so a test binary that links the crate
 //!    carries it too; the linker ignores it for anything with no import table.
 //! 2. macOS: the dylib's install name is `@rpath/libprisc_interop.dylib`, which keeps CI paths out
 //!    of the shipped binary (C# opens it by absolute path anyway).

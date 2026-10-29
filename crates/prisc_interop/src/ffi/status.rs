@@ -41,13 +41,9 @@ crate::convert::ffi_enum!(PriscInteropStatus: i32 {
 
 // The Rust spellings the export bodies use. Crate-private: csbindgen would drop the negative
 // ones, and C# gets the enum above instead.
-#[allow(dead_code)]
 pub(crate) const PRISC_OK: i32 = PriscInteropStatus::Ok as i32;
-#[allow(dead_code)]
 pub(crate) const PRISC_S_NONE: i32 = PriscInteropStatus::None as i32;
-#[allow(dead_code)]
 pub(crate) const PRISC_S_TIMEOUT: i32 = PriscInteropStatus::Timeout as i32;
-#[allow(dead_code)]
 pub(crate) const PRISC_S_CLOSED: i32 = PriscInteropStatus::Closed as i32;
 
 #[cfg(test)]

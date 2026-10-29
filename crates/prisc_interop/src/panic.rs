@@ -92,7 +92,7 @@ fn payload_text(payload: &(dyn Any + Send)) -> String {
 /// would drain such a slot, so it owns a static slot and reports a caught panic to the log sink.
 pub(crate) struct CallbackPanic(Mutex<Option<String>>);
 
-#[allow(dead_code)] // the area handles own and drain these
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))] // no OS callback runs our code there
 impl CallbackPanic {
     /// The slot of trampolines that have no handle.
     pub(crate) fn process() -> &'static CallbackPanic {
@@ -135,12 +135,13 @@ impl Default for CallbackPanic {
     }
 }
 
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 static PROCESS_CALLBACK_PANIC: CallbackPanic = CallbackPanic::new();
 
 /// Runs an OS-called trampoline body; on a panic returns `benign` and records the panic text on
 /// `slot` (the owning handle's [`CallbackPanic`], or [`CallbackPanic::process`]). A later panic
 /// on the same slot replaces an unread earlier one. Never logs, never unwinds.
-#[allow(dead_code)] // the OS trampolines of the area work packages use it
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))] // no OS callback runs our code there
 pub(crate) fn callback_guard<R>(slot: &CallbackPanic, benign: R, body: impl FnOnce() -> R) -> R {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(value) => value,

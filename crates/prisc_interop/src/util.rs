@@ -5,8 +5,6 @@
 //! body reads `let out = util::out(out, "out")?;` and never dereferences a pointer it has not
 //! checked for null.
 
-#![allow(dead_code)] // the area exports use these
-
 use crate::error::{Error, Result};
 
 /// A caller's out pointer as a reference; `PRISC_E_INVALID_ARG` when null.

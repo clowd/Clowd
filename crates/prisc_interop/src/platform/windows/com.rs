@@ -15,12 +15,10 @@ use crate::platform::windows::hresult_error;
 /// COM for the duration of one export call, balanced on drop, without ever changing a host
 /// thread's apartment model. Exports that hand a COM object back across the boundary must not use
 /// it (the object would outlive the apartment); D3D12, D3D11 and DXGI creation need no apartment.
-#[allow(dead_code)] // prisc_devices_enumerate uses it
 pub(crate) struct ScopedApartment {
     owns_balance: bool,
 }
 
-#[allow(dead_code)]
 impl ScopedApartment {
     /// Joins (or establishes) the multithreaded apartment for this call. Tri-state:
     /// - `S_OK` / `S_FALSE`: COM is initialised by (or for) this call, which owns one

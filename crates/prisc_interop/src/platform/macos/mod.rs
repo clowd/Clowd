@@ -18,7 +18,6 @@ use crate::error::{Error, Result};
 
 /// The main-thread marker, or `PRISC_E_STATE` naming the export when called from another thread
 /// (README D5: `Thread: must be the macOS main thread.`).
-#[allow(dead_code)] // the main-thread exports use it
 pub(crate) fn main_thread(export: &str) -> Result<MainThreadMarker> {
     MainThreadMarker::new().ok_or_else(|| Error::state(format!("{export} must be called on the macOS main thread")))
 }

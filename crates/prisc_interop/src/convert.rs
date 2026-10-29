@@ -4,8 +4,6 @@
 //! an out-of-range enum value is undefined behaviour. An export converts with [`ffi_enum!`]'s
 //! `from_raw` (or [`flags`] for a bit-flag enum) and answers `PRISC_E_INVALID_ARG` for anything else.
 
-#![allow(dead_code)] // the area exports use these
-
 use crate::error::{Error, Result};
 
 /// Implements `from_raw(raw)` for a fieldless `#[repr(raw)]` enum declared in `src/ffi`, mapping an
